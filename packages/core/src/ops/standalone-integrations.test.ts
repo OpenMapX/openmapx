@@ -12,7 +12,7 @@ it("admits only the finite API-owned standalone inspection/install/settlement op
     },
   };
   const request = {
-    version: 2,
+    version: 1,
     requestId: "ops1_abcdefghijklmnop",
     operationKey: "opk1_abcdefghijklmnop",
     issuedAt: new Date().toISOString(),

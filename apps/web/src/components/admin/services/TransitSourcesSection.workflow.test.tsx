@@ -98,7 +98,7 @@ describe("transit source administration workflow", () => {
         ? Response.json(
             {
               error: "Another data job is running. Try again when it finishes.",
-              code: "in-flight",
+              code: "IN_FLIGHT",
               existingJobId: "running",
             },
             { status: 409 },

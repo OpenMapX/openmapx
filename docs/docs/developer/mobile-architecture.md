@@ -111,7 +111,13 @@ notification grant through the same port.
 - **Storage.** expo-sqlite runs each exclusive transaction on its own
   connection, so `getDatabase` queues writes on the one handle and sets a busy
   timeout. Without the queue a diagnostic write and a batch commit collide with
-  "database is locked".
+  "database is locked". The schema history in
+  `apps/mobile/src/storage/migrations.ts` starts with one version-1 baseline
+  that creates every table a release uses, `car_destinations` included; all
+  statements live in `apps/mobile/src/storage/sql.ts`. Each version runs once,
+  in the transaction that records it, and later changes append a version. The
+  feasibility probe's table is not part of that schema: only a feasibility build
+  creates it, on first use.
 - **Shared ground rules.** The rules a road session wraps around the engine
   live in `packages/core/src/navigation/groundSessionPolicy.ts`, which the
   browser engine (`useNavigationEngine.ts`) imports too: cue timing for the
@@ -287,14 +293,54 @@ After a refusal it answers `denied` without prompting again.
 
 ## The bridge protocol
 
-Both sides speak exactly one version, **v6**. The constants in
+Both sides speak exactly one version, **v1**. The constants in
 `packages/core/src/navigation/mobileProtocol.ts` and the release descriptor in
-`apps/mobile/release/version.json` agree on `min: 6, max: 6`. Every message shape
+`apps/mobile/release/version.json` agree on `min: 1, max: 1`. Every message shape
 change raises both bounds, because a build speaking an earlier shape cannot parse
 the new one. A page and an installed app built for different versions negotiate
 no version: the shell still answers the hello with a null selection, navigation
 stays disabled and the page asks for an app update. Protocol negotiation alone
 does not establish that a command is implemented.
+
+### The native client contract
+
+The car and the headless navigation task call six API operations themselves,
+without a WebView: geocode, directions, route match, navigation landmarks,
+transit plan refresh and vehicle journey (for journey captures). They are
+declared as `nativeClientOperations` in `@openmapx/core/api-contracts`. Their
+requests name exactly what the app sends; their responses name the fields the
+app reads and let other fields through, so the server may add fields but must
+keep these.
+
+The same protocol number versions this contract. Every native request goes
+through `createNativeApiClient` (`apps/mobile/src/api/nativeApiClient.ts`),
+which omits credentials and sends `X-OpenMapX-Mobile-Protocol:
+<MOBILE_PROTOCOL_MAX>`. The API's `onRequest` hook answers a header outside
+`[MOBILE_PROTOCOL_MIN, MOBILE_PROTOCOL_MAX]` with `426` and
+`code: "MOBILE_PROTOCOL_UNSUPPORTED"`; requests without the header (the web app)
+are not affected. The app treats a `426` as "update required": the car shows
+its update message for search and route planning, a reroute fails at once with
+`update-required` and the navigation notification asks for an update, and
+transit refresh and journey polling stop with the same notice. A transit
+session restored after the app restarts tries live times once more, because
+only a restarted app can be an updated one; the same build gets the `426`
+again and stays stopped. Voice references are optional and fall back to plain
+prompts.
+
+`NATIVE_CLIENT_CONTRACT_DIGESTS`, beside the protocol constants, holds the
+SHA-256 of the contract each protocol version speaks.
+`packages/core/src/api/contracts/native-client.test.ts` recomputes the digest
+and requires it to equal the entry for `MOBILE_PROTOCOL_MAX`, so a schema change
+raises the protocol and appends a digest. An existing entry is never edited.
+The same test checks that the declared requests match what the core fetch
+functions actually send.
+
+The digest guards the declared copy, not the routes the server serves. No
+server route is registered from these schemas or checked against them, so a
+change to the geocoding, routing or transit route that drops or renames a field
+the app reads passes this gate. When you change one of those routes, compare
+its response with the matching `nativeClientOperations` entry by hand, and
+raise the protocol if a field the app reads changes.
 
 Bridge requests use runtime timers by default. Preparation has a 15-second budget
 and ordinary reads have a five-second budget. Start's web request budget is ten

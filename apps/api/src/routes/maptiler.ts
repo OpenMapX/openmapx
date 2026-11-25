@@ -5,7 +5,6 @@ import {
   MAX_VECTOR_TILE_BYTES,
   VECTOR_TILE_MEDIA_TYPES,
 } from "@openmapx/core/server";
-import { envString } from "@openmapx/core/server-env";
 import type { ProviderDailyBudget } from "@openmapx/integration-framework/provider-daily-budget";
 import { parseWebMercatorTileCoordinates } from "@openmapx/integration-framework/tile-proxy";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
@@ -44,10 +43,6 @@ interface MaptilerTileMatch {
   x: string;
   y: string;
   format: string;
-}
-
-function maptilerKey(): string {
-  return envString("MAPTILER_KEY", "").trim();
 }
 
 function isAllowedMaptilerPath(path: string): boolean {
@@ -350,7 +345,7 @@ export const maptilerRoute: FastifyPluginAsync<{ budget?: ProviderDailyBudget | 
     }
     reply.header("Cache-Control", "no-store");
 
-    const key = maptilerKey() || (await loadMapSettings()).maptilerApiKey;
+    const key = (await loadMapSettings()).maptilerApiKey;
     if (!key) {
       return reply.status(503).send({ error: "MapTiler API key is not configured" });
     }

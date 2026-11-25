@@ -115,8 +115,8 @@ describe("privacy unique-constraint race recovery", () => {
     const input = {
       requestId: "r1",
       idempotencyKey: "replay-key-0000000001",
-      eventType: "note",
-      actorKind: "admin",
+      eventType: "extended" as const,
+      actorKind: "admin" as const,
     };
 
     it("treats an idempotency-key race as a replay", async () => {

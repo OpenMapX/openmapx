@@ -15,18 +15,19 @@ The delivered package contains compiled ESM JavaScript, TypeScript declarations,
 
 ## Supported entry points
 
-| Import                                                                                                    | Purpose                                                                   |
-| --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| `@openmapx/extension-contracts`                                                                           | Main manifest validators and types, artifact validation and compatibility |
-| `/integration`                                                                                            | Integration manifests, source metadata and semantic validation            |
-| `/service`                                                                                                | Service manifests and static provenance-aware community policy            |
-| `/extension`                                                                                              | Component bundles, configuration, readiness and catalog shapes            |
-| `/platform`                                                                                               | Extension protocol version and compatibility checks                       |
-| `/artifact`                                                                                               | Declarative archive metadata and compatibility checks                     |
-| `/contributors`, `/attribution`, `/licensing`                                                             | Captured contributor receipts and structured licence metadata             |
-| `/identifiers`, `/media-hosts`, `/capabilities`                                                           | Source identifiers, media-host matching and capability names              |
-| `/schemas`                                                                                                | Structural authoring schemas from `createAuthoringSchemas()`              |
-| `/schemas/integration.json`, `/schemas/service.json`, `/schemas/extension.json`, `/schemas/artifact.json` | Packaged editor schemas                                                   |
+| Import                                                                                                    | Purpose                                                                    |
+| --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `@openmapx/extension-contracts`                                                                           | Main manifest validators and types, artifact validation and compatibility  |
+| `/integration`                                                                                            | Integration manifests, source metadata and semantic validation             |
+| `/service`                                                                                                | Service manifests and static provenance-aware community policy             |
+| `/extension`                                                                                              | Component bundles, configuration, readiness and catalog shapes             |
+| `/platform`                                                                                               | Extension protocol version and compatibility checks                        |
+| `/artifact`                                                                                               | Declarative archive metadata and compatibility checks                      |
+| `/contributors`, `/attribution`, `/licensing`                                                             | Captured contributor receipts and structured licence metadata              |
+| `/identifiers`, `/media-hosts`, `/capabilities`                                                           | Source and component identifiers, media-host matching and capability names |
+| `/semver`                                                                                                 | Semantic-version validation and precedence                                 |
+| `/schemas`                                                                                                | Structural authoring schemas from `createAuthoringSchemas()`               |
+| `/schemas/integration.json`, `/schemas/service.json`, `/schemas/extension.json`, `/schemas/artifact.json` | Packaged editor schemas                                                    |
 
 `/licensing-schema` also exports the portable structural licensing schema.
 
@@ -59,9 +60,9 @@ An integration artifact is declarative. Executable behavior belongs in its compa
 
 ## Validation and authority
 
-The manifest validators check shape and applicable static semantics. `validateServiceManifest(input, { firstParty: false })` additionally applies the community sandbox policy. The host derives provenance from the actual installation location; data supplied by an extension cannot establish first-party authority. The CLI always validates services as community services.
+The manifest validators check shape and applicable static semantics. `validateManifest(input, { firstParty: false })` and `validateServiceManifest(input, { firstParty: false })` apply the community rules: a declared `platform`, a semantic `version`, `quality: "community"`, no unknown top-level keys, and capability and data-type names that are well-known or namespaced as `<vendor>/<name>`. The service validator additionally applies the community sandbox policy. Extension, service and integration ids are lowercase slugs of at most 48 characters (`componentIdSchema` in `/identifiers`). The host derives provenance from the actual installation location; data supplied by an extension cannot establish first-party authority. The CLI always validates services as community services.
 
-Structural JSON Schemas help editors and non-TypeScript authors. Runtime validators additionally handle structured licensing, normalization, media-host rules, component references and community policy. Schema identifiers do not imply that those URLs host downloadable schemas. Use the files shipped in the package.
+Structural JSON Schemas help editors and non-TypeScript authors; they describe community manifests. Their `$id` is keyed by the extension protocol, `https://openmapx.org/schemas/extension-contracts/1.0/<name>.json`, not by the package version. Runtime validators additionally handle structured licensing, normalization, media-host rules, component references and community policy. Schema identifiers do not imply that those URLs host downloadable schemas. Use the files shipped in the package.
 
 Neither schema validity nor an offline preflight proves that a host can download, install, start or trust a component. Installation also checks actual artifacts, source policy, privileges, configuration and runtime readiness.
 
@@ -82,6 +83,6 @@ pnpm --filter @openmapx/extension-contracts build
 pnpm check-packed-packages
 ```
 
-Regenerate schemas after changing manifest shapes or the package version; the build rejects stale schema content, including versioned identifiers.
+Regenerate schemas after changing manifest shapes or the extension protocol version; the build rejects stale schema content, including versioned identifiers.
 
 The workspace resolves source entry points. `pnpm pack` applies `publishConfig.exports` to deliver JavaScript and declaration entry points from `dist`; release automation must publish that verified tarball. The clean-consumer gate checks the packed metadata and exercises JavaScript, strict TypeScript, CLI scaffolds and declarative artifacts outside the monorepo.

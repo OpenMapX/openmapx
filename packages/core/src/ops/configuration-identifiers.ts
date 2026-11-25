@@ -1,10 +1,7 @@
 /** Portable identifier schemas shared by inputs and browser-visible results. */
 import { z } from "zod";
-export const serviceIdSchema = z
-  .string()
-  .min(1)
-  .max(64)
-  .regex(/^[a-z0-9][a-z0-9-]*$/);
+import { COMPONENT_ID_PATTERN } from "../component-id";
+export const serviceIdSchema = z.string().regex(COMPONENT_ID_PATTERN);
 export const stableIdSchema = z
   .string()
   .min(1)

@@ -85,6 +85,11 @@ describe.runIf(enabled)("backup cancellation through real Docker", () => {
     mkdirSync(join(root, "services/postgis"), { recursive: true });
     mkdirSync(join(root, "bin"));
     writeFileSync(join(root, "pnpm-workspace.yaml"), "packages: []\n");
+    mkdirSync(join(root, "apps/api/src/db/migrations/meta"), { recursive: true });
+    writeFileSync(
+      join(root, "apps/api/src/db/migrations/meta/_journal.json"),
+      JSON.stringify({ entries: [{ tag: "0000_baseline", when: 1000 }] }),
+    );
     writeFileSync(
       join(root, "services/postgis/service.json"),
       JSON.stringify({
@@ -126,7 +131,12 @@ volumes:
     writeFileSync(compose, composeYaml, { mode: 0o400 });
     writeFileSync(
       join(generation, "resolved-config.generated.json"),
-      JSON.stringify({ serviceConfigs: [], integrationConfigs: [] }),
+      JSON.stringify({
+        version: 1,
+        domain: "maps.example.test",
+        serviceConfigs: [],
+        integrationConfigs: [],
+      }),
       { mode: 0o400 },
     );
     symlinkSync(relative(dirname(current), generation), current);
@@ -151,6 +161,12 @@ volumes:
     );
     await sql("target", "CREATE DATABASE unrelated");
     await sql("target", "CREATE DATABASE restored");
+    // The backup names the API schema it captured from the newest applied migration.
+    await sql("target", "CREATE DATABASE openmapx");
+    await sql(
+      "openmapx",
+      "CREATE SCHEMA drizzle; CREATE TABLE drizzle.__drizzle_migrations(id serial PRIMARY KEY, hash text NOT NULL, created_at bigint); INSERT INTO drizzle.__drizzle_migrations (hash, created_at) VALUES ('baseline', 1000)",
+    );
     for (const database of ["target", "unrelated"]) {
       await sql(
         database,
@@ -191,7 +207,7 @@ exec "$OPENMAPX_TEST_REAL_DOCKER" "$@"
     vi.stubEnv("PATH", `${join(root, "bin")}:${process.env.PATH ?? ""}`);
     vi.stubEnv("OPENMAPX_ROOT_DIR", root);
     vi.stubEnv("OPENMAPX_ENABLED_SERVICES", "postgis");
-    vi.stubEnv("BACKUP_RETENTION_DAYS", "30");
+    vi.stubEnv("RETENTION_BACKUP_DAYS", "30");
     vi.stubEnv("OPENMAPX_TEST_REAL_DOCKER", realDocker);
     vi.stubEnv("OPENMAPX_TEST_PROJECT", project);
     vi.stubEnv("OPENMAPX_TEST_TAR_NAME", join(root, "tar-name"));
@@ -382,7 +398,7 @@ exec "$OPENMAPX_TEST_REAL_DOCKER" "$@"
     const result = await createBackup({ rootDir: root, name: "normal" });
     const volume = result.manifest.services[0]?.volumes[0];
     if (!volume) throw Error("Missing fixture backup");
-    expect(result.manifest.formatVersion).toBe(2);
+    expect(result.manifest.formatVersion).toBe(1);
     const archive = readFileSync(join(result.directory, volume.file));
     await docker(
       [

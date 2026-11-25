@@ -82,8 +82,8 @@ it("opens the card beside a visible category sidebar", () => {
 
 it("labels the pin with the place panel's title and hides the basemap's own label", () => {
   const selected = createPlace({
-    primaryScheme: "stylePoi",
-    ids: { stylePoi: "5564352411" },
+    primaryScheme: "style-poi",
+    ids: { "style-poi": "5564352411" },
     name: "Berliner Fernsehturm",
     address: "Berliner Fernsehturm",
     coordinates: [13.4094, 52.5208],

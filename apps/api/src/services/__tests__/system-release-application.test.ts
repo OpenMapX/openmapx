@@ -73,7 +73,7 @@ vi.mock("../../db", async () => {
         from: (table: unknown) => ({
           where: async () =>
             table === adminJob
-              ? [{ id: "job-1", type: "system.update", createdBy: actorId }]
+              ? [{ id: "job-1", type: "system.update", createdByUserId: actorId }]
               : table === user
                 ? [{ id: actorId, role: "admin", banned: false }]
                 : [],

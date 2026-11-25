@@ -329,9 +329,9 @@ describe("integration store", () => {
       const admitted = await app.inject({
         method: "POST",
         url: "/v1/operations",
-        headers: { authorization: `Bearer ${apiToken}`, "x-ops-protocol-version": "2" },
+        headers: { authorization: `Bearer ${apiToken}`, "x-ops-protocol-version": "1" },
         payload: {
-          version: 2,
+          version: 1,
           execution: { requestedDeadlineAt },
           requestId: "ops1_redirectDiagnostic",
           operationKey: createControlRootOperationKey({
@@ -356,7 +356,7 @@ describe("integration store", () => {
       let status = await app.inject({
         method: "GET",
         url: `/v1/operations/${operationId}`,
-        headers: { authorization: `Bearer ${apiToken}`, "x-ops-protocol-version": "2" },
+        headers: { authorization: `Bearer ${apiToken}`, "x-ops-protocol-version": "1" },
       });
       for (
         let attempt = 0;
@@ -367,7 +367,7 @@ describe("integration store", () => {
         status = await app.inject({
           method: "GET",
           url: `/v1/operations/${operationId}`,
-          headers: { authorization: `Bearer ${apiToken}`, "x-ops-protocol-version": "2" },
+          headers: { authorization: `Bearer ${apiToken}`, "x-ops-protocol-version": "1" },
         });
       }
 
@@ -419,9 +419,9 @@ describe("integration store", () => {
       const admitted = await app.inject({
         method: "POST",
         url: "/v1/operations",
-        headers: { authorization: `Bearer ${apiToken}`, "x-ops-protocol-version": "2" },
+        headers: { authorization: `Bearer ${apiToken}`, "x-ops-protocol-version": "1" },
         payload: {
-          version: 2,
+          version: 1,
           execution: { requestedDeadlineAt },
           requestId: "ops1_largeInspection000",
           operationKey: createControlRootOperationKey({
@@ -439,7 +439,7 @@ describe("integration store", () => {
         const status = await app.inject({
           method: "GET",
           url: `/v1/operations/${operationId}`,
-          headers: { authorization: `Bearer ${apiToken}`, "x-ops-protocol-version": "2" },
+          headers: { authorization: `Bearer ${apiToken}`, "x-ops-protocol-version": "1" },
         });
         expect(status.statusCode).toBe(200);
         expect(status.json().result).toMatchObject({

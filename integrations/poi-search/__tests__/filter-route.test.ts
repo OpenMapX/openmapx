@@ -277,7 +277,10 @@ describe("POST /filter route", () => {
     );
 
     expect(reply.statusCode).toBe(422);
-    expect(reply.payload).toEqual({ error: "area_too_large" });
+    expect(reply.payload).toEqual({
+      error: "The area is too large; zoom in and try again",
+      code: "AREA_TOO_LARGE",
+    });
   });
 
   it("503 when Overpass is too busy to answer, which no smaller area fixes", async () => {
@@ -317,7 +320,10 @@ describe("POST /filter route", () => {
     );
 
     expect(reply.statusCode).toBe(503);
-    expect(reply.payload).toEqual({ error: "overpass_unavailable" });
+    expect(reply.payload).toEqual({
+      error: "Place search is unavailable; try again later",
+      code: "OVERPASS_UNAVAILABLE",
+    });
   });
 
   it("sets Cache-Control header on success", async () => {

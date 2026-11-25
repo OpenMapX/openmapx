@@ -108,7 +108,7 @@ describe("production core restart workflow", () => {
       vi.stubEnv("OPS_AGENT_TOKEN_FILE", tokenFile);
       vi.stubEnv("BETTER_AUTH_SECRET", "core-restart-test-only-000000000000000000000000");
       try {
-        const headers = { authorization: `Bearer ${host.token}`, "x-ops-protocol-version": "2" };
+        const headers = { authorization: `Bearer ${host.token}`, "x-ops-protocol-version": "1" };
         const submit = async (operation: Record<string, unknown>) => {
           const deadline = Date.now() + 60_000;
           return app.inject({
@@ -116,7 +116,7 @@ describe("production core restart workflow", () => {
             url: "/v1/operations",
             headers,
             payload: {
-              version: 2,
+              version: 1,
               requestId: `ops1_${randomBytes(16).toString("hex")}`,
               operationKey: createControlRootOperationKey({
                 notAfter: deadline,
@@ -174,7 +174,7 @@ describe("production core restart workflow", () => {
         const controller = new AbortController();
         const ctx: JobContext = {
           jobId: randomUUID(),
-          jobType: "service.core-restart",
+          jobType: "service.core.restart",
           execution: { owner: randomUUID(), version: 1 },
           payload: { service: serviceId },
           signal: controller.signal,

@@ -103,7 +103,7 @@ describe("MapClickFloatingCard on a phone", () => {
     await userEvent.click(screen.getByRole("button", { name: "common.share" }));
     expect(share.shareUrl).toHaveBeenCalledTimes(1);
     const payload = share.shareUrl.mock.calls[0]?.[0] as unknown as { url: string; title: string };
-    expect(new URL(payload.url).searchParams.get("at")).toBe("50.776,6.083");
+    expect(new URL(payload.url).searchParams.get("placeLocation")).toBe("50.776,6.083");
     expect(payload.title).toBe("Aachen");
     expect(await screen.findByText("mapContextMenu.linkCopied")).toBeDefined();
   });
@@ -161,7 +161,7 @@ describe("MapClickFloatingCard on a basemap place", () => {
     await userEvent.click(screen.getByRole("button", { name: "common.details" }));
     const selected = usePlaceStore.getState().selectedPlace;
     expect(selected?.name).toBe("Café Kaiser");
-    expect(selected?.id).toBe("stylePoi:42");
+    expect(selected?.id).toBe("style-poi:42");
   });
 
   it("offers its name to copy", async () => {

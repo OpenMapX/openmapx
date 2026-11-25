@@ -33,11 +33,16 @@ export function registerCoverageEvidenceRoute(
     const { snapshotId, offset = 0, limit = 50 } = request.query;
     try {
       const snapshot = snapshotId ? snapshotStore.get(snapshotId) : await snapshotStore.latest();
-      if (!snapshot) return reply.code(409).send({ error: "snapshot_expired" });
+      if (!snapshot)
+        return reply
+          .code(409)
+          .send({ error: "Coverage snapshot expired", code: "SNAPSHOT_EXPIRED" });
       return reply.send(snapshotStore.page(snapshot, { offset, limit }));
     } catch (error) {
       request.log.error({ err: error }, "coverage evidence collection failed");
-      return reply.code(503).send({ error: "coverage_unavailable" });
+      return reply
+        .code(503)
+        .send({ error: "Coverage evidence is unavailable", code: "COVERAGE_UNAVAILABLE" });
     }
   });
   return snapshotStore;

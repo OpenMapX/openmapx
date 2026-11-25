@@ -65,7 +65,10 @@ describe("GET /coverage/evidence", () => {
       url: "/coverage/evidence?snapshotId=missing-revision",
     });
     expect(expired.statusCode).toBe(409);
-    expect(expired.json()).toEqual({ error: "snapshot_expired" });
+    expect(expired.json()).toEqual({
+      error: "Coverage snapshot expired",
+      code: "SNAPSHOT_EXPIRED",
+    });
     await app.close();
   });
 });

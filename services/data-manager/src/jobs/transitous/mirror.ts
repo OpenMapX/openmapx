@@ -93,7 +93,7 @@ export const run: StageFn = async (ctx): Promise<StageResult> => {
     // Acquisition is completed as one transaction by fetch-operator. Keep
     // going so it can collect operator failures too, then fail once with the
     // complete desired-source evidence.
-    const status: StageStatus = failures.length > 0 ? "partial" : "ok";
+    const status: StageStatus = failures.length > 0 ? "partially_succeeded" : "succeeded";
 
     return {
       stage: "mirror",
@@ -111,7 +111,7 @@ export const run: StageFn = async (ctx): Promise<StageResult> => {
     const err = error as Error;
     return {
       stage: "mirror",
-      status: "error",
+      status: "failed",
       startedAt,
       finishedAt: ctx.now(),
       durationMs: Date.now() - start,

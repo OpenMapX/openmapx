@@ -1,3 +1,4 @@
+import { OSM_SEARCH_SCHEMA_VERSION } from "@openmapx/core/published-data";
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
 import { createOsmAliasSuggestionProvider } from "../provider.js";
@@ -7,7 +8,9 @@ describe("OSM alias suggestion provider", () => {
     const execute = vi
       .fn()
       .mockResolvedValueOnce([{ exists: true }])
-      .mockResolvedValueOnce([{ epoch: "epoch-1", status: "ready" }])
+      .mockResolvedValueOnce([
+        { epoch: "epoch-1", status: "ready", schema_version: OSM_SEARCH_SCHEMA_VERSION },
+      ])
       .mockResolvedValueOnce([
         {
           osm_type: "node",
@@ -65,7 +68,9 @@ describe("OSM alias suggestion provider", () => {
     const execute = vi
       .fn()
       .mockResolvedValueOnce([{ exists: true }])
-      .mockResolvedValueOnce([{ epoch: "epoch-2", status: "ready" }])
+      .mockResolvedValueOnce([
+        { epoch: "epoch-2", status: "ready", schema_version: OSM_SEARCH_SCHEMA_VERSION },
+      ])
       .mockResolvedValueOnce([]);
     const provider = createOsmAliasSuggestionProvider(
       createMockIntegrationContext({ db: { execute } }),

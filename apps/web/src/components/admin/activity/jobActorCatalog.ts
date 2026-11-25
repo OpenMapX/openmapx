@@ -1,13 +1,15 @@
 /**
- * The fixed actor labels the activity API sends for jobs that no known user
- * started. Other labels are derived from the job's trigger and stay as sent.
+ * The fixed actor labels the activity API sends for jobs, one per data job
+ * trigger and for an application job no known user started.
  * `scripts/admin-code-catalogue.test.ts` keeps this list in step with
  * `apps/api/src/services/activity-jobs.ts`.
  */
 export const JOB_ACTOR_LABELS: readonly string[] = [
   "Administrator",
-  "Automatic version bump",
+  "API",
   "Bootstrap",
+  "Host CLI",
+  "Operations agent",
   "Scheduled",
   "System",
 ];

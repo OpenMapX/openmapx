@@ -16,8 +16,8 @@ import type { GetAdminService200ManifestVolumesItem } from "./getAdminService200
 
 export type GetAdminService200Manifest = {
   /**
-   * @minLength 1
-   * @pattern ^[a-z0-9][a-z0-9-]*$
+   * @maxLength 48
+   * @pattern ^[a-z0-9]+(-[a-z0-9]+)*$
    */
   id: string;
   /** @minLength 1 */
@@ -30,14 +30,21 @@ export type GetAdminService200Manifest = {
   homepage?: string;
   documentation?: string;
   quality: GetAdminService200ManifestQuality;
+  /** @pattern ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ */
   platform?: string;
   container: GetAdminService200ManifestContainer;
   provides?: GetAdminService200ManifestProvidesItem[];
   consumes?: GetAdminService200ManifestConsumesItem[];
   produces?: GetAdminService200ManifestProducesItem[];
-  /** @items.pattern ^[a-z0-9][a-z0-9-]*$ */
+  /**
+   * @items.maxLength 48
+   * @items.pattern ^[a-z0-9]+(-[a-z0-9]+)*$
+   */
   selectionDependencies?: string[];
-  /** @items.pattern ^[a-z0-9][a-z0-9-]*$ */
+  /**
+   * @items.maxLength 48
+   * @items.pattern ^[a-z0-9]+(-[a-z0-9]+)*$
+   */
   communityNetworkAccess?: string[];
   /**
    * @minItems 1

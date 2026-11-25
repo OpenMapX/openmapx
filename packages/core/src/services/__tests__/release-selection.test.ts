@@ -4,7 +4,7 @@ import * as releases from "../release-manifest";
 
 const digest = `sha256:${"a".repeat(64)}`;
 describe("explicit release selection", () => {
-  it.each(["main", "preview", "v0.1.0-alpha.1", digest])(
+  it.each(["main", "preview", "v0.1.0-alpha.1", "v0.1.0", "v1.0.0", digest])(
     "resolves %s in the configured namespace",
     (selector) => {
       expect(
@@ -27,12 +27,19 @@ describe("explicit release selection", () => {
     });
     expect(releases.normalizeReleaseSelection("local")).toEqual({ kind: "local" });
   });
-  it.each(["", "latest", "stable", "v0.1.0", "v0.1.0-alpha.01", "main;whoami", "sha256:bad"])(
-    "rejects unsupported selector %j",
-    (selector) => {
-      expect(() => releases.normalizeReleaseSelection(selector)).toThrow();
-    },
-  );
+  it.each([
+    "",
+    "latest",
+    "stable",
+    "v1.0",
+    "v01.0.0",
+    "v1.0.0-beta",
+    "v0.1.0-alpha.01",
+    "main;whoami",
+    "sha256:bad",
+  ])("rejects unsupported selector %j", (selector) => {
+    expect(() => releases.normalizeReleaseSelection(selector)).toThrow();
+  });
   it.each([
     "ghcr.io/team/release-manifest:main",
     "https://registry.example/team/release-manifest",

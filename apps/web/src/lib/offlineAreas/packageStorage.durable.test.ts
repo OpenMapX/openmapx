@@ -147,7 +147,7 @@ for (const backend of ["blob", "opfs-move", "opfs-copy"] as const) {
           status: "error",
           bytesReceived: 2,
           verifiedPrefixBytes: 2,
-          lastError: expect.objectContaining({ code: "archive-missing" }),
+          lastError: expect.objectContaining({ code: "ARCHIVE_MISSING" }),
         }),
       ]);
       expect((await reopen().get(packageId))?.status).toBe("error");

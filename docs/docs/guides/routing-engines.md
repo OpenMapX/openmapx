@@ -75,7 +75,7 @@ verify a route afterward.
 
 ### Tuning the Valhalla build
 
-The schema exposes `build_elevation` and `build_admins`, both enabled by default:
+The schema exposes `BUILD_ELEVATION` and `BUILD_ADMINS`, both enabled by default:
 
 ```dotenv
 SERVICE_VALHALLA_BUILD_ELEVATION=false

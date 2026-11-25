@@ -109,8 +109,7 @@ export async function adminIntegrationCredentialsRoute(app: FastifyInstance): Pr
     await writeAuditLog({
       actorId: adminSession.user.id,
       targetId: integrationId,
-      targetType: "integration",
-      action: "credential.set",
+      action: "integration.credential.set",
       details: { key, database: applied.database, runtime: applied.runtime },
       request,
     });
@@ -141,8 +140,7 @@ export async function adminIntegrationCredentialsRoute(app: FastifyInstance): Pr
     await writeAuditLog({
       actorId: adminSession.user.id,
       targetId: integrationId,
-      targetType: "integration",
-      action: "credential.delete",
+      action: "integration.credential.delete",
       details: { key, database: applied.database, runtime: applied.runtime },
       request,
     });

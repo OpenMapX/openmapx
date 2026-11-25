@@ -16,6 +16,7 @@ export {
   isApiClientError,
   isApiRequestAbortedError,
 } from "../api/client";
+export { nativeGeocodeResponseSchema } from "../api/contracts/native-client/schemas";
 export { type FetchDirectionsParams, fetchDirections } from "../api/directions";
 export { fetchGeocode, type GeocodeParams } from "../api/geocoding";
 export {

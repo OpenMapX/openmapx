@@ -6,7 +6,10 @@ export type GetAdminExtensionCatalogEntry200ServicesItem = {
   repo: string;
   /** @pattern ^[a-zA-Z0-9._\-/]+$ */
   ref?: string;
-  /** @pattern ^[a-z0-9][a-z0-9-]*$ */
+  /**
+   * @maxLength 48
+   * @pattern ^[a-z0-9]+(-[a-z0-9]+)*$
+   */
   service: string;
   [key: string]: unknown;
 };

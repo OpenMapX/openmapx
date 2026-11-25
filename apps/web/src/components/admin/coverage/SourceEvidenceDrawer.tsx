@@ -48,7 +48,7 @@ export function SourceEvidenceDrawer({
   const displayedSource = data?.source ?? source;
   const handledSnapshotExpiry = useRef(false);
   const snapshotExpired =
-    query.isError && (query.error as CoverageRequestError).code === "snapshot_expired";
+    query.isError && (query.error as CoverageRequestError).code === "SNAPSHOT_EXPIRED";
 
   useEffect(() => {
     if (!snapshotExpired) {

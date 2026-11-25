@@ -7,9 +7,9 @@ import {
   adminActionReauthentication,
   authPolicyApplication,
   dataDisclosureEvent,
-  dataManagerOfflinePackageArtifactReferences,
-  dataManagerOfflinePackageJobOwners,
-  dataManagerOfflinePackageJobs,
+  dataManagerOfflinePackageArtifactReference,
+  dataManagerOfflinePackageJob,
+  dataManagerOfflinePackageJobOwner,
   dataSubjectRequest,
   integrationApplicationReceipt,
   oauthAccessToken,
@@ -55,12 +55,12 @@ afterEach(async () => {
       .where(inArray(authPolicyApplication.key, policyApplications));
   if (offlinePrincipals.length)
     await db
-      .delete(dataManagerOfflinePackageArtifactReferences)
-      .where(inArray(dataManagerOfflinePackageArtifactReferences.principal, offlinePrincipals));
+      .delete(dataManagerOfflinePackageArtifactReference)
+      .where(inArray(dataManagerOfflinePackageArtifactReference.principal, offlinePrincipals));
   if (offlineJobs.length)
     await db
-      .delete(dataManagerOfflinePackageJobs)
-      .where(inArray(dataManagerOfflinePackageJobs.id, offlineJobs));
+      .delete(dataManagerOfflinePackageJob)
+      .where(inArray(dataManagerOfflinePackageJob.id, offlineJobs));
   for (const id of requests)
     await db.delete(dataSubjectRequest).where(eq(dataSubjectRequest.id, id));
   for (const id of users) await db.delete(user).where(eq(user.id, id));
@@ -118,9 +118,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const [row] = await db
           .insert(adminActionReauthentication)
           .values({
-            actorId,
+            actorUserId: actorId,
             startingSessionId: randomUUID(),
-            purpose: "credentials.export",
+            purpose: "credential.export",
             targetId: "credentials",
             nonceDigest: randomUUID(),
             expiresAt: daysAgo(expiredDaysAgo),
@@ -298,14 +298,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         policyApplications.push(key);
         await db.insert(accountActionReceipt).values({
           key,
-          actorId,
+          actorUserId: actorId,
           action: "create",
           intentDigest: "fixture",
           createdAt: daysAgo(days),
         });
         await db.insert(integrationApplicationReceipt).values({
           operationId: key,
-          actorId,
+          actorUserId: actorId,
           integrationId,
           capability: "fixture",
           candidateId: randomUUID(),
@@ -316,7 +316,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         });
         await db.insert(authPolicyApplication).values({
           key,
-          actorId,
+          actorUserId: actorId,
           intentDigest: "fixture",
           snapshot: {} as never,
           createdAt: daysAgo(days),
@@ -366,7 +366,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         integrationReceipts.push(key);
         await db.insert(integrationApplicationReceipt).values({
           operationId: key,
-          actorId: actor,
+          actorUserId: actor,
           integrationId,
           capability: "fixture",
           candidateId: randomUUID(),
@@ -382,8 +382,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         accountReceipts.push(key);
         await db.insert(accountActionReceipt).values({
           key,
-          actorId: actor,
-          targetId,
+          actorUserId: actor,
+          targetUserId: targetId,
           action: "role",
           intentDigest: "fixture",
           createdAt: daysAgo(days),
@@ -442,6 +442,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             mode: "snapshot",
             label: "A → B",
             snapshot: {},
+            snapshotVersion: 1,
             createdAt: daysAgo(60),
             expiresAt: expiredDaysAgo === null ? null : daysAgo(expiredDaysAgo),
           })
@@ -507,7 +508,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const insertOwner = async (principal: string, days: number) => {
         const jobId = randomUUID();
         offlineJobs.push(jobId);
-        await db.insert(dataManagerOfflinePackageJobs).values({
+        await db.insert(dataManagerOfflinePackageJob).values({
           id: jobId,
           requestKey: randomUUID(),
           packageId: `pkg-${jobId}`,
@@ -517,13 +518,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           updatedAt: daysAgo(days),
         });
         await db
-          .insert(dataManagerOfflinePackageJobOwners)
+          .insert(dataManagerOfflinePackageJobOwner)
           .values({ jobId, principal, createdAt: daysAgo(days) });
         return jobId;
       };
       const insertReference = async (principal: string, days: number) => {
         const packageId = `pkg-${randomUUID()}`;
-        await db.insert(dataManagerOfflinePackageArtifactReferences).values({
+        await db.insert(dataManagerOfflinePackageArtifactReference).values({
           principal,
           packageId,
           byteLength: 1,
@@ -543,10 +544,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(
         await remaining(
           db
-            .select({ id: dataManagerOfflinePackageJobOwners.jobId })
-            .from(dataManagerOfflinePackageJobOwners)
+            .select({ id: dataManagerOfflinePackageJobOwner.jobId })
+            .from(dataManagerOfflinePackageJobOwner)
             .where(
-              inArray(dataManagerOfflinePackageJobOwners.jobId, [
+              inArray(dataManagerOfflinePackageJobOwner.jobId, [
                 oldErasedJob,
                 recentErasedJob,
                 oldLiveJob,
@@ -556,11 +557,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       ).toEqual([recentErasedJob, oldLiveJob].sort());
       const references = await db
         .select({
-          principal: dataManagerOfflinePackageArtifactReferences.principal,
-          packageId: dataManagerOfflinePackageArtifactReferences.packageId,
+          principal: dataManagerOfflinePackageArtifactReference.principal,
+          packageId: dataManagerOfflinePackageArtifactReference.packageId,
         })
-        .from(dataManagerOfflinePackageArtifactReferences)
-        .where(inArray(dataManagerOfflinePackageArtifactReferences.principal, [live, erased]));
+        .from(dataManagerOfflinePackageArtifactReference)
+        .where(inArray(dataManagerOfflinePackageArtifactReference.principal, [live, erased]));
       expect(references.map((row) => `${row.principal}:${row.packageId}`).sort()).toEqual(
         [recentErasedRef, oldLiveRef].sort(),
       );
@@ -572,14 +573,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       // is deleted.
       await insertOwner(erased, 40);
       const before = await db
-        .select({ id: dataManagerOfflinePackageJobOwners.jobId })
-        .from(dataManagerOfflinePackageJobOwners)
-        .where(eq(dataManagerOfflinePackageJobOwners.principal, erased));
+        .select({ id: dataManagerOfflinePackageJobOwner.jobId })
+        .from(dataManagerOfflinePackageJobOwner)
+        .where(eq(dataManagerOfflinePackageJobOwner.principal, erased));
       await pruneDeclaredRetention({ offlinePrincipalKey: async () => undefined });
       const after = await db
-        .select({ id: dataManagerOfflinePackageJobOwners.jobId })
-        .from(dataManagerOfflinePackageJobOwners)
-        .where(eq(dataManagerOfflinePackageJobOwners.principal, erased));
+        .select({ id: dataManagerOfflinePackageJobOwner.jobId })
+        .from(dataManagerOfflinePackageJobOwner)
+        .where(eq(dataManagerOfflinePackageJobOwner.principal, erased));
       expect(after.length).toBe(before.length);
 
       // An unreadable key file fails the run visibly and deletes nothing.
@@ -592,9 +593,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(failed).toBeInstanceOf(AggregateError);
       expect((failed as AggregateError).errors).toContain(unreadable);
       const afterFailure = await db
-        .select({ id: dataManagerOfflinePackageJobOwners.jobId })
-        .from(dataManagerOfflinePackageJobOwners)
-        .where(eq(dataManagerOfflinePackageJobOwners.principal, erased));
+        .select({ id: dataManagerOfflinePackageJobOwner.jobId })
+        .from(dataManagerOfflinePackageJobOwner)
+        .where(eq(dataManagerOfflinePackageJobOwner.principal, erased));
       expect(afterFailure.length).toBe(before.length);
     });
 
@@ -607,7 +608,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const erased = randomBytes(32).toString("hex");
       offlinePrincipals.push(...live, erased);
       for (const principal of [...live, erased])
-        await db.insert(dataManagerOfflinePackageArtifactReferences).values({
+        await db.insert(dataManagerOfflinePackageArtifactReference).values({
           principal,
           packageId: `pkg-${randomUUID()}`,
           byteLength: 1,
@@ -619,9 +620,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       await prune({ batchSize: 1, maxBatches: 1 });
 
       const principals = await db
-        .select({ principal: dataManagerOfflinePackageArtifactReferences.principal })
-        .from(dataManagerOfflinePackageArtifactReferences)
-        .where(inArray(dataManagerOfflinePackageArtifactReferences.principal, [...live, erased]));
+        .select({ principal: dataManagerOfflinePackageArtifactReference.principal })
+        .from(dataManagerOfflinePackageArtifactReference)
+        .where(inArray(dataManagerOfflinePackageArtifactReference.principal, [...live, erased]));
       expect(principals.map((row) => row.principal).sort()).toEqual([...live].sort());
     });
 

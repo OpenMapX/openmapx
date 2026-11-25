@@ -33,9 +33,9 @@ const checkpoint = {
   overtureCount: 0,
 };
 const active = {
-  version: 2,
+  version: 1,
   generation,
-  policyVersion: 2,
+  policyVersion: 1,
   publishedAt: date,
   placeCount: 42,
   enabled: true,
@@ -165,7 +165,7 @@ describe("ambient operator workflow", () => {
     view();
     await screen.findByText(/osm-one/);
     expect(screen.getByText(/OSM only/)).toBeInTheDocument();
-    expect(screen.getByText("Policy 2")).toBeInTheDocument();
+    expect(screen.getByText("Policy 1")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Publish map snapshot" }));
     await waitFor(() =>
       expect(fetch).toHaveBeenCalledWith(

@@ -1,9 +1,8 @@
 import { createHash } from "node:crypto";
-import { db } from "../db";
-import { systemSettings } from "../db/schema";
 import { getAllIntegrations } from "../integration-host";
 import { safeErrorClass } from "../utils/safe-log-fields";
 import { appLogger } from "./app-logger";
+import { resolveSettingValues, settingDefinition, settingFromEnvironment } from "./settings";
 
 /**
  * Operator policy for licence-restricted data sources. Both non-commercial
@@ -11,9 +10,9 @@ import { appLogger } from "./app-logger";
  * *allowed* by default — the project's default deployment is non-commercial, and
  * most grey-area sources are public APIs whose terms are merely undocumented. An
  * operator running a commercial deployment can tighten either control to exclude
- * the corresponding sources. Resolved env-first (OPENMAPX_ALLOW_NONCOMMERCIAL /
- * OPENMAPX_ALLOW_GREY_AREA), then the `system_settings` row set in the admin
- * panel, then the default.
+ * the corresponding sources. Resolved like every setting: the environment
+ * (DATA_USE_ALLOW_NON_COMMERCIAL / DATA_USE_ALLOW_GREY_AREA), then the value
+ * stored in the admin panel, then the default.
  */
 export interface DataUsePolicy {
   /** Allow sources whose licence forbids commercial use (`commercialUse: "no"`). */
@@ -22,14 +21,8 @@ export interface DataUsePolicy {
   allowGreyArea: boolean;
 }
 
-const ENV_NON_COMMERCIAL = "OPENMAPX_ALLOW_NONCOMMERCIAL";
-const ENV_GREY_AREA = "OPENMAPX_ALLOW_GREY_AREA";
-
-function envBool(name: string): boolean | undefined {
-  const v = process.env[name];
-  if (v === undefined || v === "") return undefined;
-  return v === "true" || v === "1";
-}
+const NON_COMMERCIAL_SETTING = "dataUse.allowNonCommercial";
+const GREY_AREA_SETTING = "dataUse.allowGreyArea";
 
 interface PolicyCache {
   value: DataUsePolicy;
@@ -60,49 +53,41 @@ const EMPTY: Set<string> = new Set();
 async function loadPolicy(
   previous: PolicyCache | null,
 ): Promise<{ value: DataUsePolicy; authoritative: boolean }> {
-  const envNC = envBool(ENV_NON_COMMERCIAL);
-  const envGrey = envBool(ENV_GREY_AREA);
-
-  let authoritative = true;
-  let dbNC: boolean | undefined;
-  let dbGrey: boolean | undefined;
-  // Only hit the DB for the keys not already pinned by an env var.
-  if (envNC === undefined || envGrey === undefined) {
-    try {
-      const rows = await db.select().from(systemSettings);
-      const map = Object.fromEntries(rows.map((r) => [r.key, r.value]));
-      if (typeof map.allowNonCommercial === "boolean") dbNC = map.allowNonCommercial;
-      if (typeof map.allowGreyArea === "boolean") dbGrey = map.allowGreyArea;
-    } catch (err) {
-      // Writer authority is lost either way; what display falls back to
-      // depends on whether there is a last good policy to keep.
-      authoritative = false;
-      appLogger.add({
-        level: "warn",
-        source: "data-use-policy",
-        msg: previous
-          ? "Data-use policy refresh failed; keeping the last good policy"
-          : "Data-use policy could not be loaded; excluding both restricted classes until it can",
-        time: Date.now(),
-        metadata: { errorClass: safeErrorClass(err) },
-      });
-      return {
-        value: {
-          allowNonCommercial: envNC ?? previous?.value.allowNonCommercial ?? false,
-          allowGreyArea: envGrey ?? previous?.value.allowGreyArea ?? false,
-        },
-        authoritative,
-      };
-    }
+  const envNC = settingFromEnvironment(settingDefinition(NON_COMMERCIAL_SETTING)) as
+    | boolean
+    | undefined;
+  const envGrey = settingFromEnvironment(settingDefinition(GREY_AREA_SETTING)) as
+    | boolean
+    | undefined;
+  try {
+    const values = await resolveSettingValues([NON_COMMERCIAL_SETTING, GREY_AREA_SETTING]);
+    return {
+      value: {
+        allowNonCommercial: values[NON_COMMERCIAL_SETTING] as boolean,
+        allowGreyArea: values[GREY_AREA_SETTING] as boolean,
+      },
+      authoritative: true,
+    };
+  } catch (err) {
+    // Writer authority is lost either way; what display falls back to
+    // depends on whether there is a last good policy to keep.
+    appLogger.add({
+      level: "warn",
+      source: "data-use-policy",
+      message: previous
+        ? "Data-use policy refresh failed; keeping the last good policy"
+        : "Data-use policy could not be loaded; excluding both restricted classes until it can",
+      time: Date.now(),
+      metadata: { errorClass: safeErrorClass(err) },
+    });
+    return {
+      value: {
+        allowNonCommercial: envNC ?? previous?.value.allowNonCommercial ?? false,
+        allowGreyArea: envGrey ?? previous?.value.allowGreyArea ?? false,
+      },
+      authoritative: false,
+    };
   }
-
-  return {
-    value: {
-      allowNonCommercial: envNC ?? dbNC ?? true,
-      allowGreyArea: envGrey ?? dbGrey ?? true,
-    },
-    authoritative,
-  };
 }
 
 /**

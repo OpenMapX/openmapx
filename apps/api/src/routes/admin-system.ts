@@ -1,4 +1,5 @@
 import { HOST_MUTATING_JOB_TYPES } from "@openmapx/core/api-contracts";
+import type { SYSTEM_MAINTENANCE_JOB_TYPES } from "@openmapx/core/jobs";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { ActiveMaintenanceConflict } from "../services/active-maintenance-conflict";
 import { hostControlConfigured } from "../services/deployment-mode";
@@ -99,7 +100,7 @@ function maintenanceConflict(reply: FastifyReply, active: { id: string } | null)
  * unique active-maintenance index decides concurrent requests. */
 async function enqueueMaintenance(
   reply: FastifyReply,
-  type: "system.update" | "system.diagnostics",
+  type: (typeof SYSTEM_MAINTENANCE_JOB_TYPES)[number],
   payload: Record<string, unknown>,
   actorId: string,
 ): Promise<{ jobId: string } | { conflict: ReturnType<typeof maintenanceConflict> }> {
@@ -141,7 +142,6 @@ export async function adminSystemRoute(app: FastifyInstance): Promise<void> {
       if ("conflict" in admitted) return admitted.conflict;
       await writeAuditLog({
         actorId: admin.user.id,
-        targetType: "system",
         targetId: "openmapx",
         action: "system.update.check",
         request,
@@ -160,7 +160,7 @@ export async function adminSystemRoute(app: FastifyInstance): Promise<void> {
       const active = await activeMaintenanceJob();
       if (active) return maintenanceConflict(reply, active);
       const admin = getAdminSession(request);
-      if (admin.user.id === "loopback" || admin.session.impersonatedBy)
+      if (admin.session.impersonatedBy)
         return reply.code(403).send({ error: "A real full administrator session is required" });
       const { releaseId, expectedDigest } = request.body;
       const createBackup = request.body.createBackup !== false;
@@ -179,9 +179,8 @@ export async function adminSystemRoute(app: FastifyInstance): Promise<void> {
       if ("conflict" in admitted) return admitted.conflict;
       await writeAuditLog({
         actorId: admin.user.id,
-        targetType: "system",
         targetId: "openmapx",
-        action: "system.update.apply",
+        action: "system.update",
         details: { createBackup, releaseId, expectedDigest },
         request,
       });
@@ -199,13 +198,17 @@ export async function adminSystemRoute(app: FastifyInstance): Promise<void> {
       const active = await activeMaintenanceJob();
       if (active) return maintenanceConflict(reply, active);
       const admin = getAdminSession(request);
-      const admitted = await enqueueMaintenance(reply, "system.diagnostics", {}, admin.user.id);
+      const admitted = await enqueueMaintenance(
+        reply,
+        "system.diagnostics.collect",
+        {},
+        admin.user.id,
+      );
       if ("conflict" in admitted) return admitted.conflict;
       await writeAuditLog({
         actorId: admin.user.id,
-        targetType: "system",
         targetId: "openmapx",
-        action: "system.diagnostics.run",
+        action: "system.diagnostics.collect",
         request,
       });
       return { ok: true, jobId: admitted.jobId };

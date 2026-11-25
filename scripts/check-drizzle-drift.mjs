@@ -10,14 +10,18 @@
  *    inspection, and uncommitted changes in the folder also fail. Neither step
  *    may print an error or ask for a terminal: drizzle-kit exits 0 when it
  *    cannot ask a question or load the schema code.
- * 3. While the journal holds only the baseline and the custom migration, a
- *    baseline regenerated from the schema code into an empty temporary folder
- *    must have a `0000_baseline.sql` byte-identical to the committed one and a
- *    snapshot equal to the committed `0000_snapshot.json` apart from its random
- *    `id` and `prevId`. This catches a hand edit to the generated SQL, which
- *    steps 1 and 2 do not read. Once later migrations exist, the baseline is
- *    frozen and no longer what the schema code generates, so this step is
- *    skipped; steps 1 and 2 still guard drift.
+ * 3. The released migrations listed in `released-migrations.json` (written
+ *    by release preparation) must be unchanged and present, and every other
+ *    journal entry must have a `when` newer than all of them; while the lock
+ *    lists none, the journal must hold exactly the baseline and the custom
+ *    migration.
+ * 4. While the lock lists no migration, a baseline regenerated from the schema
+ *    code into an empty temporary folder must have a `0000_baseline.sql`
+ *    byte-identical to the committed one and a snapshot equal to the committed
+ *    `0000_snapshot.json` apart from its random `id` and `prevId`. This catches
+ *    a hand edit to the generated SQL, which steps 1 and 2 do not read. Once a
+ *    release ships the baseline, it is frozen and no longer what the schema
+ *    code generates, so this step is skipped; steps 1 to 3 still guard drift.
  *
  * The custom migration (`0001_*.sql`) is hand-written and not compared here;
  * apps/api/src/db/custom-migration.test.ts limits what it may contain.
@@ -27,36 +31,36 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  MIGRATIONS,
+  migrationDigest,
+  RELEASED_MIGRATIONS,
+  readJournal,
+  readReleasedMigrations,
+  releasedMigrationProblems,
+} from "./released-migrations.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const MIGRATIONS = "apps/api/src/db/migrations";
 // Same dialect and schema entry as apps/api/drizzle.config.ts.
 const SCHEMA = "./src/db/schema.ts";
 // drizzle-kit asks interactively about renames; without a terminal it must not hang.
 const TIMEOUT_MS = 120_000;
-const BASELINE_TAGS = ["0000_baseline", "0001_database_objects"];
 
 const DOCS = 'docs/docs/developer/development-setup.md, "API migrations"';
-const REGENERATE =
-  `Until the first release that contains the baseline is installed anywhere, regenerate the baseline from the schema code (${DOCS}) and commit the result. ` +
-  "After that, add an incremental migration with `pnpm db:generate` in apps/api instead, and never edit or regenerate 0000 or 0001.";
-const ADD_MIGRATION = `Add an incremental migration with \`pnpm db:generate\` in apps/api (${DOCS}) and commit it; never edit or regenerate 0000 or 0001.`;
+const REGENERATE = `No migration is released yet (${RELEASED_MIGRATIONS} lists none): regenerate the baseline from the schema code (${DOCS}) and commit the result.`;
+const ADD_MIGRATION = `Add an incremental migration with \`pnpm db:generate\` in apps/api (${DOCS}) and commit it; never edit or regenerate a migration ${RELEASED_MIGRATIONS} lists.`;
 
 /**
  * Whether the committed baseline must still equal a fresh regeneration: only
- * while the journal holds exactly the baseline and the custom migration.
+ * while no release has shipped a migration.
+ *
+ * @param {import("./released-migrations.mjs").ReleasedMigrations} lock
  */
-export function baselineComparison(journal) {
-  const tags = (journal?.entries ?? []).map((entry) => entry.tag);
-  if (tags.length === BASELINE_TAGS.length && tags.every((tag, i) => tag === BASELINE_TAGS[i]))
-    return { applies: true };
-  const later = tags.filter((tag) => !BASELINE_TAGS.includes(tag));
+export function baselineComparison(lock) {
+  if (lock.migrations.length === 0) return { applies: true };
   return {
     applies: false,
-    reason:
-      later.length > 0
-        ? `Skipping the baseline regeneration check: later migrations follow the baseline (${later.join(", ")}), so 0000 and 0001 are frozen. drizzle-kit check and generate still guard drift.`
-        : `Skipping the baseline regeneration check: the journal does not hold exactly ${BASELINE_TAGS.join(" and ")}. drizzle-kit check and generate still guard drift.`,
+    reason: `Skipping the baseline regeneration check: ${RELEASED_MIGRATIONS} lists released migrations (${lock.migrations.map((released) => released.tag).join(", ")}), so they are frozen. drizzle-kit check and generate and the released-migration check still guard drift.`,
   };
 }
 
@@ -168,10 +172,14 @@ function compareRegeneratedBaseline() {
 }
 
 if (import.meta.main) {
-  const comparison = baselineComparison(
-    JSON.parse(readFileSync(join(ROOT, MIGRATIONS, "meta", "_journal.json"), "utf8")),
-  );
+  const lock = readReleasedMigrations(ROOT);
+  const comparison = baselineComparison(lock);
   const remedy = comparison.applies ? REGENERATE : ADD_MIGRATION;
+  const released = releasedMigrationProblems(lock, readJournal(ROOT), (tag) =>
+    migrationDigest(ROOT, tag),
+  );
+  if (released.length > 0)
+    fail(`${released.map((problem) => `✗ ${problem}`).join("\n")}\n${remedy}`);
   const kit = ["--filter", "@openmapx/api", "exec", "drizzle-kit"];
   const check = run("pnpm", [...kit, "check"]);
   const generate = run("pnpm", [...kit, "generate"]);

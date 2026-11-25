@@ -25,8 +25,8 @@ export function persistedJob(
       deploymentBudgetMs,
     });
   return {
-    executionVersion: 2,
-    requestVersion: 2,
+    executionVersion: 1,
+    requestVersion: 1,
     ...identity,
     operationFingerprint,
     deploymentBudgetMs,

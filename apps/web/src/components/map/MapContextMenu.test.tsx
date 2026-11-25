@@ -396,7 +396,7 @@ describe("MapContextMenu route and place actions", () => {
     );
 
     expect(usePlaceStore.getState().selectedPlace).toMatchObject({
-      id: "stylePoi:42",
+      id: "style-poi:42",
       name: "Smithsonian Institution Building",
       address: "Smithsonian Institution Building",
       coordinates: [-77.026, 38.889],
@@ -434,7 +434,7 @@ describe("MapContextMenu route and place actions", () => {
     );
 
     expect(usePlaceStore.getState().selectedPlace).toMatchObject({
-      id: "coordinate:38.888590--77.025730",
+      id: "coordinate:38.888590,-77.025730",
       name: "Washington",
       address: "1000 Jefferson Drive",
       coordinates: [-77.02573, 38.88859],
@@ -712,7 +712,7 @@ describe("MapContextMenu share behavior", () => {
 
       expect(shareUrlMock).toHaveBeenCalledWith({
         title: "38.888590, -77.025730",
-        url: "http://localhost:3000/map?map=38.88859%2C-77.02573%2C16%2C0%2C0&panel=place&place=coordinate%3A38.888590--77.025730&at=38.88859%2C-77.02573&name=38.888590%2C+-77.025730",
+        url: "http://localhost:3000/map?map=38.88859%2C-77.02573%2C16%2C0%2C0&panel=place&place=coordinate%3A38.888590%2C-77.025730&placeLocation=38.88859%2C-77.02573&placeName=38.888590%2C+-77.025730",
       });
       expect(Boolean(screen.queryByRole("menu"))).toBe(remainsOpen);
       if (message) expect(screen.getByText(message)).toBeDefined();

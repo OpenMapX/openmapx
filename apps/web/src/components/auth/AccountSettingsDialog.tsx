@@ -35,6 +35,8 @@ import { useAccountCredentials } from "./useAccountCredentials";
 interface AccountSettingsDialogProps {
   open: boolean;
   onClose: () => void;
+  /** The account was deleted; the caller closes the dialog and tells an incomplete cleanup. */
+  onAccountDeleted: (cleanupIncomplete: boolean) => void;
   user: User;
   initialSection: AccountSettingsSection;
 }
@@ -56,6 +58,7 @@ export function AccountSettingsDialog(props: AccountSettingsDialogProps) {
 function AccountSettingsDialogContent({
   open,
   onClose,
+  onAccountDeleted,
   user,
   initialSection,
 }: AccountSettingsDialogProps) {
@@ -149,7 +152,7 @@ function AccountSettingsDialogContent({
         <Divider sx={{ mb: 2 }} />
         <MangroveAccountSection />
         <Divider sx={{ mb: 2 }} />
-        <DeletionSection onDeleted={onClose} setMessage={setMessage} />
+        <DeletionSection onDeleted={onAccountDeleted} setMessage={setMessage} />
       </DialogContent>
     </Dialog>
   );

@@ -15,8 +15,8 @@ export interface PartnerCredential {
  * written, because neither vendor issues credentials self-service.
  */
 export const PARTNER_CREDENTIALS: readonly PartnerCredential[] = [
-  { sourceId: "yango", keys: ["yango-client-id", "yango-api-key"] },
-  { sourceId: "karhoo", keys: ["karhoo-client-id", "karhoo-client-secret"] },
+  { sourceId: "yango", keys: ["yangoClientId", "yangoApiKey"] },
+  { sourceId: "karhoo", keys: ["karhooClientId", "karhooClientSecret"] },
 ];
 
 /**

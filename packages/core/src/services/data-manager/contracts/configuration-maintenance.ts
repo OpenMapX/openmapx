@@ -1,4 +1,5 @@
 import z from "zod/v4";
+import { COMPONENT_ID_PATTERN } from "../../../component-id";
 import { executionRefSchema } from "../../../ops/execution-ref";
 import {
   dataControlDelegationSchema,
@@ -19,7 +20,7 @@ const binding = {
 export const dataConfigurationFencePrepareSchema = z.strictObject({
   ...binding,
   serviceIds: z
-    .array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/))
+    .array(z.string().regex(COMPONENT_ID_PATTERN))
     .min(1)
     .max(256)
     .refine((values) => values.every((value, i) => i === 0 || (values[i - 1] ?? value) < value)),

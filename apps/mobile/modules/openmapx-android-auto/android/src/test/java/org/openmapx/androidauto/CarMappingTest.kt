@@ -255,10 +255,14 @@ class CarMappingTest {
     } finally {
       CarState.projection = null
     }
-    for (code in listOf("phone-setup", "location-unavailable", "no-route", "network", "other")) {
+    for (
+      code in
+        listOf("phone-setup", "location-unavailable", "no-route", "network", "update-required", "other")
+    ) {
       CarState.result = JSONObject().put("error", code)
       assertNotNull(PreviewScreen(context, routes).onGetTemplate())
     }
+    assertEquals(R.string.car_update_required, CarErrors.message("update-required"))
     CarState.result = JSONObject()
   }
 

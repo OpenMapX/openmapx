@@ -109,14 +109,15 @@ import { validateArtifactMetadata } from "@openmapx/extension-contracts/artifact
 import { satisfiesPlatformVersion } from "@openmapx/extension-contracts/platform";
 import { parseContributors } from "@openmapx/extension-contracts/contributors";
 import { createAuthoringSchemas } from "@openmapx/extension-contracts/schemas";
-assert(validateManifest({id:"demo",domains:["knowledge"],quality:"community"}).valid);
+assert(validateManifest({id:"demo",version:"1.0.0",platform:"1.0",domains:["knowledge"],quality:"community"},{firstParty:false}).valid);
+assert(!validateManifest({id:"demo",domains:["knowledge"],quality:"community"},{firstParty:false}).valid);
 assert(!validateServiceManifest({id:"bad"},{firstParty:false}).valid);
-assert(!validateExtensionManifest({id:"empty",name:"Empty",version:"0.1.0"}).valid);
+assert(!validateExtensionManifest({id:"empty",name:"Empty",version:"0.1.0",platform:"1.0"}).valid);
 assert(validateArtifactMetadata({schemaVersion:1,id:"demo",platformVersion:"1.0",builtAt:"1970-01-01T00:00:00Z"},"demo","1.2").valid);
 assert(!satisfiesPlatformVersion("bogus"));
 assert.deepEqual(parseContributors([]),[]);
 assert.equal(createAuthoringSchemas().extension.type,"object");
-for (const subpath of ["", "/identifiers", "/media-hosts", "/capabilities", "/licensing", "/attribution"]) {
+for (const subpath of ["", "/identifiers", "/semver", "/media-hosts", "/capabilities", "/licensing", "/attribution"]) {
   await import("@openmapx/extension-contracts" + subpath);
 }
 for (const name of ["integration", "service", "extension", "artifact"]) {
@@ -137,10 +138,10 @@ import type { Attribution } from "@openmapx/extension-contracts/attribution";
 import { parseContributors } from "@openmapx/extension-contracts/contributors";
 import { parseLicensing } from "@openmapx/extension-contracts/licensing";
 const integration: IntegrationManifest = {id:"demo",domains:["knowledge"]};
-const extension: ExtensionManifest = {id:"demo",name:"Demo",version:"0.1.0",services:[{repo:"https://github.com/example/demo",service:"demo"}]};
+const extension: ExtensionManifest = {id:"demo",name:"Demo",version:"0.1.0",platform:"1.0",services:[{repo:"https://github.com/example/demo",service:"demo"}]};
 const artifact: ArtifactMetadata = {id:"demo",schemaVersion:1,platformVersion:"1.0",builtAt:"1970-01-01T00:00:00Z"};
 const receipts: Attribution[] = parseContributors([]) ?? [];
-validateManifest(integration); validateExtensionManifest(extension); parseLicensing(undefined);
+validateManifest(integration, {firstParty:true}); validateExtensionManifest(extension); parseLicensing(undefined);
 const serviceCheck = (service: ServiceManifest) => validateServiceManifest(service, {firstParty:false});
 void artifact; void receipts; void serviceCheck;
 `,
@@ -271,7 +272,10 @@ void artifact; void receipts; void serviceCheck;
   rejects(["validate", badReceipts, "--kind", "contributors"], /canonical contributor receipts/);
   const invalid = join(consumer, "invalid-extension.json");
   const untouched = join(consumer, "must-not-exist.json");
-  writeFileSync(invalid, JSON.stringify({ id: "empty", name: "Empty", version: "0.1.0" }));
+  writeFileSync(
+    invalid,
+    JSON.stringify({ id: "empty", name: "Empty", version: "0.1.0", platform: "1.0" }),
+  );
   rejects(["bundle", "--input", invalid, "--out", untouched], /at least one|component/i);
   assert(!existsSync(untouched), "Invalid input must not write output");
   const originalBundle = readFileSync(out, "utf8");

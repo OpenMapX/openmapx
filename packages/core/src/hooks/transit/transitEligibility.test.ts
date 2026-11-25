@@ -8,8 +8,8 @@ import {
 } from "./transitEligibility";
 
 const basePlace = {
-  primaryScheme: "stylePoi",
-  ids: { stylePoi: "poi-1" },
+  primaryScheme: "style-poi",
+  ids: { "style-poi": "poi-1" },
   name: "Archimo",
   address: "Archimo",
   coordinates: [6.0839, 50.774] as [number, number],

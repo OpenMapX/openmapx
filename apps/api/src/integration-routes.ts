@@ -97,7 +97,14 @@ export const ROUTE_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"] a
 let _routeDispatcherFastify: FastifyInstance<any, any, any, any> | null = null;
 type IntegrationRouteTiers = Pick<
   RateLimitTiers,
-  "public" | "expensive" | "routing" | "typeahead" | "tile" | "unmatched"
+  | "public"
+  | "expensive"
+  | "routing"
+  | "typeahead"
+  | "tile"
+  | "contribution"
+  | "enrollment"
+  | "unmatched"
 >;
 
 let routeRateLimits: IntegrationRouteTiers | null = null;

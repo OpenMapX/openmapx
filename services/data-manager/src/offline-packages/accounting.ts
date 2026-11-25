@@ -8,8 +8,6 @@ export const DEFAULT_PRINCIPAL_MAX_REFERENCES = 5;
 export const DEFAULT_PRINCIPAL_MAX_LOGICAL_BYTES = 5 * 1024 ** 3;
 
 export class OfflinePackageCapacityError extends Error {
-  readonly errorCode = "capacity" as const;
-
   constructor(message: string) {
     super(`offline package capacity: ${message}`);
     this.name = "OfflinePackageCapacityError";
@@ -17,8 +15,6 @@ export class OfflinePackageCapacityError extends Error {
 }
 
 export class OfflinePackagePrincipalQuotaError extends Error {
-  readonly errorCode = "principal-quota" as const;
-
   constructor(message: string) {
     super(`offline package principal quota: ${message}`);
     this.name = "OfflinePackagePrincipalQuotaError";
@@ -242,7 +238,7 @@ export class MemoryOfflinePackageAccountingStore implements OfflinePackageAccoun
         ...stored.record,
         status: "expired",
         manifest: undefined,
-        errorCode: "expired",
+        errorCode: "EXPIRED",
         errorMessage: "offline package artifact unavailable; prepare the area again",
         updatedAtMs: this.clock(),
       };
@@ -509,7 +505,7 @@ export class MemoryOfflinePackageAccountingStore implements OfflinePackageAccoun
     await this.fail(
       jobId,
       undefined,
-      "expired",
+      "EXPIRED",
       "offline package preparation expired",
       updatedAtMs,
     );

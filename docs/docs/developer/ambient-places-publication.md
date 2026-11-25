@@ -107,7 +107,7 @@ Localized names have separate receipts. OSM names, position and category remain
 authoritative after conflation; only retained Overture gaps and GERS identity
 add their corresponding receipts.
 
-Format 2 feature properties include `format_version`, `_mapAttributions`
+Format 1 feature properties include `format_version`, `_mapAttributions`
 (canonical JSON receipt array), `field_contributors` (JSON field receipt map),
 and `source_lineage` (public source properties plus release). Receipts retain
 their captured wording after registry reloads. A captured empty array is
@@ -204,10 +204,11 @@ pnpm openmapx data overture-status
 
 Wait for each job to finish before the next command. Keep the same downloaded
 PBF in place throughout both source builds. The OSM snapshot must be `ready`,
-region `planet`, ambient source format **2**, current fingerprint equal to its
-published fingerprint, and have a recorded file identity. Overture must be
-region `planet`, on one validated Places release, with completed conflation
-against that exact OSM file identity. Table identities, epochs, release dates,
+region `planet`, written by the current search-index builder (its
+`schema_version`), current fingerprint equal to its published fingerprint, and
+have a recorded file identity. Overture must be region `planet`, written by the
+current Overture builder, on one validated Places release, with completed
+conflation against that exact OSM file identity. Table identities, epochs, release dates,
 conflation completion/attempt and row counts form the durable source signature.
 Same-release reconflation also invalidates an interrupted candidate. Older OSM
 snapshots need rebuilding; merely widening region bounds does not establish
@@ -512,7 +513,7 @@ retain their existing coordinate fallback.
 - Labels: supplied German/English names, otherwise the source name; the shared
   style localization pass accepts colon and underscore language fields; at most 120
   Unicode characters. No inferred opening hours, ratings or popularity.
-- Ranking (policy 3): essential destinations at zoom 13; corroborated cathedral/
+- Ranking (policy 1): essential destinations at zoom 13; corroborated cathedral/
   basilica or heritage levels 1 to 3 destinations at 14; other registered cultural
   landmarks and everyday businesses at 15; other places at 16. Cultural landmarks
   require a valid Wikidata/language-prefixed Wikipedia identity plus registered

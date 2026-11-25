@@ -35,11 +35,11 @@ describe("last map view", () => {
   });
 
   it("ignores a corrupt or out-of-range saved view", () => {
-    storage.setString("openmapx:lastMapView", "{not json");
+    storage.setString("openmapx:map:last-view", "{not json");
     expect(readLastMapView()).toBeNull();
-    storage.setString("openmapx:lastMapView", JSON.stringify({ center: [200, 10], zoom: 3 }));
+    storage.setString("openmapx:map:last-view", JSON.stringify({ center: [200, 10], zoom: 3 }));
     expect(readLastMapView()).toBeNull();
-    storage.setString("openmapx:lastMapView", JSON.stringify({ center: [10, 10], zoom: "3" }));
+    storage.setString("openmapx:map:last-view", JSON.stringify({ center: [10, 10], zoom: "3" }));
     expect(readLastMapView()).toBeNull();
     writeLastMapView({ center: [Number.NaN, 10], zoom: 3 });
     expect(readLastMapView()).toBeNull();
@@ -49,10 +49,10 @@ describe("last map view", () => {
     writeLastMapView({ center: [13.405, 52.52], zoom: 14 });
     useSettingsStore.getState().setRememberMapView(false);
 
-    expect(storage.getString("openmapx:rememberMapView")).toBe("false");
-    expect(storage.getString("openmapx:lastMapView")).toBeNull();
+    expect(storage.getString("openmapx:map:remember-view")).toBe("false");
+    expect(storage.getString("openmapx:map:last-view")).toBeNull();
     writeLastMapView({ center: [6.08, 50.78], zoom: 12 });
-    expect(storage.getString("openmapx:lastMapView")).toBeNull();
+    expect(storage.getString("openmapx:map:last-view")).toBeNull();
     expect(readLastMapView()).toBeNull();
 
     useSettingsStore.setState({ rememberMapView: true });
@@ -61,8 +61,8 @@ describe("last map view", () => {
   });
 
   it("honours a stored opt-out before the settings store is hydrated", () => {
-    storage.setString("openmapx:rememberMapView", "false");
-    storage.setString("openmapx:lastMapView", JSON.stringify({ center: [10, 10], zoom: 3 }));
+    storage.setString("openmapx:map:remember-view", "false");
+    storage.setString("openmapx:map:last-view", JSON.stringify({ center: [10, 10], zoom: 3 }));
     expect(useSettingsStore.getState().rememberMapView).toBe(true);
     expect(readLastMapView()).toBeNull();
   });

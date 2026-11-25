@@ -34,7 +34,7 @@ describe("image-only staging controls", () => {
     });
     expect(response.statusCode).toBe(202);
     expect(enqueue).toHaveBeenCalledWith(
-      "service.images.pull",
+      "service.image.pull",
       request,
       getAdminSession.mock.results.at(-1)?.value.user.id,
       key["idempotency-key"],

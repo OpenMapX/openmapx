@@ -328,7 +328,7 @@ dbDescribe("atomic last administrator protection", () => {
     const [ownedApplication] = await fixture.db
       .select()
       .from(authPolicyApplication)
-      .where(eq(authPolicyApplication.actorId, target.id));
+      .where(eq(authPolicyApplication.actorUserId, target.id));
     if (!ownedApplication) throw Error("Missing original policy application");
     const { streamOpenMapxRegistrationRecords } = await import("../privacy/openmapx-collectors");
     const records = [];
@@ -347,14 +347,14 @@ dbDescribe("atomic last administrator protection", () => {
       payload: { userId: target.id },
     });
     expect(result.statusCode, result.body).toBe(200);
-    expect((await fixture.db.select().from(authPolicyState))[0]?.activatedBy).toBeNull();
+    expect((await fixture.db.select().from(authPolicyState))[0]?.activatedByUserId).toBeNull();
     expect(
       (
         await fixture.db
           .select()
           .from(authPolicyApplication)
           .where(eq(authPolicyApplication.key, ownedApplication.key))
-      )[0]?.actorId,
+      )[0]?.actorUserId,
     ).toBeNull();
   });
   it("shares one role audit and version check across server API and the legacy privacy route", async () => {
@@ -443,19 +443,22 @@ dbDescribe("atomic last administrator protection", () => {
       previewId = randomUUID(),
       operationKey = `opk1_${randomUUID().replaceAll("-", "")}`;
     vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 0x73).toString("base64url"));
-    const { encrypt } = await import("../services/secrets"),
-      encrypted = encrypt("synthetic private proposal");
+    const { encrypt, secretAad } = await import("../services/secrets"),
+      encrypted = encrypt(
+        "synthetic private proposal",
+        secretAad.transitCredentialPreview(previewId),
+      );
     await fixture.db.insert(adminJob).values({
       id: jobId,
       type: "configuration.apply",
       status: "running",
-      createdBy: owner.id,
+      createdByUserId: owner.id,
       payload: { operationKey },
       protocol: { immediate: { actorId: owner.id, intentDigest: "0".repeat(64) } },
     });
     await fixture.db.insert(transitCredentialPreview).values({
       id: previewId,
-      actorId: owner.id,
+      actorUserId: owner.id,
       operationKey,
       intentFingerprint: "a".repeat(64),
       ...encrypted,

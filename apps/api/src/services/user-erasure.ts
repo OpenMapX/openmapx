@@ -9,8 +9,8 @@ import { currentAccountMutation } from "../account/account-context";
 import { assertAccountDeletionAllowed } from "../account/admin-invariant";
 import { type AuthDatabase, currentAuthDatabase } from "../account/auth-database";
 import {
-  dataManagerOfflinePackageArtifactReferences,
-  dataManagerOfflinePackageJobOwners,
+  dataManagerOfflinePackageArtifactReference,
+  dataManagerOfflinePackageJobOwner,
 } from "../db/schema";
 import {
   deriveOfflinePackagePrincipal,
@@ -109,11 +109,11 @@ export async function removeOfflinePackageOwnership(
   const principal = deriveOfflinePackagePrincipal(userId, key);
   await database.transaction(async (tx) => {
     await tx
-      .delete(dataManagerOfflinePackageJobOwners)
-      .where(eq(dataManagerOfflinePackageJobOwners.principal, principal));
+      .delete(dataManagerOfflinePackageJobOwner)
+      .where(eq(dataManagerOfflinePackageJobOwner.principal, principal));
     await tx
-      .delete(dataManagerOfflinePackageArtifactReferences)
-      .where(eq(dataManagerOfflinePackageArtifactReferences.principal, principal));
+      .delete(dataManagerOfflinePackageArtifactReference)
+      .where(eq(dataManagerOfflinePackageArtifactReference.principal, principal));
   });
 }
 

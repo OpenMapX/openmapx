@@ -47,7 +47,6 @@
     "type": "custom"
   },
   "quality": "built-in",
-  "category": "Geocoding",
   "dataSources": [
     {
       "commercialUse": "yes",

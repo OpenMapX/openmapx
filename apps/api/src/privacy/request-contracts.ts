@@ -1,7 +1,7 @@
 import { isValidRequestTransition } from "@openmapx/core/privacy";
 import { defaultLocale } from "@openmapx/i18n";
 import z from "zod/v4";
-import { REQUEST_CHANNELS, REQUEST_KINDS, type RequestState } from "../db/privacy-schema.js";
+import { REQUEST_CHANNELS, REQUEST_KINDS, type RequestStatus } from "../db/privacy-schema.js";
 import { isSupportedTimeZone } from "./deadline.js";
 import { PrivacyRequestError } from "./errors.js";
 
@@ -95,6 +95,6 @@ export const eventPayloadSchema = z
   )
   .refine((payload) => JSON.stringify(payload).length <= 8_192, "event payload too large");
 
-export function assertValidRequestTransition(from: RequestState, to: RequestState): void {
+export function assertValidRequestTransition(from: RequestStatus, to: RequestStatus): void {
   if (!isValidRequestTransition(from, to)) throw new PrivacyRequestError("INVALID_TRANSITION", 409);
 }

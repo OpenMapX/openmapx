@@ -2,11 +2,9 @@ import type { Database } from "./database";
 import {
   CREATE_ACTIVE_NAVIGATION,
   CREATE_ACTIVE_NAVIGATION_INDEX,
+  CREATE_CAR_DESTINATIONS,
   CREATE_DIAGNOSTIC_EVENTS,
   CREATE_DIAGNOSTIC_EVENTS_INDEX,
-  CREATE_FEASIBILITY_PROBE,
-  CREATE_NAVIGATION_EVENTS,
-  CREATE_NAVIGATION_EVENTS_INDEX,
   CREATE_PROCESSED_COMMANDS,
   CREATE_PROCESSED_COMMANDS_INDEX,
   CREATE_QUARANTINED_SESSIONS,
@@ -14,7 +12,6 @@ import {
   CREATE_SCHEDULED_ALERTS_INDEX,
   CREATE_SCHEMA_MIGRATIONS,
   CREATE_TERMINAL_ACK,
-  DROP_NAVIGATION_EVENTS,
   INSERT_APPLIED_MIGRATION,
   SELECT_APPLIED_MIGRATIONS,
 } from "./sql";
@@ -22,10 +19,10 @@ import {
 /**
  * The ordered, append-only schema history.
  *
- * Editing an existing entry would leave already-installed devices on a
- * different shape than a fresh install, so new work always appends. Every
- * statement is written to be safe to re-run, because an installed build may
- * already carry a table from before `schema_migrations` existed.
+ * Version 1 is the schema the first release ships. Editing an existing entry
+ * would leave installed devices on a different shape than a fresh install, so
+ * new work always appends a version. Each version runs exactly once, inside
+ * the transaction that records it.
  */
 export interface Migration {
   version: number;
@@ -33,15 +30,12 @@ export interface Migration {
 }
 
 export const SESSION_MIGRATIONS: readonly Migration[] = [
-  { version: 1, statements: [CREATE_FEASIBILITY_PROBE] },
   {
-    version: 2,
+    version: 1,
     statements: [
       CREATE_ACTIVE_NAVIGATION,
       CREATE_ACTIVE_NAVIGATION_INDEX,
       CREATE_TERMINAL_ACK,
-      CREATE_NAVIGATION_EVENTS,
-      CREATE_NAVIGATION_EVENTS_INDEX,
       CREATE_PROCESSED_COMMANDS,
       CREATE_PROCESSED_COMMANDS_INDEX,
       CREATE_SCHEDULED_ALERTS,
@@ -49,11 +43,9 @@ export const SESSION_MIGRATIONS: readonly Migration[] = [
       CREATE_DIAGNOSTIC_EVENTS,
       CREATE_DIAGNOSTIC_EVENTS_INDEX,
       CREATE_QUARANTINED_SESSIONS,
+      CREATE_CAR_DESTINATIONS,
     ],
   },
-  // The event outbox was written and never delivered; snapshots carry
-  // everything the page shows. Dropping its table also drops its index.
-  { version: 3, statements: [DROP_NAVIGATION_EVENTS] },
 ];
 
 export const LATEST_SCHEMA_VERSION = Math.max(

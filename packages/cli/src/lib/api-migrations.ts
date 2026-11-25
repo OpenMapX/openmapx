@@ -10,8 +10,6 @@ export const API_SERVICE_ID = coreServices.CORE_SERVICE_ID.api;
 
 /** The API image's migration entry point, relative to its working directory. */
 const MIGRATE_SCRIPT = "dist/migrate.js";
-/** Exit status of the migration container when its image has no migration entry point. */
-const NO_MIGRATION_STEP = 78;
 /** The migration cancels its statement within seconds of SIGTERM; allow for its rollback. */
 const STOP_TIMEOUT_SECONDS = "60";
 
@@ -74,10 +72,8 @@ export function stopMigrationArgs(labels: [string, string], composeArgs: string[
  * then a one-off container of the new image migrates the database. Its output
  * is this command's output. On failure the old API container starts again
  * and the nonzero status is returned: nothing has been recreated, and the
- * migration rolled back as a whole.
- *
- * Images without the migration entry point skip the step: the API applies its
- * migrations when it starts, as earlier releases did.
+ * migration rolled back as a whole. An image without the migration entry point
+ * fails the step like a failed migration.
  */
 export async function migrateBeforeApiUpdate(options: { deps: boolean }): Promise<number> {
   const labels = await migrationLabels();
@@ -123,19 +119,16 @@ export async function migrateBeforeApiUpdate(options: { deps: boolean }): Promis
       "--label",
       MIGRATION_MARKER,
       API_SERVICE_ID,
-      "sh",
-      "-c",
-      `if [ -f ${MIGRATE_SCRIPT} ]; then exec node --import tsx/esm ${MIGRATE_SCRIPT}; fi; exit ${NO_MIGRATION_STEP}`,
+      "node",
+      "--import",
+      "tsx/esm",
+      MIGRATE_SCRIPT,
     ]);
   } finally {
     process.off("SIGTERM", stopOnSignal);
     process.off("SIGINT", stopOnSignal);
   }
 
-  if (code === NO_MIGRATION_STEP) {
-    log.dim("This API image applies its migrations when it starts.");
-    return 0;
-  }
   if (code !== 0) {
     log.err(
       "The database migration did not complete, and whatever part of it ran was rolled back. Starting the previous API again; nothing was replaced.",

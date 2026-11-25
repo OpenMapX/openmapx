@@ -11,13 +11,14 @@ const databaseState = vi.hoisted(() => ({
   rows: [] as { key: string; value: unknown }[],
   secrets: {} as Record<string, string>,
 }));
-vi.mock("../../db/index.js", () => ({
-  db: { select: () => ({ from: async () => databaseState.rows }) },
-}));
-vi.mock("../../db/schema.js", () => ({ systemSettings: {} }));
 vi.mock("../../services/settings.js", () => ({
-  isSecretSetting: (key: string) => key === "maptilerApiKey",
-  loadSecretSettings: async () => databaseState.secrets,
+  SecretSettingUnreadableError: class extends Error {},
+  // Environment, then the stored value, then the default, as the resolver orders them.
+  resolveSetting: async (key: string) => {
+    if (key === "maptiler.apiKey")
+      return process.env.MAPTILER_API_KEY?.trim() || databaseState.secrets[key] || "";
+    return databaseState.rows.find((row) => row.key === key)?.value ?? "auto";
+  },
 }));
 
 import { invalidateMapSettings } from "../../utils/map-settings.js";
@@ -51,7 +52,7 @@ describe("GET /maptiler/*", () => {
     ["y outside the zoom world", "/maptiler/tiles/v3/2/0/4.pbf"],
     ["zoom above the provider ceiling", "/maptiler/tiles/v3/23/0/0.pbf"],
   ])("rejects %s before provider acquisition", async (_label, url) => {
-    vi.stubEnv("MAPTILER_KEY", "test-key");
+    vi.stubEnv("MAPTILER_API_KEY", "test-key");
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
 
@@ -62,7 +63,7 @@ describe("GET /maptiler/*", () => {
   });
 
   it("accepts the exact zoom-22 maximum tile", async () => {
-    vi.stubEnv("MAPTILER_KEY", "test-key");
+    vi.stubEnv("MAPTILER_API_KEY", "test-key");
     vi.stubGlobal(
       "fetch",
       vi.fn(
@@ -85,7 +86,7 @@ describe("GET /maptiler/*", () => {
     ["terrain-rgb-v2", "webp"],
     ["contours-v2", "pbf"],
   ])("proxies %s TileJSON and rewrites its %s tiles", async (tileset, extension) => {
-    vi.stubEnv("MAPTILER_KEY", "test-key");
+    vi.stubEnv("MAPTILER_API_KEY", "test-key");
     vi.stubEnv("PUBLIC_BASE_URL", "https://api.example.test");
     vi.stubGlobal(
       "fetch",
@@ -106,7 +107,7 @@ describe("GET /maptiler/*", () => {
   });
 
   it("rewrites MapTiler style asset URLs to the API proxy", async () => {
-    vi.stubEnv("MAPTILER_KEY", "test-key");
+    vi.stubEnv("MAPTILER_API_KEY", "test-key");
     // The proxy base is taken from configuration (PUBLIC_BASE_URL / DOMAIN),
     // not from request headers — see `publicBaseUrl()` in maptiler.ts.
     vi.stubEnv("PUBLIC_BASE_URL", "https://api.example.test");
@@ -151,7 +152,7 @@ describe("GET /maptiler/*", () => {
   });
 
   it("proxies binary tile assets without exposing the key to the client URL", async () => {
-    vi.stubEnv("MAPTILER_KEY", "test-key");
+    vi.stubEnv("MAPTILER_API_KEY", "test-key");
     const fetchMock = vi.fn(
       async () =>
         new Response(new Uint8Array([1, 2, 3]), {
@@ -184,7 +185,7 @@ describe("GET /maptiler/*", () => {
       },
     ],
   ])("rejects a raster tile with %s", async (_label, headers) => {
-    vi.stubEnv("MAPTILER_KEY", "test-key");
+    vi.stubEnv("MAPTILER_API_KEY", "test-key");
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response(new Uint8Array([1]), { headers })),
@@ -200,7 +201,7 @@ describe("GET /maptiler/*", () => {
   });
 
   it("returns a fixed no-store 502 when a streamed tile exceeds its byte limit", async () => {
-    vi.stubEnv("MAPTILER_KEY", "test-key");
+    vi.stubEnv("MAPTILER_API_KEY", "test-key");
     vi.stubGlobal(
       "fetch",
       vi.fn(
@@ -228,7 +229,7 @@ describe("GET /maptiler/*", () => {
   });
 
   it("cancels a stalled provider stream when the client disconnects after the first chunk", async () => {
-    vi.stubEnv("MAPTILER_KEY", "test-key");
+    vi.stubEnv("MAPTILER_API_KEY", "test-key");
     let cancelled = false;
     let fetchSignal: AbortSignal | undefined;
     vi.stubGlobal(
@@ -273,7 +274,7 @@ describe("GET /maptiler/*", () => {
   });
 
   it("rejects a bodyless binary success response", async () => {
-    vi.stubEnv("MAPTILER_KEY", "test-key");
+    vi.stubEnv("MAPTILER_API_KEY", "test-key");
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response(null, { headers: { "Content-Type": "image/png" } })),
@@ -298,7 +299,7 @@ describe("GET /maptiler/*", () => {
       },
     ],
   ])("rejects style JSON with %s", async (_label, headers) => {
-    vi.stubEnv("MAPTILER_KEY", "test-key");
+    vi.stubEnv("MAPTILER_API_KEY", "test-key");
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response("{}", { headers })),
@@ -314,7 +315,7 @@ describe("GET /maptiler/*", () => {
   });
 
   it("returns a no-store 502 for malformed style JSON", async () => {
-    vi.stubEnv("MAPTILER_KEY", "test-key");
+    vi.stubEnv("MAPTILER_API_KEY", "test-key");
     vi.stubGlobal(
       "fetch",
       vi.fn(
@@ -333,7 +334,7 @@ describe("GET /maptiler/*", () => {
   });
 
   it("cancels a rejected upstream error body", async () => {
-    vi.stubEnv("MAPTILER_KEY", "test-key");
+    vi.stubEnv("MAPTILER_API_KEY", "test-key");
     let cancelled = false;
     vi.stubGlobal(
       "fetch",
@@ -371,7 +372,7 @@ describe("GET /maptiler/*", () => {
     ["sprite%402x.json", "application/json"],
     ["sprite%402x.png", "image/png"],
   ])("forwards %s with the filename MapTiler accepts", async (requested, contentType) => {
-    vi.stubEnv("MAPTILER_KEY", "test-key");
+    vi.stubEnv("MAPTILER_API_KEY", "test-key");
     const fetchMock = vi.fn(
       async () =>
         new Response(contentType === "image/png" ? new Uint8Array([137, 80, 78, 71]) : "{}", {
@@ -392,7 +393,7 @@ describe("GET /maptiler/*", () => {
   });
 
   it("rejects unsupported paths", async () => {
-    vi.stubEnv("MAPTILER_KEY", "test-key");
+    vi.stubEnv("MAPTILER_API_KEY", "test-key");
     vi.stubGlobal("fetch", vi.fn());
 
     const res = await app.inject({
@@ -405,7 +406,7 @@ describe("GET /maptiler/*", () => {
   });
 
   it("returns 503 when no MapTiler key is configured", async () => {
-    vi.stubEnv("MAPTILER_KEY", undefined);
+    vi.stubEnv("MAPTILER_API_KEY", undefined);
     vi.stubGlobal("fetch", vi.fn());
 
     const res = await app.inject({
@@ -418,7 +419,7 @@ describe("GET /maptiler/*", () => {
   });
 
   it("logs a failed upstream only as a host/digest summary and safe error class", async () => {
-    vi.stubEnv("MAPTILER_KEY", "fixture-maptiler-key");
+    vi.stubEnv("MAPTILER_API_KEY", "fixture-maptiler-key");
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => {
@@ -462,7 +463,7 @@ describe("GET /maptiler/*", () => {
   });
 
   it("ignores X-Forwarded-Host when rewriting style URLs (cache-poisoning guard)", async () => {
-    vi.stubEnv("MAPTILER_KEY", "test-key");
+    vi.stubEnv("MAPTILER_API_KEY", "test-key");
     vi.stubEnv("PUBLIC_BASE_URL", "https://api.example.test");
     const fetchMock = vi.fn(async () =>
       Response.json({
@@ -499,7 +500,7 @@ describe("MapTiler key never reaches the client", () => {
   const FAKE_KEY = "fake-maptiler-key-for-tests";
 
   function stubJson(document: unknown) {
-    vi.stubEnv("MAPTILER_KEY", FAKE_KEY);
+    vi.stubEnv("MAPTILER_API_KEY", FAKE_KEY);
     vi.stubEnv("PUBLIC_BASE_URL", "https://api.example.test");
     vi.stubGlobal(
       "fetch",
@@ -565,7 +566,7 @@ describe("MapTiler key never reaches the client", () => {
   });
 
   it("refuses a document that still contains the key, without logging or returning it", async () => {
-    vi.stubEnv("MAPTILER_KEY", FAKE_KEY);
+    vi.stubEnv("MAPTILER_API_KEY", FAKE_KEY);
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
@@ -630,8 +631,8 @@ describe("MapTiler key never reaches the client", () => {
 
 describe("admin-configured MapTiler credentials", () => {
   it("authenticates upstream requests with the effective database key without returning it", async () => {
-    vi.stubEnv("MAPTILER_KEY", "");
-    databaseState.secrets = { maptilerApiKey: "admin-secret-key" };
+    vi.stubEnv("MAPTILER_API_KEY", "");
+    databaseState.secrets = { "maptiler.apiKey": "admin-secret-key" };
     vi.stubGlobal("fetch", async (url: URL) => {
       expect(url.searchParams.get("key")).toBe("admin-secret-key");
       return Response.json({

@@ -71,7 +71,7 @@ export const run: StageFn = async (ctx) => {
     const finishedAt = ctx.now();
     return {
       stage: "prepare",
-      status: "ok",
+      status: "succeeded",
       startedAt,
       finishedAt,
       durationMs: Date.now() - start,
@@ -95,7 +95,7 @@ function errorResult(
 ): StageResult {
   return {
     stage: "prepare",
-    status: "error",
+    status: "failed",
     startedAt,
     finishedAt,
     durationMs: Date.now() - start,

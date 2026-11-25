@@ -82,10 +82,23 @@ as a known failure.
 - **Pointer.** The symbolic link `infra/docker/state/ops-agent/configuration/current`
   that names the live generation. Switching generations is one atomic rename of the
   pointer.
-- **Journal.** The agent's job journal, `infra/docker/state/ops-agent/jobs-v1.json`,
+- **Journal.** The agent's job journal, `infra/docker/state/ops-agent/jobs.json`,
   written by atomic rename. It holds every operation the agent admitted and its
   state, and is the only terminal record of an agent operation. The row of an
-  operation the agent runs also holds its execution row.
+  operation the agent runs also holds its execution row. Each row's identity (ids,
+  keys, role, state, timestamps and the protocol version that admitted it) must
+  parse in every release, or the agent refuses the journal. Its operation, result
+  and execution are read with the running release's schemas; a row whose rest does
+  not parse was written by another release (an update or a rollback). It is kept
+  as written until its retention ends, a caller asking for it gets
+  `other_release`, and one that had not finished fails as `recovery_required`.
+  A succeeded configuration apply (a trusted configuration kind, or a maintenance
+  apply that committed a generation) also stores a `settlement` beside its result:
+  `{ outcome, summary }`, with the committed revision, enabled services, follow-up
+  and cleanup flag, or the reason nothing was committed. Its shape is part of the
+  row's identity and never changes, so a later release parses it strictly. The
+  `other_release` answer to a status read carries it, and the API settles the
+  update's own maintenance apply from it instead of waiting for recovery.
 - **Execution row.** One durable record per execution: its admission (operation,
   identity, origin, targets, reserved children), fixed when it is recorded, and its
   progress (held, cancel pending or settled; when the effect started; the
@@ -94,7 +107,7 @@ as a known failure.
   maintenance prepares), recorded before the child is bound; its grant in the lease
   store carries it to the recipient. The agent
   keeps the rows of its operations on their journal rows and data-manager keeps
-  each execution's row on its `data_manager.jobs` row; every other execution (a
+  each execution's row on its `data_manager.job` row; every other execution (a
   maintenance step, a fixed CLI child, a host CLI root) has a row file in its
   role's `control` directory.
 - **Operation key.** The caller-chosen idempotency key of an agent operation,
@@ -133,17 +146,17 @@ trusted because only its owner writes that directory, which
 nowhere else. Everything read from disk or the network is
 schema-checked. Docker and host administrators remain trusted.
 
-| Record                                                                                                                                                                                                             | Place                                                                                                                                                                                                                                                                                             | Writer                                                                            | Readers                                                              |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
-| Administrative job row: `payload`, public `result`, and `protocol` (claim, cancellation, attempted agent operations, candidate phase)                                                                              | PostgreSQL, `admin_job`                                                                                                                                                                                                                                                                           | API                                                                               | API                                                                  |
-| Agent journal row per operation                                                                                                                                                                                    | `state/ops-agent/jobs-v1.json`                                                                                                                                                                                                                                                                    | agent                                                                             | agent; callers through the operation routes                          |
-| Execution row: admission (operation, identity, origin, targets, reserved children) and progress (held, cancel pending or settled; effect started; settlement and receipt; each reserved child's binding and grant) | an agent operation: its journal row; a data-manager execution: its `data_manager.jobs` row (`execution_admission`, `execution_progress`); a maintenance step or fixed CLI child: `state/ops-agent/control/executions/<key>.json`; a host CLI root: `state/host-cli/control/executions/<key>.json` | that role (a fixed CLI child its own file)                                        | that role; a fixed CLI child reads its parent's row from the journal |
-| Configuration candidate (payload, snapshot, apply operation, private intents)                                                                                                                                      | agent state, behind `configuration.candidate.retain`, `read` and `discard`                                                                                                                                                                                                                        | API through the agent                                                             | API on recovery; agent when the apply step runs                      |
-| Maintenance file: record, plan (with the Data Manager image it commits), the containers it replaces                                                                                                                | `state/ops-agent/control/…/maintenance/<maintenanceId>.json`                                                                                                                                                                                                                                      | agent; the host CLI only for `control resolve` of a record in recovery_required   | agent; API through `configurationMaintenance.*` results              |
-| Helper progress                                                                                                                                                                                                    | `maintenance/<maintenanceId>.handoff.json` beside the maintenance file                                                                                                                                                                                                                            | helper                                                                            | agent, after the helper container exited                             |
-| Lease rows and their children                                                                                                                                                                                      | `state/ops-agent/leases.json`                                                                                                                                                                                                                                                                     | agent, host CLI, fixed children and helper under the lock; data-manager over HTTP | holders by lease ID; children by `{leaseId, childKey}`               |
-| Data-manager fence, and its record of the agent's fence child (prepared, settled or refused)                                                                                                                       | `data_manager.configuration_fence`                                                                                                                                                                                                                                                                | data-manager on the agent's request                                               | data-manager, agent                                                  |
-| Data job row (status, publication, agent operations of in-process work, worker completion) with the job's execution row, whose cells are the job's only record of its children                                     | `data_manager.jobs`                                                                                                                                                                                                                                                                               | data-manager                                                                      | data-manager; agent and host CLI through `lookupDataExecution`       |
+| Record                                                                                                                                                                                                             | Place                                                                                                                                                                                                                                                                                            | Writer                                                                            | Readers                                                              |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Administrative job row: `payload`, public `result`, and `protocol` (claim, cancellation, attempted agent operations, candidate phase)                                                                              | PostgreSQL, `admin_job`                                                                                                                                                                                                                                                                          | API                                                                               | API                                                                  |
+| Agent journal row per operation                                                                                                                                                                                    | `state/ops-agent/jobs.json`                                                                                                                                                                                                                                                                      | agent                                                                             | agent; callers through the operation routes                          |
+| Execution row: admission (operation, identity, origin, targets, reserved children) and progress (held, cancel pending or settled; effect started; settlement and receipt; each reserved child's binding and grant) | an agent operation: its journal row; a data-manager execution: its `data_manager.job` row (`execution_admission`, `execution_progress`); a maintenance step or fixed CLI child: `state/ops-agent/control/executions/<key>.json`; a host CLI root: `state/host-cli/control/executions/<key>.json` | that role (a fixed CLI child its own file)                                        | that role; a fixed CLI child reads its parent's row from the journal |
+| Configuration candidate (payload, snapshot, apply operation, private intents)                                                                                                                                      | agent state, behind `configuration.candidate.retain`, `read` and `discard`                                                                                                                                                                                                                       | API through the agent                                                             | API on recovery; agent when the apply step runs                      |
+| Maintenance file: record, plan (with the Data Manager image it commits), the containers it replaces                                                                                                                | `state/ops-agent/control/…/maintenance/<maintenanceId>.json`                                                                                                                                                                                                                                     | agent; the host CLI only for `control resolve` of a record in recovery_required   | agent; API through `configurationMaintenance.*` results              |
+| Helper progress                                                                                                                                                                                                    | `maintenance/<maintenanceId>.handoff.json` beside the maintenance file                                                                                                                                                                                                                           | helper                                                                            | agent, after the helper container exited                             |
+| Lease rows and their children                                                                                                                                                                                      | `state/ops-agent/leases.json`                                                                                                                                                                                                                                                                    | agent, host CLI, fixed children and helper under the lock; data-manager over HTTP | holders by lease ID; children by `{leaseId, childKey}`               |
+| Data-manager fence, and its record of the agent's fence child (prepared, settled or refused)                                                                                                                       | `data_manager.configuration_fence`                                                                                                                                                                                                                                                               | data-manager on the agent's request                                               | data-manager, agent                                                  |
+| Data job row (status, publication, agent operations of in-process work, worker completion) with the job's execution row, whose cells are the job's only record of its children                                     | `data_manager.job`                                                                                                                                                                                                                                                                               | data-manager                                                                      | data-manager; agent and host CLI through `lookupDataExecution`       |
 
 The API's keyed digests (the source fingerprint of a candidate and the intent
 digest of an immediate configuration request) use a key derived from the API's own
@@ -497,7 +510,7 @@ releases. A preparation removes the rows that were settled or refused more than
 
 ### Data jobs
 
-Every data job is a durable execution in `data_manager.jobs`; there is one
+Every data job is a durable execution in `data_manager.job`; there is one
 admission. The job row is also the execution row: the job's columns already hold
 its operation, admission time, deadline and parent, and `execution_ref` its
 execution and the child bodies reserved with it; the job row is
@@ -519,6 +532,15 @@ last observed the agent's operation). The cell reads as bound once the binding
 is recorded and as attempted once the grant is, before the one request that
 sends the child; data-manager's own changes to a cell are made under the job
 row's lock and move the job's version like its status does.
+
+A data job's status is one of the job statuses both job tables share (`queued`,
+`running`, `cancel_pending`, `succeeded`, `failed`, `cancelled`, listed in
+`@openmapx/core/jobs`) or one of two of its own: `partially_succeeded`, a run that
+published without part of its work (missing transit feeds, or Overture links not
+rebuilt), and `interrupted`, an execution whose worker ended without a recorded
+outcome and whose publication is unknown. `interrupted` is never terminal: the
+data plane stays fenced until recovery settles the job. Transit stages record
+`succeeded`, `partially_succeeded`, `failed` or `skipped`.
 
 A job ends in three steps on its row. When its work returns or fails, the worker
 records how it ended in `execution_completion`, once; recovery reads it back
@@ -550,7 +572,7 @@ admitted, recorded as attempted before its one request, and keeps the job open
 until the agent reports a terminal state for it; a reservation the work never used
 does not. After a restart, in-process work the previous process left behind is
 settled by observation every 10 seconds: once every operation it attempted has a
-terminal answer it ends as `interrupted`, and until then it keeps data work
+terminal answer it ends as `failed`, and until then it keeps data work
 fenced. Data-manager's advisory locks are named in one registry,
 `@openmapx/core/data-manager-sdk`'s `DATA_ADVISORY_LOCKS`.
 
@@ -624,17 +646,19 @@ nothing twice.
 
 ### API administrative job status
 
-`admin_job.status` in `apps/api`.
+`admin_job.status` in `apps/api`. The statuses and the job types (named
+`<area>.<object>.<verb>`, such as `service.image.pull`) are listed in
+`@openmapx/core/jobs`, and the table's `CHECK`s are generated from those lists.
 
 | From                        | Event                                                | To                                    |
 | --------------------------- | ---------------------------------------------------- | ------------------------------------- |
 | (none)                      | Job created                                          | `queued`                              |
-| `queued`                    | Cancel with no managed operation                     | `canceled`                            |
+| `queued`                    | Cancel with no managed operation                     | `cancelled`                           |
 | `queued`                    | Claimed by a job owner                               | `running`                             |
-| `running`                   | Job completed                                        | `success`                             |
+| `running`                   | Job completed                                        | `succeeded`                           |
 | `running`                   | Job failed                                           | `failed`                              |
 | `running`, `cancel_pending` | Cancel requested                                     | `cancel_pending`                      |
-| `cancel_pending`            | Agent operations contained                           | `canceled`                            |
+| `cancel_pending`            | Agent operations contained                           | `cancelled`                           |
 | `cancel_pending`            | Recovered failure that still needs candidate cleanup | `running`, with observation `unknown` |
 
 A job records each agent operation in `protocol.operations` before it sends it. A
@@ -656,7 +680,27 @@ commits the generation with the release it froze, then the helper verifies the
 images and recreates the services. Clearing the selected pin renders the applied
 configuration again without pins. The agent caches the manifests it checked under
 `state/ops-agent/releases/<digest>.json`; the newest is the release an update can
-apply. A manifest's `producer` and `buildMetadata` are display metadata.
+apply. An installed agent and CLI read the manifests of later releases, so only
+what is authorised from a manifest is strict: `schemaVersion`, `release`, the five
+image references, `databaseMigrationHead` and `stateEpoch`. `producer`,
+`buildMetadata` and `product` are display metadata, read as objects that may
+gain or change fields; only `product.version` is checked, against the release id
+and a version selection. Product versions are stable semver or a numbered alpha,
+beta or release candidate. The stored and digested copy keeps a top-level field
+an older release does not know, so a later release reads back what it published;
+it keeps only the five pinned images, so a release that pins another image
+raises the state epoch. The layout is fixed for every later release: the known
+fields in their order, then every other top-level field (and every key inside
+the metadata objects) sorted by UTF-16 code unit, never in the order the fields
+were added. A release that changes this layout changes digests and raises the
+state epoch.
+
+`stateEpoch` is the version of installation state the release reads and writes
+(`RELEASE_STATE_EPOCH`, written by `.github/workflows/docker.yml`). A release
+that cannot take over an installation's state in place raises it. The manifest
+parser refuses a candidate of another epoch, so `compose release --check`, the
+agent's release check (error `release_state_epoch`), the update preview and the
+apply all refuse it with a message to install that release fresh.
 
 `openmapx control rollback` targets the newest retained generation, by the age of
 its rendered files, whose pinned release digest differs from the applied one: the
@@ -739,7 +783,7 @@ expired, data-manager's prune removes the files named by its key (a transit
 run's runner journal among them) and then sets the row's `released_at`. The API
 deletes a finished data-manager job row 90 days after it finished, once it has
 no execution row and its `released_at` is set, unless a privacy case preserves
-it; a finished row it cannot delete yet loses its `triggered_by` account then. A
+it; a finished row it cannot delete yet loses its `triggered_by_user_id` then. A
 pass examines at most 256
 executions and resumes where the previous pass stopped; a store too large for one
 pass is reported and pruned in part. The records of a recovery-required execution
@@ -807,7 +851,7 @@ how an operator's own superuser session must avoid running a role's code.
 
 **In-process data work a crash interrupted is settled automatically.** When
 data-manager restarts, in-process work the old process left behind ends
-`interrupted` once its agent operations answered, with its publication recorded as
+`failed` once its agent operations answered, with its publication recorded as
 `committed` ("may have changed") if it had published or an agent operation it
 admitted finished. The new process proves the old worker is gone, so this does not
 wait for an operator; a partly written local publication reads as changed rather

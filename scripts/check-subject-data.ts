@@ -13,18 +13,18 @@ const CATALOGUE_IDS = new Set(SUBJECT_DATA_CATALOGUE.map((item) => item.id));
  * of the live PostgreSQL inventory in user-erasure-postgres.test.ts. */
 export const DIRECT_USER_FK_CLASSIFICATIONS: Record<string, string> = {
   "account.user_id": "auth-accounts",
-  "account_action_receipt.actor_id": "administrative-receipts",
-  "account_action_receipt.target_id": "administrative-receipts",
+  "account_action_receipt.actor_user_id": "administrative-receipts",
+  "account_action_receipt.target_user_id": "administrative-receipts",
   "account_mail_outbox.user_id": "auth-verifications",
   "data_disclosure_event.user_id": "disclosure-events",
-  "admin_audit_log.actor_id": "admin-audit-attribution",
-  "auth_policy_application.actor_id": "administrative-receipts",
-  "auth_policy_state.activated_by": "admin-audit-attribution",
-  "admin_job.created_by": "admin-jobs-attribution",
-  "installed_extension.installed_by": "installed-component-attribution",
-  "installed_integration.installed_by": "installed-component-attribution",
-  "integration_application_receipt.actor_id": "administrative-receipts",
-  "integration_secret.updated_by": "secret-update-attribution",
+  "admin_audit_log.actor_user_id": "admin-audit-attribution",
+  "auth_policy_application.actor_user_id": "administrative-receipts",
+  "auth_policy_state.activated_by_user_id": "admin-audit-attribution",
+  "admin_job.created_by_user_id": "admin-jobs-attribution",
+  "installed_extension.installed_by_user_id": "installed-component-attribution",
+  "installed_integration.installed_by_user_id": "installed-component-attribution",
+  "integration_application_receipt.actor_user_id": "administrative-receipts",
+  "integration_secret.updated_by_user_id": "secret-update-attribution",
   "labeled_place.user_id": "labeled-places",
   "mangrove_keypair.user_id": "mangrove-keypairs",
   "mobile_auth_handoff.user_id": "mobile-auth-handoffs",
@@ -33,17 +33,17 @@ export const DIRECT_USER_FK_CLASSIFICATIONS: Record<string, string> = {
   "oauth_consent.user_id": "auth-oauth-resources",
   "oauth_refresh_token.user_id": "auth-oauth-tokens",
   "parked_location.user_id": "parked-locations",
-  "platform_configuration_preview.actor_id": "platform-configuration-previews",
+  "platform_configuration_preview.actor_user_id": "platform-configuration-previews",
   "passkey.user_id": "auth-passkeys",
   "personal_timeline_connection.user_id": "timeline-connections",
   "personal_vehicle.user_id": "personal-vehicles",
   "saved_list.user_id": "saved-lists",
-  "service_secret.updated_by": "secret-update-attribution",
-  "system_secret.updated_by": "secret-update-attribution",
-  "transit_credential_preview.actor_id": "secret-update-attribution",
-  "configuration_migration_preview.actor_id": "secret-update-attribution",
+  "service_secret.updated_by_user_id": "secret-update-attribution",
+  "system_secret.updated_by_user_id": "secret-update-attribution",
+  "transit_credential_preview.actor_user_id": "secret-update-attribution",
+  "configuration_migration_preview.actor_user_id": "secret-update-attribution",
   "session.user_id": "auth-sessions",
-  "admin_action_reauthentication.actor_id": "auth-sessions",
+  "admin_action_reauthentication.actor_user_id": "auth-sessions",
   "share_link.user_id": "share-links",
   "two_factor.user_id": "auth-two-factor",
   "data_subject_request.user_id": "privacy-case-records",
@@ -51,8 +51,9 @@ export const DIRECT_USER_FK_CLASSIFICATIONS: Record<string, string> = {
   "data_subject_request_notification.recipient_user_id": "privacy-case-handling-attribution",
   "data_subject_request_event.actor_user_id": "privacy-case-handling-attribution",
   "admin_audit_log.target_user_id": "admin-audit-attribution",
-  "system_settings.updated_by": "system-setting-attribution",
+  "system_setting.updated_by_user_id": "system-setting-attribution",
   "session_auth_assurance.user_id": "auth-sessions",
+  "data_manager.job.triggered_by_user_id": "data-manager-trigger-attribution",
 };
 
 /** Columns that hold an account's id, or a value derived from it, without a
@@ -67,10 +68,9 @@ export const USER_ID_COLUMNS_WITHOUT_USER_FOREIGN_KEY: Record<string, string> = 
   "session.impersonated_by": "erasure trigger: the impersonation sessions are deleted",
   "verification.identifier": "erasure trigger: the rows naming the email are deleted",
   "verification.value": "erasure trigger: the rows holding the id are deleted",
-  "data_manager.jobs.triggered_by": "erasure trigger: 'api:user:<id>' is set to NULL",
-  "data_manager.offline_package_job_owners.principal":
+  "data_manager.offline_package_job_owner.principal":
     "API delete hook (HMAC of the id under an API-only key); otherwise retention",
-  "data_manager.offline_package_artifact_references.principal":
+  "data_manager.offline_package_artifact_reference.principal":
     "API delete hook (HMAC of the id under an API-only key); otherwise retention",
   "mangrove_keypair_wrap.user_id": "foreign key CASCADE to mangrove_keypair.user_id",
 };
@@ -81,7 +81,7 @@ export const NON_USER_ID_COLUMNS: Record<string, string> = {
   "personal_timeline_connection.upstream_user_id":
     "the account in the external Dawarich instance; the row cascades",
   "data_disclosure_event.recipient_id": "the third party that received a disclosure",
-  "data_manager.offline_package_jobs.lease_owner": "a worker",
+  "data_manager.offline_package_job.lease_owner": "a worker",
 };
 
 const MANIFEST_SUBJECT_TYPES = ["integration", "service"] as const;
@@ -114,7 +114,6 @@ const ACCOUNT_ID_LOCATOR_TYPES = new Set<SubjectLocatorType>([
   "target_id",
   "creator_id",
   "updater_id",
-  "triggered_by",
 ]);
 
 export interface SubjectDataInventoryResult {

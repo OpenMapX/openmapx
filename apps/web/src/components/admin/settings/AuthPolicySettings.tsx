@@ -189,7 +189,7 @@ function PolicyForm({ view }: { view: ReturnType<typeof authPolicyViewSchema.par
         </Stack>
       )}
       <FormControlLabel
-        id="setting-emailVerificationRequired"
+        id="setting-auth.emailVerificationRequired"
         control={
           <Checkbox
             checked={email}
@@ -201,12 +201,12 @@ function PolicyForm({ view }: { view: ReturnType<typeof authPolicyViewSchema.par
       />
       {ownership.emailVerificationRequired === "env" && (
         <Typography variant="caption">
-          {t("ownedByHost", { variable: "AUTH_EMAIL_VERIFICATION" })}
+          {t("ownedByHost", { variable: "AUTH_EMAIL_VERIFICATION_REQUIRED" })}
         </Typography>
       )}
       <TextField
         sx={{ maxWidth: 480 }}
-        id="setting-sessionDurationHours"
+        id="setting-auth.sessionDurationHours"
         label={t("sessionLifetime")}
         type="number"
         value={hours}
@@ -216,7 +216,7 @@ function PolicyForm({ view }: { view: ReturnType<typeof authPolicyViewSchema.par
         helperText={t("sessionLifetimeHelp", { min: 1, max: 8760 })}
       />
       <FormControlLabel
-        id="setting-twoFaEnabled"
+        id="setting-auth.twoFaEnabled"
         control={
           <Checkbox
             checked={twoFa}
@@ -229,7 +229,7 @@ function PolicyForm({ view }: { view: ReturnType<typeof authPolicyViewSchema.par
       <Typography variant="caption">{t("twoFaHelp")}</Typography>
       <TextField
         sx={{ maxWidth: 480 }}
-        id="setting-passwordMinLength"
+        id="setting-auth.passwordMinLength"
         label={t("passwordMinLength")}
         type="number"
         value={length}

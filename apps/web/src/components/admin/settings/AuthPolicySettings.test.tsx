@@ -60,14 +60,17 @@ async function mount(focusKey?: string) {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.get.mockResolvedValue({ status: 200, data: view });
-  mocks.apply.mockResolvedValue({ status: 409, data: { error: "AUTH_POLICY_CONFLICT" } });
+  mocks.apply.mockResolvedValue({
+    status: 409,
+    data: { error: "Sign-in policy refused", code: "AUTH_POLICY_CONFLICT" },
+  });
 });
 afterEach(() => {
   cleanup();
   for (const c of caches.splice(0)) c.clear();
 });
 it("focuses the addressed policy field without applying it", async () => {
-  await mount("passwordMinLength");
+  await mount("auth.passwordMinLength");
   await waitFor(() => expect(screen.getByLabelText("Minimum password length")).toHaveFocus());
   expect(mocks.apply).not.toHaveBeenCalled();
 });

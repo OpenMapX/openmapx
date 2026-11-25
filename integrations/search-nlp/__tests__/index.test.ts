@@ -303,7 +303,7 @@ describe("search-nlp setup / POST /parse", () => {
 
     const tooLong = await call("a".repeat(MAX_QUERY_CHARACTERS + 1));
     expect(tooLong.statusCode).toBe(400);
-    expect(tooLong.payload).toEqual({ error: "query_too_long" });
+    expect(tooLong.payload).toEqual({ error: "The query is too long", code: "QUERY_TOO_LONG" });
     expect((await call(`cafe ${"a".repeat(MAX_QUERY_CHARACTERS - 5)}`)).statusCode).toBe(200);
     // Characters, not UTF-16 units: 500 emoji are 1,000 units but still allowed.
     expect((await call("☕".repeat(MAX_QUERY_CHARACTERS))).statusCode).toBe(200);

@@ -1,4 +1,4 @@
-import { accountProvisioningOperations } from "@openmapx/core/api-contracts";
+import { accountProvisioningOperations, errorCodeSchema } from "@openmapx/core/api-contracts";
 import { isAPIError } from "better-auth/api";
 import { fromNodeHeaders } from "better-auth/node";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -28,25 +28,37 @@ function actor(request: FastifyRequest) {
 }
 function failure(error: unknown, reply: FastifyReply) {
   if (error instanceof AdminReauthenticationError)
-    return reply.code(409).send({ error: error.code });
+    return reply.code(409).send({ error: "Reauthentication failed", code: error.code });
   if (error instanceof AccountProvisioningError) {
     if (error.statusCode === 429) reply.header("Retry-After", "3600");
-    return reply
-      .code(error.statusCode)
-      .send({ error: error.code, ...(error.statusCode === 429 ? { retryAfter: 3600 } : {}) });
+    return reply.code(error.statusCode).send({
+      error: "Account action refused",
+      code: error.code,
+      ...(error.statusCode === 429 ? { retryAfter: 3600 } : {}),
+    });
   }
   if (isAPIError(error)) {
     const code = error.body?.code;
     if (error.statusCode === 429) {
       reply.header("Retry-After", "60");
-      return reply.code(429).send({ error: "ACCOUNT_ACTION_RATE_LIMITED", retryAfter: 60 });
+      return reply.code(429).send({
+        error: "Too many account actions",
+        code: "ACCOUNT_ACTION_RATE_LIMITED",
+        retryAfter: 60,
+      });
     }
     return reply.code(error.statusCode).send({
-      error:
-        typeof code === "string" && /^[A-Z0-9_]{1,80}$/.test(code) ? code : "ACCOUNT_ACTION_FAILED",
+      error: "Account action failed",
+      // Only a code the reply's schema accepts is passed on.
+      code:
+        typeof code === "string" && code.length <= 80 && errorCodeSchema.safeParse(code).success
+          ? code
+          : "ACCOUNT_ACTION_FAILED",
     });
   }
-  return reply.code(503).send({ error: "ACCOUNT_ACTION_UNAVAILABLE" });
+  return reply
+    .code(503)
+    .send({ error: "Account actions are unavailable", code: "ACCOUNT_ACTION_UNAVAILABLE" });
 }
 export async function registerAccountActions(app: FastifyInstance) {
   register(app, "getAdminAccountDelivery", async (request, reply) => {
@@ -69,9 +81,9 @@ export async function registerAccountActions(app: FastifyInstance) {
   });
   const actions = {
     inviteAdminAccount: "invitation",
-    sendAdminAccountVerificationEmail: "verification-email",
+    sendAdminAccountVerificationEmail: "email_verification",
     verifyAdminAccount: "verify",
-    sendAdminAccountPasswordReset: "reset-password",
+    sendAdminAccountPasswordReset: "password_reset",
     setAdminAccountPassword: "password",
   } as const;
   for (const [operation, action] of Object.entries(actions))

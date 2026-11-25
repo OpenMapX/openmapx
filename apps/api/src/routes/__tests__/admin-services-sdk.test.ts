@@ -236,11 +236,11 @@ const backupInventory = {
     {
       backupId: "nightly",
       createdAt: "2026-10-21T00:00:00Z",
-      platformVersion: "1.2.3",
+      release: "1.2.3",
       serviceCount: 2,
       volumeCount: 3,
       totalBytes: 42,
-      formatVersion: 2 as const,
+      formatVersion: 1 as const,
       verified: true,
       manifestDigest: "a".repeat(64),
       volumes: [],
@@ -250,7 +250,7 @@ const backupInventory = {
 };
 // The execution identity every admission and status carries.
 const identity = {
-  version: 2 as const,
+  version: 1 as const,
   admittedAt: 0,
   deadlineAt: 3_600_000,
   fingerprint: "a".repeat(64),
@@ -387,6 +387,8 @@ async function wire(max = 1000) {
       status: unexpected,
       unmatched: unexpected,
       typeahead: unexpected,
+      contribution: unexpected,
+      enrollment: unexpected,
       routing: unexpected,
     }),
   );
@@ -521,6 +523,37 @@ describe("actual service producers through final exported SDK", () => {
     },
   );
 
+  it("names the required settings an apply lacks in a typed 409 through the SDK", async () => {
+    const missingSettings = [{ serviceId: "ingest", keys: ["INSTANCE_ID", "API_TOKEN"] }];
+    apply.mockRejectedValueOnce(
+      new TrustedConfigurationApplyError({
+        outcome: "not_committed",
+        reason: "failed",
+        cleanupFailed: false,
+        registryUpdateFailed: false,
+        problem: "Required service settings have no value: ingest (INSTANCE_ID, API_TOKEN).",
+        missingSettings,
+      }),
+    );
+    const { options, close } = await wire();
+    try {
+      const response = await sdk.updateAdminServiceConfig(
+        "motis",
+        { config: { count: 3 } },
+        { "idempotency-key": crypto.randomUUID() },
+        options,
+      );
+      expect(response.status).toBe(409);
+      expect(response.data).toEqual({
+        error: "Required service settings have no value: ingest (INSTANCE_ID, API_TOKEN).",
+        code: "REQUIRED_SETTINGS_MISSING",
+        missingSettings,
+      });
+    } finally {
+      await close();
+    }
+  });
+
   it("retains the original producer failure internally without a route-local inverse", async () => {
     const failure = new TrustedConfigurationApplyError({
       outcome: "not_committed",
@@ -636,7 +669,7 @@ describe("actual service producers through final exported SDK", () => {
               serviceCount: 2,
               volumeCount: 3,
               totalBytes: 42,
-              openmapxVersion: "1.2.3",
+              release: "1.2.3",
             },
           ],
         },

@@ -18,7 +18,7 @@ pattern non_copy() {
     r"[\"'`]OpenMapX[\"'`]",
     // Environment variable names the admin screens show, and the
     // INTEGRATION_<ID>_<KEY> and SERVICE_<ID>_<KEY> name patterns.
-    r"[\"'`](?:OPENMAPX_[A-Z0-9_]+|(?:INTEGRATION|SERVICE)_<ID>_<KEY>|TRANSITOUS_API_KEYS|PUBLIC_URL|EMAIL_FROM|AUTH_EMAIL_VERIFICATION)[\"'`]",
+    r"[\"'`](?:OPENMAPX_[A-Z0-9_]+|(?:INTEGRATION|SERVICE)_<ID>_<KEY>|TRANSITOUS_API_KEYS|AUTH_EMAIL_VERIFICATION_REQUIRED)[\"'`]",
     // Commands, file names and protocol names.
     r"[\"'`](?:openssl rand -hex 32|pnpm openmapx compose down|pnpm openmapx compose render|infra/docker/\.env|extension\.json|tcp)[\"'`]",
     // Licence identifiers.

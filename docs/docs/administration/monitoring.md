@@ -225,13 +225,13 @@ it to scroll back. Two things worth knowing about retention:
 
 - Recent logs at every level live in an **in-memory ring buffer** (the most recent
   10,000 entries by default), so the viewer is fast but a restart clears them.
-- `warn`, `error` and `fatal` entries are also submitted to `app_logs` on a
+- `warn`, `error` and `fatal` entries are also submitted to `app_log` on a
   best-effort basis. Database unavailability can lose persisted entries; logs
   are not a guaranteed audit or delivery channel.
 
-Persisted application logs are pruned daily using the server-log retention of
-the legal settings, `LEGAL_SERVER_LOG_RETENTION_DAYS` or the value set in the
-administration (30 days by default). Review the value against
+Persisted application logs are pruned daily using the server-log retention,
+`RETENTION_SERVER_LOG_DAYS` or the value set in the administration (30 days by
+default). Review the value against
 the deployment's published policy. Entries about a person with an open
 data-subject request stay while that request still needs them, including while
 an operator still has to handle the logs for it: until they are captured for the
@@ -256,11 +256,11 @@ delete only rows older than that operator-chosen cutoff:
 
 ```sql
 SELECT count(*)
-FROM app_logs
+FROM app_log
 WHERE created_at < TIMESTAMPTZ '2026-08-25 00:00:00+00';
 
 BEGIN;
-DELETE FROM app_logs
+DELETE FROM app_log
 WHERE created_at < TIMESTAMPTZ '2026-08-25 00:00:00+00';
 COMMIT;
 ```
@@ -505,24 +505,29 @@ address**, and a timestamp. Filter by action (grouped by subsystem), by target
 type, or search by target id; destructive and auth-related actions are color-coded
 so a ban or a credential deletion stands out.
 
+Action names follow one rule, `<area>[.<object>].<verb>`: an imperative verb, a
+singular object and `snake_case` inside a segment, for example
+`integration.config.update`, `user.session.revoke` or `service.image.pull`.
+Each action records one target type (`service`, `user`, `transit_source`, …),
+and the database refuses an action or target type outside that list.
+
 The server writes the trail independently of the client. Its operational limits are:
 
-- **CLI and loopback actions are recorded too.** A request that comes in over the
-  loopback short-circuit (how the `openmapx` CLI calls admin endpoints) has no
-  user row, so it's logged with a null actor and a `(loopback)` marker on the
-  user-agent. See the
-  [local admin escape hatch](./admin-panel.md) for that bypass.
+- **CLI actions are recorded too.** The `openmapx` CLI calls admin endpoints as
+  the operator's administrator session, so its actions name that administrator.
+  See [Host CLI access](./admin-panel.md#host-cli-access).
 - **A failed write never breaks the action.** If the audit insert fails, the error
   is logged and the underlying operation can still complete.
 - **Retention is bounded.** A daily prune deletes entries older than
-  `AUDIT_LOG_RETENTION_DAYS` (default 365), so the table doesn't grow without
-  limit on a long-lived instance. Raise or lower it via the env var; the privacy
-  page and data-access reports state the configured period. Deleting an account
+  the audit-log retention (default 365 days), so the table doesn't grow without
+  limit on a long-lived instance. Set it at `/admin/privacy-setup` or with
+  `RETENTION_AUDIT_LOG_DAYS`; the privacy page and data-access reports state the
+  configured period. Deleting an account
   removes it from the entries that name it, with the IP address and browser of
   its own actions.
 
-The **Jobs** tab lists running and recently finished background operations with their logs. A daily prune deletes finished admin jobs after `ADMIN_JOB_RETENTION_DAYS` (default
-30). Finished data-manager jobs, with their stages and the account that started
+The **Jobs** tab lists running and recently finished background operations with their logs. A daily prune deletes finished admin jobs after the admin-job retention (`RETENTION_ADMIN_JOB_DAYS`,
+default 30). Finished data-manager jobs, with their stages and the account that started
 them, are deleted 90 days after they finished; this period is fixed and matches
 the privacy catalogue. A finished job that the Data Manager has not yet cleared
 of its control records, for example while it is stopped, is kept until then but

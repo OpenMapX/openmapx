@@ -259,9 +259,9 @@ it("issues no maintenance step from a bare terminal summary without the maintena
   await expect(a.delegateArtifactTargetLease(lease, plan)).rejects.toThrow();
   mkdirSync(join(root, "state/ops-agent"), { recursive: true, mode: 0o700 });
   writeFileSync(
-    join(root, "state/ops-agent/jobs-v1.json"),
+    join(root, "state/ops-agent/jobs.json"),
     JSON.stringify({
-      version: 2,
+      version: 1,
       jobs: [
         {
           operationId: execution.executionId,

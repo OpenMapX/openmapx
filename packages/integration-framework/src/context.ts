@@ -240,9 +240,19 @@ export interface RouteOptions {
    * Host-owned limiter bucket. Every integration route uses exactly one tier:
    * `public` (the default), `expensive` for routes that fan out to a costly
    * upstream, `routing` for turn-by-turn directions, `typeahead` for routes a
-   * client calls while the user types, and `tile` for map-tile fan-out.
+   * client calls while the user types, `tile` for map-tile fan-out, and
+   * `contribution` and `enrollment` for crowd reports and reporter-key
+   * enrollment relayed under a relay credential, which the upstream no longer
+   * limits per client address.
    */
-  rateLimitTier?: "public" | "expensive" | "routing" | "typeahead" | "tile";
+  rateLimitTier?:
+    | "public"
+    | "expensive"
+    | "routing"
+    | "typeahead"
+    | "tile"
+    | "contribution"
+    | "enrollment";
   /**
    * Largest request body the route accepts, in bytes. The host answers 413 to
    * anything larger, and also caps this value at 8 MiB. Routes that do not

@@ -54,7 +54,7 @@ import {
 import { prepareDataUpdateAdmission, resolveDataDefaultRegion } from "./data-workflow-runtime";
 import type { JobRunner, OpsAudit } from "./job-run";
 import { executionFor, type JobRecord, type JobTable } from "./job-table";
-import type { OpsJobJournal } from "./journal";
+import { JOURNAL_EXECUTION_VERSION, type OpsJobJournal } from "./journal";
 import { LeaseRefused, runLeaseOperation } from "./lease-operations";
 import { createMaintenance, maintenanceCapacityReached, pendingHandoffs } from "./maintenance";
 import type { MaintenanceRuntime } from "./maintenance-runtime";
@@ -283,6 +283,8 @@ export function classify(error: unknown): { errorClass: OpsErrorClass; statusCod
     };
   if (error instanceof OpsHostUpdateRequiredError)
     return { errorClass: "host_update_required", statusCode: 409 };
+  if (error instanceof services.ReleaseStateEpochError)
+    return { errorClass: "release_state_epoch", statusCode: 409 };
   if (error instanceof OpsAgentBusyError) return { errorClass: "busy", statusCode: 409 };
   if (error instanceof OpsNotWiredError) return { errorClass: "not_wired", statusCode: 501 };
   return { errorClass: "runtime", statusCode: 500 };
@@ -465,6 +467,8 @@ export function createAdmission(options: {
       };
       if (policy.execution === "async") {
         await table.prune(nowMs);
+        if (table.foreignByKey(role, parsed.operationKey))
+          throw new RequestGuardError("other_release", 409);
         const existing = table.byKey.get(`${role}:${parsed.operationKey}`);
         if (existing) {
           if (!matchesRetained(existing)) throw new RequestGuardError("conflict", 409);
@@ -592,6 +596,8 @@ export function createAdmission(options: {
         // admission lock, so a holder that is finishing can release meanwhile.
         let graceSpent = false;
         const admit = async () => {
+          if (table.foreignByKey(role, parsed.operationKey))
+            throw new RequestGuardError("other_release", 409);
           const retained = table.byKey.get(ownerKey);
           if (retained) {
             if (!matchesRetained(retained)) {
@@ -609,12 +615,12 @@ export function createAdmission(options: {
           if (normalized.deadlineAt <= now().getTime()) throw new RequestGuardError("timeout", 504);
           const timestamp = new Date(normalized.admittedAt).toISOString();
           let operationId: string | undefined = controlAdmission?.execution.executionId;
-          if (operationId && table.byId.has(operationId))
+          if (operationId && table.hasOperationId(operationId))
             throw new RequestGuardError("conflict", 409);
           try {
             for (let attempt = 0; !operationId && attempt < MAX_JOB_ID_ATTEMPTS; attempt += 1) {
               const candidate = `job1_${Buffer.from(options.randomBytes(18)).toString("base64url")}`;
-              if (OPERATION_ID_PATTERN.test(candidate) && !table.byId.has(candidate)) {
+              if (OPERATION_ID_PATTERN.test(candidate) && !table.hasOperationId(candidate)) {
                 operationId = candidate;
                 break;
               }
@@ -629,7 +635,7 @@ export function createAdmission(options: {
             operation,
             operationId,
             operationKey: parsed.operationKey,
-            executionVersion: 2,
+            executionVersion: JOURNAL_EXECUTION_VERSION,
             requestVersion: parsed.version,
             ...normalized,
             operationFingerprint,

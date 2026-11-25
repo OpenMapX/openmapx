@@ -5,7 +5,7 @@ import type {
 } from "@openmapx/integration-geocoding/types";
 /**
  * MapTiler Geocoding API client.
- * Requires an API key: the integration's `apiKey`, else MAPTILER_KEY.
+ * Requires an API key: the integration's `apiKey`, else MAPTILER_API_KEY.
  * https://docs.maptiler.com/cloud/geocoding/
  */
 
@@ -39,7 +39,7 @@ const SEARCH_TYPES =
   "poi,address,street,neighbourhood,municipality,municipal_district,locality,subregion,region,county,country,postal_code,place";
 
 /**
- * The integration's own `apiKey`, or else the deployment-wide `MAPTILER_KEY`
+ * The integration's own `apiKey`, or else the deployment-wide `MAPTILER_API_KEY`
  * the tile proxy uses, so one key set in `.env` serves both maps and search.
  * `shared` tells whether it is the deployment's key: only that key spends the
  * deployment's MapTiler daily budget. A map key saved in the admin settings is
@@ -51,7 +51,7 @@ export function resolveMaptilerApiKey(
   env: NodeJS.ProcessEnv = process.env,
 ): { key: string; shared: boolean } | undefined {
   const own = configured?.trim();
-  const shared = env.MAPTILER_KEY?.trim() || undefined;
+  const shared = env.MAPTILER_API_KEY?.trim() || undefined;
   if (own) return { key: own, shared: own === shared };
   return shared ? { key: shared, shared: true } : undefined;
 }
@@ -315,7 +315,9 @@ export function createMaptilerGeocodingService(
   ): Promise<MaptilerResponse> => {
     const key = options.apiKey();
     if (!key)
-      throw new Error("MapTiler geocoding requires an API key (config `apiKey` or MAPTILER_KEY)");
+      throw new Error(
+        "MapTiler geocoding requires an API key (config `apiKey` or MAPTILER_API_KEY)",
+      );
     const admission = await options.budget()?.admit();
     if (admission && !admission.allowed) {
       if (admission.firstRefusalInWindow) {

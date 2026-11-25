@@ -1,9 +1,11 @@
-import { getStorage, useSettingsStore } from "@openmapx/core";
+import { getStorage, STORAGE_KEYS, useSettingsStore } from "@openmapx/core";
 import { type CarDestination, carDestinationSchema } from "@openmapx/core/navigation";
 import { create } from "zustand";
 
-const STORAGE_KEY = "openmapx:recentSearches";
-const SETTING_KEY = "openmapx:searchHistoryEnabled";
+const STORAGE_KEY = STORAGE_KEYS.recentSearches.key;
+const SETTING_KEY = STORAGE_KEYS.searchHistoryEnabled.key;
+const DESTINATIONS_KEY = STORAGE_KEYS.recentDestinations.key;
+const DESTINATIONS_ACCOUNT_KEY = STORAGE_KEYS.recentDestinationsAccount.key;
 const MAX_ENTRIES = 10;
 
 function normalize(values: unknown): string[] {
@@ -53,7 +55,7 @@ export const useRecentSearchStore = create<RecentSearchState>((set, get) => ({
       parsed.data,
       ...get().destinations.filter((p) => p.id !== parsed.data.id),
     ].slice(0, 20);
-    getStorage().setString("openmapx:recentDestinations", JSON.stringify(destinations));
+    getStorage().setString(DESTINATIONS_KEY, JSON.stringify(destinations));
     set({ destinations });
   },
   add: (query) => {
@@ -71,7 +73,7 @@ export const useRecentSearchStore = create<RecentSearchState>((set, get) => ({
   },
   clear: () => {
     getStorage().remove(STORAGE_KEY);
-    getStorage().remove("openmapx:recentDestinations");
+    getStorage().remove(DESTINATIONS_KEY);
     set({ entries: [], destinations: [] });
   },
   hydrate: () => {
@@ -84,9 +86,7 @@ export const useRecentSearchStore = create<RecentSearchState>((set, get) => ({
     }
     let destinations: CarDestination[] = [];
     try {
-      const parsed: unknown = JSON.parse(
-        getStorage().getString("openmapx:recentDestinations") ?? "[]",
-      );
+      const parsed: unknown = JSON.parse(getStorage().getString(DESTINATIONS_KEY) ?? "[]");
       if (Array.isArray(parsed))
         destinations = parsed
           .flatMap((p) => {
@@ -121,9 +121,9 @@ export function subscribeRecentSearchStorage(): () => void {
 export function scopeRecentDestinations(account: string | null) {
   const storage = getStorage();
   const scope = account ?? "signed-out";
-  if (storage.getString("openmapx:recentDestinationAccount") !== scope) {
-    storage.setString("openmapx:recentDestinationAccount", scope);
-    storage.remove("openmapx:recentDestinations");
+  if (storage.getString(DESTINATIONS_ACCOUNT_KEY) !== scope) {
+    storage.setString(DESTINATIONS_ACCOUNT_KEY, scope);
+    storage.remove(DESTINATIONS_KEY);
     useRecentSearchStore.setState({ destinations: [] });
     return [];
   }

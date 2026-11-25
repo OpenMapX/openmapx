@@ -325,7 +325,7 @@ export const ADMIN_OPERATIONS: readonly AnyAdminOperationDefinition[] = [
   }),
   defineOperation({
     id: "overture-conflate",
-    version: 2,
+    version: 1,
     group: "overture",
     title: "Overture Conflation",
     description: "Links Overture places to OSM features for a region.",

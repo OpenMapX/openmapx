@@ -13,6 +13,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
+import { RELEASE_STATE_EPOCH } from "../packages/core/src/services/release-manifest";
 
 const root = resolve(import.meta.dirname, "..");
 
@@ -388,6 +389,7 @@ describe("Docker release trust gate", () => {
         release: `${"a".repeat(40)}-1-2`,
         buildMetadata,
         databaseMigrationHead: { tag: "0001_newest_change", when: 1794754360788 },
+        stateEpoch: RELEASE_STATE_EPOCH,
         producer: {
           repository: "OpenMapX/openmapx",
           workflowPath: ".github/workflows/ci.yml",

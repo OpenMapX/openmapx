@@ -223,7 +223,7 @@ export function createDataExecutionDispatcher(deps: {
           const result = await runTransitousPipeline(ctx);
           finish(context.execution.executionId, {
             event: "done",
-            ok: result.finalStatus !== "error",
+            ok: result.finalStatus !== "failed",
             ...result,
           });
           const sourceRevision = ctx.state.transitousLock?.ref ?? "unavailable";
@@ -231,7 +231,7 @@ export function createDataExecutionDispatcher(deps: {
             throw Error("Transit source revision was not retained");
           return {
             kind: input.kind,
-            finalStatus: result.finalStatus === "skipped" ? "error" : result.finalStatus,
+            finalStatus: result.finalStatus === "skipped" ? "failed" : result.finalStatus,
             sourceRevision,
             countries: input.countries,
           };

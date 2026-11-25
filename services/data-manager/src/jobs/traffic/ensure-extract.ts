@@ -1,19 +1,6 @@
-import { services } from "@openmapx/core/server";
 import { runOpsOperation } from "../../ops-client.js";
 import { TrafficMaintenancePreflightError } from "./preflight-error.js";
 
-/**
- * Default Valhalla container name under the default docker-compose project
- * naming (`<project>-<service>-1`). The stack's compose project comes from
- * the core services constants and `services/valhalla/service.json` pins no
- * `container.containerName`, so the runtime container falls back to this
- * convention. Overridable via `VALHALLA_CONTAINER` for non-default compose
- * project names.
- */
-// Exported so sibling traffic jobs (e.g. `ways-to-edges.ts`, which also shells
-// out to the Valhalla container) share these constants instead of duplicating
-// values that would silently drift.
-export const DEFAULT_VALHALLA_CONTAINER = `${services.STACK_PROJECT}-valhalla-1`;
 export const DEFAULT_VALHALLA_CONFIG_PATH = "/custom_files/valhalla.json";
 /** Must match `mjolnir.tile_dir` in services/valhalla/config/valhalla.json. */
 export const TILE_DIR_PATH = "/custom_files/valhalla_tiles";
@@ -38,7 +25,6 @@ interface TrafficExtractLogger {
 
 export interface EnsureTrafficExtractDeps {
   runDocker?: DockerRunner;
-  container?: string;
   configPath?: string;
   logger?: TrafficExtractLogger;
   /**
@@ -51,18 +37,6 @@ export interface EnsureTrafficExtractDeps {
 
 export interface EnsureTrafficExtractResult {
   built: boolean;
-}
-
-/**
- * Resolves the Valhalla container name from an explicit override, falling
- * back to `VALHALLA_CONTAINER` and then the default compose-project naming
- * convention. Exported for reuse by sibling traffic jobs that also shell out
- * to the same container (e.g. `ways-to-edges.ts`).
- */
-export function resolveContainer(deps: { container?: string }): string {
-  if (deps.container) return deps.container;
-  const envValue = process.env.VALHALLA_CONTAINER;
-  return envValue && envValue.trim() !== "" ? envValue.trim() : DEFAULT_VALHALLA_CONTAINER;
 }
 
 /**

@@ -46,7 +46,7 @@ function fixture() {
       version: "1.0.0",
       quality: "built-in",
       container: { image: "example/alpha", tag: "1" },
-      configSchema: { type: "object", properties: { label: { type: "string" } } },
+      configSchema: { type: "object", properties: { LABEL: { type: "string" } } },
     }),
     { mode: 0o644 },
   );
@@ -133,13 +133,13 @@ describe("overlapping configuration writers", () => {
     a.release();
     await a.wait("done");
     await Promise.all([cli.wait("done"), init.wait("done")]);
-    expect(coreServices.readAppliedConfiguration(infra).serviceConfigs[0]?.values.label).toBe("a");
+    expect(coreServices.readAppliedConfiguration(infra).serviceConfigs[0]?.values.LABEL).toBe("a");
     expect(
       readFileSync(
         join(infra, coreServices.CURRENT_CONFIGURATION, "docker-compose.generated.yml"),
         "utf8",
       ),
-    ).toContain("label: a");
+    ).toContain("LABEL: a");
   }, 20_000);
   it("rejects an overlapping compensation after B completes and preserves B follow-up files", async () => {
     const root = fixture();
@@ -162,7 +162,7 @@ describe("overlapping configuration writers", () => {
       reason: "conflict",
       currentRevisionId: rev("b"),
     });
-    expect(coreServices.readAppliedConfiguration(infra).serviceConfigs[0]?.values.label).toBe("b");
+    expect(coreServices.readAppliedConfiguration(infra).serviceConfigs[0]?.values.LABEL).toBe("b");
     expect(
       readFileSync(join(infra, "state/ops-agent/traefik/dynamic/generated-routes.yml"), "utf8"),
     ).toBe(routes);
@@ -199,7 +199,7 @@ describe("overlapping configuration writers", () => {
     await a.wait("done");
     await init.wait("done");
     expect(coreServices.currentConfigurationGeneration(infra)).toBe(rev("a"));
-    expect(coreServices.readAppliedConfiguration(infra).serviceConfigs[0]?.values.label).toBe("a");
+    expect(coreServices.readAppliedConfiguration(infra).serviceConfigs[0]?.values.LABEL).toBe("a");
     expect(readdirSync(join(infra, coreServices.CONFIGURATION_GENERATIONS))).toHaveLength(15);
   }, 20_000);
   it("never writes after a contender times out, even when the live holder subsequently releases", async () => {
@@ -216,7 +216,7 @@ describe("overlapping configuration writers", () => {
     await a.wait("done");
     await delay(150);
     expect(coreServices.currentConfigurationGeneration(infra)).toBe(rev("a"));
-    expect(coreServices.readAppliedConfiguration(infra).serviceConfigs[0]?.values.label).toBe("a");
+    expect(coreServices.readAppliedConfiguration(infra).serviceConfigs[0]?.values.LABEL).toBe("a");
     expect((await start(root, "ops", "c").wait("done")).result).toMatchObject({
       outcome: "committed",
     });

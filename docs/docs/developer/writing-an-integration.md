@@ -228,9 +228,10 @@ refuse to load unless the API's secrets key is configured: a missing key is a ha
 error, not a silent degrade. The config cascade resolves defaults,
 database values, vault secrets, `config.json` and environment overrides in that
 order. An environment override follows the pattern
-`INTEGRATION_<ID>_<KEY>` (id and key uppercased, hyphens replaced by
-underscores). CamelCase is uppercased without added separators:
-`apiKey` becomes `INTEGRATION_KNOWLEDGE_SUNRISE_SUNSET_APIKEY`. Use the exported
+`INTEGRATION_<ID>_<KEY>`: the id with hyphens replaced by underscores, and the
+key's lowerCamel words joined by underscores, both uppercased. `apiKey` becomes
+`INTEGRATION_KNOWLEDGE_SUNRISE_SUNSET_API_KEY`. Config keys must be lowerCamel;
+manifest validation refuses others. Use the exported
 `integrationEnvVarName(id, key)` helper when displaying or generating a name.
 
 ### Helping operators obtain a key (`x-openmapx-setup`)
@@ -406,7 +407,9 @@ services:
   to choose the per-client bucket: `expensive` for a route that calls a costly or
   quota-bound upstream, `routing` for directions a navigating client re-requests,
   `typeahead` for one a client calls while the user types,
-  `tile` for map-tile fan-out, or the default `public`. Relay map tiles with
+  `tile` for map-tile fan-out, `contribution` and `enrollment` for crowd
+  contributions and key enrollment relayed under a relay credential, or the
+  default `public`. Relay map tiles with
   `createTileProxyHandler`, which validates the tile coordinates first; see
   [Tile proxies](./integration-system.md#tile-proxies). The incoming request's headers are
   forwarded as `req.headers` (`Record<string, string | string[] | undefined>`);

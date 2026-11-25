@@ -238,7 +238,7 @@ it.skipIf(
       );
       const rows = await ownRows();
       expect(rows).toHaveLength(1);
-      expect(rows[0]?.status.status).toBe("ok");
+      expect(rows[0]?.status.status).toBe("succeeded");
       expect(rows[0]?.parent?.issuer).toBe("host-cli");
       expect(rows[0]?.execution.principal).toBe("host-cli");
       const [row] = rows;
@@ -294,11 +294,11 @@ it.skipIf(
       // One application, and nothing left held once it ended.
       expect(
         await sql`SELECT status, finished_at IS NOT NULL AS finished
-          FROM data_manager.jobs WHERE kind='generation-link'`,
-      ).toEqual([{ status: "ok", finished: true }]);
+          FROM data_manager.job WHERE kind='generation-link'`,
+      ).toEqual([{ status: "succeeded", finished: true }]);
       expect(heldTargets(dirname(data)).includes("data-manager")).toBe(false);
     } finally {
-      await sql`DELETE FROM data_manager.jobs WHERE kind='generation-link'`;
+      await sql`DELETE FROM data_manager.job WHERE kind='generation-link'`;
       await runtime.close();
       agent.server.closeAllConnections();
       await agent.close();
@@ -307,7 +307,7 @@ it.skipIf(
       fontServer.closeAllConnections();
       await new Promise<void>((resolve) => fontServer.close(() => resolve()));
       for (const row of await ownRows())
-        await sql`DELETE FROM data_manager.jobs WHERE id=${row.status.id}`;
+        await sql`DELETE FROM data_manager.job WHERE id=${row.status.id}`;
       control.closeControlInstallation(dm);
       control.closeControlInstallation(agentInstallation);
       await sql.end();

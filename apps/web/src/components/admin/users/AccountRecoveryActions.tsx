@@ -182,12 +182,12 @@ function RecoveryForm({ user }: { user: User }) {
         <AdminReauthenticationDialog
           purpose={
             action === "verify"
-              ? "account.verify"
+              ? "user.email.verify"
               : action === "password"
-                ? "account.password.set"
+                ? "user.password.set"
                 : action === "reset-password"
-                  ? "account.reset.send"
-                  : "account.invite"
+                  ? "user.password_reset.send"
+                  : "user.invitation.send"
           }
           targetId={user.id}
           onCompleted={run}

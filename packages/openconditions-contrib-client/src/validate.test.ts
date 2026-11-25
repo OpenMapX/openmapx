@@ -3,6 +3,7 @@ import type { ReportClaim, SituationClaim, SubClaimBody } from "./types.js";
 import { validateReportClaim, validateSubClaimBody } from "./validate.js";
 
 const SITUATION: SituationClaim = {
+  v: 1,
   claimClass: "situation",
   kind: "closure",
   type: "closure",
@@ -26,6 +27,7 @@ const SITUATION: SituationClaim = {
 };
 
 const VOTE: SubClaimBody = {
+  v: 1,
   subject: { class: "situation", id: "crowd:situation-0001" },
   claimType: "confirm",
   reportedAt: "2026-07-11T12:35:00Z",
@@ -50,6 +52,7 @@ describe("validateReportClaim", () => {
   it("accepts an observation claim about a feature", () => {
     expect(() =>
       validateReportClaim({
+        v: 1,
         claimClass: "observation",
         subject: { featureId: "osm:way/1", componentKey: "lane:1" },
         property: "surface",
@@ -59,6 +62,13 @@ describe("validateReportClaim", () => {
         nonce: "validate-nonce-000002",
       }),
     ).not.toThrow();
+  });
+
+  it("requires the signed claim protocol version 1", () => {
+    const { v: _v, ...unversioned } = SITUATION;
+    expect(() => validateReportClaim(unversioned as ReportClaim)).toThrow(/claim\.v must be 1/);
+    expect(() => validateReportClaim(claim({ v: 2 }))).toThrow(/claim\.v must be 1/);
+    expect(() => validateReportClaim(claim({ v: "1" }))).toThrow(/claim\.v must be 1/);
   });
 
   it("rejects an unknown claim class", () => {
@@ -113,6 +123,14 @@ describe("validateReportClaim", () => {
 });
 
 describe("validateSubClaimBody", () => {
+  it("requires the signed claim protocol version 1", () => {
+    const { v: _v, ...unversioned } = VOTE;
+    expect(() => validateSubClaimBody(unversioned as SubClaimBody)).toThrow(
+      /subClaim\.v must be 1/,
+    );
+    expect(() => validateSubClaimBody(vote({ v: 0 }))).toThrow(/subClaim\.v must be 1/);
+  });
+
   it("accepts a record reference, including a feature component", () => {
     expect(() => validateSubClaimBody(VOTE)).not.toThrow();
     expect(() =>

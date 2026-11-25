@@ -3,7 +3,7 @@
 import type { GetAdminConfigurationMigrationInventory200DocumentServiceConfigsItemConfig } from "./getAdminConfigurationMigrationInventory200DocumentServiceConfigsItemConfig";
 
 export type GetAdminConfigurationMigrationInventory200DocumentServiceConfigsItem = {
-  /** @pattern ^[a-z0-9][a-z0-9-]{0,63}$ */
+  /** @pattern ^(?=.{1,48}$)[a-z0-9]+(?:-[a-z0-9]+)*$ */
   serviceId: string;
   config: GetAdminConfigurationMigrationInventory200DocumentServiceConfigsItemConfig;
 };

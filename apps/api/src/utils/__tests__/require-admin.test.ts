@@ -1,5 +1,5 @@
 import Fastify from "fastify";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Stub the better-auth getSession import so the test doesn't need a live auth
 // stack. Returns null by default; individual tests override per-call as needed.
@@ -13,15 +13,10 @@ const { requireAdmin, tryAdminSession } = await import("../require-admin");
 
 beforeEach(() => {
   mockGetSession.mockReset();
-  vi.stubEnv("OPENMAPX_DISABLE_LOCALHOST_AUTH", undefined);
-  vi.stubEnv("OPENMAPX_LOCAL_ADMIN_TOKEN", undefined);
-  vi.stubEnv("NODE_ENV", undefined);
 });
 
-afterEach(() => vi.unstubAllEnvs());
-
 function makeApp() {
-  const app = Fastify();
+  const app = Fastify({ trustProxy: "uniquelocal" });
   // requireAdmin throws a 401/403 on failure; Fastify's default error handler
   // turns that into the response, so the route body only runs when admitted.
   app.get("/protected", async (request) => {
@@ -31,152 +26,44 @@ function makeApp() {
   return app;
 }
 
-describe("requireAdmin loopback short-circuit", () => {
-  it("admits a loopback request that carries the custom local-admin header", async () => {
+describe("requireAdmin admits only an administrator session", () => {
+  it("refuses a loopback peer without a session", async () => {
+    mockGetSession.mockResolvedValue(null);
     const app = makeApp();
-    // app.inject() defaults remoteAddress to 127.0.0.1, which Fastify reports as `request.ip`.
+    // app.inject() defaults remoteAddress to 127.0.0.1.
+    const res = await app.inject({ method: "GET", url: "/protected" });
+    await app.close();
+    expect(res.statusCode).toBe(401);
+    expect(mockGetSession).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses a request whose forwarded headers claim loopback", async () => {
+    mockGetSession.mockResolvedValue(null);
+    const app = makeApp();
     const res = await app.inject({
       method: "GET",
       url: "/protected",
-      headers: { "x-openmapx-local-admin": "" },
+      remoteAddress: "10.0.0.5",
+      headers: { "x-forwarded-for": "127.0.0.1", "x-real-ip": "127.0.0.1" },
     });
     await app.close();
-    expect(res.statusCode).toBe(200);
-    expect(JSON.parse(res.body)).toEqual({ ok: true, userId: "loopback" });
-    expect(mockGetSession).not.toHaveBeenCalled();
-  });
-
-  it("rejects a loopback request lacking the custom header (CSRF guard) in dev", async () => {
-    mockGetSession.mockResolvedValue(null);
-    const app = makeApp();
-    // No header → simulate a same-origin <form action> CSRF attempt; browsers
-    // cannot set the custom header without a CORS preflight.
-    const res = await app.inject({ method: "GET", url: "/protected" });
-    await app.close();
     expect(res.statusCode).toBe(401);
-    expect(mockGetSession).toHaveBeenCalledTimes(1);
   });
 
-  it("respects OPENMAPX_DISABLE_LOCALHOST_AUTH=1 (no short-circuit)", async () => {
-    vi.stubEnv("OPENMAPX_DISABLE_LOCALHOST_AUTH", "1");
-    mockGetSession.mockResolvedValue(null); // no cookies, no session
-    const app = makeApp();
-    const res = await app.inject({ method: "GET", url: "/protected" });
-    await app.close();
-    expect(res.statusCode).toBe(401);
-    expect(mockGetSession).toHaveBeenCalledTimes(1);
-  });
-
-  it("rejects 403 for an authed non-admin user when loopback short-circuit is disabled", async () => {
-    vi.stubEnv("OPENMAPX_DISABLE_LOCALHOST_AUTH", "1");
-    mockGetSession.mockResolvedValue({
-      user: { id: "u1", role: "user" },
-      session: { id: "s1" },
-    });
-    const app = makeApp();
-    const res = await app.inject({ method: "GET", url: "/protected" });
-    await app.close();
-    expect(res.statusCode).toBe(403);
-  });
-
-  it("admits an authed admin user when loopback short-circuit is disabled", async () => {
-    vi.stubEnv("OPENMAPX_DISABLE_LOCALHOST_AUTH", "1");
+  it("admits an administrator session from any peer", async () => {
     mockGetSession.mockResolvedValue({
       user: { id: "admin1", role: "admin" },
       session: { id: "s1" },
     });
     const app = makeApp();
-    const res = await app.inject({ method: "GET", url: "/protected" });
+    const res = await app.inject({ method: "GET", url: "/protected", remoteAddress: "10.0.0.5" });
     await app.close();
     expect(res.statusCode).toBe(200);
-    expect(JSON.parse(res.body)).toEqual({ ok: true, userId: "admin1" });
-  });
-
-  it("requires the local admin token when OPENMAPX_LOCAL_ADMIN_TOKEN is set", async () => {
-    vi.stubEnv("OPENMAPX_LOCAL_ADMIN_TOKEN", "s3cret");
-    mockGetSession.mockResolvedValue(null);
-    const app = makeApp();
-    // No token header → loopback short-circuit must NOT admit, and no better-auth session exists.
-    const res = await app.inject({ method: "GET", url: "/protected" });
-    await app.close();
-    expect(res.statusCode).toBe(401);
-  });
-
-  it("admits a loopback request that presents the correct local admin token", async () => {
-    vi.stubEnv("OPENMAPX_LOCAL_ADMIN_TOKEN", "s3cret");
-    const app = makeApp();
-    const res = await app.inject({
-      method: "GET",
-      url: "/protected",
-      headers: { "x-openmapx-local-admin": "s3cret" },
-    });
-    await app.close();
-    expect(res.statusCode).toBe(200);
-    expect(JSON.parse(res.body)).toEqual({ ok: true, userId: "loopback" });
-    expect(mockGetSession).not.toHaveBeenCalled();
-  });
-
-  it("rejects a loopback request with a wrong token", async () => {
-    vi.stubEnv("OPENMAPX_LOCAL_ADMIN_TOKEN", "s3cret");
-    mockGetSession.mockResolvedValue(null);
-    const app = makeApp();
-    const res = await app.inject({
-      method: "GET",
-      url: "/protected",
-      headers: { "x-openmapx-local-admin": "WRONG" },
-    });
-    await app.close();
-    expect(res.statusCode).toBe(401);
-  });
-
-  it("denies loopback bypass entirely in production when no token is configured", async () => {
-    vi.stubEnv("NODE_ENV", "production");
-    mockGetSession.mockResolvedValue(null);
-    const app = makeApp();
-    const res = await app.inject({
-      method: "GET",
-      url: "/protected",
-      headers: { "x-openmapx-local-admin": "" },
-    });
-    await app.close();
-    expect(res.statusCode).toBe(401);
-  });
-
-  it("rejects a request through a trusted proxy that spoofs X-Forwarded-For=127.0.0.1", async () => {
-    // Simulate a deployment behind Traefik: the API trusts the immediate proxy
-    // hop and resolves `request.ip` from XFF. A malicious public client sends
-    // `X-Forwarded-For: 127.0.0.1` to try to claim the loopback short-circuit.
-    // The check uses `request.socket.remoteAddress` (the actual TCP peer), so
-    // the forgery must be rejected.
-    vi.stubEnv("OPENMAPX_LOCAL_ADMIN_TOKEN", "s3cret");
-    mockGetSession.mockResolvedValue(null);
-    const app = Fastify({ trustProxy: "uniquelocal" });
-    app.get("/protected", async (request) => {
-      const session = await requireAdmin(request);
-      return { ok: true, userId: session.user.id };
-    });
-    const res = await app.inject({
-      method: "GET",
-      url: "/protected",
-      remoteAddress: "10.0.0.5", // the private reverse proxy
-      headers: {
-        "x-forwarded-for": "127.0.0.1",
-        "x-openmapx-local-admin": "s3cret",
-      },
-    });
-    await app.close();
-    expect(res.statusCode).toBe(401);
-    // The forged XFF must not even reach the auth lookup as loopback — it
-    // falls through to the regular session check, which finds no session.
-    expect(mockGetSession).toHaveBeenCalledTimes(1);
+    expect(res.json()).toEqual({ ok: true, userId: "admin1" });
   });
 });
 
 describe("requireAdmin throws (no manual reply)", () => {
-  beforeEach(() => {
-    vi.stubEnv("OPENMAPX_DISABLE_LOCALHOST_AUTH", "1"); // skip loopback short-circuit
-  });
-
   it("throws a 401 when there is no session", async () => {
     mockGetSession.mockResolvedValue(null);
     await expect(requireAdmin({ headers: {}, socket: {} } as never)).rejects.toMatchObject({
@@ -190,13 +77,16 @@ describe("requireAdmin throws (no manual reply)", () => {
       statusCode: 403,
     });
   });
+
+  it("admits another allowed role when the caller names it", async () => {
+    mockGetSession.mockResolvedValue({ user: { id: "m1", role: "moderator" }, session: {} });
+    await expect(
+      requireAdmin({ headers: {}, socket: {} } as never, ["admin", "moderator"]),
+    ).resolves.toMatchObject({ user: { id: "m1" } });
+  });
 });
 
 describe("tryAdminSession (non-throwing)", () => {
-  beforeEach(() => {
-    vi.stubEnv("OPENMAPX_DISABLE_LOCALHOST_AUTH", "1");
-  });
-
   it("returns null instead of throwing when unauthorized", async () => {
     mockGetSession.mockResolvedValue(null);
     expect(await tryAdminSession({ headers: {}, socket: {} } as never)).toBeNull();

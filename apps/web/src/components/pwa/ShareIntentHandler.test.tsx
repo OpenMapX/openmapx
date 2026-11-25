@@ -16,16 +16,16 @@ it("consumes native warm search requests and repeated identical requests", () =>
   for (let i = 0; i < 2; i++) {
     useSearchStore.getState().setQuery("");
     act(() => {
-      window.history.replaceState(null, "", "/?q=Main+Street&map=1,2,13,0,0");
+      window.history.replaceState(null, "", "/?query=Main+Street&map=1,2,13,0,0");
       window.dispatchEvent(new Event(DEEPLINK_OPEN_EVENT));
     });
     expect(useSearchStore.getState().query).toBe("Main Street");
     expect(window.location.search).toBe("?map=1%2C2%2C13%2C0%2C0");
   }
   view.unmount();
-  window.history.replaceState(null, "", "/?q=ignored");
+  window.history.replaceState(null, "", "/?query=ignored");
   window.dispatchEvent(new Event(DEEPLINK_OPEN_EVENT));
-  expect(window.location.search).toBe("?q=ignored");
+  expect(window.location.search).toBe("?query=ignored");
 });
 it("still consumes cold PWA geo requests while preserving unrelated state", () => {
   window.history.replaceState(null, "", "/?geo=geo%3A0%2C0%3Fq%3DMunich&panel=saved#anchor");

@@ -17,11 +17,11 @@ import {
 import { createControlRootOperationKey, OpsClient } from "@openmapx/core/ops";
 import {
   feedState,
-  jobStages,
-  jobs,
-  offlinePackageArtifactReferences,
-  offlinePackageJobOwners,
-  offlinePackageJobs,
+  job,
+  jobStage,
+  offlinePackageArtifactReference,
+  offlinePackageJob,
+  offlinePackageJobOwner,
 } from "@openmapx/db-schema";
 import { inspectPinnedFeedCredentialKeys } from "@openmapx/transitous-core";
 import { drizzle } from "drizzle-orm/postgres-js";
@@ -78,6 +78,7 @@ vi.mock("@openmapx/core/http/safe-download", async (original) => ({
   },
 }));
 const enabled = process.env.OPENMAPX_RUN_DATABASE_TESTS === "1";
+const actor = { trigger: "cli" as const };
 let root = "",
   agent: ReturnType<typeof buildOpsAgentServer>,
   agentInstallation: ReturnType<typeof openControlInstallation>,
@@ -234,7 +235,7 @@ it.skipIf(!enabled)(
       }),
     });
     const proposalId = "00000000-0000-4000-8000-000000000001",
-      proposal = await reviewer.resolveCatalogProposal({ branch: "main", proposalId });
+      proposal = await reviewer.resolveCatalogProposal({ branch: "main", proposalId, actor });
     expect(proposal.pins.transitous.ref).toBe(`main@${sha}`);
     expect(proposal.pins.gbfs.commit).toBe("c".repeat(40));
     expect(proposal.baseGenerationId).toBe(originalPins.generationId);
@@ -247,12 +248,14 @@ it.skipIf(!enabled)(
     const requests = state.requests.length,
       retainedPath = join(infra, "catalog-pins/proposals", `${proposalId}.json`),
       bytes = readFileSync(retainedPath, "utf8");
-    expect(await reviewer.resolveCatalogProposal({ branch: "main", proposalId })).toEqual(proposal);
+    expect(await reviewer.resolveCatalogProposal({ branch: "main", proposalId, actor })).toEqual(
+      proposal,
+    );
     expect(state.requests).toHaveLength(requests);
     expect(readFileSync(retainedPath, "utf8")).toBe(bytes);
     expect(
-      await state.fixture.sql`SELECT status FROM data_manager.jobs WHERE kind='transit-proposal'`,
-    ).toEqual([{ status: "ok" }, { status: "ok" }]);
+      await state.fixture.sql`SELECT status FROM data_manager.job WHERE kind='transit-proposal'`,
+    ).toEqual([{ status: "succeeded" }, { status: "succeeded" }]);
     const atlasRemote = join(root, "atlas-upstream.git"),
       atlasWork = join(root, "atlas-upstream-work"),
       catalogWork = join(root, "catalog-upstream-work");
@@ -284,6 +287,7 @@ it.skipIf(!enabled)(
     const nextProposal = await reviewer.resolveCatalogProposal({
       branch: "next",
       proposalId: "00000000-0000-4000-8000-000000000002",
+      actor,
     });
     expect(nextProposal.pins.transitous.submodules["transitland-atlas"]).toBe(nextAtlas);
     expect(git(atlas, ["rev-parse", "HEAD"])).toBe(atlasSha);
@@ -376,7 +380,7 @@ it.skipIf(!enabled)(
       });
       expect(accepted.statusCode).toBe(202);
       const id = accepted.json().id;
-      await vi.waitFor(async () => expect((await receiver.inspect(id))?.status).toBe("error"), {
+      await vi.waitFor(async () => expect((await receiver.inspect(id))?.status).toBe("failed"), {
         timeout: 10000,
         interval: 50,
       });
@@ -389,10 +393,10 @@ it.skipIf(!enabled)(
       expect(failed.json()).toMatchObject({
         validationEligible: false,
         validation: null,
-        execution: { id, kind: "catalog.validate", status: "error" },
+        execution: { id, kind: "catalog.validate", status: "failed" },
       });
       expect(readCatalogPinSet(root)).toEqual(originalPins);
-      expect(await receiver.lookup(key)).toMatchObject({ id, status: "error" });
+      expect(await receiver.lookup(key)).toMatchObject({ id, status: "failed" });
     } finally {
       if (oldTwoSlot === undefined) delete process.env.MOTIS_TWO_SLOT;
       else process.env.MOTIS_TWO_SLOT = oldTwoSlot;

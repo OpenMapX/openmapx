@@ -5,7 +5,6 @@
   "license": "MIT",
   "quality": "built-in",
   "domains": ["gtfs-catalog"],
-  "category": "Transit",
   "configSchema": {
     "type": "object",
     "properties": {

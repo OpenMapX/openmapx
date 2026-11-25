@@ -466,7 +466,7 @@ describe("offline package generation", () => {
       bbox: { west: -1, south: 1, east: 2, north: 2 },
     });
     expect(invalid.status).toBe("failed");
-    expect(invalid.errorCode).toBe("invalid-request");
+    expect(invalid.errorCode).toBe("INVALID_REQUEST");
     expect(extract).not.toHaveBeenCalled();
 
     const first = await generator.prepare(principal, request);
@@ -611,7 +611,7 @@ describe("offline package generation", () => {
     expect(await generator.getJob(principal, ids[0] ?? "")).toBeUndefined();
     expect(await generator.getJob(principal, ids.at(-1) ?? "")).toMatchObject({
       status: "failed",
-      errorCode: "invalid-request",
+      errorCode: "INVALID_REQUEST",
     });
   });
 

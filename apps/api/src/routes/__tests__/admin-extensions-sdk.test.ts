@@ -102,6 +102,8 @@ beforeEach(async () => {
       public: (req, reply) => floor.preHandler()(req, reply),
       unmatched: unexpected,
       typeahead: unexpected,
+      contribution: unexpected,
+      enrollment: unexpected,
       routing: unexpected,
     }),
   );
@@ -164,6 +166,7 @@ describe("actual extension producers", () => {
       ],
       hasUpdate: true,
       latestVersion: "2.0",
+      critical: null,
     });
     getSession.mockResolvedValue(null);
     expect(
@@ -193,6 +196,7 @@ describe("actual extension producers", () => {
       platformVersion: "1.0",
       installed: true,
       installedVersion: "1.0",
+      installedCritical: null,
       hasUpdate: true,
       removed: null,
       critical: null,

@@ -170,7 +170,6 @@ export async function adminTransitPinsRoute(app: FastifyInstance): Promise<void>
           throw new TransitPinRequestConflict("Refresh review to select the current catalog pair");
         await writeAuditLog({
           actorId: actor,
-          targetType: "transit",
           targetId: created.proposalId,
           action: "transit.catalog.propose",
           details: { branch: request.body.branch, generationId: created.catalogRevisionId },
@@ -201,7 +200,6 @@ export async function adminTransitPinsRoute(app: FastifyInstance): Promise<void>
         );
         await writeAuditLog({
           actorId: actor,
-          targetType: "transit",
           targetId: request.params.proposalId,
           action: "transit.catalog.validate",
           details: { jobId: job.id, countries: request.body.countries },
@@ -228,7 +226,6 @@ export async function adminTransitPinsRoute(app: FastifyInstance): Promise<void>
         );
         await writeAuditLog({
           actorId: actor,
-          targetType: "transit",
           targetId: request.params.proposalId,
           action: "transit.catalog.activate",
           details: {
@@ -266,7 +263,6 @@ export async function adminTransitPinsRoute(app: FastifyInstance): Promise<void>
         );
         await writeAuditLog({
           actorId: getAdminSession(request).user.id,
-          targetType: "transit",
           targetId: current.id,
           action: "transit.catalog.cancel",
           request,

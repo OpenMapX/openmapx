@@ -5,6 +5,7 @@ import {
   index,
   jsonb,
   pgTable,
+  smallint,
   text,
   timestamp,
   uuid,
@@ -39,6 +40,9 @@ export const shareLink = pgTable(
     label: text("label").notNull(),
     /** Frozen public payload for snapshot shares. */
     snapshot: jsonb("snapshot"),
+    /** The format `snapshot` was written in; it selects the parser together
+     * with `target_type`. Set exactly when `snapshot` is. */
+    snapshotVersion: smallint("snapshot_version"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .defaultNow()
@@ -71,6 +75,10 @@ export const shareLink = pgTable(
     check(
       "share_link_snapshot_check",
       sql`(${table.mode} = 'snapshot') = (${table.snapshot} is not null)`,
+    ),
+    check(
+      "share_link_snapshot_version_check",
+      sql`(${table.snapshot} is null) = (${table.snapshotVersion} is null) and (${table.snapshotVersion} is null or ${table.snapshotVersion} = 1)`,
     ),
   ],
 );

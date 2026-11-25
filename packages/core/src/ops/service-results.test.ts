@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { COMPONENT_ID_MAX_LENGTH } from "../component-id";
 import { OPS_KIND_POLICIES } from "./contract";
 import { opsFailureResultSchema } from "./job-evidence";
 import { createServiceBatchResult, serviceBatchResultSchema } from "./service-results";
@@ -36,11 +37,11 @@ describe("service batch evidence", () => {
   it("fits all 256 maximum-length service IDs in the build-all failure budget", () => {
     const ids = Array.from(
       { length: 256 },
-      (_, i) => `service-${String(i).padStart(3, "0")}-${"x".repeat(52)}`,
+      (_, i) => `service-${String(i).padStart(3, "0")}-${"x".repeat(36)}`,
     );
     const serviceBatch = createServiceBatchResult(ids, ids.slice(0, 128), ids.slice(128), []);
     const failure = opsFailureResultSchema.parse({ serviceBatch });
-    expect(JSON.stringify(failure).length).toBeGreaterThan(16 * 1024);
+    expect(ids.every((id) => id.length === COMPONENT_ID_MAX_LENGTH)).toBe(true);
     expect(Buffer.byteLength(JSON.stringify(failure))).toBeLessThanOrEqual(
       OPS_KIND_POLICIES["services.buildAll"].maxResultBytes,
     );

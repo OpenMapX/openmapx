@@ -27,7 +27,6 @@
     }
   },
   "quality": "built-in",
-  "category": "Routing",
   "dataSources": [
     {
       "sourceId": "brouter",

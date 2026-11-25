@@ -90,7 +90,7 @@ describe("feed proxy transaction", () => {
     const candidate = { next: { url: "https://next.example/feed" } };
     const fx = setup(candidate, old);
     const context = ctx(dataDir());
-    expect((await run(context)).status).toBe("ok");
+    expect((await run(context)).status).toBe("succeeded");
     expect(readFileSync(join(fx.active, "feed-proxy-vars.json"), "utf-8")).toContain('"old"');
     expect(readFileSync(join(fx.active, "feed-proxy-vars.json"), "utf-8")).toContain('"next"');
     await rollbackProxyTransaction(context);
@@ -124,7 +124,7 @@ describe("feed proxy transaction", () => {
       runner: async () => {},
       now: () => "2026-01-01T00:00:00Z",
     });
-    expect((await run(context)).status).toBe("ok");
+    expect((await run(context)).status).toBe("succeeded");
 
     const producerPath = join(fx.active, "conf", "default.conf");
     // The container-mounted copy matches the freshly written producer config…
@@ -136,7 +136,7 @@ describe("feed proxy transaction", () => {
   it("restores exact previous files when nginx validation fails", async () => {
     const fx = setup({ next: { url: "https://next.example/feed" } }, {});
     const result = await run(ctx(dataDir(), "test"));
-    expect(result.status).toBe("error");
+    expect(result.status).toBe("failed");
     expect(readFileSync(join(fx.active, "conf", "default.conf"), "utf-8")).toBe("old bytes\n");
   });
 
@@ -149,7 +149,7 @@ describe("feed proxy transaction", () => {
       { same: { url: "https://old.example/feed" } },
     );
     const context = ctx(dataDir());
-    expect((await run(context)).status).toBe("ok");
+    expect((await run(context)).status).toBe("succeeded");
     const vars = JSON.parse(readFileSync(join(fx.active, "feed-proxy-vars.json"), "utf-8"));
     expect(vars.same.url).toBe("https://new.example/feed");
     await rollbackProxyTransaction(context);

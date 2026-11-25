@@ -125,7 +125,7 @@ describe("AuthDialog notice", () => {
 describe("AuthDialog dismissal policy", () => {
   it("passes the hosting contribution return path to social sign-in", async () => {
     const { AuthDialog } = await import("./AuthDialog");
-    const callbackPath = "/?place=osm%3Anode%3A12&at=13.4%2C52.5&osm-contribute=1";
+    const callbackPath = "/?place=osm%3Anode%3A12&placeLocation=13.4%2C52.5&osmContribution=1";
     render(<AuthDialog open onClose={vi.fn()} callbackPath={callbackPath} />);
     await userEvent.click(screen.getByRole("button", { name: "auth.continueWith" }));
     expect(signInSocial).toHaveBeenCalledWith({

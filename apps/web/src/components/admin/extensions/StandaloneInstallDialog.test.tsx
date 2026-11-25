@@ -60,7 +60,7 @@ beforeEach(() => {
     return Response.json(
       job({
         id,
-        status: "success",
+        status: "succeeded",
         cancelable: false,
         result: id === previewJob ? inspection : { outcome: "committed" },
       }),
@@ -200,7 +200,7 @@ it("retries a lost preview acknowledgement using the already-uploaded immutable 
       return Response.json(
         job({
           id: previewJob,
-          status: "success",
+          status: "succeeded",
           cancelable: false,
           result: {
             ...inspection,

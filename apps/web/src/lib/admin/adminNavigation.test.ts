@@ -74,7 +74,7 @@ it.each([
 });
 it.each([
   "/admin/data/transit?tab=credentials&token=private",
-  "/admin/settings/general?tab=logs",
+  "/admin/settings/email?tab=logs",
   "/admin/system/services/%2fetc",
   "/admin/users/../settings",
   "//evil.test/admin",

@@ -150,9 +150,8 @@ Copy `infra/docker/.env.example` to `infra/docker/.env` and configure:
 
 - a public `DOMAIN` and `ACME_EMAIL`, with DNS and inbound TCP 80/443 reaching
   Traefik; publish an AAAA record only if IPv6 works end to end;
-- unique `POSTGRES_PASSWORD`, `BETTER_AUTH_SECRET` and
-  `OPENMAPX_LOCAL_ADMIN_TOKEN` values (the render generates the API's secrets
-  key);
+- unique `POSTGRES_PASSWORD` and `BETTER_AUTH_SECRET` values (the render
+  generates the API's secrets key);
 - `OPENMAPX_HOST_DIR` as the absolute checkout path and `DOCKER_GID` as the local
   Docker socket's group ID;
 - explicit `TRANSITOUS_COUNTRIES` or a MOTIS feed allow-list for the default

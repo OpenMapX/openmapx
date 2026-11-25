@@ -19,7 +19,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
 });
-const groups = ["general", "auth", "email", "map", "policy", "legal"].map((group) => ({
+const groups = ["auth", "email", "map", "policy", "legal"].map((group) => ({
   id: group,
   label: group,
   settings: [
@@ -36,7 +36,6 @@ const groups = ["general", "auth", "email", "map", "policy", "legal"].map((group
   ],
 }));
 it.each([
-  ["general", "general"],
   ["authentication", "auth"],
   ["email", "email"],
   ["map", "map"],

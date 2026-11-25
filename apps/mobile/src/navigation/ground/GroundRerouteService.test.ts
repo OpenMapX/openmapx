@@ -1,5 +1,5 @@
 import type { GroundMobileSession } from "@openmapx/core/navigation";
-import type { ApiClient } from "@openmapx/core/navigation/api";
+import { type ApiClient, ApiClientError } from "@openmapx/core/navigation/api";
 import { groundSessionFixture } from "../../storage/testing/sessionFixture";
 import { nth } from "../../testing/nth";
 import { GroundRerouteService, rerouteWaypoints } from "./GroundRerouteService";
@@ -282,6 +282,20 @@ describe("GroundRerouteService", () => {
     expect(outcome).toMatchObject({ ok: false, code: "network" });
     // A message can carry a URL with the user's coordinates in its query.
     expect(JSON.stringify(outcome)).not.toContain("50.15");
+  });
+
+  it("reports a refused mobile protocol as an update the user must install", async () => {
+    const { client } = fakeClient(async () => {
+      throw new ApiClientError(426, { code: "MOBILE_PROTOCOL_UNSUPPORTED" }, null);
+    });
+
+    const outcome = await service(client).request({
+      requestId: "r1",
+      session: session(),
+      origin: ORIGIN,
+    });
+
+    expect(outcome).toMatchObject({ ok: false, code: "update-required" });
   });
 
   it("aborts a request whose session has ended", async () => {

@@ -36,8 +36,8 @@ const credits = () =>
     .join(" ");
 const now = new Date().toISOString();
 const publication = {
-  version: 2 as const,
-  policyVersion: 2,
+  version: 1 as const,
+  policyVersion: 1,
   generation: "11111111-1111-4111-8111-111111111111",
   publishedAt: now,
   region: { name: "Neuss", bounds: [6.58, 50.89, 7.07, 51.31] as [number, number, number, number] },
@@ -62,7 +62,7 @@ function feature(): MapGeoJSONFeature {
       category: "cafe",
       min_zoom: 15,
       sources: "overture",
-      format_version: 2,
+      format_version: 1,
       _mapAttributions: JSON.stringify([
         { sourceId: "meta-places", name: "Hidden name source" },
         { sourceId: "microsoft-places", name: "Captured German name" },

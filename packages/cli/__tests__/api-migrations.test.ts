@@ -58,9 +58,10 @@ describe("migrateBeforeApiUpdate", () => {
     expect(run[run.indexOf("--label") + 1]).toBe(MARKER);
     expect(run.slice(run.indexOf("api"))).toEqual([
       "api",
-      "sh",
-      "-c",
-      "if [ -f dist/migrate.js ]; then exec node --import tsx/esm dist/migrate.js; fi; exit 78",
+      "node",
+      "--import",
+      "tsx/esm",
+      "dist/migrate.js",
     ]);
     expect(vi.mocked(dockerCompose).mock.calls).toEqual([[["config", "--format", "json"]]]);
     expect(dockerCalls()).toEqual([["ps", "-aq", ...FILTERS]]);
@@ -89,10 +90,16 @@ describe("migrateBeforeApiUpdate", () => {
     expect(composeCalls()[2]).toEqual(["start", "api"]);
   });
 
-  it("leaves migrating to the API's startup when its image has no migration entry point", async () => {
-    vi.mocked(dockerComposeStream).mockImplementation(async (args) => (args[0] === "run" ? 78 : 0));
-    expect(await migrateBeforeApiUpdate({ deps: false })).toBe(0);
-    expect(composeCalls().map((args) => args[0])).toEqual(["stop", "run"]);
+  it("fails when the image has no migration entry point, as for any failed migration", async () => {
+    // Node's status for a missing entry module; status 78 has no meaning of its own.
+    for (const status of [1, 78]) {
+      vi.mocked(dockerComposeStream).mockReset();
+      vi.mocked(dockerComposeStream).mockImplementation(async (args) =>
+        args[0] === "run" ? status : 0,
+      );
+      expect(await migrateBeforeApiUpdate({ deps: false })).toBe(status);
+      expect(composeCalls().map((args) => args[0])).toEqual(["stop", "run", "start"]);
+    }
   });
 
   it("migrates nothing when the Compose project cannot be read", async () => {

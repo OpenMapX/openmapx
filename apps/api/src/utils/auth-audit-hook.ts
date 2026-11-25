@@ -1,19 +1,20 @@
+import type { AuditAction } from "@openmapx/core/api-contracts";
 import { currentAccountMutation } from "../account/account-context";
 import { writeAuditLog } from "./audit-log";
 
-// Map admin-plugin endpoint paths to (action, target-type) tuples for audit
-// emission. Keep keys aligned with better-auth's `admin` plugin route table —
-// see node_modules/better-auth/dist/plugins/admin/admin.mjs.
-const ADMIN_AUDIT_ROUTES: Record<string, { action: string; targetType: string }> = {
-  "/admin/ban-user": { action: "user.ban", targetType: "user" },
-  "/admin/unban-user": { action: "user.unban", targetType: "user" },
-  "/admin/set-role": { action: "user.role.change", targetType: "user" },
-  "/admin/impersonate-user": { action: "user.impersonate", targetType: "user" },
-  "/admin/remove-user": { action: "user.delete", targetType: "user" },
-  "/admin/create-user": { action: "user.create", targetType: "user" },
-  "/admin/set-user-password": { action: "user.password.set", targetType: "user" },
-  "/admin/revoke-user-session": { action: "user.session.revoke", targetType: "user" },
-  "/admin/revoke-user-sessions": { action: "user.sessions.revoke_all", targetType: "user" },
+// Map admin-plugin endpoint paths to the audit actions they record. Keep keys
+// aligned with better-auth's `admin` plugin route table — see
+// node_modules/better-auth/dist/plugins/admin/admin.mjs.
+const ADMIN_AUDIT_ROUTES: Record<string, { action: AuditAction }> = {
+  "/admin/ban-user": { action: "user.ban" },
+  "/admin/unban-user": { action: "user.unban" },
+  "/admin/set-role": { action: "user.role.change" },
+  "/admin/impersonate-user": { action: "user.impersonate" },
+  "/admin/remove-user": { action: "user.delete" },
+  "/admin/create-user": { action: "user.create" },
+  "/admin/set-user-password": { action: "user.password.set" },
+  "/admin/revoke-user-session": { action: "user.session.revoke" },
+  "/admin/revoke-user-sessions": { action: "user.session.revoke_all" },
 };
 
 interface AdminAuditBody {
@@ -85,7 +86,6 @@ export async function handleAdminAuditEvent(ctx: AdminAuditCtx): Promise<void> {
   await writeAuditLog({
     actorId,
     targetId,
-    targetType: route.targetType,
     action: route.action,
     details: Object.keys(details).length > 0 ? details : null,
     request: ctx.request,

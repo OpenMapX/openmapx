@@ -18,9 +18,11 @@
  * lands somewhere showing exactly what was already shown keeps going, and the
  * next surface to open reuses such an entry instead of stacking on it.
  *
- * Each entry carries `omx` metadata in `history.state`, beside Next.js's own
- * keys, which are always spread through unchanged.
+ * Each entry carries metadata under `HISTORY_STATE_KEY` in `history.state`,
+ * beside Next.js's own keys, which are always spread through unchanged.
  */
+
+import { HISTORY_STATE_KEY } from "@openmapx/core/storage-keys";
 
 /** Ordered surfaces the URL has open, outermost first. See `navigationPath` in deepLink. */
 export type NavigationPath = readonly string[];
@@ -64,7 +66,7 @@ export type HistoryStep = "replace" | "push";
  */
 export type HistoryRestoreListener = () => boolean;
 
-const STATE_KEY = "omx";
+const STATE_KEY = HISTORY_STATE_KEY;
 /** A step-over whose popstate never arrives must not wedge every later write. */
 const POP_TIMEOUT_MS = 1000;
 const DOCUMENT_ID = Math.random().toString(36).slice(2);

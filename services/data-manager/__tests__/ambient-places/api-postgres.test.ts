@@ -7,6 +7,7 @@ import {
   buildSearchIndexIndexesDDL,
   buildSearchIndexSchemaDDL,
 } from "../../src/jobs/search-index/schema.js";
+import { authenticateAs } from "../helpers/authenticated-app.js";
 import { installDisposableDataAdmission } from "../helpers/data-admission-fixture.js";
 import { startPostgis } from "../helpers/postgis-testcontainer.js";
 
@@ -23,17 +24,17 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const closeAdmission = await installDisposableDataAdmission(pg.sql);
       const barrier = postgres(pg.connectionString, { max: 1 });
       const coldSql = postgres(pg.connectionString, { max: 2 });
-      const cold = Fastify();
+      const cold = authenticateAs(Fastify());
       registerAmbientPlacesApi(cold, coldSql);
-      const a = Fastify();
-      const b = Fastify();
+      const a = authenticateAs(Fastify());
+      const b = authenticateAs(Fastify());
       registerAmbientPlacesApi(a, pg.sql);
       registerAmbientPlacesApi(b, pg.sql);
       try {
         await pg.sql.unsafe(
           buildSearchIndexSchemaDDL("osm_search") + buildSearchIndexIndexesDDL("osm_search"),
         );
-        await pg.sql.unsafe(`INSERT INTO osm_search.index_state(singleton,region,source_path,source_fingerprint,current_fingerprint,epoch,status,started_at,published_at,updated_at) VALUES(1,'aachen','fixture','fixture','fixture','admission','ready',now(),now(),now());
+        await pg.sql.unsafe(`INSERT INTO osm_search.index_state(schema_version,singleton,region,source_path,source_fingerprint,current_fingerprint,epoch,status,started_at,published_at,updated_at) VALUES(1,1,'aachen','fixture','fixture','fixture','admission','ready',now(),now(),now());
         INSERT INTO osm_search.places(osm_type,osm_id,name,geom,category,tags,importance) VALUES('node',1,'Clinic',ST_Point(6.08,50.77,4326),'amenity/hospital','{}',0.8)`);
         // Initialize the dedicated schema without accepting a publication.
         const { ensureAmbientSchema } = await import("../../src/jobs/ambient-places/schema.js");

@@ -92,7 +92,7 @@ beforeAll(async () => {
     },
     runtime: host.runtime,
     resourceClaimer: host.claimer,
-    journal: await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs-v1.json")),
+    journal: await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs.json")),
     controlInstallation: installation,
   });
   agent.addHook("preHandler", async (request) => {
@@ -137,6 +137,7 @@ it.skipIf(!enabled)(
         id: "workflow-bundle",
         name: "Workflow bundle",
         version: "1.0.0",
+        platform: "1.0",
         integrations: [
           {
             id: "workflow-map",
@@ -344,7 +345,10 @@ it.skipIf(!enabled)(
       if (args.includes("community-live")) host.setRows([host.row]);
     });
 
-    async function context(type: string, payload: Record<string, unknown>) {
+    async function context(
+      type: (typeof schema.adminJob.$inferInsert)["type"],
+      payload: Record<string, unknown>,
+    ) {
       const id = randomUUID(),
         execution = { owner: randomUUID(), version: 1 };
       await fixture.db
@@ -399,6 +403,7 @@ it.skipIf(!enabled)(
         id: "service-workflow",
         name: "Service workflow",
         version: "1.0.0",
+        platform: "1.0",
         services: [
           { repo: "https://github.com/example/community-services", service: "community-live" },
         ],

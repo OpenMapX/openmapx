@@ -172,7 +172,8 @@ A staff member's own export lists what they did on other people's privacy
 cases (registering a case, verifying an identity, decisions, extensions, task
 resolutions and exports) and the case alerts sent to them, under
 `privacy-case-handling-attribution`. Each entry names only the event, its time,
-the request type and a pseudonymous case reference: the person a case concerns,
+the request type, for a status change the status set, and a pseudonymous case
+reference: the person a case concerns,
 the locator, reason codes and other case details stay out. The report states
 the configured periods of the audit log, finished admin jobs, application logs
 and privacy cases rather than the catalogue's defaults.

@@ -41,7 +41,6 @@
     "url": "https://loom.cs.uni-freiburg.de/tiles/rail/geo/0/0/0.mvt"
   },
   "quality": "built-in",
-  "category": "Data Overlays",
   "dataSources": [
     {
       "sourceId": "loom-tiles",

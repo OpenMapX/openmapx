@@ -172,6 +172,12 @@ export {
   createPlace,
   idsFromPrimary,
   idsFromPrimaryOrCoords,
+  isPersistablePlaceId,
+  persistablePlaceId,
+  SESSION_LOCAL_PLACE_ID_SCHEMES,
+  type SessionLocalPlaceIdScheme,
+  savedPlaceKey,
+  savedRowKey,
 } from "./placeIds";
 export type { RestaurantLinks, RestaurantMenu } from "./restaurantMenu";
 export type {

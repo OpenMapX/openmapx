@@ -13,12 +13,13 @@
 // manifest declares an `x-openmapx-secret` field (none do yet). The layering
 // is parallel to `resolveConfigWithSources` in `integration-host.ts` — the two
 // functions share the core helpers in `@openmapx/core` (`configSchemaKeys`,
-// `serviceConfigEnvPrefix`) so the env-var pattern and default extraction stay
+// `serviceConfigEnvName`) so the env-var pattern and default extraction stay
 // in lockstep.
 //
-// The env prefix is `SERVICE_{ID}_{KEY}` (dashes → underscores, uppercase).
-// Example: `SERVICE_VALHALLA_MEMORY_LIMIT=4g` overrides whatever is saved in
-// `service_config.config.memory_limit` for the `valhalla` service.
+// The env name is `SERVICE_{ID}_{KEY}`: the id with dashes → underscores,
+// uppercased, and the UPPER_SNAKE key as is. Example:
+// `SERVICE_VALHALLA_BUILD_ELEVATION=false` overrides whatever is saved in
+// `service_config.config.BUILD_ELEVATION` for the `valhalla` service.
 
 import { services as coreServices } from "@openmapx/core/server";
 import { eq } from "drizzle-orm";

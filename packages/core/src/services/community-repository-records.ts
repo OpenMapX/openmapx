@@ -9,6 +9,7 @@ import {
   readSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
+import { COMPONENT_ID_PATTERN } from "../component-id";
 import { agentStatePaths } from "./agent-state";
 import { readRegularFileBytes } from "./built-in-service-source";
 import { communityServiceManifestProblems } from "./community-manifest";
@@ -28,12 +29,12 @@ import type { LoadedService, ServiceManifest } from "./types";
  * play no other part.
  */
 
-export const COMMUNITY_RECORD_VERSION = 2;
+export const COMMUNITY_RECORD_VERSION = 1;
 
 const REPOSITORY = /^[a-f0-9]{16}$/;
 const TRANSACTION = /^txn1_[a-f0-9]{24}$/;
 const COMMIT = /^[a-f0-9]{40}$/;
-const SERVICE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const SERVICE_ID = COMPONENT_ID_PATTERN;
 const SHA256 = /^[a-f0-9]{64}$/;
 const RECORD = /^\.repository-([a-f0-9]{16})\.json$/;
 const MAX_RECORD_BYTES = 256 * 1024;

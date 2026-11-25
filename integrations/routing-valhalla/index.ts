@@ -13,7 +13,7 @@ export function setup(ctx: IntegrationContext): void {
       url: ctx.resolvePlatformEndpoint("valhalla")?.url,
       apiKey: (ctx.config.apiKey as string | undefined) || undefined,
       // Defaults on: only an explicit `false` from config disables it.
-      bidirectionalAlternates: ctx.config["bidirectional-alternates"] !== false,
+      bidirectionalAlternates: ctx.config.bidirectionalAlternates !== false,
     };
   });
 

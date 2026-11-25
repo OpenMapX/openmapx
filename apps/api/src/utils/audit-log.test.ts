@@ -36,7 +36,6 @@ describe("writeAuditLog", () => {
     await writeAuditLog({
       actorId: "admin-1",
       targetId: "u-2",
-      targetType: "user",
       action: "user.ban",
       details: { reason: "spam" },
       request: fakeReq("203.0.113.5", "vitest-ua"),
@@ -46,8 +45,9 @@ describe("writeAuditLog", () => {
     expect(h.valuesMock).toHaveBeenCalledTimes(1);
     const values = callArg(h.valuesMock, 0, 0) as Record<string, unknown>;
     expect(values).toMatchObject({
-      actorId: "admin-1",
+      actorUserId: "admin-1",
       action: "user.ban",
+      targetType: "user",
       targetId: "u-2",
       targetUserId: "u-2",
       ipAddress: "203.0.113.5",
@@ -58,24 +58,19 @@ describe("writeAuditLog", () => {
   });
 
   it("references the target account only when the target is a user", async () => {
-    await writeAuditLog({
-      actorId: "admin-1",
+    await writeAuditLog({ actorId: "admin-1", targetId: "u-2", action: "service.restart" });
+    await writeAuditLog({ actorId: "admin-1", targetId: null, action: "user.ban" });
+
+    expect(callArg(h.valuesMock, 0, 0)).toMatchObject({
       targetType: "service",
       targetId: "u-2",
-      action: "x",
+      targetUserId: null,
     });
-    await writeAuditLog({ actorId: "admin-1", targetType: "user", targetId: null, action: "y" });
-
-    expect(callArg(h.valuesMock, 0, 0)).toMatchObject({ targetId: "u-2", targetUserId: null });
-    expect(callArg(h.valuesMock, 1, 0)).toMatchObject({ targetId: null, targetUserId: null });
-  });
-
-  it("maps the loopback sentinel actor to null with a tagged user-agent", async () => {
-    await writeAuditLog({ actorId: "loopback", action: "user.role.change" });
-
-    const values = callArg(h.valuesMock, 0, 0) as Record<string, unknown>;
-    expect(values.actorId).toBeNull();
-    expect(values.userAgent).toBe("unknown (loopback)");
+    expect(callArg(h.valuesMock, 1, 0)).toMatchObject({
+      targetType: "user",
+      targetId: null,
+      targetUserId: null,
+    });
   });
 
   it("sanitizes an extension label, nested credentials, and hostile values before persistence", async () => {
@@ -105,7 +100,7 @@ describe("writeAuditLog", () => {
 
     await writeAuditLog({
       actorId: "admin-1",
-      action: "extension.add_source",
+      action: "extension.source.add",
       details: {
         label: PRIVATE_URL,
         nested: { authorization: "Bearer fixture-audit-bearer", safe: "kept" },
@@ -149,7 +144,7 @@ describe("writeAuditLog", () => {
   it("replaces oversized audit details with one deterministic bounded value", async () => {
     await writeAuditLog({
       actorId: "admin-1",
-      action: "extension.add_source",
+      action: "extension.source.add",
       details: Object.fromEntries(
         Array.from({ length: 50 }, (_, index) => [`field-${index}`, "x".repeat(2_048)]),
       ),
@@ -178,7 +173,7 @@ describe("writeAuditLog", () => {
     expect(result.entries[0]).toMatchObject({
       level: "error",
       source: "audit-log",
-      msg: "Audit log persistence failed",
+      message: "Audit log persistence failed",
       metadata: { errorClass: "TypeError" },
     });
     expect(JSON.stringify(result.entries[0])).not.toMatch(

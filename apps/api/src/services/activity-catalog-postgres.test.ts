@@ -60,6 +60,7 @@ it.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             nonce: randomBytes(16),
           }),
           requestedDeadlineAt: deadline,
+          trigger: "cron",
         });
         const listed = await listActivityJobs({ filter: "active", limit: 100, offset: 0 });
         expect(listed.jobs.find((job) => job.id === record.status.id)).toMatchObject({
@@ -71,7 +72,7 @@ it.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           cancelable: true,
         });
         // One catalog job runs at a time; the next one is admitted once this row is gone.
-        await fixture.sql`DELETE FROM data_manager.jobs WHERE id=${record.status.id}`;
+        await fixture.sql`DELETE FROM data_manager.job WHERE id=${record.status.id}`;
       }
     } finally {
       state.fixture = null;

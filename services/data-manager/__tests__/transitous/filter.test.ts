@@ -100,7 +100,7 @@ describe("feeds-overlay catalog write security", () => {
     writeFileSync(
       overlayPath,
       JSON.stringify({
-        version: 3,
+        version: 1,
         sources: existing
           ? []
           : [
@@ -155,7 +155,7 @@ describe("feeds-overlay catalog write security", () => {
         actualFs.writeFileSync(file, data, options);
       });
       const result = await filterRun(ctx);
-      expect(result.status).toBe(fail ? "error" : "ok");
+      expect(result.status).toBe(fail ? "failed" : "succeeded");
       if (fail) expect(result.message).toBe("injected catalog write failure");
       else
         expect(JSON.parse(readFileSync(feedPath, "utf-8"))).toEqual({
@@ -194,7 +194,7 @@ describe("feeds-overlay catalog write security", () => {
       if (kind === "symlink") symlinkSync(external, feedPath);
       else linkSync(external, feedPath);
 
-      expect((await filterRun(ctx)).status).toBe("error");
+      expect((await filterRun(ctx)).status).toBe("failed");
       expect(readFileSync(external, "utf-8")).toBe(original);
       expect(statSync(external).mode & 0o777).toBe(0o644);
     },
@@ -210,7 +210,7 @@ describe("feeds-overlay catalog write security", () => {
       }
       return data;
     });
-    expect((await filterRun(ctx)).status).toBe("error");
+    expect((await filterRun(ctx)).status).toBe("failed");
     expect(statSync(feedPath).isDirectory()).toBe(true);
   });
 
@@ -228,7 +228,7 @@ describe("feeds-overlay catalog write security", () => {
       }
       actualFs.writeFileSync(file, data, options);
     });
-    expect((await filterRun(ctx)).status).toBe("ok");
+    expect((await filterRun(ctx)).status).toBe("succeeded");
     expect(modes).toEqual([0o600]);
     expect(statSync(feedPath).mode & 0o777).toBe(0o600);
     expect(JSON.parse(readFileSync(feedPath, "utf-8"))).not.toHaveProperty("region");
@@ -262,7 +262,7 @@ describe("filter stage", () => {
     ctx.state.catalogDir = catalogDir;
 
     const result = await filterRun(ctx);
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(readSources(feedPath)[0]?.["api-key"]).toBe("test-key");
     expect(statSync(feedPath).mode & 0o777).toBe(0o600);
   });
@@ -301,7 +301,7 @@ describe("filter stage", () => {
     expect(statSync(apiKeysPath).ino).not.toBe(before);
 
     const result = await filterRun(ctx);
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(readSources(feedPath)[0]?.["api-key"]).toBe("second-key");
   });
 
@@ -331,7 +331,7 @@ describe("filter stage", () => {
     ctx.state.catalogDir = catalogDir;
 
     const result = await filterRun(ctx);
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(statSync(feedPath).mode & 0o777).toBe(0o600);
   });
 
@@ -358,7 +358,7 @@ describe("filter stage", () => {
     ctx.state.catalogDir = catalogDir;
 
     const result = await filterRun(ctx);
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(result.artifacts).toMatchObject({
       activeFeeds: 1,
       requestedCount: 2,
@@ -388,7 +388,7 @@ describe("filter stage", () => {
     ctx.state.catalogDir = catalogDir;
 
     const result = await filterRun(ctx);
-    expect(result.status).toBe("error");
+    expect(result.status).toBe("failed");
     expect(result.message).toMatch(/does not contain any feed files for countries: zz/);
   });
 
@@ -420,7 +420,7 @@ describe("filter stage", () => {
     ctx.state.catalogDir = catalogDir;
 
     const result = await filterRun(ctx);
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(result.artifacts?.prunedUnresolvable).toBe(1);
     expect(state.calls).toBe(2);
 
@@ -456,7 +456,7 @@ describe("filter stage", () => {
       overlayPath,
       JSON.stringify(
         {
-          version: 3,
+          version: 1,
           sources: [],
           patches: [
             {
@@ -490,7 +490,7 @@ describe("filter stage", () => {
     ctx.state.catalogDir = catalogDir;
 
     const result = await filterRun(ctx);
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(result.artifacts?.overlayPatchCount).toBe(1);
 
     const updated = JSON.parse(readFileSync(deFeedPath, "utf-8")) as {
@@ -521,7 +521,7 @@ describe("filter stage", () => {
     writeFileSync(
       join(tmp, "overrides", "feeds-overlay.json"),
       JSON.stringify({
-        version: 3,
+        version: 1,
         sources: [],
         patches: [{ sourceId: "catalog:de:BVG", skip: true }],
         quarantine: [],
@@ -542,7 +542,7 @@ describe("filter stage", () => {
       ctx.state.catalogDir = catalogDir;
 
       const result = await filterRun(ctx);
-      expect(result.status).toBe("ok");
+      expect(result.status).toBe("succeeded");
       expect(result.artifacts?.overlayPatchCount).toBe(1);
       expect(readSources(deFeedPath)[0]).toMatchObject({ skip: true });
     } finally {
@@ -572,7 +572,7 @@ describe("filter stage", () => {
     writeFileSync(
       overlayPath,
       JSON.stringify({
-        version: 3,
+        version: 1,
         sources: [
           {
             spec: "gtfs",
@@ -603,7 +603,7 @@ describe("filter stage", () => {
 
     const result = await filterRun(ctx);
 
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     const catalogText = readFileSync(deFeedPath, "utf-8");
     expect(catalogText).toContain("http://127.0.0.1:4000/internal/transit/operator-feed/");
     expect(catalogText).not.toContain("operator.example");

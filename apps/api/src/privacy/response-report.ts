@@ -420,7 +420,7 @@ export function buildPrivacyResponseReport(input: {
     html,
     translationFallbacks,
     processingInformation: {
-      version: 2 as const,
+      version: 1 as const,
       request: { ...context.request, rights },
       controller: context.controller,
       deployment: context.deployment,

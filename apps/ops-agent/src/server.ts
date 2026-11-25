@@ -167,7 +167,11 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
   const now = options.now ?? (() => new Date());
   const journal: OpsJobJournal =
     options.journal ??
-    ({ records: () => [], replace: async () => undefined } satisfies OpsJobJournal);
+    ({
+      records: () => [],
+      foreignRecords: () => [],
+      replace: async () => undefined,
+    } satisfies OpsJobJournal);
   let literalProductionRuntime = false;
   try {
     productionOwnedServices(runtime);
@@ -508,6 +512,12 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       return reply.code(400).send(redactedOpsError(requestId, "validation"));
     }
     await table.prune(now().getTime());
+    const foreign = table.foreignByKey(role, operationKey);
+    // Like a status read: a finished configuration apply says what it settled.
+    if (foreign)
+      return reply
+        .code(409)
+        .send(redactedOpsError(requestId, "other_release", { settlement: foreign.settlement }));
     const job = table.byKey.get(`${role}:${operationKey}`);
     if (!job) return reply.code(404).send(redactedOpsError(requestId, "not_found"));
     const fingerprint = request.headers["x-ops-operation-fingerprint"];
@@ -562,6 +572,13 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       return reply.code(400).send(redactedOpsError(requestId, "validation"));
     }
     await table.prune(now().getTime());
+    const foreign = table.foreign.get(operationId);
+    // A finished configuration apply says what it settled, so its caller
+    // settles without reading the result another release wrote.
+    if (foreign?.role === role)
+      return reply
+        .code(409)
+        .send(redactedOpsError(requestId, "other_release", { settlement: foreign.settlement }));
     const job = table.byId.get(operationId);
     if (!job || job.role !== role)
       return reply.code(404).send(redactedOpsError(requestId, "not_found"));
@@ -579,6 +596,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       return reply.code(400).send(redactedOpsError(requestId, "validation"));
     }
     await table.prune(now().getTime());
+    if (table.foreign.get(operationId)?.role === role)
+      return reply.code(409).send(redactedOpsError(requestId, "other_release"));
     const job = table.byId.get(operationId);
     if (!job || job.role !== role)
       return reply.code(404).send(redactedOpsError(requestId, "not_found"));
@@ -637,6 +656,8 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       return reply.code(400).send(redactedOpsError(requestId, "validation"));
     }
     await table.prune(now().getTime());
+    if (table.foreign.get(operationId)?.role === role)
+      return reply.code(409).send(redactedOpsError(requestId, "other_release"));
     const job = table.byId.get(operationId);
     if (!job || job.role !== role) {
       return reply.code(404).send(redactedOpsError(requestId, "not_found"));

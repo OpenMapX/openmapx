@@ -6,6 +6,5 @@
   "domains": ["reviews"],
   "dependencies": ["geocoding"],
   "backend": { "routes": true },
-  "quality": "built-in",
-  "category": "External"
+  "quality": "built-in"
 }

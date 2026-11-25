@@ -12,7 +12,10 @@ import type { GetAdminIntegration200ManifestRequiresItem } from "./getAdminInteg
 import type { GetAdminIntegration200ManifestSubjectData } from "./getAdminIntegration200ManifestSubjectData";
 
 export type GetAdminIntegration200Manifest = {
-  /** @pattern ^[a-z0-9][a-z0-9-]*$ */
+  /**
+   * @maxLength 48
+   * @pattern ^[a-z0-9]+(-[a-z0-9]+)*$
+   */
   id: string;
   name?: string;
   version?: string;

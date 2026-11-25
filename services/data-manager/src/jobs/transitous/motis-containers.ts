@@ -1,13 +1,10 @@
+import { services } from "@openmapx/core/server";
+
 /**
- * MOTIS container names the data-manager addresses by bare name over the docker
- * CLI (`docker exec`, `docker restart`, `docker stop`). These MUST match the
- * `container.containerName` pinned in the corresponding service manifests
- * (services/motis/, services/motis-staging/, services/motis-feed-proxy/): the
- * compose renderer emits `container_name` from those manifests, and any
- * mismatch surfaces only at runtime as "No such container". A guard test
- * (manifest-container-names.test.ts) asserts the two stay in sync, so this is
- * the single source of truth on the data-manager side.
+ * The MOTIS containers the transit pipeline names in its results and stop
+ * requests. Data-manager runs no Docker command itself: the operations agent
+ * acts on these containers through typed operations, and both derive the
+ * names from the service ids with `serviceContainerName`.
  */
-export const PRIMARY_CONTAINER = "motis";
-export const STAGING_CONTAINER = "motis-staging";
-export const FEED_PROXY_CONTAINER = "motis-feed-proxy";
+export const PRIMARY_CONTAINER = services.serviceContainerName("motis");
+export const STAGING_CONTAINER = services.serviceContainerName("motis-staging");

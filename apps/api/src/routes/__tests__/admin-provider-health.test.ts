@@ -140,7 +140,6 @@ describe("POST /admin/providers/:id/reset", () => {
     expect(writeAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "provider.reset",
-        targetType: "provider",
         targetId: "acme",
       }),
     );

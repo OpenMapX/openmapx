@@ -165,7 +165,7 @@ describe.skipIf(!enabled)("primary OpenMapX streaming snapshot", () => {
       expect(authentication).toMatchObject({
         bytes: authBytes.byteLength,
         sha256: createHash("sha256").update(authBytes).digest("hex"),
-        schemaId: "article-15-record-v1",
+        schemaId: "export-record-1",
       });
 
       const savedLines = (await consume(articleSaved.source as AsyncIterable<Uint8Array>))

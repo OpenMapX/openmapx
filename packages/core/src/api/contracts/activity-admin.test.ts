@@ -69,7 +69,7 @@ describe("activity administration wire contracts", () => {
       id: "stage",
       jobId: base.id,
       stage: "fetch",
-      status: "partial",
+      status: "partially_succeeded",
       startedAt: at,
       finishedAt: at,
       durationMs: 100,
@@ -80,7 +80,7 @@ describe("activity administration wire contracts", () => {
     const dm = {
       ...base,
       source: "data-manager",
-      status: "partial",
+      status: "partially_succeeded",
       result: null,
       logs: [],
       stages: [stage],
@@ -130,18 +130,19 @@ describe("activity administration wire contracts", () => {
   });
   it("validates each named SSE payload independently without accepting cross-event shapes", () => {
     expect(
-      adminJobStreamEventSchemas.progress.safeParse({ type: "status", status: "success" }).success,
+      adminJobStreamEventSchemas.progress.safeParse({ type: "status", status: "succeeded" })
+        .success,
     ).toBe(false);
     expect(
       adminJobStreamEventSchemas.status.parse({
         type: "status",
-        status: "success",
+        status: "succeeded",
         result: [null, { nested: true }],
         finishedAt: at,
       }),
     ).toEqual({
       type: "status",
-      status: "success",
+      status: "succeeded",
       result: [null, { nested: true }],
       finishedAt: at,
     });

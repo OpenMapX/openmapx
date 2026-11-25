@@ -44,7 +44,7 @@ export const run: StageFn = async (ctx) => {
       intervalMs: 2_000,
     });
     if (liveness) {
-      return finish("error", `motis-health probe "${liveness.probe}" failed: ${liveness.reason}`, {
+      return finish("failed", `motis-health probe "${liveness.probe}" failed: ${liveness.reason}`, {
         failedProbe: liveness.probe,
         candidateEpoch: manifest.epoch,
       });
@@ -55,7 +55,7 @@ export const run: StageFn = async (ctx) => {
     const report = await runFunctionalProbes(baseUrl, manifest, Date.now() + FUNCTIONAL_BUDGET_MS);
     if (!report.ok) {
       return finish(
-        "error",
+        "failed",
         `motis-health probe "${report.failure?.name}" failed: ${report.failure?.evidence}`,
         { candidateEpoch: manifest.epoch, probes: report.outcomes },
       );
@@ -68,7 +68,7 @@ export const run: StageFn = async (ctx) => {
       report,
       ctx.now(),
     );
-    return finish("ok", `motis-health: ${report.outcomes.length} typed probes passed`, {
+    return finish("succeeded", `motis-health: ${report.outcomes.length} typed probes passed`, {
       candidateEpoch: manifest.epoch,
       configHash: manifest.artifacts.config.sha256,
       licenseHash: manifest.artifacts.license.sha256,
@@ -77,7 +77,7 @@ export const run: StageFn = async (ctx) => {
       stagingUrl: baseUrl,
     });
   } catch (error) {
-    return finish("error", (error as Error).message, {
+    return finish("failed", (error as Error).message, {
       failure: (error as Error).message,
     });
   }

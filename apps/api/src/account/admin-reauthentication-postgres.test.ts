@@ -59,7 +59,9 @@ dbDescribe("durable purpose-bound administrator action proof", () => {
     });
     return { id, userId: actorId, method, authenticatedAt: at, mfaConfigured: false };
   }
-  async function ceremony(purpose: "account.verify" | "platform.domain.apply" = "account.verify") {
+  async function ceremony(
+    purpose: "user.email.verify" | "platform.domain.apply" = "user.email.verify",
+  ) {
     const actorId = await actor(),
       old = await login(actorId);
     const target = purpose === "platform.domain.apply" ? "a".repeat(64) : "subject-a";
@@ -121,7 +123,7 @@ dbDescribe("durable purpose-bound administrator action proof", () => {
       .select()
       .from(adminActionReauthentication)
       .where(eq(adminActionReauthentication.id, c.proof.challengeId));
-    expect(row?.state).toBe("completed");
+    expect(row?.status).toBe("completed");
     await fixture.db.transaction((tx) => service.consume(input, tx));
     await expect(
       fixture.db.transaction((tx) => service.check(input, tx), { accessMode: "read only" }),
@@ -132,7 +134,7 @@ dbDescribe("durable purpose-bound administrator action proof", () => {
       input = await finish(c);
     for (const altered of [
       { ...input, targetId: "other" },
-      { ...input, purpose: "account.invite" as const },
+      { ...input, purpose: "user.invitation.send" as const },
       { ...input, nonce: Buffer.alloc(32) },
     ])
       await expect(fixture.db.transaction((tx) => service.consume(altered, tx))).rejects.toThrow();
@@ -214,14 +216,14 @@ dbDescribe("durable purpose-bound administrator action proof", () => {
     const first = await service.start({
       actorId,
       startingSessionId: old.id,
-      purpose: "credentials.import",
+      purpose: "credential.import",
       targetId: "candidate-a",
       intentFingerprint: intent,
     });
     const second = await service.start({
       actorId,
       startingSessionId: old.id,
-      purpose: "transit.credentials",
+      purpose: "transit.credential.update",
       targetId: "catalog-a",
       intentFingerprint: intent,
       nonce: first.nonce,
@@ -236,13 +238,13 @@ dbDescribe("durable purpose-bound administrator action proof", () => {
       proofs: [
         {
           challengeId: first.challengeId,
-          purpose: "credentials.import" as const,
+          purpose: "credential.import" as const,
           targetId: "candidate-a",
           intentFingerprint: intent,
         },
         {
           challengeId: second.challengeId,
-          purpose: "transit.credentials" as const,
+          purpose: "transit.credential.update" as const,
           targetId: "catalog-a",
           intentFingerprint: intent,
         },
@@ -271,7 +273,7 @@ dbDescribe("durable purpose-bound administrator action proof", () => {
           .select()
           .from(adminActionReauthentication)
           .where(eq(adminActionReauthentication.id, first.challengeId))
-      )[0]?.state,
+      )[0]?.status,
     ).toBe("completed");
     await fixture.db.transaction((tx) => service.consumeMany(input, tx));
   });
@@ -282,7 +284,7 @@ dbDescribe("durable purpose-bound administrator action proof", () => {
       service.start({
         actorId: c.actorId,
         startingSessionId: c.fresh.id,
-        purpose: "account.invite",
+        purpose: "user.invitation.send",
         targetId: "b",
         nonce: c.proof.nonce,
       }),
@@ -297,7 +299,7 @@ dbDescribe("durable purpose-bound administrator action proof", () => {
       first = await service.start({
         actorId,
         startingSessionId: old.id,
-        purpose: "credentials.import",
+        purpose: "credential.import",
         targetId: "candidate",
         intentFingerprint: intent,
       });
@@ -311,7 +313,7 @@ dbDescribe("durable purpose-bound administrator action proof", () => {
             proofs: [
               {
                 challengeId: first.challengeId,
-                purpose: "credentials.import",
+                purpose: "credential.import",
                 targetId: "candidate",
                 intentFingerprint: intent,
               },
@@ -326,7 +328,7 @@ dbDescribe("durable purpose-bound administrator action proof", () => {
     const restarted = await service.start({
       actorId,
       startingSessionId: fresh.id,
-      purpose: "credentials.import",
+      purpose: "credential.import",
       targetId: "candidate",
       intentFingerprint: intent,
       nonce: first.nonce,

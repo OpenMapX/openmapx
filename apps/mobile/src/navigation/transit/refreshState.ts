@@ -17,6 +17,8 @@ export interface RefreshRuntime {
   attempts: number;
   firstAttemptAtMs?: number;
   ambiguousAttempts?: number;
+  /** The server refused this build's protocol; refreshing stopped until an update. */
+  updateRequired?: true;
 }
 
 export type RefreshDecision =
@@ -92,7 +94,9 @@ export type RefreshFailure =
   | "ambiguous"
   /** The network was simply absent; nothing was sent. */
   | "offline"
-  | "retryable";
+  | "retryable"
+  /** The server no longer serves this build's protocol; only a store update helps. */
+  | "update-required";
 
 /** Rejections are terminal; ambiguous replies retry the same token at most three times. */
 export function onRefreshFailed(
@@ -101,6 +105,13 @@ export function onRefreshFailed(
   nowMs = Date.now(),
   hasToken = true,
 ): RefreshRuntime {
+  if (failure === "update-required")
+    return {
+      status: "broken",
+      generation: runtime.generation,
+      attempts: runtime.attempts,
+      updateRequired: true,
+    };
   if (!hasToken)
     return onRefreshUnreachable(
       { ...runtime, ambiguousAttempts: undefined, firstAttemptAtMs: undefined },

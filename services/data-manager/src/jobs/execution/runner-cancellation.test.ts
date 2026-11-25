@@ -217,7 +217,6 @@ it.skipIf(
         input = {
           countries: ["de"],
           idempotencyKey: "fix2-union-" + randomUUID(),
-          triggeredBy: "synthetic:operator",
         };
       const admitted = await fetch(base + "/transit/sync", {
         method: "POST",
@@ -231,7 +230,7 @@ it.skipIf(
       present(dm).send({ type: "probe", id });
       expect((await present(dm).next("probe")).pendingRunners).toBe(2);
       expect(posts).toBe(2);
-      const [original] = await sql`SELECT * FROM data_manager.jobs WHERE id=${id}`;
+      const [original] = await sql`SELECT * FROM data_manager.job WHERE id=${id}`;
       if (!original) throw Error("Original row missing");
       const lease = motisLease(root);
       expect(lease).toBeDefined();
@@ -240,7 +239,7 @@ it.skipIf(
       // The killed worker never recorded how it ended.
       expect(original.execution_completion).toBeNull();
       expect(
-        (await sql`SELECT execution_completion FROM data_manager.jobs WHERE id=${id}`)[0]
+        (await sql`SELECT execution_completion FROM data_manager.job WHERE id=${id}`)[0]
           ?.execution_completion,
       ).toBeNull();
       base = await start(true);
@@ -293,7 +292,7 @@ it.skipIf(
       present<Peer>(dm).send({ type: "probe", id });
       const probe = await present<Peer>(dm).next("probe");
       expect(probe).toMatchObject({ dispatches: 0, pendingRunners: 1 });
-      const [current] = await sql`SELECT * FROM data_manager.jobs WHERE id=${id}`;
+      const [current] = await sql`SELECT * FROM data_manager.job WHERE id=${id}`;
       expect(current?.status).toBe("cancel_pending");
       expect(current?.finished_at).toBeNull();
       expect(current?.execution_state.publication).toBe("unknown");
@@ -304,7 +303,8 @@ it.skipIf(
         "execution_fingerprint",
         "execution_input",
         "deadline_at",
-        "triggered_by",
+        "trigger",
+        "triggered_by_user_id",
       ])
         expect(current?.[key]).toEqual(original[key]);
       expect(motisLease(root)).toBe(lease);
@@ -318,7 +318,7 @@ it.skipIf(
       writeFileSync(join(catalog, "release"), "release");
       runner.server.closeAllConnections();
       await runner.close();
-      if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+      if (id) await sql`DELETE FROM data_manager.job WHERE id=${id}`;
       await sql.end();
       rmSync(root, { recursive: true, force: true });
     }
@@ -411,7 +411,6 @@ it
       const input = {
         countries: ["de"],
         idempotencyKey: "fix1-crash-" + randomUUID(),
-        triggeredBy: "synthetic:operator",
       };
       if (mode === "agent") {
         const controller = new AbortController();
@@ -438,7 +437,7 @@ it
         await expect.poll(() => existsSync(ready), { timeout: 15000 }).toBe(true);
       }
       if (!id) throw Error("Original admission missing");
-      const [original] = await sql`SELECT * FROM data_manager.jobs WHERE id=${id}`;
+      const [original] = await sql`SELECT * FROM data_manager.job WHERE id=${id}`;
       if (!original) throw Error("Original row missing");
       const operationKey = String(original.operation_key),
         lease = motisLease(root);
@@ -448,7 +447,7 @@ it
       // SIGKILL occurred while dispatcher awaited the independent child.
       const jobId = id;
       const completion = async () =>
-        (await sql`SELECT execution_completion FROM data_manager.jobs WHERE id=${jobId}`)[0]
+        (await sql`SELECT execution_completion FROM data_manager.job WHERE id=${jobId}`)[0]
           ?.execution_completion;
       expect(await completion()).toBeNull();
       base = await start(true);
@@ -502,7 +501,7 @@ it
         expect(runnerControls.length).toBeGreaterThan(0);
         for (const request of runnerControls) expect(request).toEqual(originalRunnerRequest);
       }
-      const [current] = await sql`SELECT * FROM data_manager.jobs WHERE id=${id}`;
+      const [current] = await sql`SELECT * FROM data_manager.job WHERE id=${id}`;
       expect(current?.finished_at).toBeNull();
       expect(current?.status).toBe("cancel_pending");
       expect(current?.execution_state.publication).toBe("unknown");
@@ -513,7 +512,8 @@ it
         "operation_fingerprint",
         "deadline_at",
         "execution_input",
-        "triggered_by",
+        "trigger",
+        "triggered_by_user_id",
       ])
         expect(current?.[key]).toEqual(original[key]);
       expect(motisLease(root)).toBe(lease);
@@ -539,7 +539,7 @@ it
         runner.server.closeAllConnections();
         await runner.close();
       }
-      if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+      if (id) await sql`DELETE FROM data_manager.job WHERE id=${id}`;
       await sql.end();
       rmSync(root, { recursive: true, force: true });
     }
@@ -619,7 +619,7 @@ it.skipIf(
         context.signal.throwIfAborted();
         return {
           kind: "transit-sync",
-          finalStatus: "ok",
+          finalStatus: "succeeded",
           sourceRevision: "public-fixture",
           countries: ["de"],
         };
@@ -631,7 +631,7 @@ it.skipIf(
       operationKey = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) });
       const admitted = await runtime.admit(
         { kind: "transit-sync", countries: ["de"] },
-        { operationKey, requestedDeadlineAt: deadline },
+        { operationKey, requestedDeadlineAt: deadline, trigger: "cli" },
       );
       id = admitted.id;
       await expect.poll(() => existsSync(ready), { timeout: 10000 }).toBe(true);
@@ -658,7 +658,7 @@ it.skipIf(
         .toBe(false);
       await expect
         .poll(async () => (await store.inspect(present(id)))?.status.status, { timeout: 15000 })
-        .toBe("canceled");
+        .toBe("cancelled");
       await expect.poll(() => terminalPublished, { timeout: 15000 }).toBe(true);
       const terminal = await store.inspect(id);
       if (!terminal) throw Error("Original terminal row missing");
@@ -679,7 +679,7 @@ it.skipIf(
       runner.server.closeAllConnections();
       await runner.close();
       if (!id && operationKey) id = (await store.lookup(operationKey))?.status.id;
-      if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+      if (id) await sql`DELETE FROM data_manager.job WHERE id=${id}`;
       control.closeControlInstallation(installation);
       await sql.end();
       rmSync(root, { recursive: true, force: true });

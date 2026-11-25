@@ -79,7 +79,7 @@ describe("offline package API client", () => {
     );
     await expect(createOfflinePackageApi().capability()).rejects.toMatchObject({
       name: "OfflinePackageApiError",
-      code: "invalid-response",
+      code: "INVALID_RESPONSE",
       status: 200,
     });
   });
@@ -109,7 +109,7 @@ describe("offline package API client", () => {
         manifest: { ...manifest, archive: { ...manifest.archive, sha256: "invalid" } },
       },
       { ...preparing, status: "failed" },
-      { ...preparing, status: "expired", errorCode: "generation-failed", errorMessage: "expired" },
+      { ...preparing, status: "expired", errorCode: "GENERATION_FAILED", errorMessage: "expired" },
       { ...preparing, status: "unknown" },
       null,
     ])("rejects malformed successful jobs: %j", async (body) => {
@@ -119,7 +119,7 @@ describe("offline package API client", () => {
       );
       await expect(invoke()).rejects.toMatchObject({
         name: "OfflinePackageApiError",
-        code: "invalid-response",
+        code: "INVALID_RESPONSE",
         status: 200,
       });
     });
@@ -131,14 +131,14 @@ describe("offline package API client", () => {
         jobId: "job-a",
         request: canonicalRequest,
         status: "failed",
-        errorCode: "generation-failed",
+        errorCode: "GENERATION_FAILED",
         errorMessage: "Preparation failed",
       },
       {
         jobId: "job-a",
         request: canonicalRequest,
         status: "expired",
-        errorCode: "expired",
+        errorCode: "EXPIRED",
         errorMessage: "Package expired",
       },
     ])("preserves complete %s job data", async (body) => {
@@ -266,7 +266,7 @@ describe("offline package API client", () => {
         Response.json(
           {
             error: "Offline package preparation quota exceeded",
-            code: "prepare-rate-limit",
+            code: "PREPARE_RATE_LIMITED",
             ...(body === undefined ? {} : { retryAfterSeconds: body }),
           },
           { status: 429, headers: header === undefined ? {} : { "Retry-After": header } },
@@ -282,7 +282,7 @@ describe("offline package API client", () => {
       })
       .catch((reason) => reason);
     expect(error).toMatchObject({
-      code: "prepare-rate-limit",
+      code: "PREPARE_RATE_LIMITED",
       status: 429,
       message: "Offline package preparation quota exceeded",
       retryAfterSeconds: expected,
@@ -312,7 +312,7 @@ describe("offline package API client", () => {
       "fetch",
       vi.fn(async () =>
         Response.json(
-          { error: "Offline package service unavailable", code: "source-unavailable" },
+          { error: "Offline package service unavailable", code: "SOURCE_UNAVAILABLE" },
           { status: 502 },
         ),
       ),
@@ -332,7 +332,7 @@ describe("offline package API client", () => {
     );
 
     await expect(defaultOfflinePackageApi.capability()).rejects.toMatchObject({
-      code: "http-429",
+      code: "HTTP_429",
       status: 429,
       message: "Too many requests",
     });

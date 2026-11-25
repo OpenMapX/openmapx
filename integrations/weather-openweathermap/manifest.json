@@ -42,7 +42,6 @@
     }
   },
   "quality": "built-in",
-  "category": "Weather",
   "healthCheck": {
     "type": "http",
     "urlTemplate": "https://api.openweathermap.org/data/2.5/weather?lat=0&lon=0&appid=${apiKey}",

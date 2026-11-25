@@ -6,7 +6,6 @@
   "quality": "built-in",
   "domains": ["search-nlp"],
   "backend": { "routes": true },
-  "category": "Geocoding",
   "requires": [{ "service": "local-ai", "optional": true }],
   "configSchema": {
     "type": "object",

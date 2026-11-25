@@ -12,7 +12,7 @@ const label = <T,>(hook: () => T) => renderHook(hook).result.current;
 describe("server code labels", () => {
   it("word known job types, including data-manager kinds", () => {
     const jobType = label(useJobTypeLabel);
-    expect(jobType("service.core-restart")).toBe("Restart core service");
+    expect(jobType("service.core.restart")).toBe("Restart core service");
     expect(jobType("transit-sync")).toBe("Sync transit");
   });
 
@@ -22,7 +22,7 @@ describe("server code labels", () => {
 
   it("word known audit actions and show an unknown one as its code", () => {
     const action = label(useAuditActionLabel);
-    expect(action("data.overture-pull")).toBe("Overture data downloaded");
+    expect(action("user.ban")).toBe("User banned");
     expect(action("future.action-code")).toBe("future.action-code");
   });
 

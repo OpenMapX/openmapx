@@ -99,7 +99,7 @@ describe("GET /api/attribution/:sourceId", () => {
   it("returns 404 for an unknown sourceId", async () => {
     const res = await app.inject({ method: "GET", url: "/api/attribution/totally-unknown" });
     expect(res.statusCode).toBe(404);
-    expect(res.json()).toEqual({ error: "not_found" });
+    expect(res.json()).toEqual({ error: "Attribution not found", code: "NOT_FOUND" });
   });
 });
 

@@ -6,7 +6,10 @@ export type ListAdminExtensionCatalog200EntriesItemIntegrationsItem = {
   artifact: string;
   /** @pattern ^[a-f0-9]{64}$ */
   sha256: string;
-  /** @pattern ^[a-z0-9][a-z0-9-]*$ */
+  /**
+   * @maxLength 48
+   * @pattern ^[a-z0-9]+(-[a-z0-9]+)*$
+   */
   id: string;
   [key: string]: unknown;
 };

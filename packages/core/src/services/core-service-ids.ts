@@ -34,6 +34,16 @@ export function serviceNetworkAlias(serviceId: string): string {
   return `${SERVICE_NETWORK_ALIAS_PREFIX}${serviceId}`;
 }
 
+/**
+ * The Docker container name of a service, such as `openmapx-postgis`: the same
+ * string as its network alias. The renderer gives every service this
+ * `container_name`, and every `docker exec`, `inspect`, `stop` or `logs`
+ * target in the code is derived from it, never written as a literal.
+ */
+export function serviceContainerName(serviceId: string): string {
+  return serviceNetworkAlias(serviceId);
+}
+
 const { api, web, dataManager, opsAgent, transitousRunner, traefik, postgis, redis, wellKnown } =
   CORE_SERVICE_ID;
 

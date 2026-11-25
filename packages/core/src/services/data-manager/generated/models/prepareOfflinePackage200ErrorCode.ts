@@ -5,8 +5,8 @@ export type PrepareOfflinePackage200ErrorCode =
   (typeof PrepareOfflinePackage200ErrorCode)[keyof typeof PrepareOfflinePackage200ErrorCode];
 
 export const PrepareOfflinePackage200ErrorCode = {
-  "invalid-request": "invalid-request",
-  capacity: "capacity",
-  "generation-failed": "generation-failed",
-  expired: "expired",
+  INVALID_REQUEST: "INVALID_REQUEST",
+  CAPACITY: "CAPACITY",
+  GENERATION_FAILED: "GENERATION_FAILED",
+  EXPIRED: "EXPIRED",
 } as const;

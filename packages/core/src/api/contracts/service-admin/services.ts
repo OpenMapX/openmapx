@@ -158,7 +158,7 @@ export const adminServiceCredentialChangedSchema = z.union([
   z.strictObject({ ok: z.literal(true), needsRender: z.literal(true) }),
 ]);
 export const adminServiceCredentialManagedSchema = z.strictObject({
-  code: z.enum(["DAWARICH_CREDENTIAL_MANAGED", "transit_credentials_managed"]),
+  code: z.enum(["DAWARICH_CREDENTIAL_MANAGED", "TRANSIT_CREDENTIALS_MANAGED"]),
   error: z.string(),
 });
 export const adminServiceActionSchema = z.strictObject({

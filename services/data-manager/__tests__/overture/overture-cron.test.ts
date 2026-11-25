@@ -83,7 +83,7 @@ describe("Overture cron durable ownership", () => {
     await h.runOvertureNow();
     expect(admitLocal).toHaveBeenCalledExactlyOnceWith(
       { kind: "overture-sync", region: "europe/germany/berlin" },
-      { triggeredBy: "cron" },
+      { trigger: "cron" },
     );
     expect(inspect).toHaveBeenCalledExactlyOnceWith(admitted.id);
     expect(staleness).toHaveBeenCalledOnce();
@@ -95,7 +95,7 @@ describe("Overture cron durable ownership", () => {
       executionReceiver: receiverFixture({
         admitLocal: async () =>
           dataReceipt({
-            status: "partial",
+            status: "partially_succeeded",
             result: {
               kind: "overture-sync",
               region: "europe/germany/berlin",
@@ -122,7 +122,7 @@ describe("Overture cron durable ownership", () => {
     await h.runOvertureNow();
     expect(admitLocal).toHaveBeenCalledExactlyOnceWith(
       { kind: "overture-conflate", region: "europe/germany/berlin" },
-      { triggeredBy: "cron" },
+      { trigger: "cron" },
     );
   });
   it("does not downgrade an installed newer release", async () => {
@@ -134,7 +134,7 @@ describe("Overture cron durable ownership", () => {
     await h.runOvertureNow();
     expect(admitLocal).toHaveBeenCalledExactlyOnceWith(
       { kind: "overture-conflate", region: "europe/germany/berlin" },
-      { triggeredBy: "cron" },
+      { trigger: "cron" },
     );
   });
   it("retries links without catalogue discovery or a Places import", async () => {
@@ -150,7 +150,7 @@ describe("Overture cron durable ownership", () => {
     expect(discover).not.toHaveBeenCalled();
     expect(admitLocal).toHaveBeenCalledExactlyOnceWith(
       { kind: "overture-conflate", region: "europe/germany/berlin" },
-      { triggeredBy: "cron" },
+      { trigger: "cron" },
     );
   });
   it("skips link retry without an installed release", async () => {
@@ -160,6 +160,29 @@ describe("Overture cron durable ownership", () => {
       executionReceiver: receiverFixture({ admitLocal }),
     }).runOvertureConflationRetryNow();
     expect(admitLocal).not.toHaveBeenCalled();
+  });
+  it("re-imports at startup the places an older builder wrote", async () => {
+    const admitLocal = vi.fn(async () => dataReceipt({ kind: "overture-sync" }));
+    await start({
+      getInstalledOvertureRelease: async () => null,
+      hasOutdatedOverturePlaces: async () => true,
+      executionReceiver: receiverFixture({ admitLocal }),
+    }).runOvertureStartupNow();
+    expect(admitLocal).toHaveBeenCalledExactlyOnceWith(
+      { kind: "overture-sync", region: "europe/germany/berlin" },
+      { trigger: "cron" },
+    );
+  });
+  it("only retries links at startup when the places are current", async () => {
+    const admitLocal = vi.fn(async () => dataReceipt({ kind: "overture-conflate" }));
+    await start({
+      hasOutdatedOverturePlaces: async () => false,
+      executionReceiver: receiverFixture({ admitLocal }),
+    }).runOvertureStartupNow();
+    expect(admitLocal).toHaveBeenCalledExactlyOnceWith(
+      { kind: "overture-conflate", region: "europe/germany/berlin" },
+      { trigger: "cron" },
+    );
   });
   it("contains failed or unavailable admission without publication or a success check", async () => {
     const staleness = vi.fn(async () => {}),

@@ -95,7 +95,7 @@ function Workspace({ binding }: { binding: PrivacyAdminBinding }) {
           <MenuItem key={r.id} value={r.id}>
             {t("queueOption", {
               id: r.id.slice(0, 8),
-              stateLabel: t("requestState", { state: r.state }),
+              stateLabel: t("requestState", { state: r.status }),
             })}
           </MenuItem>
         ))}
@@ -117,7 +117,7 @@ function Workspace({ binding }: { binding: PrivacyAdminBinding }) {
                   <ListItemText
                     primary={`${account("accessAndPortability")} ${r.id.slice(0, 8)}`}
                     secondary={t("queueItem", {
-                      stateLabel: t("requestState", { state: r.state }),
+                      stateLabel: t("requestState", { state: r.status }),
                       date: format.dateTime(r.dueAt),
                     })}
                   />

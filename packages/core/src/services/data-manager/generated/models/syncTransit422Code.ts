@@ -4,5 +4,5 @@
 export type SyncTransit422Code = (typeof SyncTransit422Code)[keyof typeof SyncTransit422Code];
 
 export const SyncTransit422Code = {
-  "outside-operations-profile": "outside-operations-profile",
+  OUTSIDE_OPERATIONS_PROFILE: "OUTSIDE_OPERATIONS_PROFILE",
 } as const;

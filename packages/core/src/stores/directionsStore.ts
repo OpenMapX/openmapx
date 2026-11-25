@@ -10,6 +10,7 @@ import {
   type TransitRoutePreference,
 } from "../constants/transit";
 import { getStorage } from "../platform/storage";
+import { STORAGE_KEYS } from "../platform/storageKeys";
 import {
   type BikeHillPreference,
   type BikeProfile,
@@ -24,9 +25,14 @@ import { transitItineraryKey } from "../utils/transitItineraryKey";
 
 // Route-avoidance defaults persist so a chosen preference (also editable in the
 // nav settings screen) applies to every route rather than resetting each session.
-const AVOID_HIGHWAYS_STORAGE_KEY = "openmapx:avoidHighways";
-const AVOID_TOLLS_STORAGE_KEY = "openmapx:avoidTolls";
-const AVOID_FERRIES_STORAGE_KEY = "openmapx:avoidFerries";
+const AVOID_HIGHWAYS_STORAGE_KEY = STORAGE_KEYS.avoidHighways.key;
+const AVOID_TOLLS_STORAGE_KEY = STORAGE_KEYS.avoidTolls.key;
+const AVOID_FERRIES_STORAGE_KEY = STORAGE_KEYS.avoidFerries.key;
+const BIKE_PROFILE_STORAGE_KEY = STORAGE_KEYS.bikeProfile.key;
+const BIKE_HILL_PREFERENCE_STORAGE_KEY = STORAGE_KEYS.bikeHillPreference.key;
+const BIKE_PREFER_QUIET_ROADS_STORAGE_KEY = STORAGE_KEYS.bikePreferQuietRoads.key;
+const BIKE_PREFER_SMOOTH_SURFACES_STORAGE_KEY = STORAGE_KEYS.bikePreferSmoothSurfaces.key;
+const BIKE_SPEED_KMH_STORAGE_KEY = STORAGE_KEYS.bikeSpeedKmh.key;
 
 function readBool(key: string): boolean {
   return getStorage().getString(key) === "true";
@@ -34,16 +40,15 @@ function readBool(key: string): boolean {
 
 function readBikePrefs() {
   const storage = getStorage(),
-    profile = storage.getString("openmapx:bikeProfile"),
-    hills = storage.getString("openmapx:bikeHillPreference");
+    profile = storage.getString(BIKE_PROFILE_STORAGE_KEY),
+    hills = storage.getString(BIKE_HILL_PREFERENCE_STORAGE_KEY),
+    speed = Number(storage.getString(BIKE_SPEED_KMH_STORAGE_KEY));
   return {
     bikeProfile: isBikeProfile(profile) ? profile : ("trekking" as const),
     bikeHillPreference: isBikeHillPreference(hills) ? hills : ("default" as const),
-    bikePreferQuietRoads: readBool("openmapx:bikePreferQuietRoads"),
-    bikePreferSmoothSurfaces: readBool("openmapx:bikePreferSmoothSurfaces"),
-    bikeSpeedKmh: isBikeSpeedKmh(Number(storage.getString("openmapx:bikeSpeedKmh")))
-      ? Number(storage.getString("openmapx:bikeSpeedKmh"))
-      : undefined,
+    bikePreferQuietRoads: readBool(BIKE_PREFER_QUIET_ROADS_STORAGE_KEY),
+    bikePreferSmoothSurfaces: readBool(BIKE_PREFER_SMOOTH_SURFACES_STORAGE_KEY),
+    bikeSpeedKmh: isBikeSpeedKmh(speed) ? speed : undefined,
   };
 }
 let waypointCounter = 0;
@@ -570,25 +575,28 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
     setRequireBikeTransport: (requireBikeTransport) =>
       update({ requireBikeTransport, activeItineraryIndex: 0 }),
     setBikeHillPreference: (bikeHillPreference) => {
-      getStorage().setString("openmapx:bikeHillPreference", bikeHillPreference);
+      getStorage().setString(BIKE_HILL_PREFERENCE_STORAGE_KEY, bikeHillPreference);
       update({ bikeHillPreference, activeItineraryIndex: 0, activeRouteIndex: 0 });
     },
     setBikeProfile: (bikeProfile) => {
-      getStorage().setString("openmapx:bikeProfile", bikeProfile);
+      getStorage().setString(BIKE_PROFILE_STORAGE_KEY, bikeProfile);
       update({ bikeProfile, activeRouteIndex: 0 });
     },
     setBikePreferQuietRoads: (bikePreferQuietRoads) => {
-      getStorage().setString("openmapx:bikePreferQuietRoads", String(bikePreferQuietRoads));
+      getStorage().setString(BIKE_PREFER_QUIET_ROADS_STORAGE_KEY, String(bikePreferQuietRoads));
       update({ bikePreferQuietRoads, activeRouteIndex: 0 });
     },
     setBikePreferSmoothSurfaces: (bikePreferSmoothSurfaces) => {
-      getStorage().setString("openmapx:bikePreferSmoothSurfaces", String(bikePreferSmoothSurfaces));
+      getStorage().setString(
+        BIKE_PREFER_SMOOTH_SURFACES_STORAGE_KEY,
+        String(bikePreferSmoothSurfaces),
+      );
       update({ bikePreferSmoothSurfaces, activeRouteIndex: 0 });
     },
     setBikeSpeedKmh: (bikeSpeedKmh) => {
       if (bikeSpeedKmh !== undefined && !isBikeSpeedKmh(bikeSpeedKmh)) return;
-      if (bikeSpeedKmh === undefined) getStorage().remove("openmapx:bikeSpeedKmh");
-      else getStorage().setString("openmapx:bikeSpeedKmh", String(bikeSpeedKmh));
+      if (bikeSpeedKmh === undefined) getStorage().remove(BIKE_SPEED_KMH_STORAGE_KEY);
+      else getStorage().setString(BIKE_SPEED_KMH_STORAGE_KEY, String(bikeSpeedKmh));
       update({ bikeSpeedKmh, activeRouteIndex: 0 });
     },
     setDeutschlandticketOnly: (deutschlandticketOnly) =>

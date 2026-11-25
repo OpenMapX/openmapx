@@ -35,6 +35,7 @@ import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createControlRootOperationKey, OPS_PROTOCOL_VERSION } from "@openmapx/core/ops";
+import { services } from "@openmapx/core/server";
 import postgres from "postgres";
 import { type RuntimeBundles, runtimeBundles } from "./support/bundles";
 import {
@@ -602,6 +603,11 @@ export class CrashHost {
         ),
         version: 1,
       },
+      databaseMigrationHead: (({ tag, when }) => ({ tag, when }))(
+        JSON.parse(
+          readFileSync(join(REPO, "apps/api/src/db/migrations/meta/_journal.json"), "utf8"),
+        ).entries.at(-1),
+      ),
       images: Object.fromEntries(Object.entries(images).sort(([a], [b]) => a.localeCompare(b))),
       producer: {
         event: "push",
@@ -613,6 +619,7 @@ export class CrashHost {
       },
       release,
       schemaVersion: 1,
+      stateEpoch: services.RELEASE_STATE_EPOCH,
     })}`;
   }
 
@@ -681,7 +688,6 @@ export class CrashHost {
       ACME_EMAIL: "crash-points@example.org",
       POSTGRES_PASSWORD: secret(),
       BETTER_AUTH_SECRET: secret(),
-      OPENMAPX_LOCAL_ADMIN_TOKEN: secret(),
       OPENMAPX_HOST_DIR: this.hostDir,
       DOCKER_GID: String(process.getegid?.() ?? 0),
       TRANSITOUS_COUNTRIES: "de",
@@ -1401,7 +1407,7 @@ export class CrashHost {
     if (deadline === undefined) throw new Error("Unknown operation key; use newOperationKey");
     const now = Date.now();
     const reply = await this.agentRequest("POST", "/v1/operations", {
-      version: 2,
+      version: 1,
       requestId: `ops1_${randomBytes(12).toString("base64url")}`,
       operationKey,
       issuedAt: new Date(now).toISOString(),
@@ -1448,7 +1454,7 @@ export class CrashHost {
       status: job.status,
       ...(job.error ? { error: job.error } : {}),
       ...(job.result?.errorCode ? { errorCode: job.result.errorCode } : {}),
-      terminal: ["success", "failed", "canceled"].includes(job.status),
+      terminal: ["succeeded", "failed", "cancelled"].includes(job.status),
     };
   }
 

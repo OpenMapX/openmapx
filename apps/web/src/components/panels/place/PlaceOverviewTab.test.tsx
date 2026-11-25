@@ -87,7 +87,7 @@ const { MutationErrorNotice } = await import("../../MutationErrorNotice");
  * reach an OpenStreetMap editor control.
  */
 const ENRICHED = {
-  id: "p1",
+  id: "osm:node/12345",
   name: "Enriched Display Name",
   coordinates: [13.4, 52.5],
   primaryScheme: "osm",

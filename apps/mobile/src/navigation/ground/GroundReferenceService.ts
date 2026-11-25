@@ -13,10 +13,10 @@ import {
 } from "@openmapx/core/navigation";
 import {
   type ApiClient,
-  createApiClient,
   fetchNavigationLandmarks,
   fetchRouteMatchWindow,
 } from "@openmapx/core/navigation/api";
+import { createNativeApiClient } from "../../api/nativeApiClient";
 
 /**
  * The evidence for "At the second traffic light" and "At the Aral petrol
@@ -72,7 +72,9 @@ export class GroundReferenceService {
   private readonly inFlight = new Set<AbortController>();
 
   constructor(deps: ReferenceServiceDeps) {
-    this.client = deps.client ?? createApiClient({ baseUrl: deps.apiOrigin, credentials: "omit" });
+    // References are optional: a refused protocol leaves plain prompts, and the
+    // reroute and refresh paths report the update.
+    this.client = deps.client ?? createNativeApiClient(deps.apiOrigin);
   }
 
   abortAll(): void {

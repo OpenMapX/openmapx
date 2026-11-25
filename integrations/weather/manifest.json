@@ -5,6 +5,5 @@
   "license": "MIT",
   "domains": ["weather"],
   "backend": { "routes": true },
-  "quality": "built-in",
-  "category": "Weather"
+  "quality": "built-in"
 }

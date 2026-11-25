@@ -12,6 +12,7 @@ import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
 import {
   PANEL,
+  savedPlaceKey,
   useCategorySearchStore,
   useDirectionsStore,
   useIsSaved,
@@ -108,7 +109,7 @@ export function PlaceActionButtons({ place, layout = "circles" }: Props) {
   const { setWaypoint, open: openDirections } = useDirectionsStore();
   const { setSelectedPlace } = usePlaceStore();
   const { data: session } = useSession();
-  const { data: savedInListIds } = useIsSaved(session?.user ? place.id : null);
+  const { data: savedInListIds } = useIsSaved(session?.user ? savedPlaceKey(place) : null);
   const isSaved = savedInListIds && savedInListIds.length > 0;
 
   const handleDirections = () => {

@@ -35,7 +35,6 @@ describe("handleAdminAuditEvent", () => {
       expect.objectContaining({
         actorId: "admin-1",
         targetId: "u-2",
-        targetType: "user",
         action: "user.role.change",
         details: { role: "admin" },
       }),

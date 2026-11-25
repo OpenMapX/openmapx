@@ -1,4 +1,5 @@
 import z from "zod/v4";
+import { COMPONENT_ID_PATTERN } from "../../../component-id";
 import { type AdminOperation, adminCommonResponses, adminJson } from "../admin";
 import { adminServiceAcceptedSchema, adminServiceIdempotencyHeadersSchema } from "./common";
 export const adminReleaseClearInputSchema = z.strictObject({
@@ -7,7 +8,7 @@ export const adminReleaseClearInputSchema = z.strictObject({
 });
 export const adminImageStageInputSchema = z.strictObject({
   serviceIds: z
-    .array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/))
+    .array(z.string().regex(COMPONENT_ID_PATTERN))
     .min(1)
     .max(64)
     .refine((ids) => new Set(ids).size === ids.length),

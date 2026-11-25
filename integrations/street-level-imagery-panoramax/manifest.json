@@ -43,7 +43,6 @@
     "urlTemplate": "${instanceUrl}/"
   },
   "quality": "built-in",
-  "category": "Imagery",
   "dataSources": [
     {
       "sourceId": "panoramax",

@@ -17,7 +17,7 @@ crashScenario({
     await lost;
     expect((await host.submitDataJob()).status).toBe(409);
     const job = await host.waitForJob(submitted.jobId as string);
-    expect(job.status).toBe("success");
+    expect(job.status).toBe("succeeded");
     expect(host.agentOperations("configurationMaintenance.prepare")).toHaveLength(1);
     expect((await host.submitDataJob()).status).toBe(200);
   },

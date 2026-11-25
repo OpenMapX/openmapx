@@ -111,7 +111,7 @@ async function waitForManifest(
       bytesTotal: 0,
       speedBytesPerSecond: 0,
       ...(job.errorMessage
-        ? { error: { code: job.errorCode ?? "preparation-failed", message: job.errorMessage } }
+        ? { error: { code: job.errorCode ?? "PREPARATION_FAILED", message: job.errorMessage } }
         : {}),
     });
     if (job.status === "ready-to-download" && job.packageId) {
@@ -652,7 +652,7 @@ function DownloadAreaDialog({
           bytesReceived: current?.bytesReceived ?? 0,
           bytesTotal: current?.bytesTotal ?? 0,
           speedBytesPerSecond: 0,
-          error: { code: "download-failed", message },
+          error: { code: "DOWNLOAD_FAILED", message },
         }));
       }
     } finally {

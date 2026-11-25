@@ -49,6 +49,7 @@ import { runContainedProcess } from "../../../../ops-agent/src/docker-runtime";
 import { openOpsJobJournal } from "../../../../ops-agent/src/journal";
 import { buildOpsAgentServer } from "../../../../ops-agent/src/server";
 import * as schema from "../../db/schema";
+import { TEST_ADMIN_COOKIE } from "../../test/admin-session";
 import { createConfigurationPostgresFixture } from "../../test/configuration-postgres-fixture";
 import { dataManagerTokenFile } from "../../test/data-manager-token";
 
@@ -76,7 +77,7 @@ function maintenanceIdOf(job: { protocol: unknown }): string | undefined {
 }
 /** The agent's execution rows, as its journal holds them. */
 function agentRows(infraDir: string) {
-  const file = JSON.parse(readFileSync(join(infraDir, "state/ops-agent/jobs-v1.json"), "utf8")) as {
+  const file = JSON.parse(readFileSync(join(infraDir, "state/ops-agent/jobs.json"), "utf8")) as {
     jobs: Parameters<typeof journalExecutionRow>[0][];
   };
   return file.jobs.flatMap((job) => journalExecutionRow(job) ?? []);
@@ -152,6 +153,9 @@ vi.mock("../../db", () => ({
     return state.fixture.sql;
   },
 }));
+vi.mock("../../utils/require-admin", async (actual) =>
+  (await import("../../test/admin-session")).testAdminSessionModule(await actual()),
+);
 
 describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
   "actual coordinator lifecycle API / production agent / PostgreSQL",
@@ -376,7 +380,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         },
         runtime: host.runtime,
         resourceClaimer: host.claimer,
-        journal: await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs-v1.json")),
+        journal: await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs.json")),
         controlInstallation: installation,
       });
       posts.clear();
@@ -433,8 +437,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         OPS_AGENT_TOKEN_FILE: tokenFile,
         OPENMAPX_ROOT_DIR: host.root,
         OPENMAPX_SECRETS_KEY: Buffer.alloc(32, 0x71).toString("base64url"),
-        OPENMAPX_LOCAL_ADMIN_TOKEN: "task012-coordinator-local-admin",
-        OPENMAPX_DISABLE_LOCALHOST_AUTH: "0",
         DATA_MANAGER_URL: dm.baseUrl,
         DATA_MANAGER_TOKEN_FILE: dataManagerTokenFile(dm.token),
         DOMAIN: "example.test",
@@ -453,7 +455,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const result = await serviceApply(ctx.payload.service as string, ctx);
         return { service: ctx.payload.service, action: "apply", ...result };
       });
-      jobRunner.register("service.bulk", async (ctx) => {
+      jobRunner.register("service.batch.run", async (ctx) => {
         try {
           return await handleServiceBulkJob(ctx);
         } catch (error) {
@@ -517,7 +519,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           .select()
           .from(schema.adminJob)
           .where(eq(schema.adminJob.id, id));
-        if (row && ["success", "failed", "canceled"].includes(row.status)) return row;
+        if (row && ["succeeded", "failed", "cancelled"].includes(row.status)) return row;
         if (!diagnostic && performance.now() >= until - 105000) {
           diagnostic = true;
           console.info(
@@ -566,7 +568,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             url: "/api/admin/services/bulk-action",
             headers: {
               "idempotency-key": randomUUID(),
-              "x-openmapx-local-admin": "task012-coordinator-local-admin",
+              cookie: TEST_ADMIN_COOKIE,
             },
             payload: { action: "update", serviceIds },
           }),
@@ -579,7 +581,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             .from(schema.adminJob)
             .where(eq(schema.adminJob.id, id));
           if (
-            (row && ["success", "failed", "canceled"].includes(row.status)) ||
+            (row && ["succeeded", "failed", "cancelled"].includes(row.status)) ||
             performance.now() >= terminalUntil
           )
             throw Error(
@@ -595,7 +597,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             .select()
             .from(schema.adminJob)
             .where(eq(schema.adminJob.id, id));
-          if (row?.status === "cancel_pending" || row?.status === "canceled") break;
+          if (row?.status === "cancel_pending" || row?.status === "cancelled") break;
           if (performance.now() > until) throw Error("Actual cancellation marker unavailable");
           await delay(10);
         }
@@ -611,12 +613,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             .select()
             .from(schema.adminJob)
             .where(eq(schema.adminJob.id, id));
-          if (row?.status === "canceled") break;
+          if (row?.status === "cancelled") break;
           if (performance.now() > cleanupUntil)
             throw Error("Canceled staged candidate did not reconcile");
           await delay(500);
         }
-        expect((await finished(id)).status).toBe("canceled");
+        expect((await finished(id)).status).toBe("cancelled");
         expect(readdirSync(host.candidates)).toHaveLength(0);
         expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
         const [retained] = await fixture.db
@@ -753,12 +755,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             url: "/api/admin/services/bulk-action",
             headers: {
               "idempotency-key": randomUUID(),
-              "x-openmapx-local-admin": "task012-coordinator-local-admin",
+              cookie: TEST_ADMIN_COOKIE,
             },
             payload: { action: "update", serviceIds: ["data-manager"] },
           }),
           row = await finished(next.json().jobId);
-        expect(row.status, row.error ?? "No public error").toBe("success");
+        expect(row.status, row.error ?? "No public error").toBe("succeeded");
         expect(posts.get("service.pull")).toBe(2);
         expect(posts.get("configurationMaintenance.prepare")).toBe(1);
         expect(dm.settlementResponseStatuses).toEqual([200]);
@@ -780,7 +782,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               url: "/api/admin/services/bulk-action",
               headers: {
                 "idempotency-key": randomUUID(),
-                "x-openmapx-local-admin": "task012-coordinator-local-admin",
+                cookie: TEST_ADMIN_COOKIE,
               },
               payload: { action: "update", serviceIds: ["data-manager"] },
             }),
@@ -833,7 +835,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               url: "/api/admin/services/bulk-action",
               headers: {
                 "idempotency-key": randomUUID(),
-                "x-openmapx-local-admin": "task012-coordinator-local-admin",
+                cookie: TEST_ADMIN_COOKIE,
               },
               payload: { action: "update", serviceIds: ["data-manager"] },
             }),
@@ -849,7 +851,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               posts: [...posts],
             }),
           );
-          expect(row.status, row.error ?? "No public error").toBe("success");
+          expect(row.status, row.error ?? "No public error").toBe("succeeded");
           expect(posts.get("service.pull")).toBe(3);
           expect(dm.settlementResponseStatuses).toEqual([200]);
           for (const original of originals)
@@ -868,12 +870,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         url: "/api/admin/services/data-manager/action",
         headers: {
           "idempotency-key": randomUUID(),
-          "x-openmapx-local-admin": "task012-coordinator-local-admin",
+          cookie: TEST_ADMIN_COOKIE,
         },
         payload: { action: "apply" },
       });
       const row = await finished(next.json().jobId);
-      expect(row.status, row.error ?? "No public error").toBe("success");
+      expect(row.status, row.error ?? "No public error").toBe("succeeded");
       expect(posts.get("service.pull")).toBe(1);
       expect(posts.get("configurationMaintenance.prepare")).toBe(1);
       expect(dm.settlementResponseStatuses).toEqual([200]);
@@ -894,7 +896,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           method: "PUT",
           url: "/api/admin/services/data-manager/credentials/TOKEN",
           headers: {
-            "x-openmapx-local-admin": "task012-coordinator-local-admin",
+            cookie: TEST_ADMIN_COOKIE,
             "idempotency-key": "task012-staged-credential",
           },
           payload: { value: "synthetic-private-credential" },
@@ -951,7 +953,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           url: "/api/admin/services/bulk-action",
           headers: {
             "idempotency-key": randomUUID(),
-            "x-openmapx-local-admin": "task012-coordinator-local-admin",
+            cookie: TEST_ADMIN_COOKIE,
           },
           payload: { action: "start", serviceIds: ["motis"] },
         }),
@@ -982,7 +984,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             url: "/api/admin/services/bulk-action",
             headers: {
               "idempotency-key": randomUUID(),
-              "x-openmapx-local-admin": "task012-coordinator-local-admin",
+              cookie: TEST_ADMIN_COOKIE,
             },
             payload: { action: "update", serviceIds: ["data-manager"] },
           }),
@@ -996,18 +998,18 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       } finally {
         beforeLifecycleProcess = undefined;
         release.resolve();
-        expect((await finished(startId)).status).toBe("success");
+        expect((await finished(startId)).status).toBe("succeeded");
       }
       const repaired = await api.inject({
         method: "POST",
         url: "/api/admin/services/bulk-action",
         headers: {
           "idempotency-key": randomUUID(),
-          "x-openmapx-local-admin": "task012-coordinator-local-admin",
+          cookie: TEST_ADMIN_COOKIE,
         },
         payload: { action: "update", serviceIds: ["data-manager"] },
       });
-      expect((await finished(repaired.json().jobId)).status).toBe("success");
+      expect((await finished(repaired.json().jobId)).status).toBe("succeeded");
     }, 240000);
     it("observes its genuine pull admission without target metadata writes", async () => {
       const { pullKey } = await canceledSuccessfulCoordinatorStage(),
@@ -1149,7 +1151,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             url: "/api/admin/services/bulk-action",
             headers: {
               "idempotency-key": randomUUID(),
-              "x-openmapx-local-admin": "task012-coordinator-local-admin",
+              cookie: TEST_ADMIN_COOKIE,
             },
             payload: { action: "update", serviceIds: ["data-manager"] },
           }),
@@ -1289,11 +1291,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         url: "/api/admin/services/bulk-action",
         headers: {
           "idempotency-key": randomUUID(),
-          "x-openmapx-local-admin": "task012-coordinator-local-admin",
+          cookie: TEST_ADMIN_COOKIE,
         },
         payload: { action: "update", serviceIds: ["data-manager"] },
       });
-      expect((await finished(next.json().jobId)).status).toBe("success");
+      expect((await finished(next.json().jobId)).status).toBe("succeeded");
     }, 240000);
     it.each(["capability", "admission"])(
       "advertises staged coordinator pull while rejecting legacy direct pull (%s)",
@@ -1394,7 +1396,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           url: "/api/admin/services/bulk-action",
           headers: {
             "idempotency-key": randomUUID(),
-            "x-openmapx-local-admin": "task012-coordinator-local-admin",
+            cookie: TEST_ADMIN_COOKIE,
           },
           payload: { action: "update", serviceIds: ["data-manager"] },
         });
@@ -1476,7 +1478,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             url: "/api/admin/services/bulk-action",
             headers: {
               "idempotency-key": randomUUID(),
-              "x-openmapx-local-admin": "task012-coordinator-local-admin",
+              cookie: TEST_ADMIN_COOKIE,
             },
             payload: { action: "update", serviceIds },
           }),
@@ -1495,7 +1497,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         // The earlier pull blocks neither order: motis updates while the old
         // coordinator still runs its recorded image, and the coordinator
         // update pulls and commits its own.
-        expect(row.status, row.error ?? "No public error").toBe("success");
+        expect(row.status, row.error ?? "No public error").toBe("succeeded");
         expect((row.result as { completedServiceIds: string[] }).completedServiceIds).toEqual(
           serviceIds,
         );
@@ -1530,7 +1532,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           method: "POST",
           url: "/api/admin/services/motis/config",
           headers: {
-            "x-openmapx-local-admin": "task012-coordinator-local-admin",
+            cookie: TEST_ADMIN_COOKIE,
             "idempotency-key": "task012-unrelated-config-after-pull",
           },
           payload: { config: { MODE: "new" } },
@@ -1552,12 +1554,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             url: "/api/admin/services/bulk-action",
             headers: {
               "idempotency-key": randomUUID(),
-              "x-openmapx-local-admin": "task012-coordinator-local-admin",
+              cookie: TEST_ADMIN_COOKIE,
             },
             payload: { action: "update", serviceIds: ["data-manager"] },
           }),
           row = await finished(next.json().jobId);
-        expect(row.status, row.error ?? "No public error").toBe("success");
+        expect(row.status, row.error ?? "No public error").toBe("succeeded");
         expect(posts.get("service.pull")).toBe(2);
         expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(1);
       }, 180000);
@@ -1616,11 +1618,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         url: "/api/admin/services/bulk-action",
         headers: {
           "idempotency-key": randomUUID(),
-          "x-openmapx-local-admin": "task012-coordinator-local-admin",
+          cookie: TEST_ADMIN_COOKIE,
         },
         payload: { action: "update", serviceIds: ["data-manager"] },
       });
-      expect((await finished(next.json().jobId)).status).toBe("success");
+      expect((await finished(next.json().jobId)).status).toBe("succeeded");
       expect(beforePull).toEqual({ starts: 1, helperUps: 1 });
       expect(posts.get("service.start")).toBe(1);
       expect(posts.get("service.pull")).toBe(2);
@@ -1632,7 +1634,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         url: "/api/admin/services/data-manager/action",
         headers: {
           "idempotency-key": randomUUID(),
-          "x-openmapx-local-admin": "task012-coordinator-local-admin",
+          cookie: TEST_ADMIN_COOKIE,
         },
         payload: { action: "apply" },
       });
@@ -1641,7 +1643,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(
         row.status,
         `${row.error ?? "no job error"}; posted kinds ${JSON.stringify([...posts])}`,
-      ).toBe("success");
+      ).toBe("succeeded");
       expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(1);
       expect(dm.preparePosts).toBe(1);
       expect(posts.get("configurationMaintenance.apply")).toBe(1);
@@ -1651,13 +1653,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(await fixture.db.select().from(schema.serviceSecret)).toEqual([]);
       expect(posts.get("service.start") ?? 0).toBe(0);
     }, 180000);
-    it("guards current local-admin coordinator Update without an ordinary seed or fixed CLI", async () => {
+    it("guards current administrator coordinator Update without an ordinary seed or fixed CLI", async () => {
       const response = await api.inject({
         method: "POST",
         url: "/api/admin/services/bulk-action",
         headers: {
           "idempotency-key": randomUUID(),
-          "x-openmapx-local-admin": "task012-coordinator-local-admin",
+          cookie: TEST_ADMIN_COOKIE,
         },
         payload: { action: "update", serviceIds: ["data-manager"] },
       });
@@ -1666,7 +1668,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(
         row.status,
         `${row.error ?? "no job error"}; posted kinds ${JSON.stringify([...posts])}`,
-      ).toBe("success");
+      ).toBe("succeeded");
       expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(1);
       expect(dm.preparePosts).toBe(1);
       expect(posts.get("service.update") ?? 0).toBe(0);
@@ -1871,7 +1873,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               .select()
               .from(schema.adminJob)
               .where(eq(schema.adminJob.id, id));
-            expect(row?.status).toBe("canceled");
+            expect(row?.status).toBe("cancelled");
             expect(existsSync(path)).toBe(false);
             expect(posts.get("service.pull")).toBe(1);
             expect(posts.get("configurationMaintenance.prepare") ?? 0).toBe(0);
@@ -1913,7 +1915,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             }),
           ).toBe(0);
           const row = await finished(id);
-          expect(row.status).toBe("success");
+          expect(row.status).toBe("succeeded");
           expect((row.protocol as { execution: { version: number } }).execution.version).toBe(2);
           if (point === "decision")
             expect(
@@ -1952,12 +1954,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           url: "/api/admin/services/bulk-action",
           headers: {
             "idempotency-key": randomUUID(),
-            "x-openmapx-local-admin": "task012-coordinator-local-admin",
+            cookie: TEST_ADMIN_COOKIE,
           },
           payload: { action: "update", serviceIds: ["data-manager"] },
         });
         const row = await finished(reply.json().jobId);
-        expect(row.status, row.error ?? "No public error").toBe("success");
+        expect(row.status, row.error ?? "No public error").toBe("succeeded");
         expect(posts.get("service.pull")).toBe(1);
         expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(1);
         // The other service keeps the image its generation recorded until it is recreated.
@@ -1981,12 +1983,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           url: "/api/admin/services/bulk-action",
           headers: {
             "idempotency-key": randomUUID(),
-            "x-openmapx-local-admin": "task012-coordinator-local-admin",
+            cookie: TEST_ADMIN_COOKIE,
           },
           payload: { action: "update", serviceIds: ["data-manager"] },
         });
         const row = await finished(reply.json().jobId);
-        expect(row.status).toBe("success");
+        expect(row.status).toBe("succeeded");
         expect(posts.get("service.start")).toBe(1);
         expect(posts.get("service.pull")).toBe(1);
         expect(posts.get("configurationMaintenance.prepare")).toBe(1);
@@ -2009,7 +2011,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         url: "/api/admin/services/bulk-action",
         headers: {
           "idempotency-key": randomUUID(),
-          "x-openmapx-local-admin": "task012-coordinator-local-admin",
+          cookie: TEST_ADMIN_COOKIE,
         },
         payload: { action: "update", serviceIds: ["data-manager"] },
       });
@@ -2021,7 +2023,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const result = row?.result as { observation?: { state?: string } } | undefined;
         if (
           row &&
-          (["failed", "success", "canceled"].includes(row.status) ||
+          (["failed", "succeeded", "cancelled"].includes(row.status) ||
             result?.observation?.state === "unknown")
         )
           break;
@@ -2043,12 +2045,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         url: "/api/admin/services/data-manager/action",
         headers: {
           "idempotency-key": randomUUID(),
-          "x-openmapx-local-admin": "task012-coordinator-local-admin",
+          cookie: TEST_ADMIN_COOKIE,
         },
         payload: { action: "apply" },
       });
       expect(next.statusCode).toBe(200);
-      expect((await finished(next.json().jobId)).status).toBe("success");
+      expect((await finished(next.json().jobId)).status).toBe("succeeded");
       const [unchanged] = await fixture.db
         .select()
         .from(schema.adminJob)
@@ -2065,7 +2067,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           url: "/api/admin/services/bulk-action",
           headers: {
             "idempotency-key": randomUUID(),
-            "x-openmapx-local-admin": "task012-coordinator-local-admin",
+            cookie: TEST_ADMIN_COOKIE,
           },
           payload: { action: "update", serviceIds: ["data-manager"] },
         });
@@ -2133,7 +2135,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             url: "/api/admin/services/bulk-action",
             headers: {
               "idempotency-key": randomUUID(),
-              "x-openmapx-local-admin": "task012-coordinator-local-admin",
+              cookie: TEST_ADMIN_COOKIE,
             },
             payload: { action: "update", serviceIds: ["data-manager"] },
           });
@@ -2148,7 +2150,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             const observed = row?.result as { observation?: { state?: string } } | undefined;
             if (
               row &&
-              (["success", "failed", "canceled"].includes(row.status) ||
+              (["succeeded", "failed", "cancelled"].includes(row.status) ||
                 observed?.observation?.state === "unknown")
             )
               break;
@@ -2212,7 +2214,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   url: "/api/admin/services/bulk-action",
                   headers: {
                     "idempotency-key": randomUUID(),
-                    "x-openmapx-local-admin": "task012-coordinator-local-admin",
+                    cookie: TEST_ADMIN_COOKIE,
                   },
                   payload: { action: "update", serviceIds: ["data-manager"] },
                 }),
@@ -2230,7 +2232,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                   ).some((s) => s.serviceId === "data-manager"),
                 }),
               );
-              expect(nextRow.status).toBe("success");
+              expect(nextRow.status).toBe("succeeded");
               expect(posts.get("service.pull")).toBe(2);
             } finally {
               await stopNative();
@@ -2253,12 +2255,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               url: "/api/admin/services/bulk-action",
               headers: {
                 "idempotency-key": randomUUID(),
-                "x-openmapx-local-admin": "task012-coordinator-local-admin",
+                cookie: TEST_ADMIN_COOKIE,
               },
               payload: { action: "update", serviceIds, noDeps },
             }),
             row = await finished(reply.json().jobId);
-          expect(row.status, row.error ?? "No public error").toBe("success");
+          expect(row.status, row.error ?? "No public error").toBe("succeeded");
           expect((row.result as { completedServiceIds: string[] }).completedServiceIds).toEqual(
             serviceIds,
           );
@@ -2292,7 +2294,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             url: "/api/admin/services/bulk-action",
             headers: {
               "idempotency-key": randomUUID(),
-              "x-openmapx-local-admin": "task012-coordinator-local-admin",
+              cookie: TEST_ADMIN_COOKIE,
             },
             payload: { action: "update", serviceIds: ["motis", "data-manager", "valhalla"] },
           }),
@@ -2303,7 +2305,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           [row] = await fixture.db.select().from(schema.adminJob).where(eq(schema.adminJob.id, id));
           if (
             row &&
-            (["success", "failed", "canceled"].includes(row.status) ||
+            (["succeeded", "failed", "cancelled"].includes(row.status) ||
               (row.result as { observation?: { state: string } })?.observation?.state === "unknown")
           )
             break;
@@ -2357,7 +2359,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             url: "/api/admin/services/bulk-action",
             headers: {
               "idempotency-key": randomUUID(),
-              "x-openmapx-local-admin": "task012-coordinator-local-admin",
+              cookie: TEST_ADMIN_COOKIE,
             },
             payload: { action: "update", serviceIds },
           });
@@ -2428,7 +2430,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             }
             if (
               row &&
-              (["failed", "success", "canceled"].includes(row.status) ||
+              (["failed", "succeeded", "cancelled"].includes(row.status) ||
                 value?.observation?.state === "unknown")
             )
               break;
@@ -2436,7 +2438,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             await delay(20);
           }
           assert.isDefined(row, "the mixed update job row is missing");
-          expect(row.status).toBe("success");
+          expect(row.status).toBe("succeeded");
           const result = row.result as { completedServiceIds: string[] };
           expect(result.completedServiceIds).toEqual(serviceIds);
           expect(posts.get("configurationMaintenance.prepare")).toBe(1);

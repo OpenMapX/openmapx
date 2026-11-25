@@ -1,5 +1,5 @@
 import z from "zod/v4";
-import { httpErrorSchema } from "../../services/data-manager/contracts/common";
+import { errorCodeSchema, httpErrorSchema } from "../../services/data-manager/contracts/common";
 import type { ApiOperation } from "./operation";
 
 export { httpErrorSchema };
@@ -28,6 +28,7 @@ export const adminJsonValueSchema = z
 export type AdminJsonValue = z.infer<typeof adminJsonValueSchema>;
 export const adminRateLimitSchema = z.strictObject({
   error: z.string(),
+  code: errorCodeSchema.optional(),
   retryAfter: adminCountSchema,
 });
 export const adminJson = <S extends z.ZodType>(schema: S, headers?: z.ZodType) => ({

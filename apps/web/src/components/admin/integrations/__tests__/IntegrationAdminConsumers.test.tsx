@@ -678,7 +678,7 @@ describe("integration administration browser behavior", () => {
     ).toHaveLength(1);
   });
 
-  it("words a failed or interrupted job by its type, and a type this build does not know by its code", async () => {
+  it("words a failed job by its type, and a type this build does not know by its code", async () => {
     transport((url) => {
       switch (url.pathname) {
         case "/api/admin/overview":
@@ -698,9 +698,9 @@ describe("integration administration browser behavior", () => {
               {
                 type: "job_failed",
                 severity: "error",
-                message: 'Job "future.kind" was interrupted',
+                message: 'Job "future.kind" failed',
                 target: "4fa2c1d0-0000-4000-8000-000000000000",
-                job: { type: "future.kind", status: "interrupted" },
+                job: { type: "future.kind", status: "failed" },
               },
             ],
             recentActivity: [],
@@ -714,7 +714,7 @@ describe("integration administration browser behavior", () => {
     });
     mount(<AdminOverview />);
     expect(await screen.findByText('Job "Sync transit" failed')).toBeInTheDocument();
-    expect(screen.getByText('Job "future › kind" was interrupted')).toBeInTheDocument();
+    expect(screen.getByText('Job "future › kind" failed')).toBeInTheDocument();
     expect(screen.queryByText(/3fa2c1d0/)).not.toBeInTheDocument();
   });
 
@@ -954,7 +954,7 @@ describe("integration administration browser behavior", () => {
     expect(calls).toHaveLength(1);
   });
 
-  it.each(["success", "failed", "canceled"] as const)(
+  it.each(["succeeded", "failed", "cancelled"] as const)(
     "refreshes all domain caches only after actual reload %s",
     async (status) => {
       let finish = false;

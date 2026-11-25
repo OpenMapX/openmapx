@@ -213,7 +213,7 @@ function makeCtx(dataDir: string) {
 describe("assemble-staging run()", () => {
   it("keeps candidate metadata immutable when the producer rewrites its next config", async () => {
     const fx = setupFixture({ withConfig: true, feeds: ["feed.gtfs.zip"] });
-    expect((await run(makeCtx(fx.dataDir))).status).toBe("ok");
+    expect((await run(makeCtx(fx.dataDir))).status).toBe("succeeded");
     for (const name of ["config.yml", "license.json", TRANSIT_SOURCE_MANIFEST_FILENAME]) {
       const original = readFileSync(join(fx.stagingDir, name));
       writeFileSync(join(fx.outDir, name), "next producer generation", { mode: 0o600 });
@@ -237,7 +237,7 @@ describe("assemble-staging run()", () => {
     });
     expect(existsSync(fx.stagingDir)).toBe(false);
     const result = await run(makeCtx(fx.dataDir));
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(statSync(fx.stagingDir).mode & 0o777).toBe(0o700);
 
     // config.yml in staging
@@ -280,7 +280,7 @@ describe("assemble-staging run()", () => {
     );
 
     const result = await run(makeCtx(fx.dataDir));
-    expect(result.status).toBe("partial");
+    expect(result.status).toBe("partially_succeeded");
     const artifacts = result.artifacts as Record<string, unknown>;
     expect((artifacts.missingFeeds as string[]).includes("missing-feed.gtfs.zip")).toBe(true);
   });
@@ -291,7 +291,7 @@ describe("assemble-staging run()", () => {
     // timetable, so the stage must error (it's a hardStop in the pipeline).
     const fx = setupFixture({ withConfig: true, feeds: [] });
     const result = await run(makeCtx(fx.dataDir));
-    expect(result.status).toBe("error");
+    expect(result.status).toBe("failed");
     expect(result.message).toMatch(/refusing to import\/promote an empty timetable/);
     expect((result.artifacts as Record<string, unknown>).linkedFeeds).toBe(0);
   });
@@ -301,7 +301,7 @@ describe("assemble-staging run()", () => {
     // Config references a feed that was never written to disk → 0 linked.
     writeFileSync(join(fx.outDir, "config.yml"), buildConfig(["gone.gtfs.zip"]), { mode: 0o600 });
     const result = await run(makeCtx(fx.dataDir));
-    expect(result.status).toBe("error");
+    expect(result.status).toBe("failed");
     expect((result.artifacts as Record<string, unknown>).missingFeeds).toContain("gone.gtfs.zip");
   });
 
@@ -316,7 +316,7 @@ describe("assemble-staging run()", () => {
     expect(existsSync(join(fx.stagingDir, "old-feed.gtfs.zip"))).toBe(true);
 
     const result = await run(makeCtx(fx.dataDir));
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
 
     // Stale archive gone; current feed present
     expect(existsSync(join(fx.stagingDir, "old-feed.gtfs.zip"))).toBe(false);
@@ -334,7 +334,7 @@ describe("assemble-staging run()", () => {
     expect(existsSync(join(fx.stagingDir, "data", "tt.bin"))).toBe(true);
 
     const result = await run(makeCtx(fx.dataDir));
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
 
     // data/tt.bin still present and unchanged
     expect(existsSync(join(fx.stagingDir, "data", "tt.bin"))).toBe(true);
@@ -349,7 +349,7 @@ describe("assemble-staging run()", () => {
     });
 
     const result = await run(makeCtx(fx.dataDir));
-    expect(result.status).toBe("partial");
+    expect(result.status).toBe("partially_succeeded");
     const artifacts = result.artifacts as Record<string, unknown>;
     expect(artifacts.osmSource).toBe("missing");
   });
@@ -364,7 +364,7 @@ describe("assemble-staging run()", () => {
     writeFileSync(join(fx.outDir, "local.osm.pbf"), "osm-data-from-out", { mode: 0o600 });
 
     const result = await run(makeCtx(fx.dataDir));
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     const artifacts = result.artifacts as Record<string, unknown>;
     expect(artifacts.osmSource).toBe("out");
     expect(existsSync(join(fx.stagingDir, "local.osm.pbf"))).toBe(true);

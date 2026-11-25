@@ -4,8 +4,29 @@
 export type AddTransitSource409 =
   | {
       error: string;
+      /** @pattern ^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$ */
+      code?: string;
       message?: string;
       jobId?: string;
+    }
+  | {
+      error: string;
+      code: "REQUIRED_SETTINGS_MISSING";
+      /**
+       * @minItems 1
+       * @maxItems 256
+       */
+      missingSettings: {
+        /** @pattern ^(?=.{1,48}$)[a-z0-9]+(?:-[a-z0-9]+)*$ */
+        serviceId: string;
+        /**
+         * @minItems 1
+         * @maxItems 64
+         * @items.minLength 1
+         * @items.maxLength 128
+         */
+        keys: string[];
+      }[];
     }
   | {
       /**
@@ -19,11 +40,11 @@ export type AddTransitSource409 =
     }
   | {
       error: string;
-      code: "in-flight" | "duplicate-idempotency-key";
+      code: "IN_FLIGHT" | "DUPLICATE_IDEMPOTENCY_KEY";
       /** @nullable */
       existingJobId: string | null;
     }
   | {
       error: string;
-      code: "source_action_not_allowed";
+      code: "SOURCE_ACTION_NOT_ALLOWED";
     };

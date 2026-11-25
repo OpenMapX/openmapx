@@ -84,6 +84,7 @@ export interface SettingsEditorText {
   envOverrideHelp: (envVar: string) => string;
   envSecretValue: string;
   unreadableSecret: string;
+  invalidStoredValue: string;
   showSecret: string;
   hideSecret: string;
   databaseSource: string;
@@ -106,6 +107,7 @@ function useDefaultEditorText(): SettingsEditorText {
       envOverrideHelp: (envVar) => t("editor.envOverrideHelp", { envVar }),
       envSecretValue: t("editor.envSecretValue"),
       unreadableSecret: t("editor.unreadableSecret"),
+      invalidStoredValue: t("editor.invalidStoredValue"),
       showSecret: t("editor.showSecret"),
       hideSecret: t("editor.hideSecret"),
       databaseSource: t("editor.databaseSource"),
@@ -182,6 +184,10 @@ function SettingField({
 }) {
   const [showSecret, setShowSecret] = useState(false);
   const disabled = setting.envOverride;
+  // A stored secret the current key cannot open, or a stored value the setting
+  // does not accept, until a replacement is entered.
+  const isUnreadable = setting.unreadable === true && value === setting.value;
+  const unreadableText = setting.secret ? text.unreadableSecret : text.invalidStoredValue;
 
   if (setting.type === "boolean") {
     return (
@@ -201,7 +207,12 @@ function SettingField({
 
   if (setting.type === "select" && setting.options) {
     return (
-      <FormControl size="small" sx={{ width: "100%", maxWidth: 420 }} disabled={disabled}>
+      <FormControl
+        size="small"
+        sx={{ width: "100%", maxWidth: 420 }}
+        disabled={disabled}
+        error={isUnreadable}
+      >
         <InputLabel>{setting.label}</InputLabel>
         <Select
           value={String(value ?? "")}
@@ -214,7 +225,11 @@ function SettingField({
             </MenuItem>
           ))}
         </Select>
-        {setting.description && <FormHelperText>{setting.description}</FormHelperText>}
+        {isUnreadable ? (
+          <FormHelperText>{unreadableText}</FormHelperText>
+        ) : (
+          setting.description && <FormHelperText>{setting.description}</FormHelperText>
+        )}
       </FormControl>
     );
   }
@@ -293,8 +308,6 @@ function SettingField({
   // other field (including non-secret env overrides) shows its real value so
   // the operator can see what's actually in effect.
   const isEnvSecret = setting.envOverride && setting.secret;
-  // A stored secret the current key cannot open, until a replacement is typed.
-  const isUnreadableSecret = setting.unreadable === true && value === setting.value;
   const displayValue = isEnvSecret ? text.envSecretValue : String(value ?? "");
   const inputType = isEnvSecret
     ? "text"
@@ -311,8 +324,8 @@ function SettingField({
       type={inputType}
       value={displayValue}
       disabled={disabled}
-      error={isUnreadableSecret}
-      helperText={isUnreadableSecret ? text.unreadableSecret : setting.description}
+      error={isUnreadable}
+      helperText={isUnreadable ? unreadableText : setting.description}
       onChange={(e) =>
         onChange(setting.type === "number" ? Number(e.target.value) : e.target.value)
       }
@@ -835,10 +848,10 @@ export function SystemSettings({
         settings: group.settings.filter(
           (setting) =>
             ![
-              "emailVerificationRequired",
-              "sessionDurationHours",
-              "twoFaEnabled",
-              "passwordMinLength",
+              "auth.emailVerificationRequired",
+              "auth.sessionDurationHours",
+              "auth.twoFaEnabled",
+              "auth.passwordMinLength",
             ].includes(setting.key),
         ),
       }))

@@ -11,6 +11,8 @@ export interface ApiClientConfig {
   baseUrl: string;
   credentials?: RequestCredentials;
   headerInterceptor?: () => Record<string, string>;
+  /** `"error"` refuses redirects, so headers that authenticate reach only `baseUrl`. */
+  redirect?: RequestRedirect;
 }
 
 /**
@@ -372,6 +374,7 @@ export class ApiClient {
       response = await fetch(url, {
         ...init,
         ...(options.cache === undefined ? {} : { cache: options.cache }),
+        ...(cfg.redirect === undefined ? {} : { redirect: cfg.redirect }),
         headers,
         credentials: cfg.credentials ?? "omit",
         signal: controller.signal,

@@ -344,6 +344,12 @@ function matchesSchema(
   return true;
 }
 
+/**
+ * Whether stored configuration values are well-formed for a schema. The root
+ * schema's `required` list is not checked here: a required key is the
+ * operator's to supply, from a value, a stored secret or the environment, and
+ * `missingRequiredConfiguration` checks it when a configuration is applied.
+ */
 export function validateTrustedConfigurationValues(
   values: Record<string, unknown>,
   schema: Record<string, unknown> | undefined,
@@ -352,13 +358,14 @@ export function validateTrustedConfigurationValues(
   try {
     const root = rootSchema(schema);
     assertTrustedConfigurationSchema(root);
-    const properties = isRecord(root.properties) ? { ...root.properties } : {};
+    const { required: _required, ...rest } = root;
+    const properties = isRecord(rest.properties) ? { ...rest.properties } : {};
     for (const key of controlledKeys) {
       if (!safeKey(key)) rejected();
       properties[key] ??= { type: "boolean" };
     }
     return matchesSchema(values, {
-      ...root,
+      ...rest,
       type: "object",
       properties,
       additionalProperties: false,
@@ -366,4 +373,29 @@ export function validateTrustedConfigurationValues(
   } catch {
     return false;
   }
+}
+
+/**
+ * The keys a schema's root `required` list names that have no value: no
+ * non-empty value in `values`, no stored secret and no environment value.
+ */
+export function missingRequiredConfiguration(
+  schema: Record<string, unknown> | undefined,
+  supplied: {
+    values: Record<string, unknown>;
+    secretKeys?: Iterable<string>;
+    envKeys?: Iterable<string>;
+  },
+): string[] {
+  const root = rootSchema(schema);
+  const required = Array.isArray(root.required)
+    ? root.required.filter((key): key is string => typeof key === "string")
+    : [];
+  const secrets = new Set(supplied.secretKeys ?? []);
+  const env = new Set(supplied.envKeys ?? []);
+  return required.filter((key) => {
+    if (secrets.has(key) || env.has(key)) return false;
+    const value = supplied.values[key];
+    return value === undefined || value === null || value === "";
+  });
 }

@@ -67,7 +67,7 @@ export const run: StageFn = async (ctx) => {
 
     return {
       stage: "gc",
-      status: "ok",
+      status: "succeeded",
       startedAt,
       finishedAt: ctx.now(),
       durationMs: Date.now() - start,
@@ -85,7 +85,7 @@ export const run: StageFn = async (ctx) => {
     const err = error as Error;
     return {
       stage: "gc",
-      status: "error",
+      status: "failed",
       startedAt,
       finishedAt: ctx.now(),
       durationMs: Date.now() - start,

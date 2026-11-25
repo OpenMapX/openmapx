@@ -61,7 +61,7 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
   };
   if (!refreshToken) {
     ctx.log.warn(
-      "[transit-mobility-database] no refresh token configured; catalog disabled. Set INTEGRATION_TRANSIT_MOBILITY_DATABASE_REFRESHTOKEN or store via the admin secrets API.",
+      "[transit-mobility-database] no refresh token configured; catalog disabled. Set INTEGRATION_TRANSIT_MOBILITY_DATABASE_REFRESH_TOKEN or store via the admin secrets API.",
     );
     ctx.onActivate(() => {
       state = generation;

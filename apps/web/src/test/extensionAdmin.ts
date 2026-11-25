@@ -23,6 +23,7 @@ export function catalogEntry(
     platformVersion: "1",
     installed: false,
     installedVersion: null,
+    installedCritical: null,
     hasUpdate: false,
     removed: null,
     critical: null,
@@ -70,6 +71,7 @@ export function installed(
     ],
     hasUpdate: true,
     latestVersion: "2",
+    critical: null,
     ...overrides,
   };
 }

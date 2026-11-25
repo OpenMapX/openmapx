@@ -49,6 +49,7 @@ export function PrivacySetupPage() {
       envOverrideHelp: (envVar) => t("editor.envOverrideHelp", { envVar }),
       envSecretValue: t("editor.envSecretValue"),
       unreadableSecret: t("editor.unreadableSecret"),
+      invalidStoredValue: t("editor.invalidStoredValue"),
       showSecret: t("editor.showSecret"),
       hideSecret: t("editor.hideSecret"),
       databaseSource: t("editor.databaseSource"),
@@ -125,7 +126,7 @@ export function PrivacySetupPage() {
       </Paper>
 
       <SystemSettings
-        focusKey={field && /^[a-zA-Z0-9_-]{1,128}$/.test(field) ? field : undefined}
+        focusKey={field && /^[a-zA-Z0-9_.-]{1,128}$/.test(field) ? field : undefined}
         sections={sections}
         showHeader={false}
         showTransfer={false}

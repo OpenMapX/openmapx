@@ -50,12 +50,12 @@ const combineGlyphPbf = loadCommonJs("@mapbox/glyph-pbf-composite") as {
 export { OfflinePackageCapacityError } from "./accounting.js";
 
 function packageErrorCode(error: unknown): OfflinePackageJob["errorCode"] {
-  if (error instanceof OfflinePackageSourceError) return "generation-failed";
-  if (error instanceof OfflinePackagePrincipalQuotaError) return "capacity";
+  if (error instanceof OfflinePackageSourceError) return "GENERATION_FAILED";
+  if (error instanceof OfflinePackagePrincipalQuotaError) return "CAPACITY";
   if (error instanceof Error && error.message.startsWith("offline package capacity:")) {
-    return "capacity";
+    return "CAPACITY";
   }
-  return "generation-failed";
+  return "GENERATION_FAILED";
 }
 
 function packageErrorMessage(error: unknown): string {
@@ -239,7 +239,7 @@ export class OfflinePackageGenerator {
         jobId: randomUUID(),
         request: invalidRequest,
         status: "failed",
-        errorCode: "invalid-request",
+        errorCode: "INVALID_REQUEST",
         errorMessage: packageErrorMessage(error),
         createdAtMs: this.clock().getTime(),
         updatedAtMs: this.clock().getTime(),
@@ -404,7 +404,7 @@ export class OfflinePackageGenerator {
     for (const job of this.jobs.values()) {
       if (job.status === "preparing" && nowMs - job.createdAtMs > 24 * 60 * 60 * 1000) {
         job.status = "expired";
-        job.errorCode = "expired";
+        job.errorCode = "EXPIRED";
         job.errorMessage = "offline package preparation expired";
         job.updatedAtMs = nowMs;
         await this.accounting.expire(job.jobId, nowMs);

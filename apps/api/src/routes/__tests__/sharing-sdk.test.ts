@@ -33,6 +33,7 @@ const row = {
   updatedAt: at,
   expiresAt: null,
   snapshot: { name: "Trip", icon: null, places: [] },
+  snapshotVersion: 1,
 };
 beforeEach(async () => {
   database = createDbMock();

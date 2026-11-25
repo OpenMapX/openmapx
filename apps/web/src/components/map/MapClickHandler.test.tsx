@@ -30,7 +30,7 @@ let fake: ReturnType<typeof createFakeMap>;
 
 const PLACE = createPlace({
   primaryScheme: "coordinate",
-  ids: { coordinate: "50.000000-6.000000" },
+  ids: { coordinate: "50.000000,6.000000" },
   name: "Somewhere",
   address: "Somewhere",
   coordinates: [6, 50],

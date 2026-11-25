@@ -111,7 +111,7 @@ vi.mock("../../db/schema.js", () => ({
     status: "status",
     createdAt: "createdAt",
     finishedAt: "finishedAt",
-    createdBy: "createdBy",
+    createdByUserId: "createdByUserId",
     error: "error",
   },
   adminJobLog: { jobId: "jobId", seq: "seq" },
@@ -787,6 +787,8 @@ describe("actual integration producers through generated SDK", () => {
         public: limiter.preHandler(),
         unmatched: unexpected,
         typeahead: unexpected,
+        contribution: unexpected,
+        enrollment: unexpected,
         routing: unexpected,
       }),
     );

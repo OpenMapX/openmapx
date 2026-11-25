@@ -1,79 +1,67 @@
-import { type PrivacySource, privacySourceSchema } from "@openmapx/core/privacy";
-import { envString } from "@openmapx/core/server-env";
+import type { PrivacySource } from "@openmapx/core/privacy";
 import type { FastifyPluginAsync } from "fastify";
-import { resolveSettings } from "../services/settings";
+import { retentionPeriods } from "../services/retention-settings";
+import { resolveSettingValues } from "../services/settings";
 import { declareRouteAuth } from "../utils/route-auth";
 
 /**
- * Public, unauthenticated read of the legal facts the published /privacy page
- * needs to render. Values resolve env > database > default exactly like the
- * admin Settings panel (they share `resolveSettings`), so an operator can set
- * the hosting provider either via the LEGAL_HOSTING_* env vars or in the admin
- * Settings → Legal panel, with the env var taking priority. Only non-secret
+ * Public, unauthenticated read of the legal facts the published legal pages
+ * need to render. Values resolve exactly like every other setting
+ * (environment, then the administration's stored value, then the default),
+ * and the periods are the ones the API's retention enforces. Only non-secret
  * legal fields are exposed here — never any setting from another group.
  */
-/** A positive whole number of days, or 30 for a missing/invalid value. The
- * result is interpolated verbatim into the published privacy text, so a bad
- * value (NaN, ≤0, non-integer) must never render as a retention claim. */
-function retentionDays(raw: unknown): number {
-  const n = typeof raw === "number" ? raw : Number(raw);
-  return Number.isInteger(n) && n > 0 ? n : 30;
-}
-
-function boundedNumber(raw: unknown, fallback: number, min: number, max: number): number {
-  const n = typeof raw === "number" ? raw : Number(raw);
-  return Number.isInteger(n) && n >= min && n <= max ? n : fallback;
-}
-
-function safePrivacySources(
-  raw: unknown,
-): Array<Omit<PrivacySource, "contactCode" | "instructionsCode">> {
-  const result = privacySourceSchema.array().safeParse(raw);
-  if (!result.success) return [];
-  return result.data.map(
-    ({ contactCode: _contactCode, instructionsCode: _instructionsCode, ...publicSource }) =>
-      publicSource,
-  );
-}
-
-const asString = (v: unknown): string => (typeof v === "string" ? v : "");
+const PUBLIC_LEGAL_SETTINGS = {
+  name: "legal.controller.name",
+  street: "legal.controller.street",
+  postalCode: "legal.controller.postalCode",
+  city: "legal.controller.city",
+  country: "legal.controller.country",
+  email: "legal.controller.email",
+  phone: "legal.controller.phone",
+  hostingProvider: "legal.hosting.provider",
+  hostingLocations: "legal.hosting.locations",
+  supervisoryAuthority: "legal.supervisoryAuthority.name",
+  supervisoryAuthorityUrl: "legal.supervisoryAuthority.url",
+  dataRequestEmail: "legal.dataRequestEmail",
+  deploymentJurisdiction: "legal.deploymentJurisdiction",
+  privacySources: "legal.privacySources",
+} as const;
+type PublicLegalFact = keyof typeof PUBLIC_LEGAL_SETTINGS;
 
 export const legalConfigRoute: FastifyPluginAsync = async (fastify) => {
   declareRouteAuth(fastify, "public");
 
   fastify.get("/legal-config", async (_req, reply) => {
-    const groups = await resolveSettings();
-    const legal = groups.find((g) => g.id === "legal");
-    const values = Object.fromEntries((legal?.settings ?? []).map((s) => [s.key, s.value]));
+    const facts = Object.keys(PUBLIC_LEGAL_SETTINGS) as PublicLegalFact[];
+    const values = await resolveSettingValues(facts.map((fact) => PUBLIC_LEGAL_SETTINGS[fact]));
+    const text = (fact: PublicLegalFact) => values[PUBLIC_LEGAL_SETTINGS[fact]] as string;
+    const periods = await retentionPeriods();
+    const privacySources = (values[PUBLIC_LEGAL_SETTINGS.privacySources] as PrivacySource[]).map(
+      ({ contactCode: _contactCode, instructionsCode: _instructionsCode, ...publicSource }) =>
+        publicSource,
+    );
 
     reply.header("Cache-Control", "public, max-age=60");
     return reply.send({
-      name: asString(values.legalControllerName),
-      street: asString(values.legalControllerStreet),
-      postalCode: asString(values.legalControllerPostalCode),
-      city: asString(values.legalControllerCity),
-      country: asString(values.legalControllerCountry),
-      email: asString(values.legalControllerEmail),
-      phone: asString(values.legalControllerPhone),
-      hostingProvider: asString(values.legalHostingProvider),
-      hostingLocations: asString(values.legalHostingLocations),
-      supervisoryAuthority: asString(values.legalSupervisoryAuthority),
-      supervisoryAuthorityUrl: asString(values.legalSupervisoryAuthorityUrl),
-      serverLogRetentionDays: retentionDays(values.legalServerLogRetentionDays),
-      dataRequestEmail:
-        asString(values.legalDataRequestEmail) || asString(values.legalControllerEmail),
-      dsarCaseRetentionDays: boundedNumber(values.legalDsarCaseRetentionDays, 1095, 30, 3650),
-      deploymentJurisdiction: asString(values.legalDeploymentJurisdiction),
-      privacySources: safePrivacySources(values.legalPrivacySources),
-      // Platform backup retention, validated when the API starts.
-      backupRetentionDays: boundedNumber(envString("BACKUP_RETENTION_DAYS", "30"), 30, 1, 36_500),
-      // Administrator audit-log retention, validated when the API starts.
-      auditLogRetentionDays: boundedNumber(
-        envString("AUDIT_LOG_RETENTION_DAYS", "365"),
-        365,
-        1,
-        36_500,
-      ),
+      name: text("name"),
+      street: text("street"),
+      postalCode: text("postalCode"),
+      city: text("city"),
+      country: text("country"),
+      email: text("email"),
+      phone: text("phone"),
+      hostingProvider: text("hostingProvider"),
+      hostingLocations: text("hostingLocations"),
+      supervisoryAuthority: text("supervisoryAuthority"),
+      supervisoryAuthorityUrl: text("supervisoryAuthorityUrl"),
+      serverLogRetentionDays: periods.serverLog,
+      dataRequestEmail: text("dataRequestEmail") || text("email"),
+      dsarCaseRetentionDays: periods.privacyCase,
+      deploymentJurisdiction: text("deploymentJurisdiction"),
+      privacySources,
+      backupRetentionDays: periods.backup,
+      auditLogRetentionDays: periods.auditLog,
     });
   });
 };

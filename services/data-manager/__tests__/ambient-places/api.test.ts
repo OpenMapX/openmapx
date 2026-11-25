@@ -25,6 +25,7 @@ vi.mock("../../src/jobs/ambient-places/build.js", async (importOriginal) => ({
 vi.mock("@openmapx/core/ambient-places-server", () => ({ readAmbientManifest: mock.readManifest }));
 
 import { registerAmbientPlacesApi } from "../../src/jobs/ambient-places/api.js";
+import { authenticateAs } from "../helpers/authenticated-app.js";
 
 describe("ambient publication job lifecycle", () => {
   it.each(["Date objects", "Drizzle PostgreSQL strings"])(
@@ -74,7 +75,7 @@ describe("ambient publication job lifecycle", () => {
           ];
         },
       } as unknown as postgres.Sql;
-      const app = Fastify();
+      const app = authenticateAs(Fastify());
       registerAmbientPlacesApi(app, sql);
       try {
         const response = await app.inject("/ambient-places/status");
@@ -107,7 +108,7 @@ describe("ambient publication job lifecycle", () => {
       },
     );
     const sql = { unsafe: async () => [{ exists: false }] } as unknown as postgres.Sql;
-    const app = Fastify();
+    const app = authenticateAs(Fastify());
     registerAmbientPlacesApi(app, sql);
     const response = await app.inject({
       method: "POST",
@@ -136,7 +137,7 @@ describe("ambient publication job lifecycle", () => {
       await gate;
     });
     const sql = { unsafe: async () => [{ exists: false }] } as unknown as postgres.Sql;
-    const app = Fastify();
+    const app = authenticateAs(Fastify());
     registerAmbientPlacesApi(app, sql);
     const payload = { generation: "11111111-1111-4111-8111-111111111111" };
     try {
@@ -177,7 +178,7 @@ describe("ambient publication job lifecycle", () => {
         return [{ exists: false }];
       },
     } as unknown as postgres.Sql;
-    const app = Fastify();
+    const app = authenticateAs(Fastify());
     registerAmbientPlacesApi(app, sql);
     const request = {
       method: "POST" as const,

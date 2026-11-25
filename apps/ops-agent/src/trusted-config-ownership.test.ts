@@ -486,6 +486,7 @@ describe("authenticated conditional configuration admission", () => {
         controlInstallation: installation,
         journal: {
           records: () => journalRecords,
+          foreignRecords: () => [],
           replace: async (records) => {
             journalRecords = structuredClone(records);
           },
@@ -504,7 +505,7 @@ describe("authenticated conditional configuration admission", () => {
           url: "/v1/operations",
           headers: { authorization: `Bearer ${token}`, "x-openmapx-parent-execution": assertion },
           payload: {
-            version: 2,
+            version: 1,
             execution: { requestedDeadlineAt },
             requestId: `ops1_conditional${String(++counter).padStart(12, "0")}`,
             operationKey: key,
@@ -540,7 +541,7 @@ describe("authenticated conditional configuration admission", () => {
           const cancelled = app.inject({
             method: "DELETE",
             url: `/v1/operations/${id}`,
-            headers: { authorization: `Bearer ${token}`, "x-ops-protocol-version": "2" },
+            headers: { authorization: `Bearer ${token}`, "x-ops-protocol-version": "1" },
           });
           const cancelDeadline = performance.now() + 3_000;
           while (
@@ -548,7 +549,7 @@ describe("authenticated conditional configuration admission", () => {
               await app.inject({
                 method: "GET",
                 url: `/v1/operations/${id}`,
-                headers: { authorization: `Bearer ${token}`, "x-ops-protocol-version": "2" },
+                headers: { authorization: `Bearer ${token}`, "x-ops-protocol-version": "1" },
               })
             ).json().result.state !== "termination_pending" &&
             performance.now() < cancelDeadline
@@ -562,7 +563,7 @@ describe("authenticated conditional configuration admission", () => {
             await app.inject({
               method: "GET",
               url: `/v1/operations/${id}`,
-              headers: { authorization: `Bearer ${token}`, "x-ops-protocol-version": "2" },
+              headers: { authorization: `Bearer ${token}`, "x-ops-protocol-version": "1" },
             })
           ).json().result;
         const deadline = performance.now() + 3_000;

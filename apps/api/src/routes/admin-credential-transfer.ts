@@ -1,3 +1,4 @@
+import { auditEntry } from "@openmapx/core/api-contracts";
 import type { FastifyInstance } from "fastify";
 import {
   CREDENTIAL_TRANSFER_PREVIEW_INTENT,
@@ -31,7 +32,7 @@ export async function adminCredentialTransferRoute(app: FastifyInstance) {
   app.addHook("onRequest", async (request, reply) => {
     request.adminSession = await requireAdmin(request);
     const actor = getAdminSession(request);
-    if (actor.user.id === "loopback" || actor.session.impersonatedBy)
+    if (actor.session.impersonatedBy)
       return reply.code(403).send({ error: "A real full administrator session is required" });
   });
   app.addHook("onRoute", (route) => {
@@ -57,7 +58,7 @@ export async function adminCredentialTransferRoute(app: FastifyInstance) {
           new AdminActionReauthentication(tx).consume(
             {
               challengeId,
-              purpose: "credentials.export",
+              purpose: "credential.export",
               targetId: "vault-transfer",
               sessionId: actor.session.id,
               nonce,
@@ -70,9 +71,8 @@ export async function adminCredentialTransferRoute(app: FastifyInstance) {
           actorId: actor.user.id,
         });
         await db.insert(adminAuditLog).values({
-          action: "credentials.export",
-          actorId: actor.user.id,
-          targetType: "credential-transfer",
+          ...auditEntry("credential.export"),
+          actorUserId: actor.user.id,
           targetId: "vault-transfer",
           details: { selection: request.body.selection },
         });
@@ -99,7 +99,7 @@ export async function adminCredentialTransferRoute(app: FastifyInstance) {
           new AdminActionReauthentication(tx).consume(
             {
               challengeId,
-              purpose: "credentials.import",
+              purpose: "credential.import",
               intentFingerprint: CREDENTIAL_TRANSFER_PREVIEW_INTENT,
               targetId: "vault-transfer",
               sessionId: actor.session.id,
@@ -113,9 +113,8 @@ export async function adminCredentialTransferRoute(app: FastifyInstance) {
           actorId: actor.user.id,
         });
         await db.insert(adminAuditLog).values({
-          action: "credentials.import.preview",
-          actorId: actor.user.id,
-          targetType: "credential-transfer",
+          ...auditEntry("credential.import.preview"),
+          actorUserId: actor.user.id,
           targetId: preview.previewId,
           details: {
             entries: preview.entries.map(({ scope, id, key, status }) => ({

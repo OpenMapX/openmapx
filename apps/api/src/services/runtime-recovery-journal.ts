@@ -2,10 +2,11 @@ import { randomBytes } from "node:crypto";
 import { constants } from "node:fs";
 import { mkdir, open, opendir, rename, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { COMPONENT_ID_PATTERN } from "@openmapx/core/component-id";
 
 const MAX_BYTES = 64 * 1024;
 const MAX_SERVICES = 64;
-const SERVICE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const SERVICE_ID = COMPONENT_ID_PATTERN;
 const INCIDENT_ID = /^recovery_[a-f0-9]{64}$/;
 const TEMPORARY = /^\.runtime-recovery-v1\.json\.[a-f0-9]{24}\.tmp$/;
 const MAX_TEMPORARIES = 16;

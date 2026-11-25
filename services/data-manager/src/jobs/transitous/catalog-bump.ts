@@ -58,7 +58,7 @@ export async function resolveCatalogBumpCandidate(
 
   if (!existsSync(join(catalogDir, ".git"))) {
     throw new CatalogBumpError(
-      "catalog-not-cloned",
+      "CATALOG_NOT_CLONED",
       `Transitous catalog not found at ${catalogDir}; run a sync first to clone it.`,
     );
   }
@@ -66,7 +66,7 @@ export async function resolveCatalogBumpCandidate(
   try {
     await runner("git", ["-C", catalogDir, "fetch", "origin", branch]);
   } catch (err) {
-    throw new CatalogBumpError("git-fetch-failed", (err as Error).message);
+    throw new CatalogBumpError("GIT_FETCH_FAILED", (err as Error).message);
   }
 
   const transitousSha = (
@@ -81,7 +81,7 @@ export async function resolveCatalogBumpCandidate(
   const [, transitlandAtlasSha] = submoduleEntry.match(/^\d+\s+commit\s+([0-9a-f]{40})\s/i) ?? [];
   if (!transitlandAtlasSha) {
     throw new CatalogBumpError(
-      "submodule-resolution-failed",
+      "SUBMODULE_RESOLUTION_FAILED",
       "Could not resolve transitland-atlas submodule SHA",
     );
   }

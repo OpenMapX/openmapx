@@ -34,7 +34,7 @@
       "apiKey": {
         "type": "string",
         "title": "Stadia Maps API key",
-        "description": "Used only to validate the Valhalla/Stadia street-mode backend in the health check. A registered self-hosted Valhalla service is preferred; Stadia is the final fallback and needs a key. Transit reachability never uses this backend. The isochrone requests themselves use the apps/api VALHALLA_API_KEY env. Also settable via INTEGRATION_OVERLAY_TOOL_TRAVEL_TIME_APIKEY.",
+        "description": "Used only to validate the Valhalla/Stadia street-mode backend in the health check. A registered self-hosted Valhalla service is preferred; Stadia is the final fallback and needs a key. Transit reachability never uses this backend. The isochrone requests themselves use the apps/api VALHALLA_API_KEY env. Also settable via INTEGRATION_OVERLAY_TOOL_TRAVEL_TIME_API_KEY.",
         "format": "password",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
@@ -66,7 +66,6 @@
     }
   ],
   "quality": "built-in",
-  "category": "Map Tools",
   "dataSources": [
     {
       "sourceId": "valhalla",

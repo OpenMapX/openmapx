@@ -350,7 +350,7 @@ describe("backup administration", () => {
         {
           backupId: "nightly",
           createdAt: "2026-08-25T00:00:00.000Z",
-          platformVersion: "1.2.3",
+          release: "1.2.3",
           serviceCount: 2,
           volumeCount: 3,
           totalBytes: 42,
@@ -367,7 +367,7 @@ describe("backup administration", () => {
         {
           name: "nightly",
           createdAt: "2026-08-25T00:00:00.000Z",
-          openmapxVersion: "1.2.3",
+          release: "1.2.3",
           serviceCount: 2,
           volumeCount: 3,
           totalBytes: 42,
@@ -406,7 +406,7 @@ describe("backup administration", () => {
     });
     expect(response.statusCode).toBe(200);
     expect(mockJobRunnerEnqueue).toHaveBeenCalledWith(
-      "backup.operation",
+      "backup.operation.run",
       {
         operation: "restore",
         name: "nightly",
@@ -564,7 +564,7 @@ describe("POST /admin/services/:id/action", () => {
       });
       expect(response.statusCode).toBe(200);
       expect(mockJobRunnerEnqueue).toHaveBeenCalledWith(
-        "service.core-restart",
+        "service.core.restart",
         { service: id },
         fakeSession.user.id,
         expect.any(String),
@@ -690,7 +690,7 @@ describe("POST /admin/services/check", () => {
     expect(body.statuses).toEqual([{ service: "motis", state: "running" }]);
     expect(body.checkedAt).toBeTruthy();
     expect(mockWriteAuditLog).toHaveBeenCalledWith(
-      expect.objectContaining({ action: "service.health_check" }),
+      expect.objectContaining({ action: "service.health.check" }),
     );
   });
 });
@@ -701,7 +701,7 @@ describe("service credentials", () => {
       id: "openconditions-ingest",
       name: "OpenConditions Ingest",
       version: "0.1.0",
-      quality: "community-verified",
+      quality: "community",
       configSchema: {
         properties: {
           NY_511_API_KEY: {
@@ -1236,7 +1236,7 @@ describe("service presets and option boundaries", () => {
     });
     expect(result.statusCode).toBe(200);
     expect(mockJobRunnerEnqueue).toHaveBeenCalledWith(
-      "service.bulk",
+      "service.batch.run",
       expect.objectContaining({ action: "update", serviceIds: ["osrm", "valhalla"], noDeps: true }),
       expect.any(String),
       expect.any(String),

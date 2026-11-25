@@ -14,7 +14,6 @@
     "routes": true
   },
   "quality": "community",
-  "category": "Knowledge",
   "healthCheck": {
     "type": "http",
     "url": "https://example.com/health"

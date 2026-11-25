@@ -5,7 +5,6 @@ import {
   buildFixedConfigurationMaintenancePlan,
   type ControlInstallation,
   type FixedConfigurationMaintenancePlan,
-  verifyConfigurationReleaseSourceWitness,
   verifyConfigurationSourceWitness,
   verifyMaintenanceCoordinatorPrerequisite,
 } from "@openmapx/core/build-artifacts";
@@ -244,7 +243,7 @@ export async function planConfigurationMaintenance(
   // Another change committed since the candidate's sources were read (or they
   // expired): the candidate is stale, which the API reports as a conflict.
   try {
-    (coordinator ? verifyConfigurationReleaseSourceWitness : verifyConfigurationSourceWitness)({
+    verifyConfigurationSourceWitness({
       installation: input.installation,
       infraDir: source.infraDir,
       sourceRevision: input.operation.expectedSourceRevision,
@@ -347,7 +346,7 @@ export async function planConfigurationMaintenance(
     }
   }
   if (!coordinator && recreateServiceIds.includes("data-manager")) {
-    verifyConfigurationReleaseSourceWitness({
+    verifyConfigurationSourceWitness({
       installation: input.installation,
       infraDir: source.infraDir,
       sourceRevision: input.operation.expectedSourceRevision,

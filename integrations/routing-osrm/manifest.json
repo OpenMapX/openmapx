@@ -35,7 +35,6 @@
     "urlTemplate": "${endpoint:osrm}/nearest/v1/driving/13.388860,52.517037?number=1"
   },
   "quality": "built-in",
-  "category": "Routing",
   "dataSources": [
     {
       "sourceId": "osrm",

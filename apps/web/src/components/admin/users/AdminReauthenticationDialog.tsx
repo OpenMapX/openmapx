@@ -31,8 +31,8 @@ type Props = (
     }
   | {
       purposes: readonly [
-        AdminReauthIntent & { purpose: "credentials.import" },
-        AdminReauthIntent & { purpose: "transit.credentials" },
+        AdminReauthIntent & { purpose: "credential.import" },
+        AdminReauthIntent & { purpose: "transit.credential.update" },
       ];
       purpose?: never;
       targetId?: never;

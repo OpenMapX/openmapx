@@ -24,8 +24,8 @@ import type { CategoryPlace } from "./types/category";
 import type { Place } from "./types/place";
 import { haversineDistance } from "./utils/coordinates";
 
-export const AMBIENT_POLICY_VERSION = 3;
-export const AMBIENT_FORMAT_VERSION = 2;
+export const AMBIENT_POLICY_VERSION = 1;
+export const AMBIENT_FORMAT_VERSION = 1;
 /** Generic Overture receipt for an ambient record that carries no captured contributors. */
 const AMBIENT_OVERTURE_ATTRIBUTION: Readonly<Attribution> = Object.freeze({
   sourceId: "overture",

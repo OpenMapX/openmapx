@@ -97,7 +97,7 @@ beforeEach(() => {
   credentials.requestEmail.mockResolvedValue(emailOk);
   credentials.changeEmail.mockResolvedValue(emailOk);
   credentials.deleteUser.mockResolvedValue({ data: { success: true }, error: null });
-  credentials.clearDeviceData.mockResolvedValue(undefined);
+  credentials.clearDeviceData.mockResolvedValue({ failures: 0 });
 });
 
 import { AccountSettingsDialog } from "./AccountSettingsDialog";
@@ -131,6 +131,7 @@ describe("AccountSettingsDialog backup codes and reopening", () => {
       <AccountSettingsDialog
         open
         onClose={vi.fn()}
+        onAccountDeleted={vi.fn()}
         user={{ ...user, twoFactorEnabled: true }}
         initialSection={null}
       />,
@@ -164,17 +165,35 @@ describe("AccountSettingsDialog backup codes and reopening", () => {
 
   it("starts each opening afresh", async () => {
     const view = render(
-      <AccountSettingsDialog open onClose={vi.fn()} user={user} initialSection={null} />,
+      <AccountSettingsDialog
+        open
+        onClose={vi.fn()}
+        onAccountDeleted={vi.fn()}
+        user={user}
+        initialSection={null}
+      />,
       { wrapper: createQueryWrapper() },
     );
     const name = screen.getByDisplayValue("Alice Timeline");
     await userEvent.clear(name);
     await userEvent.type(name, "Draft name");
     view.rerender(
-      <AccountSettingsDialog open={false} onClose={vi.fn()} user={user} initialSection={null} />,
+      <AccountSettingsDialog
+        open={false}
+        onClose={vi.fn()}
+        onAccountDeleted={vi.fn()}
+        user={user}
+        initialSection={null}
+      />,
     );
     view.rerender(
-      <AccountSettingsDialog open onClose={vi.fn()} user={user} initialSection={null} />,
+      <AccountSettingsDialog
+        open
+        onClose={vi.fn()}
+        onAccountDeleted={vi.fn()}
+        user={user}
+        initialSection={null}
+      />,
     );
     expect(await screen.findByDisplayValue("Alice Timeline")).toBeInTheDocument();
     expect(screen.queryByDisplayValue("Draft name")).not.toBeInTheDocument();
@@ -185,9 +204,18 @@ describe("AccountSettingsDialog timeline targeting", () => {
   it("focuses and scrolls the stable Timeline heading after opening", async () => {
     const scrollIntoView = vi.spyOn(Element.prototype, "scrollIntoView");
 
-    render(<AccountSettingsDialog open onClose={vi.fn()} user={user} initialSection="timeline" />, {
-      wrapper: createQueryWrapper(),
-    });
+    render(
+      <AccountSettingsDialog
+        open
+        onClose={vi.fn()}
+        onAccountDeleted={vi.fn()}
+        user={user}
+        initialSection="timeline"
+      />,
+      {
+        wrapper: createQueryWrapper(),
+      },
+    );
 
     const heading = await screen.findByRole("heading", {
       name: "account.timeline.heading",
@@ -204,9 +232,18 @@ describe("AccountSettingsDialog timeline targeting", () => {
     );
     const scrollIntoView = vi.spyOn(Element.prototype, "scrollIntoView");
 
-    render(<AccountSettingsDialog open onClose={vi.fn()} user={user} initialSection="timeline" />, {
-      wrapper: createQueryWrapper(),
-    });
+    render(
+      <AccountSettingsDialog
+        open
+        onClose={vi.fn()}
+        onAccountDeleted={vi.fn()}
+        user={user}
+        initialSection="timeline"
+      />,
+      {
+        wrapper: createQueryWrapper(),
+      },
+    );
 
     const heading = await screen.findByRole("heading", { name: "account.timeline.heading" });
     await waitFor(() => expect(heading).toHaveFocus());
@@ -216,7 +253,13 @@ describe("AccountSettingsDialog timeline targeting", () => {
   it("remounts Timeline settings so an A-to-B identity replacement cannot retain form secrets", async () => {
     const interaction = userEvent.setup();
     const view = render(
-      <AccountSettingsDialog open onClose={vi.fn()} user={user} initialSection="timeline" />,
+      <AccountSettingsDialog
+        open
+        onClose={vi.fn()}
+        onAccountDeleted={vi.fn()}
+        user={user}
+        initialSection="timeline"
+      />,
       { wrapper: createQueryWrapper() },
     );
     const profileName = screen.getByLabelText("account.name");
@@ -232,6 +275,7 @@ describe("AccountSettingsDialog timeline targeting", () => {
       <AccountSettingsDialog
         open
         onClose={vi.fn()}
+        onAccountDeleted={vi.fn()}
         user={{ ...user, id: "user-b", name: "Bob Timeline" }}
         initialSection="timeline"
       />,
@@ -256,7 +300,13 @@ function deferred<T>() {
 
 function renderAccount() {
   return render(
-    <AccountSettingsDialog open onClose={vi.fn()} user={user} initialSection={null} />,
+    <AccountSettingsDialog
+      open
+      onClose={vi.fn()}
+      onAccountDeleted={vi.fn()}
+      user={user}
+      initialSection={null}
+    />,
     {
       wrapper: createQueryWrapper(),
     },
@@ -373,7 +423,7 @@ describe("AccountSettingsDialog credential actions", () => {
       credentials.remove.mockReturnValue(pending.promise);
       const view = await seedCredentials();
       await userEvent.click(screen.getByRole("button", { name: "account.removePasskey" }));
-      const props = { onClose: vi.fn(), initialSection: null };
+      const props = { onClose: vi.fn(), onAccountDeleted: vi.fn(), initialSection: null };
       view.rerender(
         <AccountSettingsDialog
           {...props}
@@ -428,6 +478,7 @@ describe("AccountSettingsDialog credential actions", () => {
       <AccountSettingsDialog
         open
         onClose={vi.fn()}
+        onAccountDeleted={vi.fn()}
         user={{ ...user, id: "user-b" }}
         initialSection={null}
       />,
@@ -449,6 +500,7 @@ describe("AccountSettingsDialog credential actions", () => {
       <AccountSettingsDialog
         open
         onClose={vi.fn()}
+        onAccountDeleted={vi.fn()}
         user={{ ...user, id: "user-b" }}
         initialSection={null}
       />,
@@ -485,6 +537,7 @@ describe("AccountSettingsDialog credential actions", () => {
       <AccountSettingsDialog
         open
         onClose={vi.fn()}
+        onAccountDeleted={vi.fn()}
         user={{ ...user, id: "user-b" }}
         initialSection={null}
       />,
@@ -565,7 +618,13 @@ describe("AccountSettingsDialog credential actions", () => {
     render(
       <StrictMode>
         <QueryWrapper>
-          <AccountSettingsDialog open onClose={vi.fn()} user={user} initialSection={null} />
+          <AccountSettingsDialog
+            open
+            onClose={vi.fn()}
+            onAccountDeleted={vi.fn()}
+            user={user}
+            initialSection={null}
+          />
         </QueryWrapper>
       </StrictMode>,
     );
@@ -586,6 +645,7 @@ describe("AccountSettingsDialog credential actions", () => {
       <AccountSettingsDialog
         open
         onClose={vi.fn()}
+        onAccountDeleted={vi.fn()}
         user={{ ...user, id: "user-b" }}
         initialSection={null}
       />,
@@ -662,6 +722,7 @@ function replaceUser(view: ReturnType<typeof renderAccount>, props: { open: bool
     <AccountSettingsDialog
       open={props.open}
       onClose={vi.fn()}
+      onAccountDeleted={vi.fn()}
       user={{ ...user, id: props.id }}
       initialSection={null}
     />,
@@ -808,7 +869,13 @@ describe("AccountSettingsDialog email change", () => {
     render(
       <StrictMode>
         <QueryWrapper>
-          <AccountSettingsDialog open onClose={vi.fn()} user={user} initialSection={null} />
+          <AccountSettingsDialog
+            open
+            onClose={vi.fn()}
+            onAccountDeleted={vi.fn()}
+            user={user}
+            initialSection={null}
+          />
         </QueryWrapper>
       </StrictMode>,
     );
@@ -1016,7 +1083,13 @@ describe("AccountSettingsDialog email change", () => {
         serve(credentials.requestEmail, stale.promise);
         const onClose = vi.fn();
         const view = render(
-          <AccountSettingsDialog open onClose={onClose} user={user} initialSection={null} />,
+          <AccountSettingsDialog
+            open
+            onClose={onClose}
+            onAccountDeleted={vi.fn()}
+            user={user}
+            initialSection={null}
+          />,
           { wrapper: createQueryWrapper() },
         );
         await openEmailForm();
@@ -1036,7 +1109,13 @@ describe("AccountSettingsDialog email change", () => {
       serve(credentials.requestEmail, stale.promise, current.promise);
       const onClose = vi.fn();
       const view = render(
-        <AccountSettingsDialog open onClose={onClose} user={user} initialSection={null} />,
+        <AccountSettingsDialog
+          open
+          onClose={onClose}
+          onAccountDeleted={vi.fn()}
+          user={user}
+          initialSection={null}
+        />,
         { wrapper: createQueryWrapper() },
       );
       await openEmailForm();
@@ -1064,7 +1143,13 @@ describe("AccountSettingsDialog email change", () => {
       serve(credentials.changeEmail, stale.promise, current.promise);
       const onClose = vi.fn();
       const view = render(
-        <AccountSettingsDialog open onClose={onClose} user={user} initialSection={null} />,
+        <AccountSettingsDialog
+          open
+          onClose={onClose}
+          onAccountDeleted={vi.fn()}
+          user={user}
+          initialSection={null}
+        />,
         { wrapper: createQueryWrapper() },
       );
       await openEmailForm();
@@ -1107,17 +1192,43 @@ describe("AccountSettingsDialog recent sign-in refusals", () => {
     credentials.listAccounts.mockResolvedValue({
       data: [{ id: "account-c", providerId: "credential" }],
     });
-    const onClose = vi.fn();
-    render(<AccountSettingsDialog open onClose={onClose} user={user} initialSection={null} />, {
-      wrapper: createQueryWrapper(),
-    });
+    const onAccountDeleted = vi.fn();
+    render(
+      <AccountSettingsDialog
+        open
+        onClose={vi.fn()}
+        onAccountDeleted={onAccountDeleted}
+        user={user}
+        initialSection={null}
+      />,
+      { wrapper: createQueryWrapper() },
+    );
     await waitFor(() => expect(credentials.listAccounts).toHaveBeenCalled());
     await userEvent.click(screen.getByRole("button", { name: "account.deleteAccount" }));
     expect(document.querySelector('input[type="password"]')).toBeNull();
     expect(screen.getByRole("button", { name: "account.confirmDeletion" })).not.toBeDisabled();
     await userEvent.click(screen.getByRole("button", { name: "account.confirmDeletion" }));
-    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onAccountDeleted).toHaveBeenCalledExactlyOnceWith(false));
     expect(credentials.deleteUser).toHaveBeenCalledWith({});
+  });
+
+  it("hands an incomplete device cleanup to the caller once the account is gone", async () => {
+    credentials.clearDeviceData.mockResolvedValue({ failures: 1 });
+    const onAccountDeleted = vi.fn();
+    render(
+      <AccountSettingsDialog
+        open
+        onClose={vi.fn()}
+        onAccountDeleted={onAccountDeleted}
+        user={user}
+        initialSection={null}
+      />,
+      { wrapper: createQueryWrapper() },
+    );
+    await waitFor(() => expect(credentials.listAccounts).toHaveBeenCalled());
+    await confirmDeletion();
+    await waitFor(() => expect(onAccountDeleted).toHaveBeenCalledExactlyOnceWith(true));
+    expect(screen.queryByText("account.failedDeleteAccount")).toBeNull();
   });
 
   it("asks for a new sign-in instead of deleting with an old one", async () => {

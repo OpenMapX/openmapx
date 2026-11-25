@@ -1,5 +1,4 @@
 "use client";
-import Alert from "@mui/material/Alert";
 import Button from "@mui/material/Button";
 import Stack from "@mui/material/Stack";
 import Link from "next/link";
@@ -7,12 +6,10 @@ import { useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import type { SETTINGS_TOPICS } from "@/lib/admin/adminNavigation";
 import { useSettingText } from "@/lib/admin/useSettingText";
-import { useAdminNavigationAccess } from "../shared/AdminNavigationContext";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { SystemSettings } from "./SystemSettings";
 
 const GROUPS = {
-  general: "general",
   authentication: "auth",
   email: "email",
   map: "map",
@@ -20,7 +17,6 @@ const GROUPS = {
 };
 export function SettingsWorkspace({ topic }: { topic: (typeof SETTINGS_TOPICS)[number] }) {
   const t = useTranslations("adminNavigation");
-  const { selfHosted } = useAdminNavigationAccess();
   const params = useSearchParams();
   const field = params.get("field");
   const settingText = useSettingText();
@@ -30,27 +26,13 @@ export function SettingsWorkspace({ topic }: { topic: (typeof SETTINGS_TOPICS)[n
         title={t(`destinations.${topic}.label`)}
         subtitle={t(`destinations.${topic}.description`)}
       />
-      {topic === "general" && (
-        <Alert
-          severity="info"
-          action={
-            selfHosted !== false ? (
-              <Button component={Link} href="/admin/system/deployment">
-                {t("destinations.deployment.label")}
-              </Button>
-            ) : undefined
-          }
-        >
-          {t("applicationUrlHelp")}
-        </Alert>
-      )}
       <SystemSettings
         flatSections
         key={topic}
         showHeader={false}
         showTransfer={false}
         settingText={settingText}
-        focusKey={field && /^[a-zA-Z0-9_-]{1,128}$/.test(field) ? field : undefined}
+        focusKey={field && /^[a-zA-Z0-9_.-]{1,128}$/.test(field) ? field : undefined}
         sections={[
           {
             id: topic,

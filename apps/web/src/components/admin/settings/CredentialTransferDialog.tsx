@@ -474,12 +474,12 @@ export function CredentialTransferDialog({
           <AdminReauthenticationDialog
             purposes={[
               {
-                purpose: "credentials.import",
+                purpose: "credential.import",
                 targetId: applying.previewId,
                 intentFingerprint: applying.intentFingerprint,
               },
               {
-                purpose: "transit.credentials",
+                purpose: "transit.credential.update",
                 targetId: applying.feedMap.catalogRevisionId,
                 intentFingerprint: applying.intentFingerprint,
               },
@@ -489,7 +489,7 @@ export function CredentialTransferDialog({
           />
         ) : (
           <AdminReauthenticationDialog
-            purpose={ceremony === "export" ? "credentials.export" : "credentials.import"}
+            purpose={ceremony === "export" ? "credential.export" : "credential.import"}
             targetId={applying ? applying.previewId : "vault-transfer"}
             {...(applying
               ? { intentFingerprint: applying.intentFingerprint }

@@ -9,7 +9,7 @@ import {
   authPolicyApplication,
   authPolicyState,
   session,
-  systemSettings,
+  systemSetting,
   user,
 } from "../db/schema";
 import { createMigratedPostgresFixture } from "../test/postgres-fixture";
@@ -30,10 +30,10 @@ dbDescribe("account policy through installed Better Auth", () => {
       };
       return { sendMail: capture, sendAuthMail: capture };
     });
-    await fixture.db.insert(systemSettings).values([
-      { key: "emailVerificationRequired", value: false },
-      { key: "twoFaEnabled", value: false },
-      { key: "passwordMinLength", value: 40 },
+    await fixture.db.insert(systemSetting).values([
+      { key: "auth.emailVerificationRequired", value: false },
+      { key: "auth.twoFaEnabled", value: false },
+      { key: "auth.passwordMinLength", value: 40 },
     ]);
     ({ auth } = await import("../auth"));
   }, 90000);
@@ -76,15 +76,6 @@ dbDescribe("account policy through installed Better Auth", () => {
       expect(
         (await app.inject({ method: "GET", url: "/api/admin/accounts/policy" })).statusCode,
       ).toBe(401);
-      expect(
-        (
-          await app.inject({
-            method: "GET",
-            url: "/api/admin/accounts/policy",
-            headers: { "x-openmapx-local-admin": "" },
-          })
-        ).statusCode,
-      ).toBe(403);
       const actor = await auth.api.createUser({
         body: {
           name: "Policy reader",
@@ -385,7 +376,7 @@ dbDescribe("account policy through installed Better Auth", () => {
     const applications = await fixture.db.select().from(authPolicyApplication);
     const before = await loadAuthPolicy(),
       rows = await fixture.db.select().from(authPolicyState),
-      drafts = await fixture.db.select().from(systemSettings);
+      drafts = await fixture.db.select().from(systemSetting);
     await fixture.db.execute(
       sql`ALTER TABLE admin_audit_log ADD CONSTRAINT synthetic_policy_audit_failure CHECK (action <> 'auth.policy.apply') NOT VALID`,
     );
@@ -408,7 +399,7 @@ dbDescribe("account policy through installed Better Auth", () => {
       ).rejects.toThrow();
       expect(await loadAuthPolicy()).toEqual(before);
       expect(await fixture.db.select().from(authPolicyState)).toEqual(rows);
-      expect(await fixture.db.select().from(systemSettings)).toEqual(drafts);
+      expect(await fixture.db.select().from(systemSetting)).toEqual(drafts);
       expect(await fixture.db.select().from(authPolicyApplication)).toEqual(applications);
     } finally {
       await fixture.db.execute(
@@ -602,12 +593,12 @@ dbDescribe("account policy through installed Better Auth", () => {
 
   it("discloses active host ownership and fails closed on malformed active environment policy", async () => {
     const { loadAuthPolicy, authPolicyView } = await import("./auth-policy"),
-      original = process.env.AUTH_EMAIL_VERIFICATION;
+      original = process.env.AUTH_EMAIL_VERIFICATION_REQUIRED;
     try {
-      vi.stubEnv("AUTH_EMAIL_VERIFICATION", "true");
+      vi.stubEnv("AUTH_EMAIL_VERIFICATION_REQUIRED", "true");
       expect((await authPolicyView()).ownership.emailVerificationRequired).toBe("env");
       expect((await loadAuthPolicy()).emailVerificationRequired).toBe(true);
-      vi.stubEnv("AUTH_EMAIL_VERIFICATION", "not-a-boolean");
+      vi.stubEnv("AUTH_EMAIL_VERIFICATION_REQUIRED", "not-a-boolean");
       await expect(loadAuthPolicy()).rejects.toMatchObject({ code: "AUTH_POLICY_INVALID" });
       const response = await auth.handler(
         new Request("http://localhost:3001/api/auth/get-session"),
@@ -615,7 +606,7 @@ dbDescribe("account policy through installed Better Auth", () => {
       expect(response.status).toBe(503);
       expect(await response.json()).toMatchObject({ code: "AUTH_POLICY_INVALID" });
     } finally {
-      vi.stubEnv("AUTH_EMAIL_VERIFICATION", original);
+      vi.stubEnv("AUTH_EMAIL_VERIFICATION_REQUIRED", original);
     }
   });
   it("activates and replays the exact policy through the generated SDK and real admin HTTP guard", async () => {

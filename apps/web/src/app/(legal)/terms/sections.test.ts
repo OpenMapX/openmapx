@@ -1,3 +1,4 @@
+import type { PublicLegalConfig } from "@openmapx/core/server-api";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import TermsContentDe from "./content.de";
@@ -8,6 +9,26 @@ import { describe, expect, it } from "vitest";
 import { TERMS_SECTION_KEYS, termsIds, termsNav, termsSectionId, termsTitles } from "./sections";
 
 const LOCALES = ["en", "de"] as const;
+const LEGAL: PublicLegalConfig = {
+  name: "Example Maps GmbH",
+  street: "Map Street 1",
+  postalCode: "10115",
+  city: "Berlin",
+  country: "Germany",
+  email: "legal@example.test",
+  phone: "",
+  hostingProvider: "",
+  hostingLocations: "",
+  supervisoryAuthority: "",
+  supervisoryAuthorityUrl: "",
+  serverLogRetentionDays: 30,
+  dataRequestEmail: "requests@example.test",
+  dsarCaseRetentionDays: 1095,
+  deploymentJurisdiction: "DE-BE",
+  privacySources: [],
+  backupRetentionDays: 30,
+  auditLogRetentionDays: 365,
+};
 const contentByLocale = new Map<string, string>();
 function content(locale: (typeof LOCALES)[number]): string {
   let markup = contentByLocale.get(locale);
@@ -28,6 +49,7 @@ function content(locale: (typeof LOCALES)[number]): string {
             cloudProviderLabels: [],
           },
         ],
+        legal: LEGAL,
       }),
     );
     contentByLocale.set(locale, markup);

@@ -124,6 +124,9 @@ export {
   createPlace,
   idsFromPrimary,
   idsFromPrimaryOrCoords,
+  isPersistablePlaceId,
+  persistablePlaceId,
+  SESSION_LOCAL_PLACE_ID_SCHEMES,
 } from "./types/placeIds";
 export {
   createFatalProcessHandler,
@@ -131,5 +134,4 @@ export {
 } from "./utils/fatalProcessPolicy";
 // Server-side geo helpers (great-circle distance, etc.).
 export { haversineKm } from "./utils/geo-server";
-export { formatAddress, legalConfig } from "./utils/legalConfig";
 export { sectionSlug } from "./utils/sectionSlug";

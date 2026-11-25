@@ -100,6 +100,14 @@ export function requestNetworkKey(req: FastifyRequest): string {
   return `${clientAddressKey(req.ip)}|${clientAddressKey(req.socket?.remoteAddress)}`;
 }
 
+// Limiters with a pending sweep, so a stopping server can cancel them all.
+const sweepingLimiters = new Set<RateLimiter>();
+
+/** Cancel every limiter's pending sweep; called when the server closes. */
+export function stopRateLimiterSweeps(): void {
+  for (const limiter of [...sweepingLimiters]) limiter.stopSweep();
+}
+
 export class RateLimiter {
   private readonly buckets = new Map<string, Bucket>();
   private readonly max: number;
@@ -108,6 +116,7 @@ export class RateLimiter {
   private readonly errorBody: (retryAfterSeconds: number) => unknown;
   private readonly maxBuckets: number;
   private lastCleanup = Date.now();
+  private sweepTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(options: RateLimiterOptions) {
     this.max = options.max;
@@ -116,6 +125,32 @@ export class RateLimiter {
     this.keyFn = options.keyFn ?? requestNetworkKey;
     this.errorBody =
       options.errorBody ?? ((retryAfter: number) => ({ error: "Too many requests", retryAfter }));
+  }
+
+  // A client address is kept only while it can still be limited: idle buckets
+  // go within one more window even when no other client arrives. The timer
+  // runs only while buckets exist and is unreferenced, so an idle limiter holds
+  // no timer and a limiter never keeps a process alive.
+  private scheduleSweep(): void {
+    if (this.sweepTimer || this.buckets.size === 0) return;
+    this.sweepTimer = setTimeout(
+      () => {
+        this.sweepTimer = null;
+        sweepingLimiters.delete(this);
+        this.sweep(Date.now());
+        this.scheduleSweep();
+      },
+      Math.max(this.windowMs, 60_000),
+    );
+    this.sweepTimer.unref?.();
+    sweepingLimiters.add(this);
+  }
+
+  /** Cancel the pending sweep; the next request schedules one again. */
+  stopSweep(): void {
+    if (this.sweepTimer) clearTimeout(this.sweepTimer);
+    this.sweepTimer = null;
+    sweepingLimiters.delete(this);
   }
 
   /**
@@ -137,6 +172,7 @@ export class RateLimiter {
         this.evictOverflow();
       }
       this.buckets.set(key, bucket);
+      this.scheduleSweep();
 
       // Refill tokens based on elapsed time
       const elapsed = now - bucket.lastRefill;
@@ -158,12 +194,15 @@ export class RateLimiter {
     };
   }
 
-  // Limiters are module singletons that outlive any one application, so stale
-  // buckets are swept when a new one is added instead of on a timer. The map
-  // is in least-recently-used order, so the sweep stops at the first bucket
-  // that is still live.
+  // Stale buckets are also swept when a new one is added, between timer runs.
   private cleanupIfDue(now: number): void {
     if (now - this.lastCleanup < 5 * 60_000) return;
+    this.sweep(now);
+  }
+
+  // Drops buckets idle for two windows. The map is in least-recently-used
+  // order, so the sweep stops at the first bucket that is still live.
+  private sweep(now: number): void {
     this.lastCleanup = now;
     for (const [key, bucket] of this.buckets) {
       if (now - bucket.lastRefill <= this.windowMs * 2) break;
@@ -189,6 +228,7 @@ export class RateLimiter {
   /** Drop every bucket. Used by tests. */
   reset(): void {
     this.buckets.clear();
+    this.stopSweep();
   }
 
   destroy(): void {
@@ -313,6 +353,24 @@ export const typeaheadApiLimit = new RateLimiter({
   max: envInt("RATE_LIMIT_TYPEAHEAD_MAX", 240),
   windowMs: envInt("RATE_LIMIT_TYPEAHEAD_WINDOW_MS", 60_000),
 });
+
+/**
+ * Crowd contributions (reports, votes and token exchanges) that the API relays
+ * to a contributions service under its own relay credential. The upstream then
+ * no longer limits each reporter's address, so this bucket does. It is separate
+ * from `expensive`, so browsing place details never refuses a report. Fixed at
+ * 30 a minute: a person reports and votes far less often than that.
+ */
+export const contributionApiLimit = new RateLimiter({ max: 30, windowMs: 60_000 });
+
+/**
+ * Enrollment of a new reporter key, relayed like a contribution. Vote limits
+ * upstream count per key, so minting keys must stay as scarce through the relay
+ * as it is for a direct caller. Like the contributions service's own limit for
+ * one address, this is a token bucket of ten that refills at ten a minute: a
+ * burst of ten, then one every six seconds. A device enrolls about once a day.
+ */
+export const enrollmentApiLimit = new RateLimiter({ max: 10, windowMs: 60_000 });
 
 /**
  * Separate expensive bucket for personal-timeline day reads. The route runs

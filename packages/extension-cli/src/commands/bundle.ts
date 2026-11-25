@@ -3,6 +3,8 @@ import {
   type ExtensionManifest,
   extensionManifestSchema,
 } from "@openmapx/extension-contracts/extension";
+import { isComponentId } from "@openmapx/extension-contracts/identifiers";
+import { PLATFORM_VERSION } from "@openmapx/extension-contracts/platform";
 
 import { validateExtensionAuthoringInput } from "../extension-validation.js";
 
@@ -22,11 +24,13 @@ export interface BundleOptions {
 
 export type ExtensionManifestDoc = ExtensionManifest;
 
-const ID_RE = /^[a-z0-9][a-z0-9-]*$/;
-
-/** Pure assembler — turns CLI flags into a validated extension.json document. */
+/**
+ * Pure assembler — turns CLI flags into a validated extension.json document.
+ * Without `platform`, the document targets the protocol this tool supports.
+ */
 export function buildExtensionManifest(opts: BundleOptions): ExtensionManifestDoc {
-  if (!ID_RE.test(opts.id)) throw new Error(`Invalid id "${opts.id}" (use lowercase, hyphenated)`);
+  if (!isComponentId(opts.id))
+    throw new Error(`Invalid id "${opts.id}" (use at most 48 lowercase, hyphenated characters)`);
   if (!opts.name) throw new Error("name is required");
   if (!opts.version) throw new Error("version is required");
 
@@ -50,8 +54,12 @@ export function buildExtensionManifest(opts: BundleOptions): ExtensionManifestDo
     throw new Error("an extension must declare at least one --service or --integration");
   }
 
-  const doc: ExtensionManifestDoc = { id: opts.id, name: opts.name, version: opts.version };
-  if (opts.platform !== undefined) doc.platform = opts.platform;
+  const doc: ExtensionManifestDoc = {
+    id: opts.id,
+    name: opts.name,
+    version: opts.version,
+    platform: opts.platform ?? PLATFORM_VERSION,
+  };
   if (opts.description) doc.description = opts.description;
   if (opts.license) doc.license = opts.license;
   if (opts.homepage) doc.homepage = opts.homepage;

@@ -37,16 +37,15 @@ chmod 600 infra/docker/.env
 
 Edit the file before rendering. Supply these values:
 
-| Setting                      | Value to provide                                       |
-| ---------------------------- | ------------------------------------------------------ |
-| `DOMAIN`                     | Public hostname pointing to this host                  |
-| `ACME_EMAIL`                 | Certificate contact email                              |
-| `POSTGRES_PASSWORD`          | Unique database superuser password, 24+ characters     |
-| `BETTER_AUTH_SECRET`         | Unique signing secret, at least 32 characters          |
-| `OPENMAPX_LOCAL_ADMIN_TOKEN` | Unique token for CLI loopback admin requests           |
-| `OPENMAPX_HOST_DIR`          | Absolute checkout path, as printed by `pwd`            |
-| `DOCKER_GID`                 | Socket group ID from `stat -c %g /var/run/docker.sock` |
-| `TRANSITOUS_COUNTRIES`       | Explicit country codes, for example `de`               |
+| Setting                | Value to provide                                       |
+| ---------------------- | ------------------------------------------------------ |
+| `DOMAIN`               | Public hostname pointing to this host                  |
+| `ACME_EMAIL`           | Certificate contact email                              |
+| `POSTGRES_PASSWORD`    | Unique database superuser password, 24+ characters     |
+| `BETTER_AUTH_SECRET`   | Unique signing secret, at least 32 characters          |
+| `OPENMAPX_HOST_DIR`    | Absolute checkout path, as printed by `pwd`            |
+| `DOCKER_GID`           | Socket group ID from `stat -c %g /var/run/docker.sock` |
+| `TRANSITOUS_COUNTRIES` | Explicit country codes, for example `de`               |
 
 Generate a separate value for each secret with `openssl rand -hex 32`. The
 renderer rejects known placeholders and weak database/application secrets.

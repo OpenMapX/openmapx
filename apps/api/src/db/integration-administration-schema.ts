@@ -12,7 +12,7 @@ export const integrationApplicationReceipt = pgTable(
   "integration_application_receipt",
   {
     operationId: text("operation_id").primaryKey(),
-    actorId: text("actor_id"),
+    actorUserId: text("actor_user_id"),
     integrationId: text("integration_id").notNull(),
     capability: text("capability").notNull(),
     serviceId: text("service_id"),
@@ -24,15 +24,15 @@ export const integrationApplicationReceipt = pgTable(
   },
   (t) => [
     foreignKey({
-      name: "integration_application_receipt_actor_id_fkey",
-      columns: [t.actorId],
+      name: "integration_application_receipt_actor_user_id_fkey",
+      columns: [t.actorUserId],
       foreignColumns: [user.id],
     }).onDelete("set null"),
     index("integration_application_receipt_integration_id_created_at_idx").on(
       t.integrationId,
       t.createdAt,
     ),
-    index("integration_application_receipt_actor_id_idx").on(t.actorId),
+    index("integration_application_receipt_actor_user_id_idx").on(t.actorUserId),
     index("integration_application_receipt_created_at_idx").on(t.createdAt),
   ],
 );

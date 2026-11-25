@@ -14,6 +14,7 @@ import { registerApi } from "./api.js";
 import { registerAuth, resolveCallerTokens } from "./auth.js";
 import { DATA_MANAGER_CONTROL_SERVICE_IDS } from "./control-targets.js";
 import { awaitInflightSync, type CronHandles, setupCron } from "./cron.js";
+import { API_SCHEMA_WAIT_TIMEOUT_MS, waitForApiSchema } from "./db/api-schema.js";
 import { connectDatabase, sql } from "./db/index.js";
 import { installDataMutationAdmission } from "./jobs/execution/admission.js";
 import type { DataExecutionReceiver } from "./jobs/execution/api.js";
@@ -30,6 +31,7 @@ import {
 } from "./jobs/notable-places/schedule.js";
 import { createNotablePlacesRuntimeState } from "./jobs/notable-places/state.js";
 import { createNotablePlacesOperationLock } from "./jobs/search-index/operation-lock.js";
+import { outdatedSearchIndexRegion } from "./jobs/search-index/state.js";
 import { bakePredicted } from "./jobs/traffic/bake-predicted.js";
 import { fetchCoveredWayIds } from "./jobs/traffic/covered-ways.js";
 import { createCatalogReviewService } from "./jobs/transitous/catalog-review.js";
@@ -215,6 +217,15 @@ async function start(): Promise<void> {
   const countries = transitAllowedCountries(operationsPolicy);
   const initialized = await initializeRequiredSubsystems({
     readiness,
+    waitForDatabaseSchema: () =>
+      waitForApiSchema(sql, {
+        timeoutMs: API_SCHEMA_WAIT_TIMEOUT_MS,
+        onWait: (found, expected) =>
+          app.log.info(
+            { found, expected: expected.tag },
+            "waiting for the API to migrate the database",
+          ),
+      }),
     controlInstallation: controlStartup.installation ?? undefined,
     onControlPruneError: (err) => app.log.warn({ err }, "Control record prune failed"),
     onControlPruneStarted: (stop) => {
@@ -280,13 +291,13 @@ async function start(): Promise<void> {
       if (!executionReceiver) throw Error("Durable data receiver is unavailable");
       const admitted = await executionReceiver.admitLocal(
         { kind: "notable-places-build" },
-        { triggeredBy: "bootstrap" },
+        { trigger: "bootstrap" },
       );
       for (;;) {
         const status = await executionReceiver.inspect(admitted.id);
         if (!status) throw Error("Notable build observation remains unknown");
         if (isDataExecutionTerminal(status)) {
-          if (status.status !== "ok") throw Error("Notable build did not complete");
+          if (status.status !== "succeeded") throw Error("Notable build did not complete");
           return;
         }
         if (Date.now() >= admitted.deadlineAt)
@@ -295,9 +306,30 @@ async function start(): Promise<void> {
       }
     },
   });
-  void notablePlacesSchedule.buildIfMissing();
+  void notablePlacesSchedule.buildIfMissingOrOutdated();
+  void rebuildOutdatedSearchIndex();
   if ((process.env.OVERTURE_ENABLED || "").trim().toLowerCase() === "true") {
-    void cronHandles.runOvertureConflationRetryNow();
+    void cronHandles.runOvertureStartupNow();
+  }
+}
+
+/**
+ * Readers ignore an OSM search index that another builder version wrote, so
+ * rebuild it for its region; the previous snapshot stays until the new one
+ * is published.
+ */
+async function rebuildOutdatedSearchIndex(): Promise<void> {
+  try {
+    const region = await outdatedSearchIndexRegion(sql);
+    if (!region) return;
+    if (!executionReceiver) throw Error("Durable data receiver is unavailable");
+    const admitted = await executionReceiver.admitLocal(
+      { kind: "search-index-build", region },
+      { trigger: "bootstrap" },
+    );
+    app.log.info({ region, jobId: admitted.id }, "search-index: rebuilding an outdated layout");
+  } catch (err) {
+    app.log.warn({ err: (err as Error).message }, "search-index: outdated layout rebuild failed");
   }
 }
 

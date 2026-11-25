@@ -8,7 +8,6 @@
     "routes": true
   },
   "quality": "built-in",
-  "category": "Routing",
   "requires": [
     {
       "capability": "routing-engine",

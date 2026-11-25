@@ -20,7 +20,7 @@ import { sendViaLettermint } from "../email";
 const config: Parameters<typeof sendViaLettermint>[1] = {
   provider: "lettermint",
   from: "OpenMapX <noreply@example.com>",
-  smtp: { host: "localhost", port: 587, secure: false, user: "", pass: "" },
+  smtp: { host: "localhost", port: 587, security: "starttls", user: "", pass: "" },
   emaillabs: { appKey: "", secretKey: "", smtpAccount: "" },
   lettermint: { apiToken: "lm_project_token" },
 };

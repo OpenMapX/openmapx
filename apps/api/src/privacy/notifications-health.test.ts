@@ -49,7 +49,7 @@ describe("privacy notification worker health", () => {
       expect(worker.health()).toEqual({
         healthy: false,
         lastRunAt: null,
-        lastErrorCode: "error",
+        lastErrorCode: "ERROR",
       });
       await expect(worker.runOnce()).rejects.toThrow("connection terminated");
     } finally {

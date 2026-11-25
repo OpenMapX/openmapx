@@ -1,6 +1,7 @@
 "use client";
 
 import { PANEL, useDirectionsStore, useSearchStore, useSidebarStore } from "@openmapx/core";
+import { MAP_INTENT_PARAMS } from "@openmapx/core/map-link-params";
 import { useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { DEEPLINK_OPEN_EVENT } from "@/lib/deepLink";
@@ -8,10 +9,12 @@ import { DEEPLINK_OPEN_EVENT } from "@/lib/deepLink";
 // SearchBar isn't a panel — it's a floating bar driven by useSearchStore.
 // Setting `isFocused: true` makes the dropdown open as if the user tapped it.
 
+const CONSUMED = [MAP_INTENT_PARAMS.query, MAP_INTENT_PARAMS.geo, MAP_INTENT_PARAMS.action];
+
 /**
  * Handles incoming intents from PWA features:
  *
- * - `?q=<query>` — Web Share Target dispatched via /share or shortcut
+ * - `?query=<text>` — Web Share Target dispatched via /share, or a native map intent
  * - `?geo=<URI>` — `geo:` protocol handler (RFC 5870)
  * - `?action=search|directions` — manifest shortcuts
  *
@@ -25,13 +28,13 @@ export function ShareIntentHandler() {
       // Native warm links use replaceState plus this app's update event;
       // Next's search-param hook alone does not observe that delivery.
       const current = new URLSearchParams(window.location.search);
-      const q = current.get("q");
-      const geo = current.get("geo");
-      const action = current.get("action");
-      if (!q && !geo && !action) return;
+      const text = current.get(MAP_INTENT_PARAMS.query);
+      const geo = current.get(MAP_INTENT_PARAMS.geo);
+      const action = current.get(MAP_INTENT_PARAMS.action);
+      if (!text && !geo && !action) return;
 
       let query: string | null = null;
-      if (q) query = q;
+      if (text) query = text;
       else if (geo) query = parseGeoUri(geo);
 
       if (query) {
@@ -48,14 +51,14 @@ export function ShareIntentHandler() {
 
       // Strip the consumed params from the URL.
       const url = new URL(window.location.href);
-      for (const key of ["q", "geo", "action"]) url.searchParams.delete(key);
+      for (const key of CONSUMED) url.searchParams.delete(key);
       window.history.replaceState(
         window.history.state,
         "",
         `${url.pathname}${url.search}${url.hash}`,
       );
     };
-    if (params.has("q") || params.has("geo") || params.has("action")) consume();
+    if (CONSUMED.some((key) => params.has(key))) consume();
     window.addEventListener(DEEPLINK_OPEN_EVENT, consume);
     return () => window.removeEventListener(DEEPLINK_OPEN_EVENT, consume);
   }, [params]);

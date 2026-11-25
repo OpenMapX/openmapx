@@ -3,4 +3,6 @@
 
 export type GetAdminCoverageReport404 = {
   error: string;
+  /** @pattern ^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$ */
+  code: string;
 };

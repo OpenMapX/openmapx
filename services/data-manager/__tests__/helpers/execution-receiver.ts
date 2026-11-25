@@ -11,7 +11,7 @@ export function dataReceipt(patch: Partial<DataExecutionStatus> = {}): DataExecu
     admittedAt: 1,
     deadlineAt: 4102444800000,
     kind: "overture-sync",
-    status: "ok",
+    status: "succeeded",
     publication: "committed",
     cancellationRequestedAt: null,
     progress: 1,

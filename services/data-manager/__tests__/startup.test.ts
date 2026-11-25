@@ -31,6 +31,7 @@ describe("initializeRequiredSubsystems", () => {
         initializeRequiredSubsystems({
           readiness: new DataManagerReadiness(),
           controlInstallation: installation,
+          waitForDatabaseSchema: async () => {},
           initializeOfflineStorage: async () => {},
           reconcileJobs: async () => {},
           setupCronSchedulers,
@@ -55,6 +56,9 @@ describe("initializeRequiredSubsystems", () => {
 
     const result = await initializeRequiredSubsystems({
       readiness,
+      waitForDatabaseSchema: async () => {
+        calls.push("schema");
+      },
       initializeOfflineStorage: async () => {
         calls.push("offline");
       },
@@ -67,7 +71,7 @@ describe("initializeRequiredSubsystems", () => {
       },
     });
 
-    expect(calls).toEqual(["offline", "reconcile", "cron"]);
+    expect(calls).toEqual(["schema", "offline", "reconcile", "cron"]);
     expect(result).toEqual({ cronHandles });
     expect(readiness.snapshot()).toEqual({ status: "starting", phase: "cron-schedulers" });
   });
@@ -79,6 +83,7 @@ describe("initializeRequiredSubsystems", () => {
     await expect(
       initializeRequiredSubsystems({
         readiness,
+        waitForDatabaseSchema: async () => {},
         initializeOfflineStorage: async () => {},
         reconcileJobs: async () => {
           throw new Error("database unavailable");
@@ -91,12 +96,33 @@ describe("initializeRequiredSubsystems", () => {
     expect(setupCronSchedulers).not.toHaveBeenCalled();
   });
 
+  it("touches no data before the API has migrated the database", async () => {
+    const readiness = new DataManagerReadiness();
+    const initializeOfflineStorage = vi.fn();
+
+    await expect(
+      initializeRequiredSubsystems({
+        readiness,
+        waitForDatabaseSchema: async () => {
+          throw new Error("schema behind");
+        },
+        initializeOfflineStorage,
+        reconcileJobs: async () => {},
+        setupCronSchedulers: vi.fn(),
+      }),
+    ).rejects.toThrow("schema behind");
+
+    expect(readiness.snapshot()).toEqual({ status: "failed", phase: "database-schema" });
+    expect(initializeOfflineStorage).not.toHaveBeenCalled();
+  });
+
   it("fails readiness when the cron scheduler cannot be constructed", async () => {
     const readiness = new DataManagerReadiness();
 
     await expect(
       initializeRequiredSubsystems({
         readiness,
+        waitForDatabaseSchema: async () => {},
         initializeOfflineStorage: async () => {},
         reconcileJobs: async () => {},
         setupCronSchedulers: () => {

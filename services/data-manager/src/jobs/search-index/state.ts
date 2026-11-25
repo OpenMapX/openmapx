@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import type { SearchIndexStatus as CanonicalSearchIndexStatus } from "@openmapx/core/data-manager-contracts";
+import { OSM_SEARCH_SCHEMA_VERSION } from "@openmapx/core/published-data";
 import type postgres from "postgres";
 import type { DatasetMetadata, StateStore } from "../../state.js";
 import { dataWorkerSignal, publishDataChange } from "../execution/worker-scope.js";
@@ -70,6 +71,20 @@ interface IndexStateRow {
   published_at: Date | string | null;
   updated_at: Date | string;
   last_error: string | null;
+  schema_version: number;
+}
+
+/** The region of a published index that another builder version wrote. */
+export async function outdatedSearchIndexRegion(sql: postgres.Sql): Promise<string | null> {
+  const existence = await sql.unsafe<{ exists: boolean }[]>(
+    `SELECT to_regclass('osm_search.index_state') IS NOT NULL AS exists`,
+  );
+  if (!existence[0]?.exists) return null;
+  const rows = await sql.unsafe<Pick<IndexStateRow, "region" | "schema_version">[]>(
+    `SELECT region, schema_version FROM osm_search.index_state WHERE singleton = 1`,
+  );
+  const row = rows[0];
+  return row && row.schema_version !== OSM_SEARCH_SCHEMA_VERSION ? row.region : null;
 }
 
 function iso(value: Date | string | null): string | null {
@@ -135,7 +150,9 @@ export async function getSearchIndexStatus(opts: {
     publishedAt: iso(row.published_at),
     updatedAt: iso(row.updated_at) ?? new Date().toISOString(),
     lastError: row.last_error,
-    stale: currentFingerprint !== row.source_fingerprint,
+    stale:
+      currentFingerprint !== row.source_fingerprint ||
+      row.schema_version !== OSM_SEARCH_SCHEMA_VERSION,
     building: opts.runtimeState.building,
   };
 }

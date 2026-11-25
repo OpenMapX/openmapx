@@ -2286,6 +2286,7 @@
     "deleteAccountWarning": "Das lässt sich nicht rückgängig machen. OpenMapX löscht dein Konto, Anmeldedaten, gespeicherte Orte, Freigaben, Fahrzeuge, Parkstatus, Timeline-Verbindung, Einstellungen und den Signaturschlüssel für Bewertungen. Lösche Mangrove-Bewertungen vorher, solange du den Schlüssel noch kontrollierst. Ein verbundenes Dawarich-Konto und dessen Standortverlauf müssen separat gelöscht werden.",
     "confirmDeletion": "Löschung bestätigen",
     "failedDeleteAccount": "Konto konnte nicht gelöscht werden",
+    "deviceCleanupIncomplete": "Dein Konto ist gelöscht, aber einige Daten auf diesem Gerät konnten nicht entfernt werden. Schließe alle anderen OpenMapX-Tabs oder lösche die Websitedaten in den Browsereinstellungen.",
     "privacyData": {
       "title": "Ihre Daten und Ihr Auskunftsantrag",
       "description": "Laden Sie eine Kopie der personenbezogenen Daten herunter, die OpenMapX über Sie verarbeitet. Das Archiv enthält Live-Daten von OpenMapX und, sofern verfügbar, verbundene Dawarich-Daten. Dafür ist eine erneute Anmeldung erforderlich; das Archiv wird direkt an Sie gesendet und nicht auf dem Server gespeichert.",
@@ -2428,6 +2429,8 @@
     "openSourceLicenses": "Open-Source-Lizenzen",
     "imprintDescription": "Impressum und Anbieterkennzeichnung für OpenMapX nach deutschem Recht.",
     "privacyDescription": "Datenschutzerklärung für OpenMapX — wie wir Ihre Daten gemäß der DSGVO verarbeiten.",
+    "configUnavailableTitle": "Diese Seite ist vorübergehend nicht verfügbar",
+    "configUnavailable": "Die Angaben des Betreibers für diese Seite konnten nicht geladen werden. Bitte versuchen Sie es in einigen Minuten erneut.",
     "termsDescription": "Nutzungsbedingungen für OpenMapX.",
     "openSourceLicensesDescription": "Lizenzen der Open-Source-Abhängigkeiten, die OpenMapX verwendet.",
     "account": "Konto",
@@ -4438,6 +4441,7 @@
       "envOverrideHelp": "Dieser Wert wird durch {envVar} gesteuert. Ändern Sie die Bereitstellungsumgebung, um ihn zu aktualisieren.",
       "envSecretValue": "Durch die Bereitstellungsumgebung gesetzt",
       "unreadableSecret": "Gespeichert, aber der aktuelle Schlüssel kann den Wert nicht entschlüsseln. Stellen Sie die Schlüsseldatei wieder her, mit der er gespeichert wurde (infra/docker/secrets/secrets-key), oder geben Sie den Wert erneut ein.",
+      "invalidStoredValue": "Der gespeicherte Wert ist für diese Einstellung nicht gültig, daher werden die Funktionen, die ihn lesen, verweigert. Angezeigt wird der Standardwert; speichern Sie einen gültigen Wert.",
       "showSecret": "Anzeigen",
       "hideSecret": "Ausblenden",
       "databaseSource": "In der Datenbank gespeichert",
@@ -4493,109 +4497,139 @@
       }
     },
     "settings": {
-      "legalControllerName": {
-        "label": "Name der verantwortlichen Stelle",
-        "description": "Vollständiger rechtlicher Name der für diese Instanz verantwortlichen Organisation oder Person."
+      "legal": {
+        "controller": {
+          "name": {
+            "label": "Name der verantwortlichen Stelle",
+            "description": "Vollständiger rechtlicher Name der für diese Instanz verantwortlichen Organisation oder Person."
+          },
+          "street": {
+            "label": "Straße und Hausnummer",
+            "description": "Straße und Hausnummer der Postanschrift der verantwortlichen Stelle."
+          },
+          "postalCode": {
+            "label": "Postleitzahl",
+            "description": "Postleitzahl der verantwortlichen Stelle."
+          },
+          "city": {
+            "label": "Ort",
+            "description": "Ort der verantwortlichen Stelle."
+          },
+          "country": {
+            "label": "Land",
+            "description": "Land der verantwortlichen Stelle."
+          },
+          "email": {
+            "label": "E-Mail der verantwortlichen Stelle",
+            "description": "Veröffentlichte E-Mail-Adresse für Datenschutzanfragen."
+          },
+          "phone": {
+            "label": "Telefon der verantwortlichen Stelle",
+            "description": "Optionale veröffentlichte Telefonnummer für Datenschutzanfragen."
+          }
+        },
+        "dataRequestEmail": {
+          "label": "E-Mail für Betroffenenanfragen",
+          "description": "Maßgebliches Postfach für Anfragen betroffener Personen."
+        },
+        "hosting": {
+          "provider": {
+            "label": "Hosting-Anbieter",
+            "description": "Unternehmen, das Daten durch das Hosting dieser Instanz verarbeitet."
+          },
+          "locations": {
+            "label": "Hosting-Standorte",
+            "description": "Länder oder Regionen, in denen der Anbieter Instanzdaten speichert."
+          }
+        },
+        "deploymentJurisdiction": {
+          "label": "Rechtsraum der Bereitstellung",
+          "description": "ISO-3166-1-Ländercode, optional mit Untereinheit."
+        },
+        "supervisoryAuthority": {
+          "name": {
+            "label": "Aufsichtsbehörde",
+            "description": "Name der zuständigen Datenschutzaufsichtsbehörde."
+          },
+          "url": {
+            "label": "URL der Aufsichtsbehörde",
+            "description": "Offizielle Website der genannten Behörde."
+          }
+        },
+        "privacySources": {
+          "label": "Datenschutz-Datenquellen",
+          "description": "JSON-Liste strikter Datenquellendeklarationen für Auskunftsberichte."
+        }
       },
-      "legalControllerStreet": {
-        "label": "Straße und Hausnummer",
-        "description": "Straße und Hausnummer der Postanschrift der verantwortlichen Stelle."
+      "retention": {
+        "serverLogDays": {
+          "label": "Aufbewahrung von Serverprotokollen (Tage)",
+          "description": "Dauer der Speicherung persistierter API-Warnungen und -Fehler."
+        },
+        "privacyCaseDays": {
+          "label": "Aufbewahrung von Anfragefällen (Tage)",
+          "description": "Dauer der Speicherung abgeschlossener Betroffenenanfragen."
+        },
+        "auditLogDays": {
+          "label": "Aufbewahrung des Administrationsprotokolls (Tage)",
+          "description": "Wie lange Einträge des Administrationsprotokolls aufbewahrt werden. Standard: 365."
+        },
+        "adminJobDays": {
+          "label": "Aufbewahrung abgeschlossener Verwaltungsaufträge (Tage)",
+          "description": "Wie lange abgeschlossene Verwaltungsaufträge aufbewahrt werden. Standard: 30."
+        },
+        "backupDays": {
+          "label": "Aufbewahrung von Sicherungen (Tage)",
+          "description": "Wie lange lokale Sicherungen aufbewahrt werden. Wird in der Plattformkonfiguration festgelegt, die der Betriebsagent und die CLI gemeinsam nutzen. Standard: 30."
+        }
       },
-      "legalControllerPostalCode": {
-        "label": "Postleitzahl",
-        "description": "Postleitzahl der verantwortlichen Stelle."
+      "email": {
+        "fromAddress": {
+          "label": "Absenderadresse",
+          "description": "Von allen Benachrichtigungsanbietern verwendete Absenderadresse."
+        }
       },
-      "legalControllerCity": {
-        "label": "Ort",
-        "description": "Ort der verantwortlichen Stelle."
+      "emaillabs": {
+        "appKey": {
+          "label": "App-Schlüssel",
+          "description": "Anwendungsschlüssel für EmailLabs."
+        },
+        "secretKey": {
+          "label": "Geheimer Schlüssel",
+          "description": "Geheimer EmailLabs-Schlüssel; gespeicherte Werte werden nie zurückgegeben."
+        },
+        "smtpAccount": {
+          "label": "SMTP-Konto",
+          "description": "SMTP-Kontokennung bei EmailLabs."
+        }
       },
-      "legalControllerCountry": {
-        "label": "Land",
-        "description": "Land der verantwortlichen Stelle."
+      "lettermint": {
+        "apiToken": {
+          "label": "API-Token",
+          "description": "Lettermint-API-Token; gespeicherte Werte werden nie zurückgegeben."
+        }
       },
-      "legalControllerEmail": {
-        "label": "E-Mail der verantwortlichen Stelle",
-        "description": "Veröffentlichte E-Mail-Adresse für Datenschutzanfragen."
-      },
-      "legalControllerPhone": {
-        "label": "Telefon der verantwortlichen Stelle",
-        "description": "Optionale veröffentlichte Telefonnummer für Datenschutzanfragen."
-      },
-      "legalDataRequestEmail": {
-        "label": "E-Mail für Betroffenenanfragen",
-        "description": "Maßgebliches Postfach für Anfragen betroffener Personen."
-      },
-      "legalHostingProvider": {
-        "label": "Hosting-Anbieter",
-        "description": "Unternehmen, das Daten durch das Hosting dieser Instanz verarbeitet."
-      },
-      "legalHostingLocations": {
-        "label": "Hosting-Standorte",
-        "description": "Länder oder Regionen, in denen der Anbieter Instanzdaten speichert."
-      },
-      "legalDeploymentJurisdiction": {
-        "label": "Rechtsraum der Bereitstellung",
-        "description": "ISO-3166-1-Ländercode, optional mit Untereinheit."
-      },
-      "legalSupervisoryAuthority": {
-        "label": "Aufsichtsbehörde",
-        "description": "Name der zuständigen Datenschutzaufsichtsbehörde."
-      },
-      "legalSupervisoryAuthorityUrl": {
-        "label": "URL der Aufsichtsbehörde",
-        "description": "Offizielle Website der genannten Behörde."
-      },
-      "legalServerLogRetentionDays": {
-        "label": "Aufbewahrung von Serverprotokollen (Tage)",
-        "description": "Dauer der Speicherung persistierter API-Warnungen und -Fehler."
-      },
-      "legalDsarCaseRetentionDays": {
-        "label": "Aufbewahrung von Anfragefällen (Tage)",
-        "description": "Dauer der Speicherung abgeschlossener Betroffenenanfragen."
-      },
-      "legalPrivacySources": {
-        "label": "Datenschutz-Datenquellen",
-        "description": "JSON-Liste strikter Datenquellendeklarationen für Auskunftsberichte."
-      },
-      "smtpFromAddress": {
-        "label": "Absenderadresse",
-        "description": "Von allen Benachrichtigungsanbietern verwendete Absenderadresse."
-      },
-      "emailLabsAppKey": {
-        "label": "App-Schlüssel",
-        "description": "Anwendungsschlüssel für EmailLabs."
-      },
-      "emailLabsSecretKey": {
-        "label": "Geheimer Schlüssel",
-        "description": "Geheimer EmailLabs-Schlüssel; gespeicherte Werte werden nie zurückgegeben."
-      },
-      "emailLabsSmtpAccount": {
-        "label": "SMTP-Konto",
-        "description": "SMTP-Kontokennung bei EmailLabs."
-      },
-      "lettermintApiToken": {
-        "label": "API-Token",
-        "description": "Lettermint-API-Token; gespeicherte Werte werden nie zurückgegeben."
-      },
-      "smtpHost": {
-        "label": "SMTP-Host",
-        "description": "Hostname des Fallback-SMTP-Servers."
-      },
-      "smtpPort": {
-        "label": "SMTP-Port",
-        "description": "Port des Fallback-SMTP-Servers."
-      },
-      "smtpUser": {
-        "label": "SMTP-Benutzername",
-        "description": "Benutzername für den Fallback-SMTP-Server."
-      },
-      "smtpPassword": {
-        "label": "SMTP-Passwort",
-        "description": "Passwort für den Fallback-SMTP-Server; gespeicherte Werte werden nie zurückgegeben."
-      },
-      "smtpTls": {
-        "label": "TLS oder STARTTLS verwenden",
-        "description": "Verschlüsselte Übertragung für die SMTP-Verbindung verlangen."
+      "smtp": {
+        "host": {
+          "label": "SMTP-Host",
+          "description": "Hostname des Fallback-SMTP-Servers."
+        },
+        "port": {
+          "label": "SMTP-Port",
+          "description": "Port des Fallback-SMTP-Servers."
+        },
+        "user": {
+          "label": "SMTP-Benutzername",
+          "description": "Benutzername für den Fallback-SMTP-Server."
+        },
+        "password": {
+          "label": "SMTP-Passwort",
+          "description": "Passwort für den Fallback-SMTP-Server; gespeicherte Werte werden nie zurückgegeben."
+        },
+        "security": {
+          "label": "Verbindungssicherheit",
+          "description": "STARTTLS (Standard, Port 587) verschlüsselt die Verbindung nachträglich und sendet nie unverschlüsselt; TLS (Port 465) verschlüsselt von Beginn an; Keine sendet unverschlüsselt."
+        }
       }
     },
     "notificationsOwner": "Der E-Mail-Versand wird unter Einstellungen → E-Mail konfiguriert.",
@@ -4822,10 +4856,6 @@
         "label": "Aktivität",
         "description": "Aufträge, Prüfereignisse und Anwendungsprotokolle"
       },
-      "general": {
-        "label": "Allgemein",
-        "description": "Anwendungsidentität und öffentliche Instanz-URL"
-      },
       "authentication": {
         "label": "Authentifizierung",
         "description": "Anmeldung, Sitzungen und wirksame Zugriffsrichtlinie"
@@ -4891,7 +4921,6 @@
         "description": "Gesamtaktualisierung, Hardlink-Abgleich und Bereinigung"
       }
     },
-    "applicationUrlHelp": "Die öffentliche Anwendungs-URL bestimmt von der Anwendung erzeugte Links. Die Bereitstellung verwaltet den Host-Ursprung und Zertifikate.",
     "privacyPolicyLink": "Betreiber, rechtliche Angaben und Aufbewahrung → Datenschutz einrichten",
     "drafts": "{count, plural, one {# Entwurf} other {# Entwürfe}}",
     "discardDraftsHelp": "Alle ungespeicherten gewöhnlichen Verwaltungsentwürfe verwerfen, auch für nicht mehr verfügbare Formulare.",
@@ -5085,7 +5114,7 @@
       "actionGroup": "{group, select, integrations {Integrationen} credentials {Zugangsdaten} services {Dienste} data {Daten} backups {Sicherungen} settings {Einstellungen} extensions {Erweiterungen} transit {Öffentlicher Verkehr} jobs {Aufträge} system {System} users {Benutzer} timeline {Zeitleiste} other {{group}}}",
       "targetType": "Zieltyp",
       "allTypes": "Alle Typen",
-      "targetTypeOption": "{type, select, integration {Integration} service {Dienst} data {Daten} data_manager_job {Datenverwaltungsauftrag} job {Auftrag} backup {Sicherung} settings {Einstellungen} configuration {Konfiguration} configuration_migration {Konfigurationsmigration} credential_transfer {Zugangsdatenübertragung} platform {Plattform} auth_policy {Anmelderichtlinie} cache {Cache} release {Release} provider {Anbieter} extension {Erweiterung} ambient_places {Orte in der Nähe auf der Karte} transit {Öffentlicher Verkehr} transit_source {ÖPNV-Quelle} transit_credentials {ÖPNV-Zugangsdaten} system {System} user {Benutzer} personal_timeline_connection {Zeitleisten-Verbindung} other {{type}}}",
+      "targetTypeOption": "{type, select, integration {Integration} service {Dienst} data_operation {Datenvorgang} data_manager_job {Datenverwaltungsauftrag} job {Auftrag} backup {Sicherung} setting {Einstellungen} configuration {Konfiguration} configuration_migration {Konfigurationsmigration} credential_transfer {Zugangsdatenübertragung} platform {Plattform} auth_policy {Anmelderichtlinie} cache {Cache} release {Release} provider {Anbieter} extension {Erweiterung} ambient_places {Orte in der Nähe auf der Karte} transit {Öffentlicher Verkehr} transit_source {ÖPNV-Quelle} transit_credential {ÖPNV-Zugangsdaten} system {System} user {Benutzer} personal_timeline_connection {Zeitleisten-Verbindung} other {{type}}}",
       "searchTarget": "Nach Ziel-ID suchen…",
       "clearFilters": "Filter zurücksetzen",
       "events": "{count, plural, one {# Ereignis} other {# Ereignisse}}",
@@ -5115,7 +5144,7 @@
     "job": "Auftrag",
     "status": "Status",
     "actor": "Akteur",
-    "actorLabel": "{actor, select, administrator {Administrator} automatic_version_bump {Automatische Versionsanhebung} bootstrap {Ersteinrichtung} scheduled {Zeitplan} system {System} other {{actor}}}",
+    "actorLabel": "{actor, select, administrator {Administrator} api {API} bootstrap {Ersteinrichtung} host_cli {Befehlszeile des Hosts} operations_agent {Betriebsagent} scheduled {Zeitplan} system {System} other {{actor}}}",
     "when": "Zeitpunkt",
     "failedToLoadJobs": "Aufträge konnten nicht geladen werden",
     "noJobsFound": "Keine Aufträge gefunden",
@@ -5234,6 +5263,7 @@
     "securityStatusStaleRevocationData": "Sicherheitsstatus: veraltete Widerrufsdaten",
     "delisted": "Aus dem Katalog entfernt: {delisting}",
     "securityAdvisory": "Sicherheitshinweis: {advisory}",
+    "installedVersionSecurityAdvisory": "Die installierte Version ist von einem Sicherheitshinweis betroffen: {advisory}",
     "requiresPlatform": "Erfordert Plattform ≥ {minPlatform} (diese Instanz: {platformVersion})",
     "installed": "Installiert",
     "installedUpdateAvailable": "Installiert · Update verfügbar",
@@ -5472,7 +5502,6 @@
     "tabHealth": "Zustand",
     "tabDataSources": "Datenquellen",
     "qualityBuiltIn": "Integriert",
-    "qualityVerified": "Geprüft",
     "qualityCommunity": "Community",
     "domainGeocoding": "Geokodierung",
     "domainRouting": "Routing",
@@ -5510,7 +5539,7 @@
     "reload": "Neu laden",
     "needsAttention": "Handlungsbedarf",
     "attention": "{type, select, health_check_failed {Zustandsprüfung von {target} schlägt fehl} service_unhealthy {Docker-Dienst „{target}“ ist gestört} other {{target}}}",
-    "jobAttention": "{status, select, interrupted {Auftrag „{jobLabel}“ wurde unterbrochen} other {Auftrag „{jobLabel}“ ist fehlgeschlagen}}",
+    "jobAttention": "Auftrag „{jobLabel}“ ist fehlgeschlagen",
     "view": "Anzeigen",
     "failedToLoadCredentialsSummary": "Die Übersicht der Zugangsdaten konnte nicht geladen werden.",
     "credentialsOverview": "Übersicht der Zugangsdaten",
@@ -5902,7 +5931,6 @@
     "allCapabilities": "Alle Fähigkeiten",
     "allQualityTiers": "Alle Qualitätsstufen",
     "builtIn": "Integriert",
-    "communityVerified": "Community (geprüft)",
     "community": "Community",
     "unknownServices": "{count, plural, one {# Dienst hat} other {# Dienste haben}} einen unbekannten Status.",
     "failedToLoadServicesThe": "Dienste konnten nicht geladen werden. Das Backend läuft möglicherweise noch nicht.",
@@ -6187,6 +6215,7 @@
       "envOverrideHelp": "Durch die Umgebungsvariable {envVar} vorgegeben. Ändern Sie die Umgebungsvariable, um diesen Wert zu aktualisieren.",
       "envSecretValue": "(durch Umgebungsvariable gesetzt)",
       "unreadableSecret": "Gespeichert, aber der aktuelle Schlüssel kann den Wert nicht entschlüsseln. Stellen Sie die Schlüsseldatei wieder her, mit der er gespeichert wurde (infra/docker/secrets/secrets-key), oder geben Sie den Wert erneut ein.",
+      "invalidStoredValue": "Der gespeicherte Wert ist für diese Einstellung nicht gültig, daher werden die Funktionen, die ihn lesen, verweigert. Angezeigt wird der Standardwert; speichern Sie einen gültigen Wert.",
       "showSecret": "Anzeigen",
       "hideSecret": "Ausblenden",
       "databaseSource": "Quelle: Datenbank",
@@ -6361,141 +6390,165 @@
       "recoveryHelp": "Hostwiederherstellung: Prüfen Sie den erhaltenen Vorgang unter „Aktivität“ und im Journal des Operations-Agenten auf dem Host. Löschen Sie keine Sperren und wiederholen Sie keine unsichere Aktualisierung. Bootstrap-Geheimnisse, die Docker-Installation und die Wiederherstellung eines Agenten ohne Verbindung erfordern Hostzugang."
     },
     "settings": {
-      "instanceName": {
-        "label": "Name der Instanz",
-        "description": "Anzeigename in der Verwaltung und in Seitentiteln."
+      "auth": {
+        "emailVerificationRequired": {
+          "label": "E-Mail-Bestätigung verlangen",
+          "description": "Neue Benutzer müssen ihre E-Mail-Adresse bestätigen, bevor sie die App nutzen können."
+        },
+        "sessionDurationHours": {
+          "label": "Sitzungsdauer (Stunden)",
+          "description": "Absolute Lebensdauer neuer Sitzungen. Bestehende Sitzungen behalten ihren ursprünglichen Ablauf."
+        },
+        "twoFaEnabled": {
+          "label": "Zwei-Faktor-Authentifizierung aktivieren",
+          "description": "Neue TOTP-Einrichtungen erlauben. Bestehende Abfragen des zweiten Faktors bleiben erforderlich."
+        },
+        "passwordMinLength": {
+          "label": "Minimale Passwortlänge"
+        }
       },
-      "instanceUrl": {
-        "label": "URL der Instanz",
-        "description": "Öffentliche URL dieser OpenMapX-Instanz (für E-Mails und Links)."
+      "email": {
+        "fromAddress": {
+          "label": "Absenderadresse",
+          "description": "Wird von jedem Anbieter als From-Header verwendet, z. B. noreply@example.com"
+        }
       },
-      "defaultLocale": {
-        "label": "Standardsprache"
+      "emaillabs": {
+        "appKey": {
+          "label": "App-Schlüssel"
+        },
+        "secretKey": {
+          "label": "Geheimer Schlüssel"
+        },
+        "smtpAccount": {
+          "label": "SMTP-Konto"
+        }
       },
-      "mapCenter": {
-        "label": "Standard-Kartenmittelpunkt",
-        "description": "Breite, Länge und Zoomstufe, mit denen die Karte beim ersten Laden startet."
+      "lettermint": {
+        "apiToken": {
+          "label": "API-Token"
+        }
       },
-      "emailVerificationRequired": {
-        "label": "E-Mail-Bestätigung verlangen",
-        "description": "Neue Benutzer müssen ihre E-Mail-Adresse bestätigen, bevor sie die App nutzen können."
+      "smtp": {
+        "host": {
+          "label": "Host"
+        },
+        "port": {
+          "label": "Port"
+        },
+        "user": {
+          "label": "Benutzername"
+        },
+        "password": {
+          "label": "Passwort"
+        },
+        "security": {
+          "label": "Verbindungssicherheit",
+          "description": "STARTTLS (Standard, Port 587) verschlüsselt die Verbindung nachträglich und sendet nie unverschlüsselt; TLS (Port 465) verschlüsselt von Beginn an; Keine sendet unverschlüsselt."
+        }
       },
-      "sessionDurationHours": {
-        "label": "Sitzungsdauer (Stunden)",
-        "description": "Absolute Lebensdauer neuer Sitzungen. Bestehende Sitzungen behalten ihren ursprünglichen Ablauf."
+      "basemap": {
+        "provider": {
+          "label": "Gehostete Vektor-Grundkarte",
+          "description": "Wird nur verwendet, wenn selbst gehostete Kacheln nicht eingerichtet oder aktiviert sind. „Automatisch“ nutzt MapTiler mit eingerichtetem Schlüssel, sonst OpenFreeMap. Laden Sie die Karte nach dem Speichern neu."
+        }
       },
-      "twoFaEnabled": {
-        "label": "Zwei-Faktor-Authentifizierung aktivieren",
-        "description": "Neue TOTP-Einrichtungen erlauben. Bestehende Abfragen des zweiten Faktors bleiben erforderlich."
+      "maptiler": {
+        "apiKey": {
+          "label": "MapTiler-API-Schlüssel",
+          "description": "MapTiler-Cloud-API-Schlüssel für den eingebauten Kachel- und Stil-Proxy von MapTiler."
+        }
       },
-      "passwordMinLength": {
-        "label": "Minimale Passwortlänge"
+      "dataUse": {
+        "allowNonCommercial": {
+          "label": "Nur nichtkommerziell nutzbare Quellen erlauben",
+          "description": "Wenn aktiviert (Standard), werden Datenquellen einbezogen, deren Lizenz kommerzielle Nutzung verbietet (z. B. Open-Meteo, RainViewer). Schalten Sie dies für eine kommerzielle Bereitstellung aus, sofern Sie keine kommerziellen Bedingungen dafür haben."
+        },
+        "allowGreyArea": {
+          "label": "Quellen mit unklaren oder undokumentierten Bedingungen erlauben",
+          "description": "Wenn aktiviert (Standard), werden Datenquellen mit unklaren oder undokumentierten Nutzungsbedingungen einbezogen (z. B. inoffizielle oder ausgelesene APIs) — meist öffentliche APIs, deren Bedingungen lediglich nicht dokumentiert sind. Schalten Sie dies aus, um sie auszuschließen (z. B. DB/HAFAS und das Register für regionalen Verkehr)."
+        }
       },
-      "smtpFromAddress": {
-        "label": "Absenderadresse",
-        "description": "Wird von jedem Anbieter als From-Header verwendet, z. B. noreply@example.com"
+      "legal": {
+        "controller": {
+          "name": {
+            "label": "Name der verantwortlichen Stelle",
+            "description": "Rechtlicher Name der Person oder Organisation, die diese Instanz betreibt."
+          },
+          "street": {
+            "label": "Straße und Hausnummer"
+          },
+          "postalCode": {
+            "label": "Postleitzahl"
+          },
+          "city": {
+            "label": "Ort"
+          },
+          "country": {
+            "label": "Land"
+          },
+          "email": {
+            "label": "Rechtliche Kontakt-E-Mail",
+            "description": "Auf den rechtlichen Seiten veröffentlichte Kontaktadresse des Betreibers."
+          },
+          "phone": {
+            "label": "Rechtliche Kontakttelefonnummer",
+            "description": "Optionale Telefonnummer, die im Impressum veröffentlicht wird."
+          }
+        },
+        "hosting": {
+          "provider": {
+            "label": "Hosting-Anbieter",
+            "description": "Unternehmen, das die Server dieser Instanz betreibt. Wird im Hosting-Abschnitt der Datenschutzerklärung als Auftragsverarbeiter genannt (Art. 28 DSGVO). Leer lassen, um den Satz wegzulassen."
+          },
+          "locations": {
+            "label": "Standorte der Rechenzentren",
+            "description": "Wo sich die Rechenzentren befinden (z. B. „Deutschland, Finnland“). Wird an den Hosting-Satz unter /privacy angehängt. Leer lassen, um ihn wegzulassen."
+          }
+        },
+        "supervisoryAuthority": {
+          "name": {
+            "label": "Datenschutz-Aufsichtsbehörde",
+            "description": "Name der zuständigen Datenschutz-Aufsichtsbehörde, angezeigt im Abschnitt zu den DSGVO-Rechten der Datenschutzerklärung. Leer lassen, um den Satz wegzulassen."
+          },
+          "url": {
+            "label": "URL der Aufsichtsbehörde",
+            "description": "Link zur oben genannten Aufsichtsbehörde, daneben unter /privacy angezeigt. Leer lassen, um nur den Namen anzuzeigen."
+          }
+        },
+        "dataRequestEmail": {
+          "label": "E-Mail für Betroffenenanfragen",
+          "description": "Kontakt der verantwortlichen Stelle für Auskunftsanfragen. Ohne Angabe wird die rechtliche Kontakt-E-Mail verwendet."
+        },
+        "deploymentJurisdiction": {
+          "label": "Rechtsraum der Bereitstellung",
+          "description": "Informativer Rechtsraum nach ISO 3166-1 Alpha-2, optional mit Untereinheit."
+        },
+        "privacySources": {
+          "label": "Datenschutz-Datenquellen",
+          "description": "Strikte JSON-Quellenangaben für den Auskunftsbericht."
+        }
       },
-      "emailLabsAppKey": {
-        "label": "App-Schlüssel"
-      },
-      "emailLabsSecretKey": {
-        "label": "Geheimer Schlüssel"
-      },
-      "emailLabsSmtpAccount": {
-        "label": "SMTP-Konto"
-      },
-      "lettermintApiToken": {
-        "label": "API-Token"
-      },
-      "smtpHost": {
-        "label": "Host"
-      },
-      "smtpPort": {
-        "label": "Port"
-      },
-      "smtpUser": {
-        "label": "Benutzername"
-      },
-      "smtpPassword": {
-        "label": "Passwort"
-      },
-      "smtpTls": {
-        "label": "TLS / STARTTLS verwenden"
-      },
-      "hostedBasemapProvider": {
-        "label": "Gehostete Vektor-Grundkarte",
-        "description": "Wird nur verwendet, wenn selbst gehostete Kacheln nicht eingerichtet oder aktiviert sind. „Automatisch“ nutzt MapTiler mit eingerichtetem Schlüssel, sonst OpenFreeMap. Laden Sie die Karte nach dem Speichern neu."
-      },
-      "maptilerApiKey": {
-        "label": "MapTiler-API-Schlüssel",
-        "description": "MapTiler-Cloud-API-Schlüssel für den eingebauten Kachel- und Stil-Proxy von MapTiler."
-      },
-      "allowNonCommercial": {
-        "label": "Nur nichtkommerziell nutzbare Quellen erlauben",
-        "description": "Wenn aktiviert (Standard), werden Datenquellen einbezogen, deren Lizenz kommerzielle Nutzung verbietet (z. B. Open-Meteo, RainViewer). Schalten Sie dies für eine kommerzielle Bereitstellung aus, sofern Sie keine kommerziellen Bedingungen dafür haben."
-      },
-      "allowGreyArea": {
-        "label": "Quellen mit unklaren oder undokumentierten Bedingungen erlauben",
-        "description": "Wenn aktiviert (Standard), werden Datenquellen mit unklaren oder undokumentierten Nutzungsbedingungen einbezogen (z. B. inoffizielle oder ausgelesene APIs) — meist öffentliche APIs, deren Bedingungen lediglich nicht dokumentiert sind. Schalten Sie dies aus, um sie auszuschließen (z. B. DB/HAFAS und das Register für regionalen Verkehr)."
-      },
-      "legalControllerName": {
-        "label": "Name der verantwortlichen Stelle",
-        "description": "Rechtlicher Name der Person oder Organisation, die diese Instanz betreibt."
-      },
-      "legalControllerStreet": {
-        "label": "Straße und Hausnummer"
-      },
-      "legalControllerPostalCode": {
-        "label": "Postleitzahl"
-      },
-      "legalControllerCity": {
-        "label": "Ort"
-      },
-      "legalControllerCountry": {
-        "label": "Land"
-      },
-      "legalControllerEmail": {
-        "label": "Rechtliche Kontakt-E-Mail",
-        "description": "Auf den rechtlichen Seiten veröffentlichte Kontaktadresse des Betreibers."
-      },
-      "legalControllerPhone": {
-        "label": "Rechtliche Kontakttelefonnummer",
-        "description": "Optionale Telefonnummer, die im Impressum veröffentlicht wird."
-      },
-      "legalHostingProvider": {
-        "label": "Hosting-Anbieter",
-        "description": "Unternehmen, das die Server dieser Instanz betreibt. Wird im Hosting-Abschnitt der Datenschutzerklärung als Auftragsverarbeiter genannt (Art. 28 DSGVO). Leer lassen, um den Satz wegzulassen."
-      },
-      "legalHostingLocations": {
-        "label": "Standorte der Rechenzentren",
-        "description": "Wo sich die Rechenzentren befinden (z. B. „Deutschland, Finnland“). Wird an den Hosting-Satz unter /privacy angehängt. Leer lassen, um ihn wegzulassen."
-      },
-      "legalSupervisoryAuthority": {
-        "label": "Datenschutz-Aufsichtsbehörde",
-        "description": "Name der zuständigen Datenschutz-Aufsichtsbehörde, angezeigt im Abschnitt zu den DSGVO-Rechten der Datenschutzerklärung. Leer lassen, um den Satz wegzulassen."
-      },
-      "legalSupervisoryAuthorityUrl": {
-        "label": "URL der Aufsichtsbehörde",
-        "description": "Link zur oben genannten Aufsichtsbehörde, daneben unter /privacy angezeigt. Leer lassen, um nur den Namen anzuzeigen."
-      },
-      "legalServerLogRetentionDays": {
-        "label": "Aufbewahrung von Serverprotokollen (Tage)",
-        "description": "Wie lange gespeicherte API-Warn- und Fehlerprotokolle vor dem automatischen Löschen aufbewahrt werden. Infrastrukturprotokolle folgen der eigenen Richtlinie des Betreibers. Muss eine positive ganze Zahl sein; Standard ist 30."
-      },
-      "legalDataRequestEmail": {
-        "label": "E-Mail für Betroffenenanfragen",
-        "description": "Kontakt der verantwortlichen Stelle für Auskunftsanfragen. Ohne Angabe wird LEGAL_EMAIL verwendet."
-      },
-      "legalDsarCaseRetentionDays": {
-        "label": "Aufbewahrung von Betroffenenanfragen (Tage)"
-      },
-      "legalDeploymentJurisdiction": {
-        "label": "Rechtsraum der Bereitstellung",
-        "description": "Informativer Rechtsraum nach ISO 3166-1 Alpha-2, optional mit Untereinheit."
-      },
-      "legalPrivacySources": {
-        "label": "Datenschutz-Datenquellen",
-        "description": "Strikte JSON-Quellenangaben für den Auskunftsbericht."
+      "retention": {
+        "serverLogDays": {
+          "label": "Aufbewahrung von Serverprotokollen (Tage)",
+          "description": "Wie lange gespeicherte API-Warn- und Fehlerprotokolle vor dem automatischen Löschen aufbewahrt werden. Infrastrukturprotokolle folgen der eigenen Richtlinie des Betreibers. Standard ist 30."
+        },
+        "privacyCaseDays": {
+          "label": "Aufbewahrung von Betroffenenanfragen (Tage)"
+        },
+        "auditLogDays": {
+          "label": "Aufbewahrung des Administrationsprotokolls (Tage)",
+          "description": "Wie lange Einträge des Administrationsprotokolls aufbewahrt werden. Standard: 365."
+        },
+        "adminJobDays": {
+          "label": "Aufbewahrung abgeschlossener Verwaltungsaufträge (Tage)",
+          "description": "Wie lange abgeschlossene Verwaltungsaufträge aufbewahrt werden. Standard: 30."
+        },
+        "backupDays": {
+          "label": "Aufbewahrung von Sicherungen (Tage)",
+          "description": "Wie lange lokale Sicherungen aufbewahrt werden. Wird in der Plattformkonfiguration festgelegt, die der Betriebsagent und die CLI gemeinsam nutzen. Standard: 30."
+        }
       }
     }
   },
@@ -6507,6 +6560,7 @@
     "showMore": "{count, number} weitere anzeigen",
     "savedValuesChangedForConflicts": "Gespeicherte Werte für {settingLabels} haben sich geändert. Prüfen Sie Ihre Änderungen oder verwerfen Sie sie vor dem Speichern.",
     "keepMyEdits": "Meine Änderungen behalten",
+    "requiredSettingsMissing": "Erforderliche Einstellungen haben keinen Wert: {settings}. Legen Sie sie in den Einstellungen oder Zugangsdaten des Dienstes fest und wenden Sie die Konfiguration erneut an.",
     "configurationSaved": "Konfiguration gespeichert.",
     "configurationSavedApplyWhenReady": "Konfiguration gespeichert. Wenden Sie die gespeicherte Konfiguration an, wenn Sie bereit sind.",
     "configurationSavedRuntimePending": "Konfiguration gespeichert. Die Anwendung zur Laufzeit steht noch aus.",
@@ -6548,14 +6602,14 @@
     "servicePaused": "Pausiert",
     "serviceUnknown": "Unbekannt",
     "jobQueued": "Wartet auf den Start.",
-    "jobStatusLabel": "{status, select, queued {eingereiht} running {läuft} cancel_pending {Abbruch angefordert} success {erfolgreich} ok {ok} failed {fehlgeschlagen} error {Fehler} canceled {abgebrochen} partial {teilweise} stale {veraltet} interrupted {unterbrochen} skipped {übersprungen} never {nie} other {{status}}}",
+    "jobStatusLabel": "{status, select, queued {eingereiht} running {läuft} cancel_pending {Abbruch angefordert} succeeded {erfolgreich} partially_succeeded {teilweise erfolgreich} failed {fehlgeschlagen} cancelled {abgebrochen} stale {veraltet} interrupted {unterbrochen} skipped {übersprungen} never {nie} other {{status}}}",
     "jobRunning": "Läuft gerade.",
     "jobSucceeded": "Erfolgreich abgeschlossen.",
     "jobFailed": "Angehalten, weil der Auftrag fehlgeschlagen ist.",
     "jobStageFailed": "Angehalten, weil diese Phase fehlgeschlagen ist.",
-    "jobCanceled": "Vor dem Abschluss abgebrochen.",
-    "jobPartial": "Mit Warnungen abgeschlossen: Eine oder mehrere Phasen waren nur teilweise erfolgreich. Öffnen Sie die Auftragsdetails, um sie zu prüfen.",
-    "jobInterrupted": "Vor dem Abschluss angehalten, meist weil der Datenmanager neu gestartet wurde.",
+    "jobCancelled": "Vor dem Abschluss abgebrochen.",
+    "jobPartiallySucceeded": "Mit Warnungen abgeschlossen: Ein Teil der Arbeit fehlt. Öffnen Sie die Auftragsdetails, um ihn zu prüfen.",
+    "jobInterrupted": "Ohne festgehaltenes Ergebnis beendet, meist weil der Datenmanager neu gestartet wurde. Neue Datenaufträge warten, bis die Wiederherstellung ihn abschließt.",
     "jobSkipped": "Übersprungen, weil diese Phase deaktiviert oder nicht erforderlich war.",
     "invalidArchives": "Ungültige Archive — {archives}",
     "invalidArchivesMore": "Ungültige Archive — {archives}; +{hidden, number} weitere",
@@ -6627,7 +6681,7 @@
       "artifact_export": "Datenartefakt exportieren",
       "artifact_import": "Datenartefakt importieren",
       "artifact_validate": "Datenartefakt prüfen",
-      "backup_operation": "Sicherungsvorgang",
+      "backup_operation_run": "Sicherungsvorgang",
       "backup_prune": "Abgelaufene Sicherungen bereinigen",
       "catalog_activate": "ÖPNV-Katalog aktivieren",
       "catalog_validate": "ÖPNV-Katalog prüfen",
@@ -6638,7 +6692,7 @@
       "configuration_migration_preview": "Vorschau der Konfigurationsmigration",
       "convert_overpass": "Overpass-Daten umwandeln",
       "credential_import": "Zugangsdaten importieren",
-      "data_operation": "Datenvorgang",
+      "data_operation_run": "Datenvorgang",
       "data_reload": "Daten neu laden",
       "download_fonts": "Kartenglyphen herunterladen",
       "download_osm": "OSM-Daten herunterladen",
@@ -6657,16 +6711,16 @@
       "release_clear": "Release-Festlegung aufheben",
       "search_index_build": "Suchindex erstellen",
       "service_apply": "Dienstkonfiguration anwenden",
-      "service_bulk": "Aktion für mehrere Dienste",
+      "service_batch_run": "Aktion für mehrere Dienste",
       "service_core_restart": "Kerndienst neu starten",
-      "service_images_pull": "Dienst-Images abrufen",
+      "service_image_pull": "Dienst-Images abrufen",
       "service_restart": "Dienst neu starten",
       "service_start": "Dienst starten",
       "service_stop": "Dienst stoppen",
       "standalone_install": "Eigenständige Integration installieren",
       "standalone_preview": "Vorschau einer eigenständigen Integration",
       "standalone_remove": "Eigenständige Integration entfernen",
-      "system_diagnostics": "Diagnose ausführen",
+      "system_diagnostics_collect": "Diagnose ausführen",
       "system_update": "OpenMapX aktualisieren",
       "traffic_live": "Live-Verkehr aktualisieren",
       "traffic_maintenance": "Verkehrsdaten warten",
@@ -6678,7 +6732,7 @@
     "auditActions": {
       "ambient_places_build": "Erstellung der Orte in der Nähe gestartet",
       "ambient_places_discard": "Erstellung der Orte in der Nähe verworfen",
-      "ambient_places_enabled": "Orte in der Nähe ein- oder ausgeschaltet",
+      "ambient_places_enabled_set": "Orte in der Nähe ein- oder ausgeschaltet",
       "ambient_places_resume": "Erstellung der Orte in der Nähe fortgesetzt",
       "ambient_places_rollback": "Orte in der Nähe zurückgesetzt",
       "auth_policy_apply": "Anmelderichtlinie angewendet",
@@ -6688,38 +6742,27 @@
       "backup_restore": "Sicherung wiederhergestellt",
       "cache_clear": "Cache geleert",
       "compose_render": "Compose-Datei erzeugt",
-      "configuration_migration_desired": "Konfigurationsmigration angewendet",
-      "credential_delete": "Zugangsdaten gelöscht",
-      "credential_set": "Zugangsdaten gespeichert",
-      "credentials_export": "Zugangsdaten exportiert",
-      "credentials_import_desired": "Zugangsdaten importiert",
-      "credentials_import_preview": "Vorschau eines Zugangsdatenimports",
-      "data_clean": "Daten bereinigt",
-      "data_convert_overpass": "Overpass-Daten umgewandelt",
-      "data_download_fonts": "Kartenglyphen heruntergeladen",
-      "data_download_osm": "OSM-Daten heruntergeladen",
-      "data_link": "Daten verknüpft",
-      "data_notable_places_build": "Bekannte Orte erstellt",
-      "data_overture_conflate": "Overture-Verknüpfung fortgesetzt",
-      "data_overture_extract": "Overture-Daten extrahiert",
-      "data_overture_ingest": "Overture-Daten importiert",
-      "data_overture_pull": "Overture-Daten heruntergeladen",
-      "data_overture_sync": "Overture synchronisiert",
-      "data_search_index_build": "Suchindex erstellt",
-      "data_update": "Daten aktualisiert",
+      "configuration_migration_apply": "Konfigurationsmigration angewendet",
+      "credential_export": "Zugangsdaten exportiert",
+      "credential_import": "Zugangsdaten importiert",
+      "credential_import_preview": "Vorschau eines Zugangsdatenimports",
+      "data_manager_job_cancel": "Datenverwaltungsauftrag abgebrochen",
+      "data_operation_run": "Datenvorgang gestartet",
+      "dawarich_oidc_secret_rotate": "Dawarich-OIDC-Geheimnis erneuert",
       "dawarich_provision": "Dawarich eingerichtet",
-      "dawarich_rotate_oidc_secret": "Dawarich-OIDC-Geheimnis erneuert",
-      "extension_add_source": "Erweiterungsquelle hinzugefügt",
+      "extension_catalog_refresh": "Erweiterungskatalog aktualisiert",
       "extension_install": "Erweiterung installiert",
-      "extension_refresh_catalog": "Erweiterungskatalog aktualisiert",
       "extension_remove": "Erweiterung entfernt",
-      "extension_remove_source": "Erweiterungsquelle entfernt",
+      "extension_source_add": "Erweiterungsquelle hinzugefügt",
+      "extension_source_remove": "Erweiterungsquelle entfernt",
       "extension_update": "Erweiterung aktualisiert",
       "integration_binding_set": "Integrationsbindung festgelegt",
       "integration_binding_remove": "Integrationsbindung entfernt",
       "integration_config_update": "Integrationskonfiguration aktualisiert",
-      "integration_disabled": "Integration deaktiviert",
-      "integration_enabled": "Integration aktiviert",
+      "integration_credential_delete": "Zugangsdaten gelöscht",
+      "integration_credential_set": "Zugangsdaten gespeichert",
+      "integration_disable": "Integration deaktiviert",
+      "integration_enable": "Integration aktiviert",
       "integration_reload": "Integration neu geladen",
       "integration_reload_all": "Alle Integrationen neu geladen",
       "job_cancel": "Auftrag abgebrochen",
@@ -6727,28 +6770,25 @@
       "provider_reset": "Anbieterzustand zurückgesetzt",
       "release_clear": "Release-Auswahl zurückgesetzt",
       "service_apply": "Dienstkonfiguration angewendet",
-      "service_bulk_build": "Dienste gebaut",
-      "service_bulk_restart": "Dienste neu gestartet",
-      "service_bulk_start": "Dienste gestartet",
-      "service_bulk_stop": "Dienste gestoppt",
-      "service_bulk_update": "Dienste aktualisiert",
+      "service_build": "Dienste gebaut",
       "service_config_update": "Dienstkonfiguration aktualisiert",
       "service_credential_delete": "Dienst-Zugangsdaten gelöscht",
       "service_credential_set": "Dienst-Zugangsdaten gespeichert",
       "service_health_check": "Dienstzustand geprüft",
-      "service_images_pull": "Dienst-Images abgerufen",
-      "service_logs_read": "Dienstprotokolle gelesen",
+      "service_image_pull": "Dienst-Images abgerufen",
+      "service_log_read": "Dienstprotokolle gelesen",
       "service_restart": "Dienst neu gestartet",
       "service_selection_update": "Dienstauswahl aktualisiert",
       "service_start": "Dienst gestartet",
       "service_stop": "Dienst gestoppt",
-      "settings_test_email": "Test-E-Mail gesendet",
-      "settings_update": "Einstellungen aktualisiert",
+      "service_update": "Dienste aktualisiert",
+      "setting_test_email_send": "Test-E-Mail gesendet",
+      "setting_update": "Einstellungen aktualisiert",
       "standalone_install": "Eigenständige Integration installiert",
       "standalone_preview": "Vorschau einer eigenständigen Integration",
       "standalone_remove": "Eigenständige Integration entfernt",
-      "system_diagnostics_run": "Diagnose ausgeführt",
-      "system_update_apply": "Systemaktualisierung angewendet",
+      "system_diagnostics_collect": "Diagnose erfasst",
+      "system_update": "Systemaktualisierung angewendet",
       "system_update_check": "Nach Systemaktualisierungen gesucht",
       "timeline_connect": "Zeitleiste verbunden",
       "timeline_disconnect": "Zeitleiste getrennt",
@@ -6758,7 +6798,7 @@
       "transit_catalog_cancel": "ÖPNV-Katalogvorschlag abgebrochen",
       "transit_catalog_propose": "ÖPNV-Katalog vorgeschlagen",
       "transit_catalog_validate": "ÖPNV-Katalog geprüft",
-      "transit_credentials_update": "ÖPNV-Zugangsdaten aktualisiert",
+      "transit_credential_update": "ÖPNV-Zugangsdaten aktualisiert",
       "transit_lock_bump": "ÖPNV-Lockfile aktualisiert",
       "transit_source_add": "ÖPNV-Quelle hinzugefügt",
       "transit_source_disable": "ÖPNV-Quelle deaktiviert",
@@ -6767,17 +6807,17 @@
       "user_ban": "Benutzer gesperrt",
       "user_create": "Benutzer angelegt",
       "user_delete": "Benutzer gelöscht",
+      "user_email_verification_send": "Bestätigungs-E-Mail gesendet",
+      "user_email_verify": "E-Mail-Adresse des Benutzers bestätigt",
       "user_impersonate": "Als Benutzer angemeldet",
-      "user_invitation": "Benutzer eingeladen",
+      "user_invitation_send": "Benutzer eingeladen",
       "user_password_reset": "Benutzerpasswort zurückgesetzt",
+      "user_password_reset_send": "E-Mail zum Zurücksetzen des Passworts gesendet",
       "user_password_set": "Benutzerpasswort festgelegt",
-      "user_reset_password": "E-Mail zum Zurücksetzen des Passworts gesendet",
       "user_role_change": "Benutzerrolle geändert",
       "user_session_revoke": "Benutzersitzung widerrufen",
-      "user_sessions_revoke_all": "Alle Benutzersitzungen widerrufen",
-      "user_unban": "Benutzersperre aufgehoben",
-      "user_verification_email": "Bestätigungs-E-Mail gesendet",
-      "user_verify": "E-Mail-Adresse des Benutzers bestätigt"
+      "user_session_revoke_all": "Alle Benutzersitzungen widerrufen",
+      "user_unban": "Benutzersperre aufgehoben"
     },
     "rowsPerPage": "Zeilen pro Seite:",
     "displayedRows": "{from, number}–{to, number} von {total, number}",
@@ -6886,6 +6926,7 @@
     "jobDetail": "Auftragsdetails",
     "failedToLoadJobDetail": "Auftragsdetails konnten nicht geladen werden.",
     "triggeredByActor": "ausgelöst von {actor}",
+    "jobTrigger": "{trigger, select, api {API} agent {Betriebsagent} cli {Befehlszeile des Hosts} cron {Zeitplan} bootstrap {Ersteinrichtung} other {{trigger}}}",
     "startedAt": "gestartet {startedAt}",
     "durationValue": "Dauer {duration}",
     "noStageRecordsYet": "Noch keine Phasen erfasst.",

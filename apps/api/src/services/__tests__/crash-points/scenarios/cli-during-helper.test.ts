@@ -24,7 +24,7 @@ crashScenario({
     }
     apiRecreate.release();
     const job = await host.waitForJob(submitted.jobId as string);
-    expect(job.status).toBe("success");
+    expect(job.status).toBe("succeeded");
     for (const action of ["start", "restart"]) {
       const cli = await host.cli(["services", action, "web"]);
       expect(cli.code, `services ${action}: ${cli.stderr}`).toBe(0);

@@ -15,6 +15,7 @@ import {
   mergeAmbientPlaces,
 } from "@openmapx/core/ambient-places";
 import { itemAt } from "@openmapx/core/item-at";
+import { OVERTURE_PLACES_SCHEMA_VERSION } from "@openmapx/core/published-data";
 import type postgres from "postgres";
 import { freeBytesInPostgresContainer } from "../overture/capacity.js";
 import type { LockRetry } from "../publish-schema-swap.js";
@@ -95,9 +96,10 @@ export async function buildGermanyPlaces(
         places_published_at: Date | null;
         place_count: string;
         sources_catalogue: AmbientOvertureRow["sources_catalogue"];
+        schema_version: number;
       }[]
     >(
-      `SELECT region,release,status,places_published_at,place_count::TEXT,sources_catalogue FROM overture_places.conflation_state WHERE singleton=1`,
+      `SELECT region,release,status,places_published_at,place_count::TEXT,sources_catalogue,schema_version FROM overture_places.conflation_state WHERE singleton=1`,
     );
     if (!state) {
       const input = itemAt(
@@ -113,6 +115,8 @@ export async function buildGermanyPlaces(
         throw new Error("Germany coverage requires the complete europe/germany Overture snapshot");
       if (state.status !== "completed")
         throw new Error("Overture conflation must be completed before ambient publication");
+      if (state.schema_version !== OVERTURE_PLACES_SCHEMA_VERSION)
+        throw new Error("Re-import Overture places with the current builder");
       const releases = itemAt(
         await tx.unsafe<{ mismatch: boolean }[]>(
           `SELECT EXISTS(SELECT 1 FROM overture_places.places WHERE release<>$1 LIMIT 1) AS mismatch`,

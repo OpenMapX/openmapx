@@ -39,12 +39,17 @@ export interface Identified {
   ids: Ids;
 }
 
+/** An id scheme: lower case, starting with a letter, words joined by `-`. */
+export const ID_SCHEME_PATTERN = /^[a-z][a-z0-9-]*$/;
+
 /**
  * Build the canonical `scheme:value` string for the given primary scheme.
- * Throws if the scheme isn't present in the id map — producers must always
- * populate the primary first.
+ * Throws if the scheme breaks the scheme grammar or isn't present in the id
+ * map — producers must always populate the primary first.
  */
 export function makeId(primaryScheme: string, ids: Ids): string {
+  if (!ID_SCHEME_PATTERN.test(primaryScheme))
+    throw new Error(`Id scheme "${primaryScheme}" does not match ${ID_SCHEME_PATTERN}.`);
   const value = ids[primaryScheme];
   if (!value) {
     throw new Error(
@@ -57,9 +62,9 @@ export function makeId(primaryScheme: string, ids: Ids): string {
 
 /**
  * Parse a canonical `scheme:value` string back into its parts. Returns
- * `null` for empty, malformed, or prefix-only strings. The scheme must be
- * a non-empty token ending at the first `:`; the value is everything after
- * (which can itself contain colons, e.g. `osm:node/123` or
+ * `null` for empty, malformed, or prefix-only strings and for a scheme that
+ * breaks the scheme grammar. The scheme ends at the first `:`; the value is
+ * everything after (which can itself contain colons, e.g. `osm:node/123` or
  * `rdw:manager/area`).
  */
 export function parseId(s: string | undefined | null): { scheme: string; value: string } | null {
@@ -68,7 +73,7 @@ export function parseId(s: string | undefined | null): { scheme: string; value: 
   if (idx <= 0 || idx === s.length - 1) return null;
   const scheme = s.slice(0, idx);
   const value = s.slice(idx + 1);
-  if (!scheme || !value) return null;
+  if (!ID_SCHEME_PATTERN.test(scheme) || !value) return null;
   return { scheme, value };
 }
 

@@ -109,7 +109,9 @@ function requireSecret(
 }
 
 function withV1(baseURL: string): string {
-  const normalized = baseURL.replace(/\/+$/, "");
+  let end = baseURL.length;
+  while (end > 0 && baseURL[end - 1] === "/") end--;
+  const normalized = baseURL.slice(0, end);
   return normalized.endsWith("/v1") ? normalized : `${normalized}/v1`;
 }
 

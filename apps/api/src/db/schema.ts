@@ -13,11 +13,11 @@ export {
   configurationFence as dataManagerConfigurationFence,
   dataManager,
   feedState as dataManagerFeedState,
-  jobStages as dataManagerJobStages,
-  jobs as dataManagerJobs,
-  offlinePackageArtifactReferences as dataManagerOfflinePackageArtifactReferences,
-  offlinePackageJobOwners as dataManagerOfflinePackageJobOwners,
-  offlinePackageJobs as dataManagerOfflinePackageJobs,
+  job as dataManagerJob,
+  jobStage as dataManagerJobStage,
+  offlinePackageArtifactReference as dataManagerOfflinePackageArtifactReference,
+  offlinePackageJob as dataManagerOfflinePackageJob,
+  offlinePackageJobOwner as dataManagerOfflinePackageJobOwner,
   overtureRelease as dataManagerOvertureRelease,
 } from "@openmapx/db-schema";
 // Admin audit log
@@ -108,7 +108,7 @@ export { shareLink, shareLinkRelations } from "./share-link-schema";
 // Encrypted secret system settings
 export { systemSecret } from "./system-secret-schema";
 // System settings
-export { systemSettings } from "./system-settings-schema";
+export { systemSetting } from "./system-setting-schema";
 // Encrypted per-user Dawarich timeline connection
 export {
   type PersonalTimelineConnectionRow,

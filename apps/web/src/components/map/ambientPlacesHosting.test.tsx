@@ -109,7 +109,7 @@ describe("published places as ordinary map content", () => {
     // Overlay state knows both manifests; only the ambient renderer is hosted
     // because the wildfire renderer needs a real map.
     initOverlayRegistry([ambient, realIntegration("overlay-wildfires")]);
-    window.history.replaceState(null, "", "/?ov=ambient-places,wildfires");
+    window.history.replaceState(null, "", "/?overlay=ambient-places,wildfires");
 
     render(
       withRegistry(
@@ -124,7 +124,7 @@ describe("published places as ordinary map content", () => {
     expect(await screen.findByTestId("ambient-places-layer")).toBeTruthy();
     expect(isOverlayActive("wildfires")).toBe(true);
     await waitFor(() =>
-      expect(new URLSearchParams(window.location.search).get("ov")).toBe("wildfires"),
+      expect(new URLSearchParams(window.location.search).get("overlay")).toBe("wildfires"),
     );
 
     // Toggling an unrelated overlay never hides the automatic content.

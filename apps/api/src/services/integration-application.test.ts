@@ -9,8 +9,12 @@ import { afterAll, afterEach, it as base, beforeAll, describe, expect, vi } from
 import { ownedServiceHost } from "../../../ops-agent/src/__fixtures__/owned-service-host";
 import { openOpsJobJournal } from "../../../ops-agent/src/journal";
 import { buildOpsAgentServer } from "../../../ops-agent/src/server";
+import { TEST_ADMIN_COOKIE } from "../test/admin-session";
+import { mockAdminSession } from "../test/auth";
 import { createConfigurationPostgresFixture } from "../test/configuration-postgres-fixture";
 import { createMigratedPostgresFixture } from "../test/postgres-fixture";
+
+const ADMIN_ID = mockAdminSession().user.id;
 
 const state = vi.hoisted(() => ({
   fixture: null as unknown as Awaited<ReturnType<typeof createConfigurationPostgresFixture>>,
@@ -31,6 +35,9 @@ vi.mock("@openmapx/core/server", async (original) => ({
 // Infrastructure-only ports; provider activation, API, SQL writer, candidate,
 // production registry/agent, signed receipts and target runtime remain actual.
 vi.mock("../redis", () => ({ redis: null }));
+vi.mock("../utils/require-admin", async (actual) =>
+  (await import("../test/admin-session")).testAdminSessionModule(await actual()),
+);
 vi.mock("./attribution", () => ({
   AttributionIndex: {
     init: async () => ({ setIntegrationManifests() {}, reload: async () => {}, close() {} }),
@@ -60,7 +67,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       api: ReturnType<typeof Fastify>,
       agent: ReturnType<typeof buildOpsAgentServer>,
       installation: ReturnType<typeof openControlInstallation>;
-    const headers = { "x-openmapx-local-admin": "binding-owned-admin" };
+    const headers = { cookie: TEST_ADMIN_COOKIE };
     beforeAll(async () => {
       migrated = await createMigratedPostgresFixture();
     }, 90000);
@@ -112,15 +119,15 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           backend: { routes: true },
           configSchema: {
             properties: {
-              TOKEN: { type: "string", "x-openmapx-secret": true, default: "old-synthetic-token" },
-              ENDPOINT: { type: "string", default: "old-endpoint" },
+              token: { type: "string", "x-openmapx-secret": true, default: "old-synthetic-token" },
+              endpoint: { type: "string", default: "old-endpoint" },
             },
           },
         }),
       );
       writeFileSync(
         join(directory, "index.ts"),
-        `export function setup(ctx){const captured=ctx.getRequiredService('routing-engine');ctx.registerRoute('GET','/bound',async(_req,reply)=>reply.send({serviceId:captured?.serviceId??null}));const token=ctx.config.TOKEN;ctx.registerRoute('GET','/credential',async(_req,reply)=>reply.send({rotated:token==='new-synthetic-token'}));}`,
+        `export function setup(ctx){const captured=ctx.getRequiredService('routing-engine');ctx.registerRoute('GET','/bound',async(_req,reply)=>reply.send({serviceId:captured?.serviceId??null}));const token=ctx.config.token;ctx.registerRoute('GET','/credential',async(_req,reply)=>reply.send({rotated:token==='new-synthetic-token'}));}`,
       );
       installation = openControlInstallation({
         infraDir: host.infraDir,
@@ -134,7 +141,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         },
         runtime: host.runtime,
         resourceClaimer: host.claimer,
-        journal: await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs-v1.json")),
+        journal: await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs.json")),
         controlInstallation: installation,
       });
       agent.addHook("onSend", async (request, _reply, payload) => {
@@ -158,7 +165,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             driftAfterCommit = false;
             writeFileSync(
               join(directory, "config.json"),
-              JSON.stringify({ TOKEN: "host-drift-token" }),
+              JSON.stringify({ token: "host-drift-token" }),
             );
           }
         }
@@ -171,8 +178,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         OPS_AGENT_URL: baseUrl,
         OPS_AGENT_TOKEN_FILE: tokenFile,
         OPENMAPX_SECRETS_KEY: Buffer.alloc(32, 0x71).toString("base64url"),
-        OPENMAPX_LOCAL_ADMIN_TOKEN: "binding-owned-admin",
-        OPENMAPX_DISABLE_LOCALHOST_AUTH: "0",
         BETTER_AUTH_SECRET: "binding-owned-synthetic-auth-secret-only",
         BETTER_AUTH_URL: "http://localhost:3001",
         [services.APPLIED_SERVICES_ENV]: "motis,engine-b",
@@ -309,8 +314,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         { createDirectAdminOpsKey } = await import("./direct-ops-idempotency");
       const request = (serviceId: string) =>
         jobRunner.applyImmediateIntegrationBinding({
-          actorId: "loopback",
-          operationKey: createDirectAdminOpsKey("loopback", `binding-race-${randomUUID()}`),
+          actorId: ADMIN_ID,
+          operationKey: createDirectAdminOpsKey(ADMIN_ID, `binding-race-${randomUUID()}`),
           input: {
             integrationId: "binding-test",
             capability: "routing-engine",
@@ -373,7 +378,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(rows).toHaveLength(1);
       const row = itemAt(rows, 0);
       expect(row.id).toBe(job.id);
-      expect(row.status).toBe("success");
+      expect(row.status).toBe("succeeded");
       expect(row.protocol.execution.version).toBe(2);
     }, 90000);
     it("keeps disabled integrations pending instead of claiming an active provider", async () => {
@@ -427,7 +432,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       (await import("../utils/rate-limit")).serviceActionLimit.reset();
       const result = await api.inject({
         method: "PUT",
-        url: "/api/admin/credentials/binding-test/TOKEN",
+        url: "/api/admin/credentials/binding-test/token",
         headers: { ...headers, "idempotency-key": `credential-${randomUUID()}` },
         payload: { value: "new-synthetic-token", expectedRevision: revision },
       });
@@ -474,7 +479,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(reload).toHaveBeenCalledTimes(1);
       const current = await state.fixture
         .sql`SELECT id,status FROM admin_job WHERE type='configuration.apply'`;
-      expect(current).toEqual([{ id: job.id, status: "success" }]);
+      expect(current).toEqual([{ id: job.id, status: "succeeded" }]);
     }, 90000);
     it("locks real service host fields and resource knobs, then permits explicit adoption after removal", async () => {
       vi.stubEnv("SERVICE_MOTIS_REGION", "host-region");
@@ -545,7 +550,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       (await import("../utils/rate-limit")).serviceActionLimit.reset();
       return api.inject({
         method,
-        url: "/api/admin/credentials/binding-test/TOKEN",
+        url: "/api/admin/credentials/binding-test/token",
         headers: { ...headers, "idempotency-key": key },
         payload: {
           expectedRevision: revision,
@@ -559,11 +564,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const directory = join(host.root, "integrations/binding-test"),
           path = join(directory, "config.json");
         if (source === "env") vi.stubEnv("INTEGRATION_BINDING_TEST_TOKEN", "host-private-token");
-        else writeFileSync(path, JSON.stringify({ TOKEN: "host-private-token" }));
+        else writeFileSync(path, JSON.stringify({ token: "host-private-token" }));
         const before = await credentials(),
           reload = vi.spyOn(await import("../integration-host"), "reloadIntegrations");
         expect(
-          before.credentials.find((field: { key: string }) => field.key === "TOKEN"),
+          before.credentials.find((field: { key: string }) => field.key === "token"),
         ).toMatchObject({
           source,
           ownership: { writable: false, adoption: "host_action_required" },
@@ -633,9 +638,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           await state.fixture.sql`ALTER TABLE service_config RENAME TO unavailable_service_config`;
         if (failure === "file") writeFileSync(path, "{malformed");
         if (failure === "vault") {
-          const encrypted = (await import("./secrets")).encrypt("private-value");
+          const encrypted = (await import("./secrets")).encrypt(
+            "private-value",
+            "integration_secret:binding-test:token",
+          );
           await state.fixture
-            .sql`INSERT INTO integration_secret(integration_id,key,ciphertext,iv,tag) VALUES ('binding-test','TOKEN','invalid',${encrypted.iv},${encrypted.tag})`;
+            .sql`INSERT INTO integration_secret(integration_id,key,ciphertext,iv,tag,key_version) VALUES ('binding-test','token','invalid',${encrypted.iv},${encrypted.tag},${encrypted.keyVersion})`;
         }
         try {
           expect(await state.fixture.sql`SELECT * FROM capability_binding`).toHaveLength(1);
@@ -666,7 +674,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             payload: { unexpected: true },
           });
           expect(result.statusCode, result.body).toBe(409);
-          expect(result.json()).toMatchObject({ code: "transit_credentials_managed" });
+          expect(result.json()).toMatchObject({ code: "TRANSIT_CREDENTIALS_MANAGED" });
         }
         expect(await state.fixture.sql`SELECT * FROM service_secret`).toHaveLength(0);
       });

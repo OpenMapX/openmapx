@@ -1,10 +1,11 @@
+import { prefixedStorageKey } from "@openmapx/core";
 import {
   type CredentialImportPreview,
   credentialImportPreviewSchema,
 } from "@openmapx/core/api-contracts";
 /** Public receipt metadata only. Never envelope, passphrase or credential values. */
 export const credentialPreviewStorageKey = (apiUrl: string, actorId: string) =>
-  `openmapx-credential-preview:${JSON.stringify([apiUrl, actorId])}`;
+  prefixedStorageKey("adminCredentialPreview", JSON.stringify([apiUrl, actorId]));
 export function readCredentialPreview(key: string): CredentialImportPreview | null {
   try {
     const raw = sessionStorage.getItem(key);

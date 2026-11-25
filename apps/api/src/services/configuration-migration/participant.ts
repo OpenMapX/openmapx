@@ -1,4 +1,5 @@
 /** Closed staged issuers. Legacy batch intents cannot construct these participants. */
+import { auditEntry } from "@openmapx/core/api-contracts";
 import { canonicalJson } from "@openmapx/core/ops";
 import { sql } from "drizzle-orm";
 import { AdminActionReauthentication } from "../../account/admin-reauthentication";
@@ -7,7 +8,7 @@ import {
   adminAuditLog,
   capabilityBinding,
   integrationBindingRevision,
-  systemSettings,
+  systemSetting,
 } from "../../db/schema";
 import {
   type AdministrativeConfigurationWriter,
@@ -183,7 +184,7 @@ export async function prepareStagedMigrationParticipant(input: {
     if (!input.proof) throw new MigrationConflict();
     return {
       challengeId: input.proof.importProofToken,
-      purpose: "credentials.import" as const,
+      purpose: "credential.import" as const,
       targetId: stage.previewId,
       intentFingerprint: stage.fingerprint,
       sessionId: input.proof.sessionId,
@@ -238,10 +239,10 @@ export async function prepareStagedMigrationParticipant(input: {
     if (stage.kind === "migration") {
       const migration = plan as MigrationPlan;
       if (owner.transactionMode === "write")
-        await owner.connection.execute(sql`LOCK TABLE system_settings IN SHARE ROW EXCLUSIVE MODE`);
+        await owner.connection.execute(sql`LOCK TABLE system_setting IN SHARE ROW EXCLUSIVE MODE`);
       const currentSettings = await owner.connection
-        .select({ key: systemSettings.key, rowVersion: sql<string>`xmin::text` })
-        .from(systemSettings);
+        .select({ key: systemSetting.key, rowVersion: sql<string>`xmin::text` })
+        .from(systemSetting);
       if (
         canonicalJson(currentSettings.sort((a, b) => a.key.localeCompare(b.key))) !==
           canonicalJson(migration.settingsWitness) ||
@@ -298,10 +299,10 @@ export async function prepareStagedMigrationParticipant(input: {
         const config = plan as MigrationPlan;
         for (const [key, value] of Object.entries(config.settings))
           await tx
-            .insert(systemSettings)
+            .insert(systemSetting)
             .values({ key, value })
             .onConflictDoUpdate({
-              target: systemSettings.key,
+              target: systemSetting.key,
               set: { value, updatedAt: new Date() },
             });
         const groups = new Set(config.document.bindings.map((b) => b.integrationId));
@@ -339,12 +340,10 @@ export async function prepareStagedMigrationParticipant(input: {
         }
       }
       await tx.insert(adminAuditLog).values({
-        actorId: writer.actorId,
-        action:
-          stage.kind === "credentials"
-            ? "credentials.import.desired"
-            : "configuration.migration.desired",
-        targetType: "configuration-migration",
+        actorUserId: writer.actorId,
+        ...auditEntry(
+          stage.kind === "credentials" ? "credential.import" : "configuration.migration.apply",
+        ),
         targetId: stage.previewId,
         details: {
           jobId: owner.job.jobId,

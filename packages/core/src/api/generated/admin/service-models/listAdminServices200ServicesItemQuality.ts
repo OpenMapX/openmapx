@@ -6,6 +6,5 @@ export type ListAdminServices200ServicesItemQuality =
 
 export const ListAdminServices200ServicesItemQuality = {
   "built-in": "built-in",
-  "community-verified": "community-verified",
   community: "community",
 } as const;

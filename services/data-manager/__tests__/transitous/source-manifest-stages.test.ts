@@ -128,7 +128,7 @@ describe("fetch stage manifest finalization", () => {
 
     finalizer.resolve("manifest.json");
     const result = await pending;
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(result.stage).toBe("fetch");
   });
 
@@ -143,7 +143,7 @@ describe("fetch stage manifest finalization", () => {
 
     finalizer.reject(new Error("manifest hashing failed"));
     const result = await pending;
-    expect(result.status).toBe("error");
+    expect(result.status).toBe("failed");
     expect(result.message).toBe("manifest hashing failed");
     expect(result.error?.message).toBe("manifest hashing failed");
   });
@@ -155,7 +155,7 @@ describe("fetch stage manifest finalization", () => {
 
     const result = await fetchStage.run(makeCtx([feedWith("catalog")]));
 
-    expect(result.status).toBe("error");
+    expect(result.status).toBe("failed");
     expect(finalizeTransitSourceManifest).not.toHaveBeenCalled();
   });
 });
@@ -173,7 +173,7 @@ describe("fetch-operator stage manifest finalization", () => {
 
     finalizer.resolve("manifest.json");
     const result = await pending;
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(result.stage).toBe("fetch-operator");
   });
 
@@ -188,7 +188,7 @@ describe("fetch-operator stage manifest finalization", () => {
 
     finalizer.reject(new Error("manifest hashing failed"));
     const result = await pending;
-    expect(result.status).toBe("error");
+    expect(result.status).toBe("failed");
     expect(result.message).toBe("manifest hashing failed");
   });
 
@@ -218,7 +218,7 @@ describe("fetch-operator stage manifest finalization", () => {
     finalizer.reject(new Error("manifest incomplete"));
 
     const result = await pending;
-    expect(result.status).toBe("error");
+    expect(result.status).toBe("failed");
     expect(result.message).toBe("manifest incomplete");
   });
 
@@ -229,7 +229,7 @@ describe("fetch-operator stage manifest finalization", () => {
 
     const result = await fetchOperatorStage.run(makeCtx([feedWith("operator")]));
 
-    expect(result.status).toBe("error");
+    expect(result.status).toBe("failed");
     expect(finalizeTransitSourceManifest).not.toHaveBeenCalled();
   });
 });

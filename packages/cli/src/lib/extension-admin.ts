@@ -1,18 +1,24 @@
 import { ApiClientError, createApiClient, isApiRequestAbortedError } from "@openmapx/core";
 import type { AdminExtensionInstallPreview } from "@openmapx/core/api-admin-sdk";
+import { AdminSessionError, type AdminSessionOptions, adminSessionRequest } from "./admin-session";
 import { log } from "./output";
 
 export const EXTENSION_READ_TIMEOUT_MS = 30_000;
 export const EXTENSION_RESOLUTION_TIMEOUT_MS = 180_000;
 
-/** Each action owns its API destination; env loading happens after module imports. */
-export function createExtensionAdminClient() {
+/**
+ * A client that acts as the operator's administrator session at the API
+ * origin, exactly as `system update` does. Each action builds its own after
+ * `infra/docker/.env` is loaded, reads the session file once, and keeps the
+ * same origin and cookie for all of its requests.
+ */
+export function createExtensionAdminClient(session: AdminSessionOptions) {
+  const { origin, headers } = adminSessionRequest(session);
   return createApiClient({
-    baseUrl: process.env.API_URL ?? process.env.OPENMAPX_API_URL ?? "http://localhost:3001",
+    baseUrl: origin,
     credentials: "omit",
-    headerInterceptor: () => ({
-      "x-openmapx-local-admin": process.env.OPENMAPX_LOCAL_ADMIN_TOKEN?.trim() ?? "",
-    }),
+    redirect: "error",
+    headerInterceptor: () => ({ ...headers }),
   });
 }
 
@@ -21,7 +27,9 @@ export async function runExtensionAction(action: () => Promise<void>): Promise<v
   try {
     await action();
   } catch (error) {
-    if (error instanceof HostPortReviewRequired) {
+    if (error instanceof AdminSessionError) {
+      log.err(error.message);
+    } else if (error instanceof HostPortReviewRequired) {
       log.err(
         "Host-port confirmation is missing or no longer matches the current preview. Run ext preview <idOrUrl>, inspect the complete current snapshot, then deliberately supply --host-port-confirmation <fingerprint>. For an update, preview the same catalog ID. Review again if the snapshot changed.",
       );

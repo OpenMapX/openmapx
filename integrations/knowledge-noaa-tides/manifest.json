@@ -14,7 +14,6 @@
     "routes": true
   },
   "quality": "built-in",
-  "category": "Knowledge",
   "healthCheck": [
     {
       "name": "NOAA CO-OPS Data API",

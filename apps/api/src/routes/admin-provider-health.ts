@@ -43,7 +43,6 @@ export async function adminProviderHealthRoute(app: FastifyInstance): Promise<vo
     await health.reset(request.params.id);
     await writeAuditLog({
       actorId: getAdminSession(request).user.id,
-      targetType: "provider",
       targetId: request.params.id,
       action: "provider.reset",
       request,

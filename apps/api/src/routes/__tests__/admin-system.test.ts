@@ -171,7 +171,7 @@ describe("admin system routes", () => {
       },
       session.user.id,
     );
-    expect(audit).toHaveBeenCalledWith(expect.objectContaining({ action: "system.update.apply" }));
+    expect(audit).toHaveBeenCalledWith(expect.objectContaining({ action: "system.update" }));
   });
 
   it.each([
@@ -190,30 +190,26 @@ describe("admin system routes", () => {
     expect(enqueue).not.toHaveBeenCalled();
   });
 
-  it.each(["loopback", "impersonated"])(
-    "refuses %s release application before enqueue",
-    async (kind) => {
-      const original = session.user.id;
-      if (kind === "loopback") session.user.id = "loopback";
-      else session.session.impersonatedBy = "another-admin";
-      try {
-        const response = await app.inject({
-          method: "POST",
-          url: "/admin/system/updates/apply",
-          payload: {
-            confirmation: "UPDATE OPENMAPX",
-            releaseId: "release-123",
-            expectedDigest: "a".repeat(64),
-          },
-        });
-        expect(response.statusCode).toBe(403);
-        expect(enqueue).not.toHaveBeenCalled();
-      } finally {
-        session.user.id = original;
-        session.session.impersonatedBy = null;
-      }
-    },
-  );
+  it("refuses impersonated release application before enqueue", async () => {
+    const original = session.user.id;
+    session.session.impersonatedBy = "another-admin";
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/admin/system/updates/apply",
+        payload: {
+          confirmation: "UPDATE OPENMAPX",
+          releaseId: "release-123",
+          expectedDigest: "a".repeat(64),
+        },
+      });
+      expect(response.statusCode).toBe(403);
+      expect(enqueue).not.toHaveBeenCalled();
+    } finally {
+      session.user.id = original;
+      session.session.impersonatedBy = null;
+    }
+  });
 
   it("allows an operator to skip the optional backup", async () => {
     const response = await app.inject({
@@ -240,7 +236,7 @@ describe("admin system routes", () => {
     );
     expect(audit).toHaveBeenCalledWith(
       expect.objectContaining({
-        action: "system.update.apply",
+        action: "system.update",
         details: { createBackup: false, releaseId: "release-123", expectedDigest: "a".repeat(64) },
       }),
     );
@@ -309,7 +305,7 @@ describe("admin system routes", () => {
 
   it("rejects updates while another host-mutating job is active", async () => {
     findActive.mockImplementation(async (type: string) =>
-      type === "backup.operation" ? { id: "backup-running", status: "running" } : null,
+      type === "backup.operation.run" ? { id: "backup-running", status: "running" } : null,
     );
     const response = await app.inject({
       method: "POST",

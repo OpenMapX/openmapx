@@ -72,7 +72,7 @@ describe("SystemSettings env-override handling", () => {
         secret: false,
         value: true,
         source: "env",
-        envVar: "OPENMAPX_ALLOW_GREY_AREA",
+        envVar: "DATA_USE_ALLOW_GREY_AREA",
         envOverride: true,
       },
     ]);

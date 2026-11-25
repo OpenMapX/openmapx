@@ -8,6 +8,7 @@ import {
   readSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
+import { COMPONENT_ID_PATTERN } from "../component-id";
 
 /** Where one set of built-in manifests is read from. */
 export interface BuiltInManifestSource {
@@ -38,7 +39,7 @@ export function checkoutBuiltInServiceManifests(
   };
 }
 
-const INTEGRATION_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const INTEGRATION_ID = COMPONENT_ID_PATTERN;
 
 /**
  * The checkout's own built-in integration manifests: every

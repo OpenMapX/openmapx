@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://openmapx.example/privacy/portable-places-v1",
+  "$id": "urn:openmapx:privacy:portable-places:1",
   "type": "object",
   "required": ["type", "features"],
   "properties": {

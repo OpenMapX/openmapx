@@ -1,6 +1,7 @@
 import { join } from "node:path";
 import { itemAt } from "@openmapx/core/item-at";
 import { assertSupportedOvertureContributors } from "@openmapx/core/places/overtureSource";
+import { OVERTURE_PLACES_SCHEMA_VERSION } from "@openmapx/core/published-data";
 import { resolveDatabaseUrl } from "@openmapx/core/service-secret-files";
 import type postgres from "postgres";
 import {
@@ -129,10 +130,14 @@ export async function activateOvertureStagingSchema(
     staging: stagingSchema,
     retry,
     carryOver: async (tx, previous) => {
+      // Only a snapshot written by this builder version shares the layout.
       const [existingOsmSnapshot] = previous
-        ? await tx.unsafe<{ exists: boolean }[]>(`SELECT to_regclass($1) IS NOT NULL AS exists`, [
-            `"${previous}".osm_pois`,
-          ])
+        ? await tx.unsafe<{ exists: boolean }[]>(
+            `SELECT to_regclass($1) IS NOT NULL
+                AND EXISTS (SELECT 1 FROM "${previous}".conflation_state
+                             WHERE singleton = 1 AND schema_version = $2) AS exists`,
+            [`"${previous}".osm_pois`, OVERTURE_PLACES_SCHEMA_VERSION],
+          )
         : [];
       if (previous && existingOsmSnapshot?.exists) {
         // `rebuildOvertureLinks` verifies this fingerprint against the current
@@ -237,9 +242,15 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
 
   await sql.unsafe(
     `INSERT INTO "${stagingSchema}".conflation_state
-       (release, region, place_count, status, sources_catalogue)
-     VALUES ($1, $2, $3, 'pending', $4::TEXT::JSONB)`,
-    [release, opts.region, count, JSON.stringify(pullContract.sourcesCatalogue)],
+       (release, region, place_count, status, sources_catalogue, schema_version)
+     VALUES ($1, $2, $3, 'pending', $4::TEXT::JSONB, $5)`,
+    [
+      release,
+      opts.region,
+      count,
+      JSON.stringify(pullContract.sourcesCatalogue),
+      OVERTURE_PLACES_SCHEMA_VERSION,
+    ],
   );
 
   opts.onProgress?.("Atomic swap staging → live...");

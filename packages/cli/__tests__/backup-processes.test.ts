@@ -27,6 +27,11 @@ beforeEach(() => {
   mkdirSync(join(root, "infra/docker"), { recursive: true });
   mkdirSync(join(root, "bin"));
   writeFileSync(join(root, "pnpm-workspace.yaml"), "packages: []\n");
+  mkdirSync(join(root, "apps/api/src/db/migrations/meta"), { recursive: true });
+  writeFileSync(
+    join(root, "apps/api/src/db/migrations/meta/_journal.json"),
+    JSON.stringify({ entries: [{ tag: "0000_baseline", when: 1000 }] }),
+  );
   writeFileSync(
     join(root, "services/postgis/service.json"),
     JSON.stringify({
@@ -54,6 +59,10 @@ const mode = process.env.BACKUP_FIXTURE_MODE;
 fs.appendFileSync(file('commands'), JSON.stringify(args) + '\\n');
 if (args[0] === 'compose' && args.includes('config')) {
   process.stdout.write(JSON.stringify({name:'fixture',volumes:{'openmapx-pgdata':{name:'fixture_pgdata'}}}));
+  process.exit(0);
+}
+if (args[0] === 'compose' && args.some(arg => arg.includes('drizzle.__drizzle_migrations'))) {
+  process.stdout.write('1000\\n');
   process.exit(0);
 }
 if (args[0] === 'compose' && (args.includes('start') || args.includes('stop'))) process.exit(0);
@@ -147,7 +156,7 @@ if (mode.startsWith('hold')) {
   vi.stubEnv("PATH", `${join(root, "bin")}${delimiter}${process.env.PATH ?? ""}`);
   vi.stubEnv("OPENMAPX_ROOT_DIR", root);
   vi.stubEnv("OPENMAPX_ENABLED_SERVICES", "postgis");
-  vi.stubEnv("BACKUP_RETENTION_DAYS", "30");
+  vi.stubEnv("RETENTION_BACKUP_DAYS", "30");
   vi.stubEnv("BACKUP_FIXTURE_MODE", "complete");
   vi.stubEnv("BACKUP_FIXTURE_ROOT", root);
 });
@@ -272,7 +281,7 @@ it("writes pg_dump's custom-format archive unchanged after confirmed completion"
   const result = await createBackup({ rootDir: root, name: "complete" });
   const volume = result.manifest.services[0]?.volumes[0];
   if (!volume) throw Error("Missing fixture backup volume");
-  expect(result.manifest.formatVersion).toBe(2);
+  expect(result.manifest.formatVersion).toBe(1);
   expect(volume).toMatchObject({
     mode: "pg_dump",
     postgresUser: "postgres",

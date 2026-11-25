@@ -308,7 +308,9 @@ body is:
 
 `mapCenter` is `[longitude, latitude]`. `query`, `mapCenter`, and `mapBbox` are
 required; `lang` is optional. A `query` longer than 500 characters is rejected
-with `400` and `{ "error": "query_too_long" }`. `cloudAccess` is the caller's
+with `400` and `{ "error": "The query is too long", "code": "QUERY_TOO_LONG" }`;
+a caller over its quota gets `429` with code `RATE_LIMITED`, and a parse that
+fails upstream `502` with code `NLP_UNAVAILABLE`. `cloudAccess` is the caller's
 choice, deliberately explicit and fail-closed; the server still decides:
 
 | Value             | Behavior                                                                             |

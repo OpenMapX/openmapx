@@ -13,6 +13,7 @@ import {
   selectOvertureStrings,
 } from "@openmapx/core";
 import { overtureTaxonomyCategoryEvidence } from "@openmapx/core/places/overtureCategoryMap";
+import { OVERTURE_PLACES_SCHEMA_VERSION } from "@openmapx/core/published-data";
 import type { DatabaseClient, IntegrationContext } from "@openmapx/integration-framework";
 import type {
   CategoryId,
@@ -64,6 +65,7 @@ interface OvertureHealthRow {
   place_count: number | string;
   place_release: string | null;
   state_release: string | null;
+  schema_version: number;
   status: string | null;
   phase: string | null;
   updated_at: Date | string | null;
@@ -280,7 +282,7 @@ async function queryOverturePlaces(
       places.release
     FROM overture_places.places
     JOIN overture_places.conflation_state AS state
-      ON state.singleton = 1 AND state.release = places.release
+      ON state.singleton = 1 AND state.release = places.release AND state.schema_version = $7
     WHERE geom && ST_MakeEnvelope($1, $2, $3, $4, 4326)
       AND (operating_status IS NULL OR operating_status = 'open')
       AND (confidence IS NULL OR confidence >= $6)
@@ -300,7 +302,15 @@ async function queryOverturePlaces(
       gers_id
     LIMIT ${OVERTURE_FETCH_LIMIT + 1}
   `;
-  const params: unknown[] = [bbox.west, bbox.south, bbox.east, bbox.north, concepts, minConfidence];
+  const params: unknown[] = [
+    bbox.west,
+    bbox.south,
+    bbox.east,
+    bbox.north,
+    concepts,
+    minConfidence,
+    OVERTURE_PLACES_SCHEMA_VERSION,
+  ];
   return db.execute<OvertureRow[]>(sql, params);
 }
 
@@ -334,10 +344,10 @@ async function fetchOverturePlaceByGers(
        places.release
      FROM overture_places.places
      JOIN overture_places.conflation_state AS state
-       ON state.singleton = 1 AND state.release = places.release
+       ON state.singleton = 1 AND state.release = places.release AND state.schema_version = $2
      WHERE gers_id = $1
      LIMIT 1`,
-    [gers],
+    [gers, OVERTURE_PLACES_SCHEMA_VERSION],
   );
   return rows[0] ?? null;
 }
@@ -451,7 +461,7 @@ export function setup(ctx: IntegrationContext): void {
         `SELECT
            state.place_count,
            (SELECT release FROM overture_places.places LIMIT 1) AS place_release,
-           state.release AS state_release, state.status, state.phase,
+           state.release AS state_release, state.schema_version, state.status, state.phase,
            state.updated_at, state.last_error
          FROM overture_places.conflation_state AS state
          WHERE state.singleton = 1`,
@@ -464,6 +474,12 @@ export function setup(ctx: IntegrationContext): void {
         return {
           status: "down" as const,
           error: `Overture release mismatch: places=${state.place_release}, state=${state.state_release}`,
+        };
+      }
+      if (state.schema_version !== OVERTURE_PLACES_SCHEMA_VERSION) {
+        return {
+          status: "down" as const,
+          error: "Overture places have an outdated layout and await their rebuild",
         };
       }
       const updatedAt = state.updated_at ? new Date(state.updated_at).getTime() : 0;

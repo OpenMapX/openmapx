@@ -5,5 +5,5 @@ export type PostApiDataManagerTransitSyncPreflight409Code =
   (typeof PostApiDataManagerTransitSyncPreflight409Code)[keyof typeof PostApiDataManagerTransitSyncPreflight409Code];
 
 export const PostApiDataManagerTransitSyncPreflight409Code = {
-  preflight_stale: "preflight_stale",
+  PREFLIGHT_STALE: "PREFLIGHT_STALE",
 } as const;

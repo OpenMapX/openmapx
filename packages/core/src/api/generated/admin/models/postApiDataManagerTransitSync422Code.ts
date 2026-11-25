@@ -5,5 +5,5 @@ export type PostApiDataManagerTransitSync422Code =
   (typeof PostApiDataManagerTransitSync422Code)[keyof typeof PostApiDataManagerTransitSync422Code];
 
 export const PostApiDataManagerTransitSync422Code = {
-  "outside-operations-profile": "outside-operations-profile",
+  OUTSIDE_OPERATIONS_PROFILE: "OUTSIDE_OPERATIONS_PROFILE",
 } as const;

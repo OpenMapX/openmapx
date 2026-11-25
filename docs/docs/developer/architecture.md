@@ -255,9 +255,8 @@ and each limiter keeps a bounded number of buckets. Admin route
 scopes also enforce administrator authorization through their runtime guards. Fastify trusts
 forwarding headers only when the socket peer belongs to an explicitly configured
 proxy IP/CIDR range, so limiters and the audit log see the real client IP without
-accepting headers from a directly connected client. The loopback admin
-short-circuit deliberately reads the raw socket address, so a forged
-`X-Forwarded-For` can't bypass it.
+accepting headers from a directly connected client. No address grants admin
+access: every admin request needs an administrator's session.
 
 **The data plane behind the engines.** The `data-manager` service owns the
 `/data` tree. It downloads OSM extracts and map glyphs, and runs the
@@ -369,6 +368,14 @@ and a failed rebuild leaves the previous live schema queryable. The
 `notable_places` schema follows the same staging-and-swap pattern, filled from
 a Wikidata SPARQL endpoint (CC0) instead of a PBF, and so does Overture's
 `overture_places`.
+
+Each of these snapshots records the layout version of the builder that wrote
+it in `schema_version` (`osm_search.index_state`, `notable_places.index_state`
+and `overture_places.conflation_state`). The versions are constants in
+`@openmapx/core/published-data`; raise one whenever its builder changes what it
+publishes. Readers serve only a snapshot of their own version. At startup
+`data-manager` rebuilds an OSM search or notable-places index of another
+version and re-imports Overture places of another version.
 
 A publication never makes the API's readers wait
 (`services/data-manager/src/jobs/publish-schema-swap.ts`). Indexes and

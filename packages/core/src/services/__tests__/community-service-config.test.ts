@@ -145,8 +145,8 @@ describe("OpenConditions ingest rendered as a community service", () => {
       "foo-bar",
       "RATE_LIMIT_MAX",
     ]);
-    expect(environment["a.b"]).toBe("$${SERVICE_OPENCONDITIONS_INGEST_A.B:-}");
-    expect(environment["foo-bar"]).toBe("$${SERVICE_OPENCONDITIONS_INGEST_FOO-BAR:-}");
+    expect(environment["a.b"]).toBe("$${SERVICE_OPENCONDITIONS_INGEST_a.b:-}");
+    expect(environment["foo-bar"]).toBe("$${SERVICE_OPENCONDITIONS_INGEST_foo-bar:-}");
     expect(environment.RATE_LIMIT_MAX).toBe("${SERVICE_OPENCONDITIONS_INGEST_RATE_LIMIT_MAX:-}");
   });
 

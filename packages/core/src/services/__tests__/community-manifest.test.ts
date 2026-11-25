@@ -12,6 +12,7 @@ function manifest(overrides: Record<string, unknown> = {}) {
     id: "maps-tiles",
     name: "Map tiles",
     version: "1.0.0",
+    platform: "1.0",
     quality: "community",
     container: {
       image: "registry.example.test/maps-tiles",
@@ -24,8 +25,14 @@ function manifest(overrides: Record<string, unknown> = {}) {
 }
 
 describe("communityServiceManifestProblems", () => {
-  it.each(["community", "community-verified"])("accepts a pinned %s manifest", (quality) => {
-    expect(communityServiceManifestProblems(manifest({ quality }))).toEqual([]);
+  it("accepts a pinned community manifest", () => {
+    expect(communityServiceManifestProblems(manifest())).toEqual([]);
+  });
+
+  it("refuses a protocol this host does not support", () => {
+    expect(communityServiceManifestProblems(manifest({ platform: "2.0" }))).toEqual([
+      'Service "maps-tiles" requires extension protocol 2.0; this host supports 1.0',
+    ]);
   });
 
   it("accepts built-in services reached by their project-unique names", () => {
@@ -91,7 +98,7 @@ describe("communityServiceManifestProblems", () => {
     const configSchema = {
       type: "object",
       properties: {
-        database: {
+        DATABASE: {
           type: "object",
           properties: { DB_HOST: { type: "string", default: "postgis" } },
         },
@@ -103,7 +110,13 @@ describe("communityServiceManifestProblems", () => {
   });
 
   it.each([
-    ["a built-in quality tier", { quality: "built-in" }, /built-in/],
+    ["a built-in quality tier", { quality: "built-in" }, /^quality: /],
+    ["a self-declared verified tier", { quality: "community-verified" }, /^quality: /],
+    ["no protocol version", { platform: undefined }, /^platform: /],
+    ["a version that is not semantic", { version: "2024.1" }, /^version: /],
+    ["an unknown top-level key", { category: "Maps" }, /category/],
+    ["an un-namespaced capability", { provides: ["tiles"] }, /^provides\[0\]: "tiles"/],
+    ["an id longer than 48 characters", { id: "x".repeat(49) }, /^id: /],
     [
       "an image without a digest",
       { container: { image: "registry.example.test/x", tag: "latest", memory: "256m" } },
@@ -155,19 +168,6 @@ describe("communityServiceManifestProblems", () => {
         },
       },
       /^reserved_network_name: network alias "openmapx-postgis"/,
-    ],
-    [
-      "a container name with the reserved network-name prefix",
-      {
-        container: {
-          image: "registry.example.test/x",
-          tag: "1",
-          digest: `sha256:${"a".repeat(64)}`,
-          memory: "256m",
-          containerName: "openmapx-redis",
-        },
-      },
-      /^reserved_network_name: container name "openmapx-redis"/,
     ],
     [
       "a built-in service reached by its bare ID",

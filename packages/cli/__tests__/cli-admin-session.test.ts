@@ -2,7 +2,7 @@ import { chmodSync, linkSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { adminApiOrigin, readAdminSessionFile } from "../src/lib/admin-session";
+import { AdminSessionError, adminApiOrigin, readAdminSessionFile } from "../src/lib/admin-session";
 
 const roots: string[] = [];
 function fixture() {
@@ -46,4 +46,13 @@ it("binds to an HTTPS origin, permitting HTTP only for explicit loopback develop
   expect(() => adminApiOrigin("https://maps.example.test/path")).toThrow();
   expect(() => adminApiOrigin("http://127.0.0.1:3001")).toThrow();
   expect(adminApiOrigin("http://127.0.0.1:3001", undefined, true)).toBe("http://127.0.0.1:3001");
+});
+it.each([
+  ["no DOMAIN and no --api-origin", undefined, undefined, /Set DOMAIN/],
+  ["an empty DOMAIN", undefined, "", /Set DOMAIN/],
+  ["an origin without a scheme", "maps.example.test", undefined, /HTTPS API origin/],
+  ["an unparseable origin", "https://", undefined, /HTTPS API origin/],
+])("names the origin as the problem for %s", (_name, input, domain, message) => {
+  expect(() => adminApiOrigin(input, domain)).toThrow(AdminSessionError);
+  expect(() => adminApiOrigin(input, domain)).toThrow(message);
 });

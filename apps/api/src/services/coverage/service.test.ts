@@ -349,7 +349,7 @@ describe("CoverageService", () => {
       collector: async () => makeCollection(makeStream("2026-09-10T13:00:00.000Z")),
     });
     await expect(service.report({ regionId: REGION.key, offset: 1 })).rejects.toMatchObject({
-      code: "snapshot_required",
+      code: "SNAPSHOT_REQUIRED",
     });
     const matrix = await service.regions();
     await expect(
@@ -386,7 +386,7 @@ describe("CoverageService", () => {
       }),
     ).rejects.toMatchObject({
       statusCode: 409,
-      code: "snapshot_expired",
+      code: "SNAPSHOT_EXPIRED",
     });
   });
 

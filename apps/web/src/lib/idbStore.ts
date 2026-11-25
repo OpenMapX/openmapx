@@ -8,7 +8,9 @@
  * one object store, string keys → arbitrary structured-cloneable values.
  */
 
-const DB_NAME = "openmapx";
+import { INDEXED_DB_DATABASES } from "@openmapx/core/storage-keys";
+
+const DB_NAME = INDEXED_DB_DATABASES.keyValue;
 const STORE = "kv";
 const DB_VERSION = 1;
 

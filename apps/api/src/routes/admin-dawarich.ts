@@ -100,11 +100,14 @@ function dawarichError<C extends string>(status: number, code: C): { error: stri
   return { error: STATUS_CODES[status] ?? "Error", code };
 }
 
-async function auditFailure(request: FastifyRequest, action: string, code: string): Promise<void> {
+async function auditFailure(
+  request: FastifyRequest,
+  action: "dawarich.provision" | "dawarich.oidc_secret.rotate",
+  code: string,
+): Promise<void> {
   await writeAuditLog({
     actorId: getAdminSession(request).user.id,
     targetId: DAWARICH_APP_SERVICE_ID,
-    targetType: "service",
     action,
     details: { outcome: "failure", code },
     request,
@@ -144,7 +147,6 @@ export async function adminDawarichRoute(app: FastifyInstance): Promise<void> {
         await writeAuditLog({
           actorId: getAdminSession(request).user.id,
           targetId: DAWARICH_APP_SERVICE_ID,
-          targetType: "service",
           action: "dawarich.provision",
           details: { ...result.audit },
           request,
@@ -183,8 +185,7 @@ export async function adminDawarichRoute(app: FastifyInstance): Promise<void> {
         await writeAuditLog({
           actorId: getAdminSession(request).user.id,
           targetId: DAWARICH_APP_SERVICE_ID,
-          targetType: "service",
-          action: "dawarich.rotate_oidc_secret",
+          action: "dawarich.oidc_secret.rotate",
           details: { ...result.audit },
           request,
         });
@@ -194,7 +195,7 @@ export async function adminDawarichRoute(app: FastifyInstance): Promise<void> {
           error instanceof ManagedDawarichProvisioningError
             ? error
             : new ManagedDawarichProvisioningError("DAWARICH_PROVISIONING_FAILED");
-        await auditFailure(request, "dawarich.rotate_oidc_secret", safeError.code);
+        await auditFailure(request, "dawarich.oidc_secret.rotate", safeError.code);
         const status = statusForError(safeError);
         reply.status(status);
         return dawarichError(status, safeError.code);

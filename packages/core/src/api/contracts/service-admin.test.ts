@@ -436,7 +436,7 @@ describe("canonical complete service administration contracts", () => {
         {
           name: "test",
           createdAt: at,
-          openmapxVersion: "test",
+          release: "test",
           serviceCount: 2,
           volumeCount: 3,
           totalBytes: 42,

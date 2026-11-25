@@ -254,5 +254,5 @@ export const run: StageFn = async (ctx) => {
     { durability: "visibility", createParentDirectory: true },
   );
   if (result.ok) writeTransitSourceManifest(ctx);
-  return finish(result.ok ? "ok" : "error", result);
+  return finish(result.ok ? "succeeded" : "failed", result);
 };

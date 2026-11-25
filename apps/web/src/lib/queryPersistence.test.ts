@@ -4,14 +4,12 @@ import type {
   PersistedQueryClientSaveOptions,
 } from "@tanstack/react-query-persist-client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  PERSONAL_TIMELINE_CACHE_BUSTER,
-  shouldDehydrateOpenMapXMutation,
-} from "./personalTimelineCachePolicy";
+import { shouldDehydrateOpenMapXMutation } from "./personalTimelineCachePolicy";
 import { subscribeRecentMapDataPersistence } from "./queryPersistence";
 import {
   clearRecentMapDataCache,
   isRecentMapDataQueryKey,
+  QUERY_CACHE_BUSTER,
   RECENT_MAP_DATA_CACHE_ENABLED_KEY,
   setRecentMapDataCacheEnabled,
 } from "./recentMapDataCache";
@@ -44,7 +42,7 @@ function fixture() {
       restoreClient: async () => undefined,
       removeClient: async () => {},
     },
-    buster: PERSONAL_TIMELINE_CACHE_BUSTER,
+    buster: QUERY_CACHE_BUSTER,
     dehydrateOptions: {
       shouldDehydrateQuery: (query) => {
         shouldDehydrateQuery(query);
@@ -89,7 +87,7 @@ describe("recent map query persistence", () => {
     expect(f.persistClient).toHaveBeenCalledTimes(1);
     expect(f.shouldDehydrateQuery).toHaveBeenCalledTimes(200);
     const snapshot = f.snapshots[0];
-    expect(snapshot?.buster).toBe(PERSONAL_TIMELINE_CACHE_BUSTER);
+    expect(snapshot?.buster).toBe(QUERY_CACHE_BUSTER);
     expect(snapshot?.clientState.queries.find((q) => q.queryKey[1] === 0)?.state.data).toBe(19);
   });
 

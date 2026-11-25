@@ -1,3 +1,4 @@
+import { MAP_INTENT_PARAMS } from "@openmapx/core/map-link-params";
 import { type NextRequest, NextResponse } from "next/server";
 
 /**
@@ -5,7 +6,7 @@ import { type NextRequest, NextResponse } from "next/server";
  * the OS dispatches incoming shares (text/URL/title) into this handler.
  *
  * We extract a usable search query — preferring `text`, falling back to
- * `url` then `title` — and redirect to the home page with a `q` query param
+ * `url` then `title` — and redirect to the home page with a `query` parameter
  * that the client picks up via ShareIntentHandler.
  */
 
@@ -33,6 +34,6 @@ function pickQuery(params: URLSearchParams): string | null {
 export function GET(request: NextRequest) {
   const query = pickQuery(request.nextUrl.searchParams);
   const target = new URL("/", request.nextUrl.origin);
-  if (query) target.searchParams.set("q", query);
+  if (query) target.searchParams.set(MAP_INTENT_PARAMS.query, query);
   return NextResponse.redirect(target, 303);
 }

@@ -12,7 +12,7 @@ import { runMotisPreflight } from "./preflight.js";
 
 const hash = (value: unknown) => createHash("sha256").update(canonicalJson(value)).digest("hex");
 const fail = (message: string, statusCode = 409) =>
-  Object.assign(Error(message), { statusCode, code: "preflight_stale" });
+  Object.assign(Error(message), { statusCode, code: "PREFLIGHT_STALE" });
 export type TransitPreflightBinding = {
   preflightId: string;
   fingerprint: string;

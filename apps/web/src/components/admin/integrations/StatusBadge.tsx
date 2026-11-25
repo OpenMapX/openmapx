@@ -2,12 +2,11 @@
 
 import BuildIcon from "@mui/icons-material/Build";
 import GroupsIcon from "@mui/icons-material/Groups";
-import VerifiedIcon from "@mui/icons-material/Verified";
 import type { ChipProps } from "@mui/material/Chip";
 import Chip from "@mui/material/Chip";
 import { useTranslations } from "next-intl";
 
-type Quality = "built-in" | "community-verified" | "community";
+type Quality = "built-in" | "community";
 
 const QUALITY_CONFIG: Record<
   Quality,
@@ -17,11 +16,6 @@ const QUALITY_CONFIG: Record<
     labelKey: "qualityBuiltIn",
     color: "primary",
     icon: <BuildIcon sx={{ fontSize: "0.85rem !important" }} />,
-  },
-  "community-verified": {
-    labelKey: "qualityVerified",
-    color: "success",
-    icon: <VerifiedIcon sx={{ fontSize: "0.85rem !important" }} />,
   },
   community: {
     labelKey: "qualityCommunity",

@@ -210,10 +210,10 @@ it("canceling a reset sign-in leaves the target unchanged", async () => {
 });
 
 it.each([
-  ["Send invitation", "account.invite", "invite"],
-  ["Send verification email", "account.invite", "verification"],
-  ["Send password reset", "account.reset.send", "reset"],
-  ["Set temporary password", "account.password.set", "password"],
+  ["Send invitation", "user.invitation.send", "invite"],
+  ["Send verification email", "user.invitation.send", "verification"],
+  ["Send password reset", "user.password_reset.send", "reset"],
+  ["Set temporary password", "user.password.set", "password"],
 ] as const)(
   "uses the exact confirmed and reauthenticated %s action",
   async (label, purpose, method) => {
@@ -312,7 +312,7 @@ it("retries a rejected create with the same key until its intent is edited", asy
   try {
     mocks.provision.mockResolvedValue({
       status: 503,
-      data: { error: "ACCOUNT_ACTION_UNAVAILABLE" },
+      data: { error: "Account actions are unavailable", code: "ACCOUNT_ACTION_UNAVAILABLE" },
     });
     mount(<CreateUserDialog open onClose={vi.fn()} />);
     fill();

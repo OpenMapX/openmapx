@@ -22,6 +22,7 @@ import type { DataExecutionRuntime } from "../src/jobs/execution/runtime.js";
 import { DataConfigurationMaintenanceBusy } from "../src/jobs/execution/store.js";
 import { resolveOperationsProfile } from "../src/jobs/transitous/operations-profile.js";
 import { OperatorFeedRelayStore } from "../src/jobs/transitous/operator-feed-relay.js";
+import { authenticateAs, TEST_CALLER_TOKENS } from "./helpers/authenticated-app.js";
 import { dataReceipt, receiverFixture } from "./helpers/execution-receiver.js";
 
 vi.mock("../src/jobs/download-osm.js", () => ({
@@ -71,7 +72,7 @@ describe("data-manager API", () => {
   });
 
   function createTestApp(): FastifyInstance {
-    const app = Fastify();
+    const app = authenticateAs(Fastify());
     apps.push(app);
     return app;
   }
@@ -197,7 +198,7 @@ describe("data-manager API", () => {
       inspect = vi
         .fn()
         .mockResolvedValueOnce(status)
-        .mockResolvedValueOnce({ ...status, status: "ok", publication: "committed" }),
+        .mockResolvedValueOnce({ ...status, status: "succeeded", publication: "committed" }),
       cancel = vi.fn(),
       app = createTestApp();
     registerApi(app, {
@@ -222,7 +223,7 @@ describe("data-manager API", () => {
     expect(response.statusCode).toBe(503);
     expect(response.json()).toEqual({
       error: "Durable data receiver is unavailable",
-      code: "ops-agent-unavailable",
+      code: "OPS_AGENT_UNAVAILABLE",
     });
   });
 
@@ -304,7 +305,7 @@ describe("data-manager API", () => {
     expect(res.statusCode).toBe(409);
     expect(res.json()).toEqual({
       error: "Another data job is running. Try again when it finishes.",
-      code: "in-flight",
+      code: "IN_FLIGHT",
       existingJobId: null,
     });
     expect(existsSync(overlayPath)).toBe(false);
@@ -386,9 +387,11 @@ describe("data-manager API", () => {
       const dataDir = createDataDir();
       sourceCatalog(dataDir);
       const logLines: string[] = [];
-      const app = Fastify({
-        logger: { level: "error", stream: { write: (line: string) => logLines.push(line) } },
-      });
+      const app = authenticateAs(
+        Fastify({
+          logger: { level: "error", stream: { write: (line: string) => logLines.push(line) } },
+        }),
+      );
       apps.push(app);
       registerApi(app, {
         dataDir,
@@ -497,7 +500,7 @@ describe("data-manager API", () => {
           source: expect.objectContaining({ name: "operator-feed" }),
         }),
       }),
-      { triggeredBy: "api" },
+      { trigger: "cli" },
     );
   });
 
@@ -618,7 +621,7 @@ describe("data-manager API", () => {
     expect(res.statusCode).toBe(422);
     expect(res.json()).toEqual({
       error: "Countries outside configured operations profile",
-      code: "outside-operations-profile",
+      code: "OUTSIDE_OPERATIONS_PROFILE",
     });
     expect(admit).not.toHaveBeenCalled();
   });
@@ -636,10 +639,11 @@ describe("data-manager API", () => {
     const res = await app.inject({
       method: "POST",
       url: "/transit/sync",
+      headers: { authorization: `Bearer ${TEST_CALLER_TOKENS.api}` },
       payload: {
         countries: ["DE"],
         idempotencyKey: "transit-test-key",
-        triggeredBy: "api:synthetic-user",
+        triggeredByUserId: "synthetic-user",
       },
     });
 
@@ -647,8 +651,27 @@ describe("data-manager API", () => {
     expect(res.json()).toEqual({ ok: true, jobId: dataReceipt().id, status: "started" });
     expect(admitLocal).toHaveBeenCalledWith(
       { kind: "transit-sync", countries: ["DE"] },
-      { idempotencyKey: "transit-test-key", triggeredBy: "api:synthetic-user" },
+      { idempotencyKey: "transit-test-key", trigger: "api", triggeredByUserId: "synthetic-user" },
     );
+  });
+
+  it("refuses an administrator named by a caller other than the API", async () => {
+    const admitLocal = vi.fn(async () => dataReceipt({ kind: "transit-sync" }));
+    const app = createTestApp();
+    registerApi(app, {
+      dataDir: createDataDir(),
+      operationsPolicy: resolveOperationsProfile({ countries: ["de"] }),
+      executionReceiver: receiverFixture({ admitLocal }),
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/transit/sync",
+      payload: { countries: ["DE"], triggeredByUserId: "synthetic-user" },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(admitLocal).not.toHaveBeenCalled();
   });
 
   it.each(["../etc", "Europe/Germany"])(

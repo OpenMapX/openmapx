@@ -37,7 +37,7 @@ const NOW = "2026-08-30T12:00:00.000Z";
 
 function manifest(): IntegrationManifest {
   const raw = JSON.parse(readFileSync(join(AIR_QUALITY_DIR, "manifest.json"), "utf8"));
-  const result = validateManifest(raw);
+  const result = validateManifest(raw, { firstParty: true });
   if (!result.valid) throw new Error(result.errors.join(", "));
   return raw as IntegrationManifest;
 }

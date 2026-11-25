@@ -1,8 +1,14 @@
+import {
+  ADMIN_REAUTH_PURPOSES,
+  AUDIT_ACTION_NAMES,
+  AUDIT_TARGET_TYPES,
+} from "@openmapx/core/api-contracts";
+import { ACTIVE_JOB_STATUSES, ADMIN_JOB_TYPES } from "@openmapx/core/jobs";
 import { and, asc, eq, getTableName, inArray, is, type SQL } from "drizzle-orm";
 import { PgTable } from "drizzle-orm/pg-core";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createMigratedPostgresFixture } from "../../test/postgres-fixture";
-import { ACTIVE_ADMIN_JOB_STATUSES, adminJob, adminJobStatusIn } from "../admin-job-schema";
+import { adminJob, adminJobStatusIn } from "../admin-job-schema";
 import * as authSchema from "../auth-schema";
 
 const integration = describe.runIf(process.env.OPENMAPX_RUN_DATABASE_TESTS === "1");
@@ -20,12 +26,27 @@ const CLOSED_VALUE_SETS: Record<string, { table: string; column: string; values:
     values: [
       "create",
       "invitation",
-      "verification-email",
-      "reset-password",
+      "email_verification",
+      "password_reset",
       "verify",
       "password",
       "role",
     ],
+  },
+  admin_audit_log_action_check: {
+    table: "admin_audit_log",
+    column: "action",
+    values: [...AUDIT_ACTION_NAMES],
+  },
+  admin_audit_log_target_type_check: {
+    table: "admin_audit_log",
+    column: "target_type",
+    values: [...AUDIT_TARGET_TYPES],
+  },
+  admin_action_reauthentication_purpose_check: {
+    table: "admin_action_reauthentication",
+    column: "purpose",
+    values: [...ADMIN_REAUTH_PURPOSES],
   },
   admin_action_reauthentication_completed_method_check: {
     table: "admin_action_reauthentication",
@@ -35,12 +56,41 @@ const CLOSED_VALUE_SETS: Record<string, { table: string; column: string; values:
   admin_job_status_check: {
     table: "admin_job",
     column: "status",
-    values: ["queued", "running", "cancel_pending", "success", "failed", "canceled"],
+    values: ["queued", "running", "cancel_pending", "succeeded", "failed", "cancelled"],
+  },
+  admin_job_type_check: {
+    table: "admin_job",
+    column: "type",
+    values: [...ADMIN_JOB_TYPES],
   },
   admin_job_log_stream_check: {
     table: "admin_job_log",
     column: "stream",
     values: ["stdout", "stderr"],
+  },
+  data_subject_request_event_event_type_check: {
+    table: "data_subject_request_event",
+    column: "event_type",
+    values: [
+      "received",
+      "status_changed",
+      "identity_verified",
+      "task_resolved",
+      "extended",
+      "export_started",
+      "export_delivered",
+      "export_failed",
+    ],
+  },
+  data_subject_request_event_actor_kind_check: {
+    table: "data_subject_request_event",
+    column: "actor_kind",
+    values: ["subject", "admin", "system"],
+  },
+  data_subject_request_task_source_check: {
+    table: "data_subject_request_task",
+    column: "source",
+    values: ["openmapx-db", "redis", "managed-service", "operator"],
   },
   data_subject_request_locator_type_check: {
     table: "data_subject_request",
@@ -92,22 +142,22 @@ const CLOSED_VALUE_SETS: Record<string, { table: string; column: string; values:
     column: "purpose",
     values: ["sign-in", "link-provider", "add-passkey"],
   },
-  jobs_status_check: {
-    table: "jobs",
+  job_status_check: {
+    table: "job",
     column: "status",
     values: [
       "queued",
       "running",
       "cancel_pending",
-      "ok",
-      "partial",
-      "error",
-      "canceled",
+      "succeeded",
+      "partially_succeeded",
+      "failed",
+      "cancelled",
       "interrupted",
     ],
   },
-  job_stages_stage_check: {
-    table: "job_stages",
+  job_stage_stage_check: {
+    table: "job_stage",
     column: "stage",
     values: [
       "prepare",
@@ -129,13 +179,13 @@ const CLOSED_VALUE_SETS: Record<string, { table: string; column: string; values:
       "mirror",
     ],
   },
-  job_stages_status_check: {
-    table: "job_stages",
+  job_stage_status_check: {
+    table: "job_stage",
     column: "status",
-    values: ["ok", "skipped", "error", "partial"],
+    values: ["succeeded", "partially_succeeded", "failed", "skipped"],
   },
-  offline_package_jobs_status_check: {
-    table: "offline_package_jobs",
+  offline_package_job_status_check: {
+    table: "offline_package_job",
     column: "status",
     values: ["preparing", "ready-to-download", "failed", "expired"],
   },
@@ -186,16 +236,92 @@ const CLOSED_VALUE_SETS: Record<string, { table: string; column: string; values:
  */
 const NAMED_BY_PURPOSE: Record<string, string> = {
   admin_job_active_system_maintenance_key: "admin_job",
-  configuration_fence_state_prepared_key: "configuration_fence",
+  configuration_fence_status_prepared_key: "configuration_fence",
   data_subject_request_notification_delivery_key: "data_subject_request_notification",
   data_subject_request_notification_recipient_created_at_idx: "data_subject_request_notification",
   data_subject_request_preservation_request_registration_key: "data_subject_request_preservation",
   data_subject_request_user_id_kind_active_key: "data_subject_request",
   mangrove_keypair_wrap_user_id_passphrase_key: "mangrove_keypair_wrap",
-  offline_package_jobs_request_key_live_key: "offline_package_jobs",
+  offline_package_job_request_key_live_key: "offline_package_job",
+  personal_vehicle_user_id_default_key: "personal_vehicle",
 };
 
 const NAME_SUFFIX: Record<string, string> = { p: "pkey", u: "key", f: "fkey", U: "key", i: "idx" };
+
+/**
+ * App-owned table names that end in "s" although they name one row, with the
+ * reason. Every other table name is singular.
+ */
+const SINGULAR_TABLE_NAMES_ENDING_IN_S: Record<string, string> = {};
+
+/** Column name segments that abbreviate a word; columns spell it out. */
+const ABBREVIATED_SEGMENTS = new Set(["msg", "addr", "cnt", "cfg", "desc", "pwd", "qty", "ts"]);
+
+/** The parts of one encrypted value: `<prefix>_ciphertext` and its siblings. */
+const ENCRYPTED_VALUE_PARTS = ["ciphertext", "iv", "tag", "key_version"] as const;
+const ENCRYPTED_VALUE_PART = /^(?:(.+)_)?(ciphertext|iv|tag|key_version)$/;
+
+/** Ciphertext columns that hold a self-describing envelope rather than the
+ * server's AES-GCM parts, with the reason. */
+const SELF_DESCRIBING_CIPHERTEXTS: Record<string, string> = {
+  "mangrove_keypair.passphrase_ciphertext":
+    "an age envelope the browser writes; it carries its own header, nonce and recipient",
+  "mangrove_keypair.recipients_ciphertext":
+    "an age envelope the browser writes; it carries its own header, nonce and recipients",
+};
+
+/** Columns named `state` or `*_state` that hold no lifecycle of their row,
+ * each with the reason. */
+const NON_LIFECYCLE_STATE_COLUMNS: Record<string, string> = {
+  "mobile_auth_handoff.state":
+    "the OAuth `state` parameter of the sign-in attempt, named as the protocol names it",
+  "data_subject_request.account_state":
+    "what the case registration recorded about the subject's account (current, inaccessible, deleted, unknown), not the case's own progress",
+  "job.execution_state":
+    "the durable execution's opaque JSON state document, not a closed list of statuses",
+};
+
+interface OwnedColumn {
+  schema: string;
+  table: string;
+  column: string;
+  referencesUser: boolean;
+}
+
+/** Every rule a table or column name breaks, as `<table>[.<column>]: <rule>`. */
+function namingViolations(columns: readonly OwnedColumn[]): string[] {
+  const violations: string[] = [];
+  const tables = [...new Set(columns.map((row) => row.table))];
+  for (const table of tables)
+    if (table.endsWith("s") && !(table in SINGULAR_TABLE_NAMES_ENDING_IN_S))
+      violations.push(`${table}: table names are singular`);
+  const byTable = new Map<string, Set<string>>();
+  for (const row of columns)
+    byTable.set(row.table, (byTable.get(row.table) ?? new Set()).add(row.column));
+  for (const { table, column, referencesUser } of columns) {
+    const name = `${table}.${column}`;
+    if (column === "actor_id") violations.push(`${name}: the acting account is actor_user_id`);
+    if (referencesUser && column !== "user_id" && !column.endsWith("_user_id"))
+      violations.push(`${name}: a column referencing "user" is <role>_user_id`);
+    if ((column === "state" || column.endsWith("_state")) && !(name in NON_LIFECYCLE_STATE_COLUMNS))
+      violations.push(`${name}: a lifecycle column is status`);
+    if (/encrypt/.test(column))
+      violations.push(
+        `${name}: an encrypted value is <prefix>_ciphertext, _iv, _tag, _key_version`,
+      );
+    if (column.split("_").some((segment) => ABBREVIATED_SEGMENTS.has(segment)))
+      violations.push(`${name}: names are spelled out`);
+    const part = ENCRYPTED_VALUE_PART.exec(column);
+    if (part && !(name in SELF_DESCRIBING_CIPHERTEXTS)) {
+      const prefix = part[1] ? `${part[1]}_` : "";
+      const siblings = byTable.get(table) ?? new Set();
+      const missing = ENCRYPTED_VALUE_PARTS.filter((sibling) => !siblings.has(prefix + sibling));
+      if (missing.length)
+        violations.push(`${name}: encrypted value lacks ${missing.map((m) => prefix + m)}`);
+    }
+  }
+  return [...new Set(violations)].sort();
+}
 
 type Fixture = Awaited<ReturnType<typeof createMigratedPostgresFixture>>;
 let fixture: Fixture;
@@ -232,6 +358,26 @@ integration("schema hygiene", () => {
         AND (u.indkey::int2[])[0:i.indnatts - 1] = (i.indkey::int2[])[0:i.indnatts - 1]
       ORDER BY 1, 2`;
     expect(duplicates).toEqual([]);
+  });
+
+  it("app-owned table and column names follow the naming rules", async () => {
+    // Better Auth's tables keep their generated names; extension-owned tables
+    // are not the app's.
+    const columns = await fixture.sql<OwnedColumn[]>`
+      SELECT n.nspname AS schema, r.relname AS table, a.attname AS column,
+        EXISTS (SELECT FROM pg_constraint fk
+          WHERE fk.contype = 'f' AND fk.conrelid = r.oid AND fk.confrelid = '"user"'::regclass
+            AND a.attnum = ANY (fk.conkey)) AS "referencesUser"
+      FROM pg_class r
+      JOIN pg_namespace n ON n.oid = r.relnamespace
+      JOIN pg_attribute a ON a.attrelid = r.oid AND a.attnum > 0 AND NOT a.attisdropped
+      WHERE r.relkind IN ('r', 'p') AND n.nspname IN ('public', 'data_manager')
+        AND NOT (n.nspname = 'public' AND r.relname IN ${fixture.sql(betterAuthTables)})
+        AND NOT EXISTS (SELECT FROM pg_depend d
+          WHERE d.classid = 'pg_class'::regclass AND d.objid = r.oid AND d.deptype = 'e')
+      ORDER BY 1, 2, 3`;
+    expect(columns.map((row) => row.table)).toEqual(expect.arrayContaining(["admin_audit_log"]));
+    expect(namingViolations(columns)).toEqual([]);
   });
 
   it("app-owned object names follow the convention", async () => {
@@ -273,7 +419,7 @@ integration("schema hygiene", () => {
         AND c.contype IN ('p', 'u', 'x'))
       ORDER BY 1, 2`;
     expect(objects.map((row) => row.table)).toEqual(
-      expect.arrayContaining(["admin_job", "jobs", "saved_list"]),
+      expect.arrayContaining(["admin_job", "job", "saved_list"]),
     );
     const misnamed: string[] = [];
     const byPurpose: string[] = [];
@@ -349,8 +495,8 @@ integration("schema hygiene", () => {
     const indexes = await fixture.sql<{ name: string; definition: string }[]>`
       SELECT indexname AS name, indexdef AS definition FROM pg_indexes
       WHERE schemaname IN ('public', 'data_manager') AND indexname IN (
-        'jobs_finished_at_idx',
-        'jobs_operation_key_idx',
+        'job_finished_at_idx',
+        'job_operation_key_idx',
         'admin_action_reauthentication_expires_at_idx',
         'data_disclosure_event_occurred_at_idx',
         'session_expires_at_idx',
@@ -394,8 +540,8 @@ integration("schema hygiene", () => {
       health_history_checked_at_idx: expect.stringContaining("(checked_at)"),
       // Data-manager jobs stay 90 days: the API's prune selects by finish time,
       // and the control prune sweeps the keys of restore-closed rows.
-      jobs_finished_at_idx: expect.stringContaining("data_manager.jobs USING btree (finished_at)"),
-      jobs_operation_key_idx: expect.stringMatching(
+      job_finished_at_idx: expect.stringContaining("data_manager.job USING btree (finished_at)"),
+      job_operation_key_idx: expect.stringMatching(
         /\(operation_key\) WHERE \(\(execution_admission IS NULL\) AND \(released_at IS NULL\)\)$/,
       ),
       mangrove_keypair_wrap_user_id_idx: expect.stringContaining("(user_id)"),
@@ -455,12 +601,12 @@ integration("schema hygiene", () => {
       "admin_job_log_pkey",
       "integration_config_pkey",
       "integration_secret_pkey",
-      "integration_secret_updated_by_idx",
+      "integration_secret_updated_by_user_id_idx",
       "service_config_pkey",
       "service_secret_pkey",
-      "service_secret_updated_by_idx",
+      "service_secret_updated_by_user_id_idx",
       "system_secret_pkey",
-      "system_secret_updated_by_idx",
+      "system_secret_updated_by_user_id_idx",
     ]);
   });
 
@@ -482,14 +628,14 @@ integration("schema hygiene", () => {
       ["service_secret", "service_id"],
     ] as const) {
       const insert = (key: string) =>
-        fixture.sql`INSERT INTO ${fixture.sql(table)} (${fixture.sql(owner)}, key, ciphertext, iv, tag)
-          VALUES ('natural-key', ${key}, 'c', 'i', 't')`;
+        fixture.sql`INSERT INTO ${fixture.sql(table)} (${fixture.sql(owner)}, key, ciphertext, iv, tag, key_version)
+          VALUES ('natural-key', ${key}, 'c', 'i', 't', 1)`;
       await insert("TOKEN");
       await insert("OTHER");
       await expect(insert("TOKEN")).rejects.toMatchObject({ constraint_name: `${table}_pkey` });
     }
     const [job] = await fixture.sql<{ id: string }[]>`
-      INSERT INTO admin_job (type) VALUES ('test.natural-key') RETURNING id`;
+      INSERT INTO admin_job (type) VALUES ('integration.reload') RETURNING id`;
     const line = (seq: number, sourceEventId: string | null = null) =>
       fixture.sql`INSERT INTO admin_job_log (job_id, seq, line, source_event_id)
         VALUES (${job?.id ?? null}, ${seq}, 'line', ${sourceEventId})`;
@@ -504,13 +650,13 @@ integration("schema hygiene", () => {
 
   it("serves active-job lookups from the partial index under a generic plan", async () => {
     await fixture.sql`INSERT INTO admin_job (type, status)
-      SELECT 'test.generic-plan', 'success' FROM generate_series(1, 2000)`;
+      SELECT 'integration.reload', 'succeeded' FROM generate_series(1, 2000)`;
     await fixture.sql`ANALYZE admin_job`;
     const lookup = (status: SQL) =>
       fixture.db
         .select({ id: adminJob.id })
         .from(adminJob)
-        .where(and(eq(adminJob.type, "test.generic-plan"), status))
+        .where(and(eq(adminJob.type, "integration.reload"), status))
         .orderBy(asc(adminJob.createdAt))
         .limit(1)
         .toSQL();
@@ -528,14 +674,14 @@ integration("schema hygiene", () => {
         return rows.map((row) => row["QUERY PLAN"]).join("\n");
       });
     expect(
-      await genericPlan(lookup(adminJobStatusIn(adminJob.status, ACTIVE_ADMIN_JOB_STATUSES))),
+      await genericPlan(lookup(adminJobStatusIn(adminJob.status, ACTIVE_JOB_STATUSES))),
     ).toContain("admin_job_type_idx");
     expect(
       await genericPlan(lookup(adminJobStatusIn(adminJob.status, ["running", "cancel_pending"]))),
     ).toContain("admin_job_type_idx");
     // Bound statuses cannot prove the index predicate once the plan is generic.
     expect(
-      await genericPlan(lookup(inArray(adminJob.status, [...ACTIVE_ADMIN_JOB_STATUSES]))),
+      await genericPlan(lookup(inArray(adminJob.status, [...ACTIVE_JOB_STATUSES]))),
     ).not.toContain("admin_job_type_idx");
   });
 
@@ -550,7 +696,7 @@ integration("schema hygiene", () => {
       "installed_extension.source_trust",
       "installed_integration.source_type",
       "capability_binding.service_id",
-      "app_logs.level",
+      "app_log.level",
       "installed_extension_component.component_id",
     ]);
     expect(leading.filter((row) => unused.has(`${row.table}.${row.column}`))).toEqual([]);
@@ -582,10 +728,12 @@ integration("schema hygiene", () => {
       targetId: string | null;
       mode: string;
       snapshot: string | null;
+      snapshotVersion?: number | null;
     }) => fixture.sql`INSERT INTO share_link
-        (user_id, token_hash, target_type, target_id, mode, label, snapshot)
+        (user_id, token_hash, target_type, target_id, mode, label, snapshot, snapshot_version)
       VALUES ('share-owner', ${values.token}, ${values.targetType}, ${values.targetId},
-        ${values.mode}, 'Label', ${values.snapshot}::jsonb)`;
+        ${values.mode}, 'Label', ${values.snapshot}::jsonb,
+        ${values.snapshotVersion === undefined ? (values.snapshot === null ? null : 1) : values.snapshotVersion})`;
     const listId = "0193e4a0-0000-7000-8000-00000000aa01";
     await insert({
       token: "ok-live",
@@ -662,13 +810,96 @@ integration("schema hygiene", () => {
         snapshot: null,
       }),
     ).rejects.toMatchObject({ constraint_name: "share_link_mode_check" });
+    for (const [token, snapshot, snapshotVersion] of [
+      ["unversioned-snapshot", "{}", null],
+      ["unknown-version", "{}", 2],
+      ["version-without-snapshot", null, 1],
+    ] as const)
+      await expect(
+        insert({
+          token,
+          targetType: "list",
+          targetId: listId,
+          mode: snapshot ? "snapshot" : "live",
+          snapshot,
+          snapshotVersion,
+        }),
+      ).rejects.toMatchObject({ constraint_name: "share_link_snapshot_version_check" });
   });
 
-  it("admits a cancel_pending admin job and refuses an unknown status", async () => {
-    await fixture.sql`INSERT INTO admin_job (type, status) VALUES ('test.job', 'cancel_pending')`;
+  it("refuses a second default vehicle, coordinates out of range and an unversioned blob", async () => {
+    await seedUser("garage-owner");
+    const vehicle = (name: string, isDefault: boolean) =>
+      fixture.sql`INSERT INTO personal_vehicle (user_id, name, kind, powertrain, is_default)
+        VALUES ('garage-owner', ${name}, 'car', 'petrol', ${isDefault})`;
+    await vehicle("First", true);
+    await vehicle("Second", false);
+    await expect(vehicle("Third", true)).rejects.toMatchObject({
+      constraint_name: "personal_vehicle_user_id_default_key",
+    });
     await expect(
-      fixture.sql`INSERT INTO admin_job (type, status) VALUES ('test.job', 'cancelling')`,
+      fixture.sql`INSERT INTO personal_vehicle (user_id, name, kind, powertrain, ev)
+        VALUES ('garage-owner', 'Electric', 'car', 'electric', '{}'::jsonb)`,
+    ).rejects.toMatchObject({ constraint_name: "personal_vehicle_ev_version_check" });
+    for (const [lat, lng, constraint] of [
+      [91, 0, "parked_location_lat_check"],
+      [0, -181, "parked_location_lng_check"],
+    ] as const)
+      await expect(
+        fixture.sql`INSERT INTO parked_location (user_id, lat, lng, source)
+          VALUES ('garage-owner', ${lat}, ${lng}, 'manual')`,
+      ).rejects.toMatchObject({ constraint_name: constraint });
+    for (const [lat, lng, constraint] of [
+      [-90.5, 0, "labeled_place_lat_check"],
+      [0, 180.5, "labeled_place_lng_check"],
+    ] as const)
+      await expect(
+        fixture.sql`INSERT INTO labeled_place (user_id, label, name, lat, lng)
+          VALUES ('garage-owner', ${constraint}, 'Place', ${lat}, ${lng})`,
+      ).rejects.toMatchObject({ constraint_name: constraint });
+    const [label] = await fixture.sql<{ stamped: boolean }[]>`
+      INSERT INTO labeled_place (user_id, label, name, lat, lng)
+      VALUES ('garage-owner', 'home', 'Home', 90, -180)
+      RETURNING created_at IS NOT NULL AND updated_at IS NOT NULL AS stamped`;
+    expect(label?.stamped).toBe(true);
+  });
+
+  it("stores only durable place ids on saved and labelled places", async () => {
+    await seedUser("place-owner");
+    const label = (name: string, placeId: string | null) =>
+      fixture.sql`INSERT INTO labeled_place (user_id, label, name, lat, lng, place_id)
+        VALUES ('place-owner', ${name}, 'Place', 50, 6, ${placeId})`;
+    await label("none", null);
+    await label("osm", "osm:node/123");
+    await label("kebab", "openseamap-harbour:4");
+    for (const placeId of [
+      "style-poi:42",
+      "saved:0193e4a0-0000-7000-8000-000000000001",
+      "label:0193e4a0-0000-7000-8000-000000000002",
+      "coordinate:50.000000,6.000000",
+      "stylePoi:42",
+      "osm:",
+      "no-scheme",
+    ])
+      await expect(label(placeId, placeId)).rejects.toMatchObject({
+        constraint_name: "labeled_place_place_id_check",
+      });
+    const [list] = await fixture.sql<{ id: string }[]>`
+      INSERT INTO saved_list (user_id, name) VALUES ('place-owner', 'Trip') RETURNING id`;
+    await expect(
+      fixture.sql`INSERT INTO saved_place (list_id, name, lat, lng, place_id)
+        VALUES (${list?.id ?? null}, 'Place', 50, 6, 'style-poi:42')`,
+    ).rejects.toMatchObject({ constraint_name: "saved_place_place_id_check" });
+  });
+
+  it("admits a cancel_pending admin job and refuses an unknown status or type", async () => {
+    await fixture.sql`INSERT INTO admin_job (type, status) VALUES ('integration.reload', 'cancel_pending')`;
+    await expect(
+      fixture.sql`INSERT INTO admin_job (type, status) VALUES ('integration.reload', 'cancelling')`,
     ).rejects.toMatchObject({ constraint_name: "admin_job_status_check" });
+    await expect(
+      fixture.sql`INSERT INTO admin_job (type, status) VALUES ('integration.reloaded', 'queued')`,
+    ).rejects.toMatchObject({ constraint_name: "admin_job_type_check" });
   });
 
   it("deleting every administrator alerted about a case keeps each alert", async () => {
@@ -686,5 +917,49 @@ integration("schema hygiene", () => {
       SELECT recipient_user_id AS recipient FROM data_subject_request_notification
       WHERE request_id = ${request?.id ?? null}`;
     expect(alerts).toEqual([{ recipient: null }, { recipient: null }]);
+  });
+});
+
+describe("table and column naming rules", () => {
+  it("refuse each misnamed table and column", () => {
+    const column = (table: string, name: string, referencesUser = false): OwnedColumn => ({
+      schema: "public",
+      table,
+      column: name,
+      referencesUser,
+    });
+    expect(
+      namingViolations([
+        column("widgets", "id"),
+        column("widget", "actor_id", true),
+        column("widget", "created_by", true),
+        column("widget", "owner_user_id", true),
+        column("widget", "state"),
+        column("widget", "sync_state"),
+        column("mobile_auth_handoff", "state"),
+        column("data_subject_request", "account_state"),
+        column("widget", "msg"),
+        column("widget", "encrypted_api_key"),
+        column("widget", "token_ciphertext"),
+        column("widget", "token_iv"),
+        column("widget", "token_tag"),
+        column("vault", "ciphertext"),
+        column("vault", "iv"),
+        column("vault", "tag"),
+        column("vault", "key_version"),
+      ]),
+    ).toEqual([
+      'widget.actor_id: a column referencing "user" is <role>_user_id',
+      "widget.actor_id: the acting account is actor_user_id",
+      'widget.created_by: a column referencing "user" is <role>_user_id',
+      "widget.encrypted_api_key: an encrypted value is <prefix>_ciphertext, _iv, _tag, _key_version",
+      "widget.msg: names are spelled out",
+      "widget.state: a lifecycle column is status",
+      "widget.sync_state: a lifecycle column is status",
+      "widget.token_ciphertext: encrypted value lacks token_key_version",
+      "widget.token_iv: encrypted value lacks token_key_version",
+      "widget.token_tag: encrypted value lacks token_key_version",
+      "widgets: table names are singular",
+    ]);
   });
 });

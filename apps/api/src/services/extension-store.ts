@@ -17,6 +17,7 @@ import {
 import { redis } from "../redis";
 import { safeErrorClass, summarizeExternalUrl } from "../utils/safe-log-fields.js";
 import { appLogger } from "./app-logger.js";
+import { mergeCriticalAdvisories } from "./extension-critical-advisory";
 import {
   editExtensionSources,
   publishExtensionCatalog,
@@ -31,9 +32,8 @@ type ExtensionTrust = "built-in" | "verified" | "community";
 // source: it comes from immutable content only. The default is pinned to an
 // exact commit so the catalog bytes cannot move under us, and each entry still
 // has to be digest-bound (see `resolveEntryTrust`) to reach the verified tier.
-// Resolved with `git ls-remote https://github.com/openmapx/community-extensions.git
-// refs/heads/main` on 2026-08-25.
-const DEFAULT_EXTENSION_CATALOG_COMMIT = "254ed34c34f204809870323e7dca6389e0d6f81f";
+// The commit that gives the catalog its `schemaVersion`, pinned on 2026-11-24.
+const DEFAULT_EXTENSION_CATALOG_COMMIT = "b9c164a699da6fc860a7dc9b66038a12b9cfd14f";
 const DEFAULT_EXTENSION_CATALOG_URL = envString(
   "EXTENSION_CATALOG_URL",
   `https://raw.githubusercontent.com/openmapx/community-extensions/${DEFAULT_EXTENSION_CATALOG_COMMIT}/catalog.json`,
@@ -126,7 +126,7 @@ export interface ExtensionCatalogSource {
 
 export interface KillSwitch {
   removed: Map<string, string>; // id -> reason
-  /** maxVersion is advisory display data; every critical entry denies execution. */
+  /** Read through `criticalAdvisoryFor`: `maxVersion` limits which versions are denied. */
   critical: Map<string, { reason: string; maxVersion?: string }>;
   /**
    * True when the moving revocation feed could not be refreshed and the last
@@ -163,6 +163,7 @@ async function fetchRevocations(): Promise<{ snapshot: RevocationSnapshot; stale
     // it must not replace the last good snapshot.
     if (
       !isCatalogRecord(data) ||
+      !hasSupportedSchemaVersion(data) ||
       (Object.hasOwn(data, "removed") && !isCatalogControlList(data.removed, false)) ||
       (Object.hasOwn(data, "critical") && !isCatalogControlList(data.critical, true))
     ) {
@@ -193,7 +194,7 @@ async function fetchRevocations(): Promise<{ snapshot: RevocationSnapshot; stale
     appLogger.add({
       level: "warn",
       source: "extension-store",
-      msg: "Extension revocation feed refresh failed; serving last known snapshot",
+      message: "Extension revocation feed refresh failed; serving last known snapshot",
       time: Date.now(),
       metadata: {
         revocationSource: summarizeExternalUrl(EXTENSION_REVOCATION_FEED_URL),
@@ -340,6 +341,17 @@ function isCatalogRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * The catalog and revocation-feed format this host reads. A document must name
+ * it as `schemaVersion`; a later major version may change the rules for
+ * entries this host would otherwise misread, so it is refused.
+ */
+const CATALOG_SCHEMA_VERSION = 1;
+
+function hasSupportedSchemaVersion(document: Record<string, unknown>): boolean {
+  return document.schemaVersion === CATALOG_SCHEMA_VERSION;
+}
+
 function isCatalogEntryList(value: unknown): value is ExtensionCatalogEntry[] {
   return (
     Array.isArray(value) &&
@@ -397,7 +409,9 @@ function isCatalogControlList(value: unknown, critical: boolean): boolean {
         isCatalogRecord(entry) &&
         typeof entry.id === "string" &&
         (!Object.hasOwn(entry, "reason") || typeof entry.reason === "string") &&
-        (!critical || !Object.hasOwn(entry, "maxVersion") || typeof entry.maxVersion === "string"),
+        (!critical ||
+          !Object.hasOwn(entry, "maxVersion") ||
+          coreServices.isSemver(entry.maxVersion)),
     )
   );
 }
@@ -411,15 +425,12 @@ async function fetchCatalogFromUrl(url: string): Promise<FetchedCatalog> {
     throw new ExtensionStoreError("catalog_acquisition_failed");
   }
   const data = await safeFetchJson<unknown>(canonical, EXTENSION_FETCH_OPTIONS);
-  // Accept either a bare array of entries or `{ extensions, removed, critical }`.
-  // Validate the whole document before consuming it: malformed acquisition is
-  // not evidence of an empty catalog, and must not clear cached denials.
-  if (Array.isArray(data)) {
-    if (!isCatalogEntryList(data)) throw new ExtensionStoreError("catalog_acquisition_failed");
-    return { entries: data.map(normalizeCatalogEntry), control: {} };
-  }
+  // `{ schemaVersion, extensions, removed, critical }`. Validate the whole
+  // document before consuming it: malformed acquisition is not evidence of an
+  // empty catalog, and must not clear cached denials.
   if (
     !isCatalogRecord(data) ||
+    !hasSupportedSchemaVersion(data) ||
     (Object.hasOwn(data, "extensions") && !isCatalogEntryList(data.extensions)) ||
     (Object.hasOwn(data, "removed") && !isCatalogControlList(data.removed, false)) ||
     (Object.hasOwn(data, "critical") && !isCatalogControlList(data.critical, true))
@@ -537,7 +548,7 @@ async function buildCatalog(sources: ExtensionCatalogSource[]): Promise<CachedCa
       appLogger.add({
         level: "warn",
         source: "extension-store",
-        msg: "Extension catalog fetch failed",
+        message: "Extension catalog fetch failed",
         time: Date.now(),
         metadata: {
           catalogSource: summarizeExternalUrl(source.url),
@@ -569,11 +580,14 @@ export async function getKillSwitch(): Promise<KillSwitch> {
   const cached = await getCatalogCached(false);
   const revocations = await fetchRevocations();
   // Union of the catalog's own control block and the moving deny-only feed.
-  // Both can only ADD denials.
+  // Both can only add denials: for one id the widest critical advisory wins,
+  // whichever document or entry carries it.
   const removed = new Map(cached.killSwitch.removed);
-  const critical = new Map(cached.killSwitch.critical);
   for (const [id, reason] of revocations.snapshot.removed) removed.set(id, reason);
-  for (const [id, value] of revocations.snapshot.critical) critical.set(id, value);
+  const critical = mergeCriticalAdvisories([
+    ...cached.killSwitch.critical,
+    ...revocations.snapshot.critical,
+  ]);
   return { removed, critical, stale: revocations.stale };
 }
 

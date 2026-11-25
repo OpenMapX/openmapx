@@ -111,7 +111,7 @@ it.skipIf(!enabled)(
       completed = await make(completedKey),
       pending = await make(pendingKey),
       expired = new Date(Date.now() - 4 * 86400000),
-      binding = encrypt("{}");
+      binding = encrypt("{}", "transit_credential_preview:fixture:authorization");
     for (const preview of [completed, pending])
       await state.fixture.db
         .update(transitCredentialPreview)
@@ -120,6 +120,7 @@ it.skipIf(!enabled)(
           authorizationCiphertext: binding.ciphertext,
           authorizationIv: binding.iv,
           authorizationTag: binding.tag,
+          authorizationKeyVersion: binding.keyVersion,
         })
         .where(eq(transitCredentialPreview.id, preview.previewId));
     await state.fixture.db.insert(adminJob).values([
@@ -127,7 +128,7 @@ it.skipIf(!enabled)(
         id: randomUUID(),
         type: "configuration.apply",
         status: "failed",
-        createdBy: "transit-preview-admin",
+        createdByUserId: "transit-preview-admin",
         finishedAt: expired,
         payload: { operationKey: completedKey },
         protocol: { immediate: { actorId: "transit-preview-admin", intentDigest: "0".repeat(64) } },
@@ -136,7 +137,7 @@ it.skipIf(!enabled)(
         id: randomUUID(),
         type: "configuration.apply",
         status: "running",
-        createdBy: "transit-preview-admin",
+        createdByUserId: "transit-preview-admin",
         payload: { operationKey: pendingKey },
         protocol: { immediate: { actorId: "transit-preview-admin", intentDigest: "0".repeat(64) } },
       },

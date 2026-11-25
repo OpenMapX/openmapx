@@ -50,8 +50,7 @@ export async function adminActivityRoute(app: FastifyInstance): Promise<void> {
       await writeAuditLog({
         actorId: adminSession.user.id,
         targetId: request.params.id,
-        targetType: request.query.source === "data-manager" ? "data-manager-job" : "job",
-        action: "job.cancel",
+        action: request.query.source === "data-manager" ? "data_manager.job.cancel" : "job.cancel",
         request,
       });
       return { ok: true };

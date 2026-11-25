@@ -14,7 +14,7 @@ export class ConfigurationPrerequisiteFailure extends AdminJobFailure {
   readonly statusCode = 409;
   constructor() {
     super("Apply or update Data Manager before changing instance configuration.", {
-      errorCode: "configuration_prerequisite",
+      errorCode: "CONFIGURATION_PREREQUISITE",
       configuration: {
         outcome: "not_committed",
         reason: "conflict",

@@ -25,7 +25,6 @@
     "urlTemplate": "${endpoint:overpass}/api/status"
   },
   "quality": "built-in",
-  "category": "Geocoding",
   "dataSources": [
     {
       "sourceId": "overpass",

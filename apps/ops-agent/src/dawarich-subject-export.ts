@@ -10,8 +10,12 @@ import {
   type DawarichSubjectRequestV1,
   dawarichSubjectRequestV1Schema,
 } from "@openmapx/core/privacy";
+import { services } from "@openmapx/core/server";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { runContainedProcess } from "./docker-runtime";
+
+/** The managed Dawarich web app's container. */
+const DAWARICH_APP_CONTAINER = services.serviceContainerName("dawarich-app");
 
 const REQUEST_HEADER = /^ops1_[A-Za-z0-9_-]{16,64}$/;
 const MAX_BODY_BYTES = 16 * 1024;
@@ -262,7 +266,7 @@ function labelOrEnv(value: Record<string, unknown>, key: string): string | null 
 export function createDockerDawarichRuntimeInspector(
   options: DockerDawarichRuntimeInspectorOptions = {},
 ): () => Promise<DawarichRuntimeIdentity> {
-  const containerName = options.containerName ?? "dawarich-app";
+  const containerName = options.containerName ?? DAWARICH_APP_CONTAINER;
   if (!/^[a-z][a-z0-9-]{0,63}$/.test(containerName))
     throw new Error("invalid Dawarich container name");
   const run = options.run ?? runContainedProcess;
@@ -312,7 +316,7 @@ export function createDockerDawarichRuntimeInspector(
 export function createDockerDawarichCollector(
   options: DockerDawarichCollectorOptions = {},
 ): (request: DawarichSubjectRequestV1, signal: AbortSignal) => Promise<Readable> {
-  const container = options.containerName ?? "dawarich-app";
+  const container = options.containerName ?? DAWARICH_APP_CONTAINER;
   if (!/^[a-z][a-z0-9-]{0,63}$/.test(container)) throw new Error("invalid Dawarich container name");
   const spawnProcess = options.spawnImpl ?? spawn;
   return async (request, signal) => {

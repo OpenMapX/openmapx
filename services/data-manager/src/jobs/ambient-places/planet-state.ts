@@ -6,6 +6,10 @@ import {
   type AmbientOvertureRow,
 } from "@openmapx/core/ambient-places";
 import { itemAt } from "@openmapx/core/item-at";
+import {
+  OSM_SEARCH_SCHEMA_VERSION,
+  OVERTURE_PLACES_SCHEMA_VERSION,
+} from "@openmapx/core/published-data";
 import type postgres from "postgres";
 import { fresh } from "./publication.js";
 
@@ -57,8 +61,11 @@ export async function capturePlanetSources(sql: postgres.Sql): Promise<PlanetSou
   );
   if (!osm || osm.state.region !== "planet" || osm.state.status !== "ready")
     throw new Error("A ready planet OSM snapshot is required");
-  if (osm.state.ambient_source_version !== 2 || typeof osm.state.source_file_identity !== "string")
-    throw new Error("Rebuild the planet OSM snapshot with ambient source format 2");
+  if (
+    osm.state.schema_version !== OSM_SEARCH_SCHEMA_VERSION ||
+    typeof osm.state.source_file_identity !== "string"
+  )
+    throw new Error("Rebuild the planet OSM search snapshot with the current builder");
   if (osm.state.current_fingerprint !== osm.state.source_fingerprint)
     throw new Error("Planet OSM source changed; rebuild the source snapshot");
   const osmPublished = fresh(osm.state.published_at as string | null);
@@ -74,7 +81,7 @@ export async function capturePlanetSources(sql: postgres.Sql): Promise<PlanetSou
       publication: osmPublished,
       fingerprint: osm.state.source_fingerprint,
       file: osm.state.source_file_identity,
-      format: 2,
+      schemaVersion: OSM_SEARCH_SCHEMA_VERSION,
     },
   };
   const osmRows = count(osm.state.place_count);
@@ -114,6 +121,8 @@ export async function capturePlanetSources(sql: postgres.Sql): Promise<PlanetSou
     } else {
       if (ot.state.region !== "planet" || ot.state.status !== "completed")
         throw new Error("Complete planet Overture conflation before ambient publication");
+      if (ot.state.schema_version !== OVERTURE_PLACES_SCHEMA_VERSION)
+        throw new Error("Re-import planet Overture places with the current builder");
       if (ot.state.source_fingerprint !== osm.state.source_file_identity)
         throw new Error(
           "Planet OSM and Overture links use different OSM snapshots; rebuild matching sources",

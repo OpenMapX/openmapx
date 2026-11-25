@@ -68,6 +68,9 @@ COPY services/data-manager/ services/data-manager/
 # Producer acquisition captures this trusted metadata in each release
 # contract; the bundle carries it as an asset.
 COPY integrations/poi-overture/manifest.json integrations/poi-overture/manifest.json
+# The bundle carries the API migration journal as an asset: at startup the
+# service waits until the database holds the newest migration it names.
+COPY apps/api/src/db/migrations/meta/_journal.json apps/api/src/db/migrations/meta/_journal.json
 COPY scripts/build-runtime-bundles.mjs scripts/module-specifiers.mjs scripts/
 ARG EXPECTED_BUNDLE_DIGEST=
 RUN node scripts/build-runtime-bundles.mjs data-manager --expect "$EXPECTED_BUNDLE_DIGEST"

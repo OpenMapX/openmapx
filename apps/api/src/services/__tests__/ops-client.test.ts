@@ -1,9 +1,11 @@
 import { getEventListeners } from "node:events";
-import type {
-  OpsEventBatch,
-  OpsJobStatusFor,
-  OpsOperationKind,
-  OpsSubmitResult,
+import {
+  OpsClientError,
+  type OpsEventBatch,
+  type OpsJobStatusFor,
+  type OpsOperationKind,
+  type OpsSettlement,
+  type OpsSubmitResult,
 } from "@openmapx/core/ops";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -15,6 +17,7 @@ import {
   executeTrustedConfigurationAndWait,
   followOpsEvents,
   OpsObservationPending,
+  OpsSettledByOtherRelease,
   waitForOpsResult,
 } from "../ops-client.js";
 
@@ -28,7 +31,7 @@ const pullResult = {
 };
 // The execution identity every admission and status carries.
 const identity = {
-  version: 2 as const,
+  version: 1 as const,
   admittedAt: 0,
   deadlineAt: 3_600_000,
   fingerprint: "a".repeat(64),
@@ -710,6 +713,85 @@ describe("configuration outcome evidence", () => {
         parentAssertion: "retained-test-parent",
       }),
     ).toEqual({ outcome: "unknown", reason: "transport_or_result" });
+  });
+});
+
+describe("operations another release recorded", () => {
+  const admission = {
+    execution: "async" as const,
+    ...identity,
+    kind: "configurationMaintenance.apply" as const,
+    operationId: "job1_abcdefghijklmnop",
+    operationKey: "opk1_abcdefghijklmnop",
+    state: "running" as const,
+  };
+  const otherRelease = (settlement?: OpsSettlement) =>
+    Object.assign(new OpsClientError("other_release", 409), settlement ? { settlement } : {});
+
+  it("settles a finished configuration apply from its settlement", async () => {
+    const client = fakeClient({
+      status: async () => {
+        throw otherRelease({
+          outcome: "committed",
+          summary: {
+            revisionId: `cfg1_${"c".repeat(43)}`,
+            enabledServiceIds: ["api"],
+            followUp: "complete",
+            cleanupFailed: false,
+          },
+        });
+      },
+    });
+    const settled = await waitForOpsResult(client, admission.kind, admission).catch(
+      (error: unknown) => error,
+    );
+    expect(settled).toBeInstanceOf(OpsSettledByOtherRelease);
+    expect((settled as OpsSettledByOtherRelease).configuration).toEqual({
+      outcome: "committed",
+      revisionId: `cfg1_${"c".repeat(43)}`,
+      enabledServiceIds: ["api"],
+      followUp: "complete",
+      cleanupFailed: false,
+    });
+  });
+
+  it("settles from the row found by key when the operation id was never kept", async () => {
+    const execute = vi.fn();
+    const lookup = vi.fn(async () => {
+      throw otherRelease({
+        outcome: "not_committed",
+        summary: { reason: "failed", cleanupFailed: false },
+      });
+    });
+    const { submitOpsOperationWithRecovery } = await import("../ops-client.js");
+    const settled = await submitOpsOperationWithRecovery(
+      fakeClient({ execute, lookup }),
+      {
+        kind: "configurationMaintenance.apply",
+        maintenanceId: "0c8d7f4e-1c42-4b77-9f0e-0f1a2b3c4d5e",
+      },
+      admission.operationKey,
+      { admissionAlreadyAttempted: true, recoveryTimeoutMs: 5 },
+    ).catch((error: unknown) => error);
+    expect(settled).toBeInstanceOf(OpsSettledByOtherRelease);
+    expect((settled as OpsSettledByOtherRelease).configuration).toEqual({
+      outcome: "not_committed",
+      reason: "failed",
+      cleanupFailed: false,
+    });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  it("leaves a row without a settlement to recovery", async () => {
+    const client = fakeClient({
+      status: async () => {
+        throw otherRelease();
+      },
+    });
+    await expect(waitForOpsResult(client, admission.kind, admission)).rejects.toMatchObject({
+      name: "OpsObservationPending",
+      reason: "recovery_required",
+    });
   });
 });
 

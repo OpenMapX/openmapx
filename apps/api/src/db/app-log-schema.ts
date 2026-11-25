@@ -1,14 +1,14 @@
-import { index, integer, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { bigint, index, jsonb, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
 export const appLog = pgTable(
-  "app_logs",
+  "app_log",
   {
-    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
     level: text("level").notNull(),
     source: text("source").notNull(),
-    msg: text("msg").notNull(),
+    message: text("message").notNull(),
     metadata: jsonb("metadata"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (t) => [index("app_logs_created_at_idx").on(t.createdAt)],
+  (t) => [index("app_log_created_at_idx").on(t.createdAt)],
 );

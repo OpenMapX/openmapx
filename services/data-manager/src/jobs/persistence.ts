@@ -1,11 +1,12 @@
-import { jobStages } from "@openmapx/db-schema";
+import type { JobStageStatus } from "@openmapx/core/jobs";
+import { jobStage } from "@openmapx/db-schema";
 import { drizzle } from "drizzle-orm/postgres-js";
 import type postgres from "postgres";
 import { scrubDiagnosticValue, scrubSecrets } from "../utils/scrub-secrets.js";
 
 export interface PersistableStageResult {
   stage: string;
-  status: string;
+  status: JobStageStatus;
   startedAt: string;
   finishedAt: string;
   durationMs: number;
@@ -36,7 +37,7 @@ export function makePersistingOnStageComplete<TStage extends PersistableStageRes
         artifacts: Record<string, unknown> | null;
       };
       await drizzle(sql)
-        .insert(jobStages)
+        .insert(jobStage)
         .values({
           jobId,
           stage: result.stage,

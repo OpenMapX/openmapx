@@ -80,12 +80,15 @@ export async function adminOperationsRoute(app: FastifyInstance): Promise<void> 
         // its own trust boundary (e.g. countries text -> typed countryCodes).
         input: req.body ?? {},
       };
-      const jobId = await jobRunner.enqueue("data.operation", { ...payload }, adminSession.user.id);
+      const jobId = await jobRunner.enqueue(
+        "data.operation.run",
+        { ...payload },
+        adminSession.user.id,
+      );
       await writeAuditLog({
         actorId: adminSession.user.id,
-        targetType: "data",
         targetId: definition.id,
-        action: `data.${definition.id}`,
+        action: "data.operation.run",
         details: definition.audit ? definition.audit(parsed.input) : parsed.input,
         request: req,
       });

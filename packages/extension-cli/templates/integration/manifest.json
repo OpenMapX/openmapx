@@ -1,6 +1,7 @@
 {
   "id": "__ID__",
   "version": "1.0.0",
+  "platform": "1.0",
   "author": "Your Name",
   "license": "MIT",
   "documentation": "https://example.com/api",
@@ -11,7 +12,6 @@
     "panel": false
   },
   "quality": "community",
-  "category": "Knowledge",
   "healthCheck": {
     "type": "http",
     "url": "https://example.com/health"

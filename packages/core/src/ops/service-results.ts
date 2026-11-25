@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { COMPONENT_ID_PATTERN } from "../component-id";
 
 export type CoordinatorMode = "ensure-running" | "require-running";
 const count = z.number().int().nonnegative().safe();
@@ -16,7 +17,7 @@ export type ServicePreparationResult = {
   hardlinks: HardlinkApplySummary;
   coordinatorMode: CoordinatorMode;
 };
-const serviceId = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/);
+const serviceId = z.string().regex(COMPONENT_ID_PATTERN);
 const ids = z
   .array(serviceId)
   .max(256)

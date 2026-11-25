@@ -111,7 +111,9 @@ export async function registerCapabilityBindingRoutes(app: FastifyInstance): Pro
       };
       const errors = (
         error: unknown,
-        reply: { code: (status: number) => { send: (body: { error: string }) => unknown } },
+        reply: {
+          code: (status: number) => { send: (body: { error: string; code?: string }) => unknown };
+        },
       ) => {
         if (error instanceof IntegrationBindingConflict)
           return reply
@@ -120,8 +122,8 @@ export async function registerCapabilityBindingRoutes(app: FastifyInstance): Pro
                 ? 409
                 : 400,
             )
-            .send({ error: error.code });
-        if (error instanceof AdminJobFailure && error.result.errorCode === "conflict")
+            .send({ error: "Capability binding refused", code: error.code });
+        if (error instanceof AdminJobFailure && error.result.errorCode === "CONFLICT")
           return reply.code(409).send({ error: "Retained binding intent conflicts" });
         if (error instanceof JobObservationPending)
           return reply.code(503).send({

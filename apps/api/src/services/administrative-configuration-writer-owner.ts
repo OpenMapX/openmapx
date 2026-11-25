@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { setTimeout as delay } from "node:timers/promises";
+import { isComponentId } from "@openmapx/core/component-id";
 import { getTableColumns, sql as query } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { db, sql } from "../db";
@@ -312,7 +313,7 @@ export async function withAdministrativeConfigurationWriter<T>(
   const job = jobs.getStore();
   if (!job?.execution || !options.actorId || !options.operationKey) throw rejected();
   const ids = [...new Set(options.integrationIds)].sort();
-  if (ids.length > 256 || ids.some((id) => !/^[a-z0-9][a-z0-9-]{0,63}$/.test(id))) throw rejected();
+  if (ids.length > 256 || !ids.every(isComponentId)) throw rejected();
   const reserved = await sql.reserve();
   const locks: number[] = [];
   let global = false;

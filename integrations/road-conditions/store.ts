@@ -1,4 +1,4 @@
-import { createOverlayStore, getStorage } from "@openmapx/core";
+import { createOverlayStore, getStorage, STORAGE_KEYS } from "@openmapx/core";
 import { ROAD_SOURCE_IDS } from "./road-sources";
 
 /** Severity threshold options for the legend filter (`"all"` = no threshold). */
@@ -30,7 +30,7 @@ const MIN_SEVERITIES: readonly MinSeverity[] = ["all", "minor", "moderate", "maj
 const HORIZONS: readonly Horizon[] = ["active", "week", "all"];
 
 /** Where the reader's layer and filter choices are kept between visits. */
-export const ROAD_CONDITIONS_STORAGE_KEY = "openmapx:roadConditions";
+export const ROAD_CONDITIONS_STORAGE_KEY = STORAGE_KEYS.roadConditions.key;
 
 /** The choices the legend remembers: which layers it draws and how incidents are filtered. */
 export interface RoadConditionsChoices {

@@ -56,7 +56,6 @@
     }
   ],
   "quality": "built-in",
-  "category": "Map Overlays",
   "dataSources": [
     {
       "sourceId": "waymarked-trails",

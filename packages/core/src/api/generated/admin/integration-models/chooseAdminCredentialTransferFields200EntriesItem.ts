@@ -5,7 +5,7 @@ import type { ChooseAdminCredentialTransferFields200EntriesItemStatus } from "./
 
 export type ChooseAdminCredentialTransferFields200EntriesItem = {
   scope: ChooseAdminCredentialTransferFields200EntriesItemScope;
-  /** @pattern ^[a-z0-9][a-z0-9-]{0,63}$ */
+  /** @pattern ^(?=.{1,48}$)[a-z0-9]+(?:-[a-z0-9]+)*$ */
   id: string;
   /**
    * @minLength 1

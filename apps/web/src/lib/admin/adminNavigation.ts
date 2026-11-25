@@ -1,4 +1,4 @@
-export const SETTINGS_TOPICS = ["general", "authentication", "email", "map", "data-use"] as const;
+export const SETTINGS_TOPICS = ["authentication", "email", "map", "data-use"] as const;
 
 export type AdminWorkspace =
   | "overview"
@@ -44,7 +44,6 @@ export const ADMIN_DESTINATIONS: readonly AdminDestination[] = [
   destination("privacy", "/admin/privacy", "privacy"),
   destination("privacy-setup", "/admin/privacy-setup", "privacy"),
   destination("activity", "/admin/activity", "activity"),
-  destination("general", "/admin/settings/general", "settings"),
   destination("authentication", "/admin/settings/authentication", "settings"),
   destination("email", "/admin/settings/email", "settings"),
   destination("map", "/admin/settings/map", "settings"),

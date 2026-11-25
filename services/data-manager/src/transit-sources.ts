@@ -54,7 +54,7 @@ export class TransitSourceError extends Error {
   constructor(
     message: string,
     readonly statusCode: 400 | 404 | 409 = 400,
-    readonly code?: "source_action_not_allowed",
+    readonly code?: "SOURCE_ACTION_NOT_ALLOWED",
   ) {
     super(message);
   }
@@ -81,7 +81,7 @@ interface CatalogSourceRecord extends Record<string, unknown> {
 }
 
 function emptyOverlay(): FeedOverlay {
-  return { version: 3, sources: [], patches: [], quarantine: [] };
+  return { version: 1, sources: [], patches: [], quarantine: [] };
 }
 
 function readOverlay(path: string): FeedOverlay {
@@ -130,7 +130,7 @@ function desiredSources(
   // visible for removal without ever being materialized into that catalog.
   const retained: FeedFile[] = [];
   applyFeedOverlay(retained, {
-    version: 3,
+    version: 1,
     sources: overlay.sources.filter(
       (source) =>
         source.spec === "gtfs" && quarantined.has(operatorSourceId(source.region, source.name)),
@@ -419,7 +419,7 @@ export function prepareRemoveTransitSource(options: {
     throw new TransitSourceError(
       "Pinned catalog sources can be disabled, but cannot be removed",
       409,
-      "source_action_not_allowed",
+      "SOURCE_ACTION_NOT_ALLOWED",
     );
   }
   const sources = current.sources.filter(
@@ -464,7 +464,7 @@ export function prepareSetTransitSourceEnabled(options: {
     throw new TransitSourceError(
       "Source is quarantined; repair it before enabling",
       409,
-      "source_action_not_allowed",
+      "SOURCE_ACTION_NOT_ALLOWED",
     );
   if (
     options.enabled &&
@@ -476,7 +476,7 @@ export function prepareSetTransitSourceEnabled(options: {
     throw new TransitSourceError(
       "Source is outside the configured country scope",
       409,
-      "source_action_not_allowed",
+      "SOURCE_ACTION_NOT_ALLOWED",
     );
   const candidate = parseFeedOverlay({
     ...current,

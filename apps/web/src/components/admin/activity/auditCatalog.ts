@@ -1,18 +1,27 @@
+import {
+  type AuditAction,
+  type AuditTargetType,
+  AUDIT_TARGET_TYPES as RECORDED_TARGET_TYPES,
+} from "@openmapx/core/api-contracts";
+
 /**
- * Audit actions and target types the API records, grouped for the audit
- * filter. `scripts/admin-code-catalogue.test.ts` collects the codes from the
- * API's audit writers and fails when this list or `adminShared.auditActions`
- * misses one or keeps one nothing records.
+ * Audit actions grouped for the audit filter. The actions and target types
+ * come from the API's audit registry; `scripts/admin-code-catalogue.test.ts`
+ * fails when this grouping or `adminShared.auditActions` misses a registered
+ * action or keeps one the registry does not hold.
  */
-export const AUDIT_ACTION_GROUPS: ReadonlyArray<{ group: string; actions: readonly string[] }> = [
+export const AUDIT_ACTION_GROUPS: ReadonlyArray<{
+  group: string;
+  actions: readonly AuditAction[];
+}> = [
   {
     group: "integrations",
     actions: [
       "integration.config.update",
-      "integration.enabled",
-      "integration.disabled",
+      "integration.enable",
+      "integration.disable",
       "integration.reload",
-      "integration.reload.all",
+      "integration.reload_all",
       "integration.binding.set",
       "integration.binding.remove",
       "standalone.preview",
@@ -24,11 +33,11 @@ export const AUDIT_ACTION_GROUPS: ReadonlyArray<{ group: string; actions: readon
   {
     group: "credentials",
     actions: [
-      "credential.set",
-      "credential.delete",
-      "credentials.export",
-      "credentials.import.preview",
-      "credentials.import.desired",
+      "integration.credential.set",
+      "integration.credential.delete",
+      "credential.export",
+      "credential.import.preview",
+      "credential.import",
     ],
   },
   {
@@ -38,42 +47,27 @@ export const AUDIT_ACTION_GROUPS: ReadonlyArray<{ group: string; actions: readon
       "service.stop",
       "service.restart",
       "service.apply",
-      "service.bulk.start",
-      "service.bulk.stop",
-      "service.bulk.restart",
-      "service.bulk.update",
-      "service.bulk.build",
+      "service.update",
+      "service.build",
       "service.selection.update",
       "service.config.update",
       "service.credential.set",
       "service.credential.delete",
-      "service.health_check",
-      "service.images.pull",
-      "service.logs.read",
+      "service.health.check",
+      "service.image.pull",
+      "service.log.read",
       "compose.render",
     ],
   },
   {
     group: "data",
     actions: [
-      "data.download-osm",
-      "data.download-fonts",
-      "data.update",
-      "data.convert-overpass",
-      "data.link",
-      "data.clean",
-      "data.overture-sync",
-      "data.overture-pull",
-      "data.overture-ingest",
-      "data.overture-extract",
-      "data.overture-conflate",
-      "data.search-index-build",
-      "data.notable-places-build",
-      "ambient-places.build",
-      "ambient-places.resume",
-      "ambient-places.discard",
-      "ambient-places.enabled",
-      "ambient-places.rollback",
+      "data.operation.run",
+      "ambient_places.build",
+      "ambient_places.resume",
+      "ambient_places.discard",
+      "ambient_places.enabled.set",
+      "ambient_places.rollback",
     ],
   },
   {
@@ -83,9 +77,9 @@ export const AUDIT_ACTION_GROUPS: ReadonlyArray<{ group: string; actions: readon
   {
     group: "settings",
     actions: [
-      "settings.update",
-      "settings.test_email",
-      "configuration.migration.desired",
+      "setting.update",
+      "setting.test_email.send",
+      "configuration.migration.apply",
       "platform.configuration.save",
       "auth.policy.apply",
       "release.clear",
@@ -98,9 +92,9 @@ export const AUDIT_ACTION_GROUPS: ReadonlyArray<{ group: string; actions: readon
       "extension.install",
       "extension.update",
       "extension.remove",
-      "extension.refresh_catalog",
-      "extension.add_source",
-      "extension.remove_source",
+      "extension.catalog.refresh",
+      "extension.source.add",
+      "extension.source.remove",
     ],
   },
   {
@@ -110,7 +104,7 @@ export const AUDIT_ACTION_GROUPS: ReadonlyArray<{ group: string; actions: readon
       "transit.catalog.validate",
       "transit.catalog.activate",
       "transit.catalog.cancel",
-      "transit.credentials.update",
+      "transit.credential.update",
       "transit.lock.bump",
       "transit.source.add",
       "transit.source.enable",
@@ -118,34 +112,34 @@ export const AUDIT_ACTION_GROUPS: ReadonlyArray<{ group: string; actions: readon
       "transit.source.remove",
     ],
   },
-  { group: "jobs", actions: ["job.cancel"] },
+  { group: "jobs", actions: ["job.cancel", "data_manager.job.cancel"] },
   {
     group: "system",
     actions: [
       "system.update.check",
-      "system.update.apply",
-      "system.diagnostics.run",
+      "system.update",
+      "system.diagnostics.collect",
       "dawarich.provision",
-      "dawarich.rotate_oidc_secret",
+      "dawarich.oidc_secret.rotate",
     ],
   },
   {
     group: "users",
     actions: [
       "user.create",
-      "user.invitation",
-      "user.verification-email",
-      "user.verify",
+      "user.invitation.send",
+      "user.email_verification.send",
+      "user.email.verify",
       "user.delete",
       "user.role.change",
       "user.ban",
       "user.unban",
       "user.impersonate",
       "user.password.set",
-      "user.reset-password",
+      "user.password_reset.send",
       "user.password.reset",
       "user.session.revoke",
-      "user.sessions.revoke_all",
+      "user.session.revoke_all",
     ],
   },
   {
@@ -158,47 +152,23 @@ export const KNOWN_AUDIT_ACTIONS: ReadonlySet<string> = new Set(
   AUDIT_ACTION_GROUPS.flatMap((group) => group.actions),
 );
 
-export const AUDIT_TARGET_TYPES: readonly string[] = [
-  "integration",
-  "service",
-  "data",
-  "data-manager-job",
-  "job",
-  "backup",
-  "settings",
-  "configuration",
-  "configuration-migration",
-  "credential-transfer",
-  "platform",
-  "auth-policy",
-  "cache",
-  "release",
-  "provider",
-  "extension",
-  "ambient-places",
-  "transit",
-  "transit-source",
-  "transit.credentials",
-  "system",
-  "user",
-  "personal_timeline_connection",
-];
+export const AUDIT_TARGET_TYPES: readonly AuditTargetType[] = RECORDED_TARGET_TYPES;
 
-export const DESTRUCTIVE_AUDIT_ACTIONS: ReadonlySet<string> = new Set([
-  "credential.delete",
+export const DESTRUCTIVE_AUDIT_ACTIONS: ReadonlySet<string> = new Set<AuditAction>([
+  "integration.credential.delete",
   "service.stop",
-  "service.bulk.stop",
   "service.credential.delete",
   "backup.delete",
   "backup.prune",
-  "ambient-places.discard",
+  "ambient_places.discard",
   "extension.remove",
-  "extension.remove_source",
+  "extension.source.remove",
   "transit.source.remove",
   "job.cancel",
+  "data_manager.job.cancel",
   "cache.clear",
   "user.delete",
   "user.ban",
   "user.session.revoke",
-  "user.sessions.revoke_all",
+  "user.session.revoke_all",
 ]);

@@ -74,7 +74,7 @@ function pitch(value: number) {
 describe("building camera restoration", () => {
   // Deliberately first: this file begins with an uninitialized overlay registry.
   it("preserves off before registry readiness and lazy building-layer mounting", () => {
-    window.history.replaceState(null, "", `${VIEW}&buildings=0&ov=3d-buildings`);
+    window.history.replaceState(null, "", `${VIEW}&buildings=0&overlay=3d-buildings`);
     const { rerender } = render(<Scene buildings={false} />);
     act(() => initOverlayRegistry([BUILDINGS]));
     rerender(<Scene />);
@@ -115,7 +115,7 @@ describe("building camera restoration", () => {
     act(updateUrl);
     const shared = window.location.search;
     expect(shared).toContain("buildings=0");
-    expect(shared).not.toContain("ov=");
+    expect(shared).not.toContain("overlay=");
     // A history traversal changes only the open surfaces, never the layers.
     act(() => {
       window.history.pushState(null, "", VIEW);
@@ -134,6 +134,6 @@ describe("building camera restoration", () => {
     act(updateUrl);
     expect(useBuildingsStore.getState().layerVisible).toBe(true);
     expect(window.location.search).not.toContain("buildings=0");
-    expect(window.location.search).toContain("ov=3d-buildings");
+    expect(window.location.search).toContain("overlay=3d-buildings");
   });
 });

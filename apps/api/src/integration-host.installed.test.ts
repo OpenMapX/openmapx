@@ -24,6 +24,7 @@ import { processLogger } from "./process-logger";
 const MANIFEST = {
   id: "delta",
   version: "1.0.0",
+  platform: "1.0",
   author: "Test",
   license: "MIT",
   domains: ["knowledge"],

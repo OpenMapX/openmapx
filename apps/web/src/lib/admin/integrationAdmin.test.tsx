@@ -334,7 +334,7 @@ describe("integration query boundaries and reload observation", () => {
       reads += 1;
       return Response.json(
         job({
-          status: reads === 1 ? "running" : reads === 2 ? "cancel_pending" : "canceled",
+          status: reads === 1 ? "running" : reads === 2 ? "cancel_pending" : "cancelled",
           cancelable: reads === 1,
         }),
       );
@@ -375,8 +375,8 @@ describe("integration query boundaries and reload observation", () => {
         ? Response.json({ ok: true, jobId: "job-1" })
         : Response.json(
             malformed
-              ? { id: "job-1", status: "success" }
-              : job({ id: "other-job", status: "success" }),
+              ? { id: "job-1", status: "succeeded" }
+              : job({ id: "other-job", status: "succeeded" }),
           ),
     );
     const qc = client();
@@ -424,7 +424,7 @@ describe("integration query boundaries and reload observation", () => {
       }
       expect(nth(requests, 1).init.signal?.aborted).toBe(true);
       await act(async () => {
-        response.resolve(Response.json(job({ status: "success", cancelable: false })));
+        response.resolve(Response.json(job({ status: "succeeded", cancelable: false })));
       });
       for (const key of [...cachedKeys("http://admin.test"), ...cachedKeys("http://second.test")])
         expect(qc.getQueryState(key)?.isInvalidated).toBe(false);
@@ -493,7 +493,7 @@ describe("integration query boundaries and reload observation", () => {
     for (const key of cachedKeys()) qc.setQueryData(key, {});
     await act(async () => {
       nth(responses, 1).resolve(
-        Response.json(job({ id: "job-2", status: "success", cancelable: false })),
+        Response.json(job({ id: "job-2", status: "succeeded", cancelable: false })),
       );
     });
     await waitFor(() => expect(qc.getQueryState(nth(cachedKeys(), 0))?.isInvalidated).toBe(true));

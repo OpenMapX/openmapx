@@ -67,14 +67,14 @@ describe("service selection helpers", () => {
         }),
       ],
       { EXISTING: "1" },
-      ["INTEGRATION_PHOTOS_FLICKR_APIKEY", "SERVICE_VALHALLA_BUILD_ELEVATION", "UNRELATED"],
+      ["INTEGRATION_PHOTOS_FLICKR_API_KEY", "SERVICE_VALHALLA_BUILD_ELEVATION", "UNRELATED"],
     );
 
     expect(env).toEqual({
       EXISTING: "1",
       OPENMAPX_APPLIED_SERVICES: "api,osrm,valhalla",
       // Compose resolves these from infra/docker/.env when the stack starts.
-      INTEGRATION_PHOTOS_FLICKR_APIKEY: "${INTEGRATION_PHOTOS_FLICKR_APIKEY:-}",
+      INTEGRATION_PHOTOS_FLICKR_API_KEY: "${INTEGRATION_PHOTOS_FLICKR_API_KEY:-}",
       SERVICE_VALHALLA_BUILD_ELEVATION: "${SERVICE_VALHALLA_BUILD_ELEVATION:-}",
     });
   });

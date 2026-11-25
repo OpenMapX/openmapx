@@ -39,7 +39,7 @@ export function SelectedPlaceMarker() {
       ? {
           coordinates: selectedPlace.coordinates,
           names: [selectedPlace.name, name],
-          stylePoiId: selectedPlace.ids?.stylePoi,
+          stylePoiId: selectedPlace.ids?.["style-poi"],
         }
       : null,
   );

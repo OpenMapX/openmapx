@@ -25,7 +25,6 @@
     "routes": true
   },
   "quality": "built-in",
-  "category": "Data Overlays",
   "healthCheck": [
     {
       "name": "openSenseMap",

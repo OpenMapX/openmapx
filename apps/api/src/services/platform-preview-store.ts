@@ -50,7 +50,7 @@ function decode(row: typeof table.$inferSelect) {
       digest !== previewFingerprint ||
       previewFingerprint !== row.previewFingerprint ||
       preview.previewId !== row.id ||
-      preview.actorId !== row.actorId ||
+      preview.actorId !== row.actorUserId ||
       preview.authPolicyRevision !== row.authPolicyRevision ||
       preview.sourceRevision !== row.sourceRevision ||
       preview.expectedCurrentRevisionId !== row.expectedCurrentRevisionId ||
@@ -85,7 +85,7 @@ export async function prunePlatformConfigurationPreviews(
             sql`exists (
             select 1 from ${adminJob}
             where ${adminJob.id} = ${table.consumedByJobId}
-              and ${adminJob.status} in ('success','failed','canceled')
+              and ${adminJob.status} in ('succeeded','failed','cancelled')
               and ${adminJob.finishedAt} is not null
               and greatest(${table.retiredAt},${adminJob.finishedAt}) < ${new Date(now.getTime() - 72 * 3600000).toISOString()}::timestamptz
              
@@ -96,7 +96,7 @@ export async function prunePlatformConfigurationPreviews(
         preservationAllowsDeletion({
           registrationId: "platform-configuration-previews",
           candidateTimestamp: table.createdAt,
-          subjectIds: [table.actorId],
+          subjectIds: [table.actorUserId],
         }),
       ),
     )
@@ -131,7 +131,7 @@ export async function retainPlatformPreview(
     const [existing] = await tx
       .select()
       .from(table)
-      .where(and(eq(table.actorId, input.actorId), eq(table.operationKey, input.operationKey)))
+      .where(and(eq(table.actorUserId, input.actorId), eq(table.operationKey, input.operationKey)))
       .for("update");
     if (existing) {
       if (existing.requestFingerprint !== input.requestFingerprint)
@@ -167,7 +167,7 @@ export async function retainPlatformPreview(
       .insert(table)
       .values({
         id: preview.previewId,
-        actorId: input.actorId,
+        actorUserId: input.actorId,
         operationKey: input.operationKey,
         requestFingerprint: input.requestFingerprint,
         previewFingerprint: preview.previewFingerprint,
@@ -192,7 +192,10 @@ export async function readRetainedPlatformPreview(
     .select()
     .from(table)
     .where(
-      and(eq(table.actorId, input.actorId), eq(table.previewFingerprint, input.previewFingerprint)),
+      and(
+        eq(table.actorUserId, input.actorId),
+        eq(table.previewFingerprint, input.previewFingerprint),
+      ),
     )
     .limit(1);
   if (!row) throw new PlatformPreviewConflict();

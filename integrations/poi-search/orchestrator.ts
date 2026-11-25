@@ -7,6 +7,10 @@ import {
   removeFilterPredicate,
   toPoiSearchOutcome,
 } from "@openmapx/core";
+import {
+  currentOvertureSnapshot,
+  OVERTURE_PLACES_SCHEMA_VERSION,
+} from "@openmapx/core/published-data";
 import { httpError, type IntegrationContext } from "@openmapx/integration-framework";
 import { getPresetById } from "@openmapx/presets";
 import type { PoiSearchProvider, PoiSearchResult, PoiSearchReturn } from "./types.js";
@@ -77,9 +81,10 @@ async function buildConflationLinkMap(
   try {
     const rows = await ctx.db.execute<ConflationLinkRow[]>(
       `SELECT osm_type, osm_id, gers_id
-         FROM overture_places.poi_conflation_link
-        WHERE (osm_type, osm_id) IN (${parsed.map((_, i) => `($${i * 2 + 1},$${i * 2 + 2})`).join(",")})`,
-      parsed.flatMap((p) => [p.type, p.id]),
+         FROM overture_places.poi_conflation_link AS link
+        WHERE (osm_type, osm_id) IN (${parsed.map((_, i) => `($${i * 2 + 1},$${i * 2 + 2})`).join(",")})
+          AND ${currentOvertureSnapshot("link", parsed.length * 2 + 1)}`,
+      [...parsed.flatMap((p) => [p.type, p.id]), OVERTURE_PLACES_SCHEMA_VERSION],
     );
     if (!Array.isArray(rows) || rows.length === 0) return undefined;
     const map = new Map<string, string>();

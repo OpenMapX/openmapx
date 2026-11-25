@@ -5,7 +5,7 @@ import {
   fakeHttpClient,
   routeRequest,
 } from "@openmapx/integration-framework/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { setup } from "../index.js";
 
 interface Captured {
@@ -69,6 +69,40 @@ describe("crowd-reports setup", () => {
         "POST /tokens",
       ].sort(),
     );
+  });
+
+  it("limits the write routes per client address in their own tiers", () => {
+    const routes = routesOf();
+    for (const key of ["POST /reports", "POST /reports/:class/:id/:action", "POST /tokens"])
+      expect(routes.get(key)?.options).toEqual({ rateLimitTier: "contribution" });
+    expect(routes.get("POST /enroll")?.options).toEqual({ rateLimitTier: "enrollment" });
+    expect(routes.get("GET /issuer-keys")?.options?.rateLimitTier).toBeUndefined();
+  });
+
+  it("refuses to start with a relay token shorter than 32 characters", () => {
+    vi.stubEnv("OPENCONDITIONS_RELAY_TOKEN", "too-short");
+    try {
+      expect(() => routesOf()).toThrow(/at least 32/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("sends the relay token on every relayed request", async () => {
+    const token = "t".repeat(32);
+    vi.stubEnv("OPENCONDITIONS_RELAY_TOKEN", token);
+    try {
+      const http = upstream(200, { ok: true });
+      for (const key of ["POST /enroll", "POST /reports", "GET /issuer-keys"]) {
+        const { reply } = fakeReply();
+        await handlerFor(key, http)(routeRequest({ query: {}, body: {} }), reply as never);
+      }
+      expect(http.calls).toHaveLength(3);
+      for (const call of http.calls)
+        expect(call.options?.headers).toMatchObject({ Authorization: `Bearer ${token}` });
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it("POST /reports forwards the signed body to the contributions-api and passes status through", async () => {

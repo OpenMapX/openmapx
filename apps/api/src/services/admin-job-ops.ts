@@ -13,6 +13,7 @@ import {
   controlTerminalReceiptDigest,
   createControlRootOperationKey,
   isTrustedConfigurationApplyOperation,
+  OpsClientError,
   type OpsJobStatus,
   type OpsOperation,
   type OpsOperationKind,
@@ -46,6 +47,7 @@ import {
   createDurableOpsKey,
   followOpsEvents,
   OpsObservationPending,
+  OpsSettledByOtherRelease,
   submitOpsOperationWithRecovery,
   waitForOpsResult,
 } from "./ops-client";
@@ -215,7 +217,7 @@ export async function executeAdminJobOperation<K extends OpsOperationKind>(
   };
   projection = {
     ...projection,
-    version: 3,
+    version: 1,
     steps: {
       ...projection.steps,
       [stepAddress]: { operationKey, requestedDeadlineAt: attempt.requestedDeadlineAt },
@@ -318,6 +320,9 @@ async function observeOperation(
       );
     return projected.result;
   }
+  // Settled from another release's row once: the agent may since have pruned it.
+  if (projected.terminal && projected.settlement)
+    throw new OpsSettledByOtherRelease(identity, projected.settlement);
   const safeCheckpoint = async () => {
     try {
       await persistProjection(context, projection);
@@ -325,6 +330,19 @@ async function observeOperation(
       retireIfLost(error);
       /* Ordinary projection failure never cancels effects. */
     }
+  };
+  // Only an operation that leaves no terminal receipt to copy settles from
+  // what another release's row states. Its caller reads the configuration the
+  // error carries; the projection keeps the settlement for every rerun.
+  const settledByOtherRelease = (error: OpsSettledByOtherRelease): never => {
+    if (opsKindRequiresControlAuthority(projected.kind))
+      throw new OpsObservationPending(error.identity, "recovery_required");
+    context.checkpointResult = { ...context.checkpointResult, configuration: error.configuration };
+    projected.settlement = error.settlement;
+    projected.terminal = true;
+    projected.phase = "terminal";
+    delete projected.outcome;
+    throw error;
   };
   try {
     let admission: OpsSubmitResult<OpsOperationKind>;
@@ -335,7 +353,13 @@ async function observeOperation(
         .status(projected.kind, projected.operationId, {
           signal: AbortSignal.any([signal, AbortSignal.timeout(2_000)]),
         })
-        .catch(() => {
+        .catch((error: unknown) => {
+          if (
+            error instanceof OpsClientError &&
+            error.errorClass === "other_release" &&
+            error.settlement
+          )
+            settledByOtherRelease(new OpsSettledByOtherRelease(identity, error.settlement));
           throw new OpsObservationPending(
             identity,
             context.signal.aborted ? "observer_deadline" : "unavailable",
@@ -378,7 +402,10 @@ async function observeOperation(
             : {}),
           ...(options.payload ? { payload: options.payload } : {}),
         },
-      );
+      ).catch((error: unknown) => {
+        if (error instanceof OpsSettledByOtherRelease) settledByOtherRelease(error);
+        throw error;
+      });
       if (admission.execution === "sync") {
         projected.result = admission.value;
         projected.terminal = true;
@@ -484,6 +511,8 @@ async function observeOperation(
     mirrorController.abort();
     await mirror;
     if (ownershipLost) throw ownershipLost;
+    if (!observed.ok && observed.error instanceof OpsSettledByOtherRelease)
+      settledByOtherRelease(observed.error);
     if (
       !observed.ok &&
       observed.error instanceof OpsObservationPending &&
@@ -540,12 +569,17 @@ async function observeOperation(
       context.checkpointResult = {
         ...context.checkpointResult,
         ...error.failureResult,
-        ...(error.errorClass === "host_update_required" || error.errorClass === "recovery_required"
-          ? { errorCode: error.errorClass }
-          : {}),
+        ...(error.errorClass === "host_update_required"
+          ? { errorCode: "HOST_UPDATE_REQUIRED" }
+          : error.errorClass === "recovery_required"
+            ? { errorCode: "RECOVERY_REQUIRED" }
+            : {}),
       };
       await checkpointTerminalCopy(context, projection, projected, terminalStatus);
-    } else if (!(error instanceof JobObservationPending)) {
+    } else if (
+      !(error instanceof JobObservationPending) &&
+      !(error instanceof OpsSettledByOtherRelease)
+    ) {
       projected.outcome = "unknown";
     }
     throw error;
@@ -613,7 +647,7 @@ export async function resumeAdminJobObservation(
       ...evidence,
       ...settled.result,
     });
-  if (settled?.status === "success") return { ...evidence, ...settled.result };
+  if (settled?.status === "succeeded") return { ...evidence, ...settled.result };
   const completion = evidence._completion as
     | { operationKey?: string; result?: Record<string, unknown> }
     | undefined;
@@ -634,10 +668,10 @@ export async function resumeAdminJobObservation(
     [
       "service.stop",
       "service.restart",
-      "service.core-restart",
-      "backup.operation",
-      "data.operation",
-      "system.diagnostics",
+      "service.core.restart",
+      "backup.operation.run",
+      "data.operation.run",
+      "system.diagnostics.collect",
     ].includes(ctx.jobType ?? "") &&
     entries.length === 1
   )

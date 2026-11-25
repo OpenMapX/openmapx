@@ -35,7 +35,7 @@ describe.skipIf(
   !process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL &&
     process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1",
 )("real durable data runtime containment", () => {
-  it.each(["committed", "canceled"] as const)(
+  it.each(["committed", "cancelled"] as const)(
     "retains cancel-pending and no final time until actual worker settles (%s)",
     async (outcome) => {
       const url = process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL;
@@ -72,7 +72,7 @@ describe.skipIf(
           started();
           context.signal.addEventListener("abort", aborted, { once: true });
           await held;
-          if (outcome === "canceled") context.signal.throwIfAborted();
+          if (outcome === "cancelled") context.signal.throwIfAborted();
           return { kind: "download-fonts", completed: true };
         },
       });
@@ -83,14 +83,14 @@ describe.skipIf(
         key = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) });
         const admitted = await runtime.admit(
           { kind: "download-fonts" },
-          { operationKey: key, requestedDeadlineAt: deadline },
+          { operationKey: key, requestedDeadlineAt: deadline, trigger: "cli" },
         );
         id = admitted.id;
         await ready;
         const running = await store.inspect(id);
         await expect(
           store.checkpoint(id, present(running).version, {
-            status: "ok",
+            status: "succeeded",
             publication: "committed",
             result: { kind: "download-fonts", completed: true },
           }),
@@ -98,7 +98,7 @@ describe.skipIf(
         expect((await store.inspect(id))?.finishedAt).toBeNull();
         const duplicate = await runtime.admit(
           { kind: "download-fonts" },
-          { operationKey: key, requestedDeadlineAt: deadline },
+          { operationKey: key, requestedDeadlineAt: deadline, trigger: "cli" },
         );
         expect(duplicate.id).toBe(id);
         expect(effects).toBe(1);
@@ -113,7 +113,7 @@ describe.skipIf(
         release();
         await expect
           .poll(async () => (await runtime.inspect(present(id)))?.status, { timeout: 15000 })
-          .toBe(outcome === "committed" ? "ok" : "canceled");
+          .toBe(outcome === "committed" ? "succeeded" : "cancelled");
         const terminal = await store.inspect(id);
         expect(terminal?.finishedAt).not.toBeNull();
         expect(terminal?.status.publication).toBe(
@@ -132,14 +132,14 @@ describe.skipIf(
         await expect(
           runtime.admit(
             { kind: "download-fonts" },
-            { operationKey: key, requestedDeadlineAt: deadline + 1 },
+            { operationKey: key, requestedDeadlineAt: deadline + 1, trigger: "cli" },
           ),
         ).rejects.toThrow(/conflict/i);
       } finally {
         release();
         await runtime.close();
         if (!id && key) id = (await store.lookup(key))?.status.id;
-        if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+        if (id) await sql`DELETE FROM data_manager.job WHERE id=${id}`;
         control.closeControlInstallation(installation);
         await sql.end();
         rmSync(root, { recursive: true, force: true });
@@ -188,12 +188,12 @@ describe.skipIf(
       id = (
         await runtime.admit(
           { kind: "download-fonts" },
-          { operationKey: key, requestedDeadlineAt: deadline },
+          { operationKey: key, requestedDeadlineAt: deadline, trigger: "cli" },
         )
       ).id;
       await expect
         .poll(async () => (await runtime.inspect(present(id)))?.status, { timeout: 15000 })
-        .toBe("ok");
+        .toBe("succeeded");
       expect(effects).toBe(1);
       expect(lostReplies).toBe(-1);
       await expect
@@ -210,7 +210,7 @@ describe.skipIf(
         .toEqual([]);
     } finally {
       await runtime.close();
-      if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+      if (id) await sql`DELETE FROM data_manager.job WHERE id=${id}`;
       control.closeControlInstallation(installation);
       await sql.end();
       rmSync(root, { recursive: true, force: true });
@@ -254,7 +254,7 @@ describe.skipIf(
       key = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) });
       const admitted = await runtime.admit(
         { kind: "download-fonts" },
-        { operationKey: key, requestedDeadlineAt: deadline },
+        { operationKey: key, requestedDeadlineAt: deadline, trigger: "cli" },
       );
       id = admitted.id;
       await expect
@@ -280,7 +280,7 @@ describe.skipIf(
       });
       await runtime.reconcile();
       expect((await store.inspect(id))?.status).toMatchObject({
-        status: "ok",
+        status: "succeeded",
         publication: "committed",
         result: { kind: "download-fonts", completed: true },
       });
@@ -292,7 +292,7 @@ describe.skipIf(
     } finally {
       await runtime.close();
       if (!id && key) id = (await store.lookup(key))?.status.id;
-      if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+      if (id) await sql`DELETE FROM data_manager.job WHERE id=${id}`;
       control.closeControlInstallation(installation);
       await sql.end();
       rmSync(root, { recursive: true, force: true });
@@ -373,7 +373,7 @@ describe.skipIf(
         key = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) });
         const admitted = await runtime.admit(
           { kind: "download-fonts" },
-          { operationKey: key, requestedDeadlineAt: deadline },
+          { operationKey: key, requestedDeadlineAt: deadline, trigger: "cli" },
         );
         id = admitted.id;
         await workerReady;
@@ -402,7 +402,7 @@ describe.skipIf(
           unblock();
           await expect
             .poll(async () => (await store.inspect(present(id)))?.status.status, { timeout: 15000 })
-            .toBe("canceled");
+            .toBe("cancelled");
           expect((await store.inspect(id))?.status.publication).toBe("not_started");
         } else {
           // The cancelled COMMIT no longer runs: its connection is idle, or the
@@ -431,7 +431,7 @@ describe.skipIf(
         await locker;
         await runtime.close();
         if (!id && key) id = (await store.lookup(key))?.status.id;
-        if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+        if (id) await sql`DELETE FROM data_manager.job WHERE id=${id}`;
         await sql.unsafe(`DROP TABLE data_manager.${child}`);
         await sql.unsafe(`DROP TABLE data_manager.${parent}`);
         control.closeControlInstallation(installation);
@@ -485,7 +485,7 @@ describe.skipIf(
         key = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) }),
         admitted = await runtime.admit(
           { kind: "overture-sync", region: "europe/germany/berlin" },
-          { operationKey: key, requestedDeadlineAt: deadline, triggeredBy: "cron" },
+          { operationKey: key, requestedDeadlineAt: deadline, trigger: "cron" },
         );
       id = admitted.id;
       await expect
@@ -511,16 +511,16 @@ describe.skipIf(
       await runtime.reconcile();
       const retained = await store.inspect(id);
       expect(retained?.status).toMatchObject({
-        status: "partial",
+        status: "partially_succeeded",
         publication: "committed",
         result: { kind: "overture-sync", release: "2026-07-22.0" },
       });
-      expect(retained?.triggeredBy).toBe("cron");
+      expect(retained?.trigger).toBe("cron");
       expect(retained?.finishedAt).not.toBeNull();
       expect(dispatches).toBe(1);
     } finally {
       await runtime.close();
-      if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+      if (id) await sql`DELETE FROM data_manager.job WHERE id=${id}`;
       control.closeControlInstallation(installation);
       await sql.end();
       rmSync(root, { recursive: true, force: true });
@@ -567,7 +567,7 @@ describe.skipIf(
         }
         return {
           kind: "transit-sync",
-          finalStatus: "ok",
+          finalStatus: "succeeded",
           sourceRevision: "public-fixture",
           countries: ["de"],
         };
@@ -579,14 +579,14 @@ describe.skipIf(
         key = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) }),
         admitted = await runtime.admit(
           { kind: "transit-sync", countries: ["de"] },
-          { operationKey: key, requestedDeadlineAt: deadline },
+          { operationKey: key, requestedDeadlineAt: deadline, trigger: "cli" },
         );
       id = admitted.id;
       await expect
         .poll(
           async () =>
             (
-              await sql`SELECT execution_completion FROM data_manager.jobs WHERE id=${present(id)}`
+              await sql`SELECT execution_completion FROM data_manager.job WHERE id=${present(id)}`
             )[0]?.execution_completion != null,
           { timeout: 15000 },
         )
@@ -597,7 +597,7 @@ describe.skipIf(
       expect(heldTargets(dirname(data)).includes("motis")).toBe(true);
     } finally {
       await runtime.close();
-      if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+      if (id) await sql`DELETE FROM data_manager.job WHERE id=${id}`;
       control.closeControlInstallation(installation);
       await sql.end();
       rmSync(root, { recursive: true, force: true });
@@ -628,7 +628,7 @@ describe.skipIf(
           store,
           dispatch: async () => ({
             kind: "transit-sync",
-            finalStatus: "ok",
+            finalStatus: "succeeded",
             sourceRevision: "public-fixture",
             countries: ["de"],
           }),
@@ -640,12 +640,12 @@ describe.skipIf(
           key = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) }),
           admitted = await runtime.admit(
             { kind: "transit-sync", countries: ["de"] },
-            { operationKey: key, requestedDeadlineAt: deadline },
+            { operationKey: key, requestedDeadlineAt: deadline, trigger: "cli" },
           );
         id = admitted.id;
         await expect
           .poll(async () => (await store.inspect(present(id)))?.status.status, { timeout: 15000 })
-          .toBe("ok");
+          .toBe("succeeded");
         await expect
           .poll(async () => !heldTargets(dirname(data)).includes("data-manager"), {
             timeout: 15000,
@@ -656,7 +656,7 @@ describe.skipIf(
         expect(record?.reservations).toHaveLength(8);
         // The execution's row, on its job row, holds a cell per reservation, and
         // no row file is written.
-        const [stored] = await sql`SELECT execution_progress FROM data_manager.jobs WHERE id=${id}`;
+        const [stored] = await sql`SELECT execution_progress FROM data_manager.job WHERE id=${id}`;
         expect(stored?.execution_progress?.children).toHaveLength(8);
         expect(requireExists(join(root, "state/data-manager/control/executions"))).toBe(false);
         vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
@@ -665,6 +665,7 @@ describe.skipIf(
         const startup = await initializeRequiredSubsystems({
           readiness: new DataManagerReadiness(),
           controlInstallation: installation,
+          waitForDatabaseSchema: async () => {},
           initializeOfflineStorage: async () => {},
           reconcileJobs: async () => {},
           setupCronSchedulers: () => ({ stop() {} }) as never,
@@ -680,16 +681,16 @@ describe.skipIf(
         // The execution row goes; the finished job row stays for the API's
         // job retention and still answers its key as a known duplicate.
         const [pruned] =
-          await sql`SELECT execution_admission, execution_progress, released_at FROM data_manager.jobs WHERE id=${id}`;
+          await sql`SELECT execution_admission, execution_progress, released_at FROM data_manager.job WHERE id=${id}`;
         expect(pruned).toMatchObject({ execution_admission: null, execution_progress: null });
         expect(pruned?.released_at).not.toBeNull();
         const repeated = await store.admit(
           { kind: "transit-sync", countries: ["de"] },
-          { operationKey: key, requestedDeadlineAt: deadline },
+          { operationKey: key, requestedDeadlineAt: deadline, trigger: "cli" },
         );
         expect(repeated).toMatchObject({
           created: false,
-          record: { status: { id, status: "ok" } },
+          record: { status: { id, status: "succeeded" } },
         });
         expect(repeated.record.children).toEqual([]);
       } finally {
@@ -697,7 +698,7 @@ describe.skipIf(
         vi.useRealTimers();
         clock?.mockRestore();
         await runtime.close();
-        if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+        if (id) await sql`DELETE FROM data_manager.job WHERE id=${id}`;
         control.closeControlInstallation(installation);
         await sql.end();
         rmSync(root, { recursive: true, force: true });
@@ -740,7 +741,7 @@ describe.skipIf(
       operationKey = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) });
     const admitted = await runtime.admit(
       { kind: "download-fonts" },
-      { operationKey, requestedDeadlineAt: deadline },
+      { operationKey, requestedDeadlineAt: deadline, trigger: "cli" },
     );
     return { id: admitted.id, operationKey, fingerprint: admitted.fingerprint };
   }
@@ -783,7 +784,7 @@ describe.skipIf(
         .poll(async () => (await fixture.store.inspect(identity.id))?.status.status, {
           timeout: 15000,
         })
-        .toBe("canceled");
+        .toBe("cancelled");
       expect(Date.now() - cancelledAt).toBeLessThan(15000);
       expect(statement).toBe("57014");
       expect(later).toBe("CONNECTION_ENDED");
@@ -791,7 +792,7 @@ describe.skipIf(
       expect((await fixture.store.inspect(identity.id))?.status.publication).toBe("not_started");
     } finally {
       await runtime.close();
-      if (id) await fixture.sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+      if (id) await fixture.sql`DELETE FROM data_manager.job WHERE id=${id}`;
       await fixture.close();
     }
   }, 60000);
@@ -829,12 +830,12 @@ describe.skipIf(
         .poll(async () => (await fixture.store.inspect(identity.id))?.status.status, {
           timeout: 15000,
         })
-        .toBe("canceled");
+        .toBe("cancelled");
       expect(statements).toEqual(Array(6).fill("57014"));
       expect(await sleeping()).toBe(0);
     } finally {
       await runtime.close();
-      if (id) await fixture.sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+      if (id) await fixture.sql`DELETE FROM data_manager.job WHERE id=${id}`;
       await fixture.close();
     }
   }, 60000);
@@ -903,7 +904,7 @@ describe.skipIf(
         .poll(async () => (await fixture.store.inspect(identity.id))?.status.status, {
           timeout: 15000,
         })
-        .toBe("canceled");
+        .toBe("cancelled");
       expect(
         (await fixture.sql.unsafe(`SELECT hits FROM data_manager.${tableName}`))[0]?.hits,
       ).toBe(0);
@@ -911,7 +912,7 @@ describe.skipIf(
       unlock();
       await locker;
       await runtime.close();
-      if (id) await fixture.sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+      if (id) await fixture.sql`DELETE FROM data_manager.job WHERE id=${id}`;
       await fixture.sql.unsafe(`DROP FUNCTION data_manager.${fn}()`);
       await fixture.sql.unsafe(`DROP TABLE data_manager.${tableName}`);
       await fixture.close();

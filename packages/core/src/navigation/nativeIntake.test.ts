@@ -34,31 +34,32 @@ describe("native intake contracts", () => {
 });
 describe("classifySharedText", () => {
   it("searches ordinary addresses without choosing another server", () => {
-    expect(params("  Bahnhofstraße 12, München ").get("q")).toBe("Bahnhofstraße 12, München");
+    expect(params("  Bahnhofstraße 12, München ").get("query")).toBe("Bahnhofstraße 12, München");
   });
   it.each(["50.11,8.68", "geo:50.11,8.68", "geo:0,0?q=50.11,8.68(Station)"])(
     "recognizes an explicit point: %s",
     (value) => {
       const p = params(value);
-      expect(p.get("at")).toBe("50.11,8.68");
+      expect(p.get("placeLocation")).toBe("50.11,8.68");
       expect(p.get("panel")).toBe("place");
+      expect(p.get("place")).toBe("coordinate:50.110000,8.680000");
     },
   );
   it("uses an address query in geo URIs", () =>
-    expect(params("geo:0,0?q=Frankfurt+Hauptbahnhof").get("q")).toBe("Frankfurt Hauptbahnhof"));
+    expect(params("geo:0,0?q=Frankfurt+Hauptbahnhof").get("query")).toBe("Frankfurt Hauptbahnhof"));
   it.each([
     "https://maps.apple.com/?ll=50.11,8.68&q=Station",
     "https://www.google.com/maps/search/?api=1&query=50.11,8.68",
     "https://www.openstreetmap.org/?mlat=50.11&mlon=8.68#map=15/50.11/8.68",
   ])("uses coordinates from a recognized map link: %s", (value) =>
-    expect(params(value).get("at")).toBe("50.11,8.68"),
+    expect(params(value).get("placeLocation")).toBe("50.11,8.68"),
   );
   it("retains a useful label beside an unresolved short link without fetching", () =>
-    expect(params("Frankfurt Hauptbahnhof\nhttps://maps.app.goo.gl/example").get("q")).toBe(
+    expect(params("Frankfurt Hauptbahnhof\nhttps://maps.app.goo.gl/example").get("query")).toBe(
       "Frankfurt Hauptbahnhof",
     ));
   it("accepts own-origin map links without accepting another backend", () =>
-    expect(params("https://openmapx.com/?q=Station").get("q")).toBe("Station"));
+    expect(params("https://openmapx.com/?query=Station").get("query")).toBe("Station"));
   it.each([
     "file:///private/route.gpx",
     "https://evil.example/?q=Station",
@@ -90,7 +91,9 @@ it.each([
   "mailto:cafe@example.com",
   "https://example.com/menu",
 ])("does not let %s hide a later map link", (line) => {
-  expect(params(`Café\n${line}\nhttps://maps.google.com/?q=52.5,13.4`).get("at")).toBe("52.5,13.4");
+  expect(params(`Café\n${line}\nhttps://maps.google.com/?q=52.5,13.4`).get("placeLocation")).toBe(
+    "52.5,13.4",
+  );
 });
 
 it.each([
@@ -106,14 +109,14 @@ it.each([
     "Marienplatz",
   ],
 ])("recognizes current map URLs: %s", (url, at, name) => {
-  expect(params(url).get("at")).toBe(at);
-  expect(params(url).get("name")).toBe(name);
+  expect(params(url).get("placeLocation")).toBe(at);
+  expect(params(url).get("placeName")).toBe(name);
 });
 it("recognizes unified Apple search URLs", () => {
-  expect(params("https://maps.apple.com/search?query=coffee").get("q")).toBe("coffee");
+  expect(params("https://maps.apple.com/search?query=coffee").get("query")).toBe("coffee");
 });
 it("uses a decoded Google place name when no explicit point is available", () => {
-  expect(params("https://www.google.com/maps/place/Caf%C3%A9+Central/").get("q")).toBe(
+  expect(params("https://www.google.com/maps/place/Caf%C3%A9+Central/").get("query")).toBe(
     "Café Central",
   );
 });
@@ -133,10 +136,12 @@ it("does not turn a Google route viewport into a place", () => {
   ).toBe("unsupported");
 });
 it("keeps the Google search term beside a viewport", () => {
-  expect(params("https://www.google.com/maps/search/coffee/@48.137,11.575,15z").get("q")).toBe(
+  expect(params("https://www.google.com/maps/search/coffee/@48.137,11.575,15z").get("query")).toBe(
     "coffee",
   );
 });
 it("recognizes a standalone Google map viewport", () => {
-  expect(params("https://www.google.com/maps/@48.137,11.575,15z").get("at")).toBe("48.137,11.575");
+  expect(params("https://www.google.com/maps/@48.137,11.575,15z").get("placeLocation")).toBe(
+    "48.137,11.575",
+  );
 });

@@ -1,4 +1,4 @@
-import { validateOfflineMapPackageManifest } from "@openmapx/core";
+import { INDEXED_DB_DATABASES, validateOfflineMapPackageManifest } from "@openmapx/core";
 import type {
   OfflineArchiveFile,
   OfflinePackageRecord,
@@ -6,7 +6,7 @@ import type {
   OfflinePackageStorageEstimate,
 } from "./types";
 
-const DB_NAME = "openmapx-offline";
+const DB_NAME = INDEXED_DB_DATABASES.offlinePackages;
 const DB_VERSION = 1;
 const PACKAGE_STORE = "packages";
 const ARCHIVE_STORE = "archives";
@@ -448,7 +448,7 @@ export class IndexedDbOfflinePackageStorage implements OfflinePackageStorage {
           verifiedPrefixBytes: Math.min(record.verifiedPrefixBytes, partialSize),
           updatedAt: Date.now(),
           lastError: {
-            code: "archive-missing",
+            code: "ARCHIVE_MISSING",
             message: "The downloaded map archive is missing and must be downloaded again.",
           },
         };

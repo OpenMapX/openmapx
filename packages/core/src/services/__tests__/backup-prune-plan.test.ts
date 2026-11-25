@@ -20,7 +20,7 @@ function archive(name: string, createdAt: string, expiresAt?: string) {
   mkdirSync(dir, { mode: 0o755, recursive: true });
   writeFileSync(
     join(dir, "manifest.json"),
-    JSON.stringify({ formatVersion: 2, name, createdAt, expiresAt, services: [] }),
+    JSON.stringify({ formatVersion: 1, name, createdAt, expiresAt, services: [] }),
     { mode: 0o644 },
   );
   writeFileSync(join(dir, "archive.tar.gz"), "synthetic archive", { mode: 0o644 });

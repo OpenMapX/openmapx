@@ -53,7 +53,7 @@ export function isReportedProcessFailure(error: unknown): boolean {
 }
 
 import { openAnchoredDirectory } from "./anchored-directory";
-import type { PersistedOpsJob } from "./journal";
+import type { ForeignOpsJob, PersistedOpsJob } from "./journal";
 
 const TRAFFIC_MAINTENANCE_FENCE = ".traffic-maintenance.json";
 const TRAFFIC_GENERATIONS_MANIFEST = "traffic-generations.json";
@@ -217,12 +217,18 @@ const defaultDataMountOwner = {
   gid: process.getgid?.() ?? 1000,
 };
 
+const POSTGIS_CONTAINER = services.serviceContainerName(services.CORE_SERVICE_ID.postgis);
 const POSTGIS_DATA_MOUNT = "/var/lib/postgresql";
-const FEED_PROXY_CONTAINER = "motis-feed-proxy";
+const FEED_PROXY_CONTAINER = services.serviceContainerName("motis-feed-proxy");
+/** The containers of the two MOTIS services, by service id. */
+const MOTIS_CONTAINERS = {
+  motis: services.serviceContainerName("motis"),
+  "motis-staging": services.serviceContainerName("motis-staging"),
+} as const;
 // Valhalla's fixed identities. `/custom_files` is the shared OSM producer mount,
 // so the artifacts these commands write are readable by data-manager directly —
 // it never needs to stream a file back out through Docker.
-const VALHALLA_CONTAINER = `${services.STACK_PROJECT}-valhalla-1`;
+const VALHALLA_CONTAINER = services.serviceContainerName("valhalla");
 const VALHALLA_CONFIG_PATH = "/custom_files/valhalla.json";
 const VALHALLA_TRAFFIC_TAR = "/custom_files/traffic.tar";
 const VALHALLA_TILE_DIR = "/custom_files/valhalla_tiles";
@@ -482,6 +488,9 @@ export interface TrafficMaintenanceRecoveryOptions {
     PersistedOpsJob,
     "operation" | "operationFingerprint" | "state" | "errorClass" | "submittedAt"
   >[];
+  /** Rows another release wrote, whose operation this release may not read.
+   * One is matched by the operation fingerprint it recorded. */
+  foreignRecords?: readonly Pick<ForeignOpsJob, "state" | "submittedAt" | "row">[];
   execFile?: ExecFile;
   descriptorAnchorRoot?: string | null;
 }
@@ -539,13 +548,24 @@ export async function recoverInterruptedTrafficMaintenance(
     if (typeof operationId !== "string" || !/^[0-9a-f]{64}$/.test(operationId)) {
       return { state: "kept", reason: "the fence names no maintenance job" };
     }
-    const job = options.journalRecords
-      .filter(
-        (record) =>
-          record.operation.kind === "valhalla.traffic.maintain" &&
-          record.operationFingerprint === operationId,
-      )
-      .sort((a, b) => Date.parse(b.submittedAt) - Date.parse(a.submittedAt))[0];
+    const job = [
+      ...options.journalRecords
+        .filter(
+          (record) =>
+            record.operation.kind === "valhalla.traffic.maintain" &&
+            record.operationFingerprint === operationId,
+        )
+        .map(({ state, errorClass, submittedAt }) => ({ state, errorClass, submittedAt })),
+      // A job an earlier release recorded, for example when an update
+      // replaced the agent mid-job, is matched by the fingerprint it stored.
+      ...(options.foreignRecords ?? [])
+        .filter((record) => record.row.operationFingerprint === operationId)
+        .map(({ state, submittedAt, row }) => ({
+          state,
+          errorClass: row.errorClass,
+          submittedAt,
+        })),
+    ].sort((a, b) => Date.parse(b.submittedAt) - Date.parse(a.submittedAt))[0];
     if (!job) return { state: "kept", reason: "the journal holds no job for the fence" };
     // Every rebuild shares one fingerprint, and only interrupted jobs outlive
     // the journal's retention: the fence must also have been written while
@@ -632,7 +652,8 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
       });
     return { changed: true } as const;
   };
-  const motisState = async (name: "motis" | "motis-staging", signal: AbortSignal) => {
+  const motisState = async (serviceId: keyof typeof MOTIS_CONTAINERS, signal: AbortSignal) => {
+    const name = MOTIS_CONTAINERS[serviceId];
     const result = await run(
       [
         "container",
@@ -658,13 +679,13 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     throw new Error("MOTIS container state cannot be confirmed stopped");
   };
   const stopMotis = async (
-    name: "motis" | "motis-staging",
+    serviceId: keyof typeof MOTIS_CONTAINERS,
     context: OpsExecutionContext,
   ): Promise<OpsResultFor<"motis.primary.stop">> => {
-    const before = await motisState(name, context.signal);
+    const before = await motisState(serviceId, context.signal);
     if (before !== "running") return { changed: false, state: before };
-    await changed(["stop", name], context);
-    const after = await motisState(name, context.signal);
+    await changed(["stop", MOTIS_CONTAINERS[serviceId]], context);
+    const after = await motisState(serviceId, context.signal);
     if (after === "running") throw new Error("MOTIS container remains running after stop");
     return { changed: true, state: after };
   };
@@ -966,7 +987,7 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
   // container, path, or argv.
   runtime["postgis.capacity.inspect"] = async (_operation, context) => {
     const result = await run(
-      ["exec", "postgis", "df", "-Pk", POSTGIS_DATA_MOUNT],
+      ["exec", POSTGIS_CONTAINER, "df", "-Pk", POSTGIS_DATA_MOUNT],
       context.signal,
       15_000,
     );

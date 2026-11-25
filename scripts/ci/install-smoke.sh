@@ -219,7 +219,6 @@ configure_environment() {
   set_env ACME_EMAIL install-smoke@openmapx.org
   set_env_secret POSTGRES_PASSWORD
   set_env_secret BETTER_AUTH_SECRET
-  set_env_secret OPENMAPX_LOCAL_ADMIN_TOKEN
   set_env OPENMAPX_HOST_DIR "$root"
   set_env DOCKER_GID "$(docker_socket_gid)"
   set_env TRANSITOUS_COUNTRIES de

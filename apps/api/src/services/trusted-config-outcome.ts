@@ -1,4 +1,8 @@
-import type { TrustedConfigurationApplyOutcome } from "@openmapx/core/ops";
+import { REQUIRED_SETTINGS_MISSING } from "@openmapx/core/api-contracts";
+import type {
+  MissingServiceSettingsList,
+  TrustedConfigurationApplyOutcome,
+} from "@openmapx/core/ops";
 
 export {
   completeTrustedConfigurationApply,
@@ -18,6 +22,17 @@ export class TrustedConfigurationApplyError extends Error {
     );
     this.name = "TrustedConfigurationApplyError";
     if (outcome.outcome === "not_committed" && outcome.problem) this.statusCode = 409;
+  }
+
+  /** The 409 reply for a failure the operator can fix; required settings are named by service. */
+  reply(): { error: string; code?: string; missingSettings?: MissingServiceSettingsList } {
+    return this.outcome.missingSettings
+      ? {
+          error: this.message,
+          code: REQUIRED_SETTINGS_MISSING,
+          missingSettings: this.outcome.missingSettings,
+        }
+      : { error: this.message };
   }
 }
 

@@ -340,7 +340,7 @@ it.each([false, true])(
     const view = render(tree(true));
     fireEvent.click(await screen.findByRole("button", { name: "Preview changes" }));
     await screen.findByText("Review platform changes");
-    const key = "openmapx-platform-preview:http://admin.test:admin-a:retention";
+    const key = "openmapx:admin:platform-preview:http://admin.test:admin-a:retention";
     expect(sessionStorage.getItem(key)).not.toBeNull();
     if (hide) view.rerender(tree(false));
     fireEvent.click(screen.getByRole("button", { name: "Discard all" }));
@@ -385,6 +385,6 @@ it("does not revive a preview that arrives after global discard", async () => {
   await new Promise((done) => setTimeout(done, 0));
   expect(screen.queryByRole("button", { name: "Apply reviewed changes" })).toBeNull();
   expect(
-    sessionStorage.getItem("openmapx-platform-preview:http://admin.test:admin-a:retention"),
+    sessionStorage.getItem("openmapx:admin:platform-preview:http://admin.test:admin-a:retention"),
   ).toBeNull();
 });

@@ -642,20 +642,20 @@ describe("MapTiler geocoding provider", () => {
 });
 
 describe("resolveMaptilerApiKey", () => {
-  it("prefers the integration's own key and falls back to the shared MAPTILER_KEY", () => {
-    expect(resolveMaptilerApiKey("own", { MAPTILER_KEY: "shared" })).toEqual({
+  it("prefers the integration's own key and falls back to the shared MAPTILER_API_KEY", () => {
+    expect(resolveMaptilerApiKey("own", { MAPTILER_API_KEY: "shared" })).toEqual({
       key: "own",
       shared: false,
     });
-    expect(resolveMaptilerApiKey(undefined, { MAPTILER_KEY: "shared" })).toEqual({
+    expect(resolveMaptilerApiKey(undefined, { MAPTILER_API_KEY: "shared" })).toEqual({
       key: "shared",
       shared: true,
     });
-    expect(resolveMaptilerApiKey("shared", { MAPTILER_KEY: "shared" })).toEqual({
+    expect(resolveMaptilerApiKey("shared", { MAPTILER_API_KEY: "shared" })).toEqual({
       key: "shared",
       shared: true,
     });
-    expect(resolveMaptilerApiKey(" ", { MAPTILER_KEY: " " })).toBeUndefined();
+    expect(resolveMaptilerApiKey(" ", { MAPTILER_API_KEY: " " })).toBeUndefined();
   });
 });
 

@@ -17,14 +17,14 @@ const copy = adminSearchCopy(
 );
 it("addresses the owning legal section without creating a duplicate policy editor", () => {
   expect(
-    adminSettingHref({ group: "legal", subgroup: "retention", key: "legalRetentionDays" }),
-  ).toBe("/admin/privacy-setup?field=legalRetentionDays#retention");
+    adminSettingHref({ group: "legal", subgroup: "retention", key: "retention.serverLogDays" }),
+  ).toBe("/admin/privacy-setup?field=retention.serverLogDays#retention");
   expect(
-    adminSettingHref({ group: "legal", subgroup: "operator", key: "legalControllerName" }),
-  ).toBe("/admin/privacy-setup?field=legalControllerName#operator");
+    adminSettingHref({ group: "legal", subgroup: "operator", key: "legal.controller.name" }),
+  ).toBe("/admin/privacy-setup?field=legal.controller.name#operator");
 });
 it.each([
-  ["SMTP", "/admin/settings/email?field=smtpHost"],
+  ["SMTP", "/admin/settings/email?field=smtp.host"],
   ["GTFS", "/admin/data/transit?tab=sources"],
   ["backup expiry", "/admin/system/backups#backup-retention"],
   ["release channel", "/admin/system/updates#release-selector"],
@@ -57,14 +57,14 @@ it("indexes only public metadata, never effective or secret values", () => {
   const entries = buildAdminSearchEntries(access, copy, {
     settings: [
       {
-        key: "smtpHost",
+        key: "smtp.host",
         group: "email",
         label: "SMTP host",
         value: "private-host",
         secret: false,
       } as never,
       {
-        key: "smtpPassword",
+        key: "smtp.password",
         group: "email",
         label: "SMTP password",
         value: "private-password",
@@ -74,7 +74,7 @@ it("indexes only public metadata, never effective or secret values", () => {
   });
   expect(searchAdminEntries(entries, "private")).toEqual([]);
   expect(searchAdminEntries(entries, "SMTP host")[0]?.href).toBe(
-    "/admin/settings/email?field=smtpHost",
+    "/admin/settings/email?field=smtp.host",
   );
   expect(JSON.stringify(entries)).not.toMatch(/private-host|private-password|value|secret/);
 });

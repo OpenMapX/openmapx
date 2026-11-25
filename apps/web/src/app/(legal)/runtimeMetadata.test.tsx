@@ -13,7 +13,7 @@ vi.mock("./terms/content.en", () => ({ default: () => null }));
 
 beforeEach(() => {
   metadata.mockReset();
-  legal.mockReset().mockResolvedValue(null);
+  legal.mockReset().mockResolvedValue({ name: "Example Maps GmbH" });
 });
 
 describe.each(["privacy", "terms"])("%s runtime metadata", (page) => {
@@ -61,5 +61,21 @@ describe.each(["privacy", "terms"])("%s runtime metadata", (page) => {
     }>;
     expect(result.props.children.props).toMatchObject({ integrations: [], disclosures: [] });
     expect(metadata).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows an error state instead of the content when the legal facts cannot be loaded", async () => {
+    metadata.mockResolvedValue(null);
+    legal.mockResolvedValue(null);
+    const { LegalConfigUnavailable } = await import("@/components/legal/LegalConfigUnavailable");
+    const Page =
+      page === "privacy"
+        ? (await import("./privacy/page")).default
+        : (await import("./terms/page")).default;
+    const result = (await Page()) as ReactElement<{
+      sections: unknown[];
+      children: ReactElement<Record<string, unknown>>;
+    }>;
+    expect(result.props.children.type).toBe(LegalConfigUnavailable);
+    expect(result.props.sections).toEqual([]);
   });
 });

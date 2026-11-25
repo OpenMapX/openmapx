@@ -41,7 +41,6 @@
     "requiredConfigKeys": ["apiKey"]
   },
   "quality": "built-in",
-  "category": "External",
   "dataSources": [
     {
       "sourceId": "flickr",

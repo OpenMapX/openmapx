@@ -160,7 +160,12 @@ volumes:
   writeFileSync(composeFile, composeYaml, { mode: 0o400 });
   writeFileSync(
     join(generation, "resolved-config.generated.json"),
-    JSON.stringify({ serviceConfigs: [], integrationConfigs: [] }),
+    JSON.stringify({
+      version: 1,
+      domain: "maps.example.test",
+      serviceConfigs: [],
+      integrationConfigs: [],
+    }),
     { mode: 0o400 },
   );
   symlinkSync(relative(dirname(current), generation), current);
@@ -358,8 +363,9 @@ async function resetMigratedDatabase(): Promise<void> {
       "postgis",
       "sh",
       "-ec",
-      // The API's role migrates and owns the tables, as in production.
-      `for file in /migrations/[0-9][0-9][0-9][0-9]_*.sql; do psql -X --single-transaction -v ON_ERROR_STOP=1 -U openmapx_api -d ${DATABASE} -f "$file"; done`,
+      // The API's role migrates and owns the tables, as in production, where
+      // Drizzle's migrator creates its history table before the first file.
+      `psql -X -v ON_ERROR_STOP=1 -U openmapx_api -d ${DATABASE} -c 'CREATE SCHEMA IF NOT EXISTS drizzle; CREATE TABLE IF NOT EXISTS drizzle.__drizzle_migrations (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at bigint)'; for file in /migrations/[0-9][0-9][0-9][0-9]_*.sql; do psql -X --single-transaction -v ON_ERROR_STOP=1 -U openmapx_api -d ${DATABASE} -f "$file"; done`,
     ],
     { cwd: fixture.infra, reject: false },
   );
@@ -437,10 +443,11 @@ async function createDatabaseBackup(name: string, includeScratch = false): Promi
     });
   }
   const manifest = {
-    formatVersion: 2,
+    formatVersion: 1,
     name,
     createdAt: new Date().toISOString(),
-    openmapxVersion: "1.0.0",
+    release: null,
+    databaseMigration: null,
     services: [
       {
         id: "postgis",
@@ -513,24 +520,24 @@ VALUES
   ('deleted-change-verification', 'change-email:${DELETED_USER_ID}:${DELETED_EMAIL}', 'fixture-code', now() + interval '1 day', now(), now()),
   ('unrelated-suffix-verification', '${UNRELATED_EMAIL}', 'unrelated-code', now() + interval '1 day', now(), now());
 INSERT INTO data_subject_request
-  (id, kind, channel, user_id, actor_user_id, locator_type, account_state, locale, time_zone, state, received_at, due_at, identity_method, identity_verified_at)
+  (id, kind, channel, user_id, actor_user_id, locator_type, account_state, locale, time_zone, status, received_at, due_at, identity_method, identity_verified_at)
 VALUES
   ('${ACTIVE_REQUEST_ID}', 'access', 'self_service', '${DELETED_USER_ID}', '${DELETED_USER_ID}', 'user_id', 'current', 'en', 'UTC', 'in_progress', now(), now() + interval '30 days', 'account_session', now()),
   ('${TERMINAL_REQUEST_ID}', 'access_and_portability', 'self_service', '${DELETED_USER_ID}', '${DELETED_USER_ID}', 'user_id', 'current', 'en', 'UTC', 'completed', now(), now() + interval '30 days', 'account_session', now());
 INSERT INTO data_subject_request_event (request_id, event_type, actor_kind, actor_user_id)
 VALUES ('${ACTIVE_REQUEST_ID}', 'received', 'subject', '${DELETED_USER_ID}');
-INSERT INTO admin_audit_log (actor_id, target_id, target_type, target_user_id, action, details, ip_address, user_agent)
-VALUES ('${DELETED_USER_ID}', '${DELETED_USER_ID}', 'user', '${DELETED_USER_ID}', 'fixture', jsonb_build_object('subject', '${DELETED_USER_ID}', 'email', '${DELETED_EMAIL}'), '192.0.2.10', 'fixture-agent');
-INSERT INTO app_logs (level, source, msg, metadata)
+INSERT INTO admin_audit_log (actor_user_id, target_id, target_type, target_user_id, action, details, ip_address, user_agent)
+VALUES ('${DELETED_USER_ID}', '${DELETED_USER_ID}', 'user', '${DELETED_USER_ID}', 'user.ban', jsonb_build_object('subject', '${DELETED_USER_ID}', 'email', '${DELETED_EMAIL}'), '192.0.2.10', 'fixture-agent');
+INSERT INTO app_log (level, source, message, metadata)
 VALUES ('warn', 'fixture', 'event for ${DELETED_EMAIL}', jsonb_build_object('subject', '${DELETED_USER_ID}'));
-INSERT INTO system_settings (key, value, updated_by)
-VALUES ('restore-fixture-setting', '"value"', '${DELETED_USER_ID}');
+INSERT INTO system_setting (key, value, updated_by_user_id)
+VALUES ('legal.hosting.locations', '"value"', '${DELETED_USER_ID}');
 INSERT INTO session (id, expires_at, token, created_at, updated_at, user_id, impersonated_by)
 VALUES ('impersonated-session', now() + interval '1 day', 'impersonated-session-token', now(), now(), '${UNRELATED_USER_ID}', '${DELETED_USER_ID}');
-INSERT INTO admin_action_reauthentication (actor_id, starting_session_id, purpose, target_id, nonce_digest, expires_at)
-VALUES ('${UNRELATED_USER_ID}', 'unrelated-session', 'account.verify', '${DELETED_USER_ID}', 'restore-fixture-nonce', now() + interval '5 minutes');
-INSERT INTO data_manager.jobs (kind, status, triggered_by, finished_at, operation_key, operation_fingerprint, execution_fingerprint, admitted_at, deadline_at, execution_input, execution_state, execution_ref)
-VALUES ('restore-fixture', 'ok', 'api:user:${DELETED_USER_ID}', now(), 'opk1_restore_fixture_job_1', '${"a".repeat(64)}', '${"b".repeat(64)}', now(), now() + interval '1 hour', '{}', '{}', '{}');
+INSERT INTO admin_action_reauthentication (actor_user_id, starting_session_id, purpose, target_id, nonce_digest, expires_at)
+VALUES ('${UNRELATED_USER_ID}', 'unrelated-session', 'user.email.verify', '${DELETED_USER_ID}', 'restore-fixture-nonce', now() + interval '5 minutes');
+INSERT INTO data_manager.job (kind, status, trigger, triggered_by_user_id, finished_at, operation_key, operation_fingerprint, execution_fingerprint, admitted_at, deadline_at, execution_input, execution_state, execution_ref)
+VALUES ('restore-fixture', 'succeeded', 'api', '${DELETED_USER_ID}', now(), 'opk1_restore_fixture_job_1', '${"a".repeat(64)}', '${"b".repeat(64)}', now(), now() + interval '1 hour', '{}', '{}', '{}');
 COMMIT;
 `);
 }
@@ -598,8 +605,8 @@ async function buildSearchIndex(
   await sql.unsafe(
     `INSERT INTO "${schema}".index_state
        (region, source_path, source_fingerprint, current_fingerprint, epoch, status,
-        place_count, term_count, started_at, published_at, updated_at)
-     VALUES ('europe/germany', 'fixture', 'fixture', 'fixture', $1, $2, 1, 1, now(),
+        place_count, term_count, schema_version, started_at, published_at, updated_at)
+     VALUES ('europe/germany', 'fixture', 'fixture', 'fixture', $1, $2, 1, 1, 1, now(),
              CASE WHEN $2 = 'ready' THEN now() END, now())`,
     [name, status],
   );
@@ -634,9 +641,10 @@ async function ingestOverture(
   const published = schema === "overture_places";
   await sql.unsafe(
     `INSERT INTO "${schema}".conflation_state
-       (release, region, place_count, status, phase, places_published_at, sources_catalogue)
+       (release, region, place_count, status, phase, places_published_at, sources_catalogue,
+        schema_version)
      VALUES ($1, 'europe/germany', 1, $2, $3, CASE WHEN $4 THEN now() END,
-             '[{"sourceId":"overture","name":"Overture Maps"}]')`,
+             '[{"sourceId":"overture","name":"Overture Maps"}]', 1)`,
     [release, published ? "completed" : "pending", published ? "complete" : "extract", published],
   );
   await sql.unsafe(
@@ -749,20 +757,20 @@ describe.skipIf(!runIntegration)("backup restore erasure replay with real Postgr
     ).toBe("unrelated-code");
     expect(
       await psql(
-        `SELECT state || ':' || account_state || ':' || coalesce(user_id, 'null') || ':' || coalesce(actor_user_id, 'null') FROM data_subject_request WHERE id = '${ACTIVE_REQUEST_ID}';`,
+        `SELECT status || ':' || account_state || ':' || coalesce(user_id, 'null') || ':' || coalesce(actor_user_id, 'null') FROM data_subject_request WHERE id = '${ACTIVE_REQUEST_ID}';`,
       ),
     ).toBe("in_progress:deleted:null:null");
     expect(
       await psql(
-        `SELECT state || ':' || account_state FROM data_subject_request WHERE id = '${TERMINAL_REQUEST_ID}';`,
+        `SELECT status || ':' || account_state FROM data_subject_request WHERE id = '${TERMINAL_REQUEST_ID}';`,
       ),
     ).toBe("completed:deleted");
     expect(
       await psql(
-        "SELECT (actor_id IS NULL)::text || ':' || (target_id IS NULL)::text || ':' || (details IS NULL)::text || ':' || (ip_address IS NULL)::text || ':' || (user_agent IS NULL)::text FROM admin_audit_log WHERE action = 'fixture';",
+        "SELECT (actor_user_id IS NULL)::text || ':' || (target_id IS NULL)::text || ':' || (details IS NULL)::text || ':' || (ip_address IS NULL)::text || ':' || (user_agent IS NULL)::text FROM admin_audit_log WHERE action = 'user.ban';",
       ),
     ).toBe("true:true:true:true:true");
-    expect(await psql("SELECT count(*) FROM app_logs WHERE source = 'fixture';")).toBe("0");
+    expect(await psql("SELECT count(*) FROM app_log WHERE source = 'fixture';")).toBe("0");
     // The replay logs in as the API role: no superuser session runs the
     // API-owned trigger code, not even after a role switch.
     expect(
@@ -777,12 +785,12 @@ describe.skipIf(!runIntegration)("backup restore erasure replay with real Postgr
     ).toBe("true");
     expect(
       await psql(
-        "SELECT (target_user_id IS NULL)::text FROM admin_audit_log WHERE action = 'fixture';",
+        "SELECT (target_user_id IS NULL)::text FROM admin_audit_log WHERE action = 'user.ban';",
       ),
     ).toBe("true");
     expect(
       await psql(
-        "SELECT (updated_by IS NULL)::text FROM system_settings WHERE key = 'restore-fixture-setting';",
+        "SELECT (updated_by_user_id IS NULL)::text FROM system_setting WHERE key = 'legal.hosting.locations';",
       ),
     ).toBe("true");
     expect(await psql("SELECT count(*) FROM session WHERE id = 'impersonated-session';")).toBe("0");
@@ -793,7 +801,7 @@ describe.skipIf(!runIntegration)("backup restore erasure replay with real Postgr
     ).toBe("0");
     expect(
       await psql(
-        "SELECT coalesce(triggered_by, 'null') FROM data_manager.jobs WHERE kind = 'restore-fixture';",
+        "SELECT coalesce(triggered_by_user_id, 'null') FROM data_manager.job WHERE kind = 'restore-fixture';",
       ),
     ).toBe("null");
   }, 120_000);
@@ -1005,7 +1013,7 @@ VALUES ('${DELETED_USER_ID}', 'Mixed Restore User', '${DELETED_EMAIL}', true, no
       finished: string,
       { children = "[]", kind = "full-update", metadata = "NULL" } = {},
     ) =>
-      `('${id}', '${kind}', '${status}', ${finished}, ${metadata}, 'opk1_${key.repeat(20)}', '${hex("a")}', '${hex("b")}', now() - interval '1 hour', now() + interval '1 hour', '{}', '{"cancellationRequestedAt":null,"progress":null,"diagnostics":{"tail":[],"truncated":false},"publication":"${publication}"}', '{}', '{}', '{"children":${children}}', '{}')`;
+      `('${id}', '${kind}', '${status}', 'agent', ${finished}, ${metadata}, 'opk1_${key.repeat(20)}', '${hex("a")}', '${hex("b")}', now() - interval '1 hour', now() + interval '1 hour', '{}', '{"cancellationRequestedAt":null,"progress":null,"diagnostics":{"tail":[],"truncated":false},"publication":"${publication}"}', '{}', '{}', '{"children":${children}}', '{}')`;
     const sync = { kind: "transitous-sync" };
     // A sent child's cell, as data-manager last observed it.
     const sent = (observed: string) =>
@@ -1015,29 +1023,29 @@ INSERT INTO admin_job (payload, type, status, finished_at)
 VALUES
   ('{"label":"job-queued"}', 'system.update', 'queued', NULL),
   ('{"label":"job-running"}', 'service.start', 'running', NULL),
-  ('{"label":"job-cancel-pending"}', 'backup.operation', 'cancel_pending', NULL),
-  ('{"label":"job-success"}', 'system.update', 'success', now()),
+  ('{"label":"job-cancel-pending"}', 'backup.operation.run', 'cancel_pending', NULL),
+  ('{"label":"job-succeeded"}', 'system.update', 'succeeded', now()),
   ('{"label":"job-failed"}', 'system.update', 'failed', now()),
-  ('{"label":"job-canceled"}', 'system.diagnostics', 'canceled', now());
+  ('{"label":"job-cancelled"}', 'system.diagnostics.collect', 'cancelled', now());
 UPDATE admin_job SET error = 'original failure' WHERE payload->>'label' = 'job-failed';
-INSERT INTO data_manager.jobs
-  (id, kind, status, finished_at, metadata, operation_key, operation_fingerprint, execution_fingerprint, admitted_at, deadline_at, execution_input, execution_state, execution_ref, execution_admission, execution_progress, execution_completion)
+INSERT INTO data_manager.job
+  (id, kind, status, trigger, finished_at, metadata, operation_key, operation_fingerprint, execution_fingerprint, admitted_at, deadline_at, execution_input, execution_state, execution_ref, execution_admission, execution_progress, execution_completion)
 VALUES
   ${job("00000000-0000-4000-8000-000000000001", "i", "running", "not_started", "NULL", { ...sync, metadata: `'{"region":"de"}'` })},
-  ${job("00000000-0000-4000-8000-000000000002", "j", "ok", "not_started", "now()", sync)},
-  ${job("00000000-0000-4000-8000-000000000003", "k", "partial", "not_started", "now()", sync)},
-  ${job("00000000-0000-4000-8000-000000000004", "l", "error", "not_started", "now()", sync)},
-  ${job("00000000-0000-4000-8000-000000000005", "m", "canceled", "not_started", "now()", sync)},
+  ${job("00000000-0000-4000-8000-000000000002", "j", "succeeded", "not_started", "now()", sync)},
+  ${job("00000000-0000-4000-8000-000000000003", "k", "partially_succeeded", "not_started", "now()", sync)},
+  ${job("00000000-0000-4000-8000-000000000004", "l", "failed", "not_started", "now()", sync)},
+  ${job("00000000-0000-4000-8000-000000000005", "m", "cancelled", "not_started", "now()", sync)},
   ${job("00000000-0000-4000-8000-000000000006", "n", "interrupted", "not_started", "NULL", sync)},
   ${job("00000000-0000-4000-8000-000000000007", "a", "queued", "not_started", "NULL")},
   ${job("00000000-0000-4000-8000-000000000008", "b", "running", "unknown", "NULL", { children: sent("null") })},
   ${job("00000000-0000-4000-8000-000000000009", "c", "cancel_pending", "not_started", "NULL", { children: sent('{"state":"observing"}') })},
   ${job("00000000-0000-4000-8000-00000000000a", "d", "interrupted", "unknown", "NULL")},
-  ${job("00000000-0000-4000-8000-00000000000b", "e", "interrupted", "not_started", "now()")},
-  ${job("00000000-0000-4000-8000-00000000000c", "f", "error", "unknown", "now()")},
-  ${job("00000000-0000-4000-8000-00000000000d", "g", "ok", "not_started", "now()", { children: sent('{"state":"observing"}') })},
-  ${job("00000000-0000-4000-8000-00000000000e", "h", "ok", "committed", "now()", { children: sent('{"state":"terminal"}') })};
-INSERT INTO data_manager.offline_package_jobs (id, request_key, package_id, request, status, created_at, updated_at, lease_owner, lease_expires_at)
+  ${job("00000000-0000-4000-8000-00000000000b", "e", "failed", "not_started", "now()")},
+  ${job("00000000-0000-4000-8000-00000000000c", "f", "failed", "unknown", "now()")},
+  ${job("00000000-0000-4000-8000-00000000000d", "g", "succeeded", "not_started", "now()", { children: sent('{"state":"observing"}') })},
+  ${job("00000000-0000-4000-8000-00000000000e", "h", "succeeded", "committed", "now()", { children: sent('{"state":"terminal"}') })};
+INSERT INTO data_manager.offline_package_job (id, request_key, package_id, request, status, created_at, updated_at, lease_owner, lease_expires_at)
 VALUES
   ('00000000-0000-4000-8000-000000000011', 'request-preparing', 'package-preparing', '{}', 'preparing', now(), now(), 'worker', now() + interval '1 hour'),
   ('00000000-0000-4000-8000-000000000012', 'request-ready', 'package-ready', '{}', 'ready-to-download', now(), now(), NULL, NULL),
@@ -1055,11 +1063,11 @@ VALUES
     ).toBe(
       [
         "job-cancel-pending=failed",
-        "job-canceled=canceled",
+        "job-cancelled=cancelled",
         "job-failed=failed",
         "job-queued=failed",
         "job-running=failed",
-        "job-success=success",
+        "job-succeeded=succeeded",
       ].join("\n"),
     );
     expect(
@@ -1076,47 +1084,47 @@ VALUES
     );
     expect(
       await psql(
-        "SELECT count(*) FROM admin_job WHERE status IN ('queued','running','cancel_pending') OR (status IN ('failed','canceled','success') AND finished_at IS NULL);",
+        "SELECT count(*) FROM admin_job WHERE status IN ('queued','running','cancel_pending') OR (status IN ('failed','cancelled','succeeded') AND finished_at IS NULL);",
       ),
     ).toBe("0");
     expect(
-      await psql("SELECT right(id::text, 2) || '=' || status FROM data_manager.jobs ORDER BY id;"),
+      await psql("SELECT right(id::text, 2) || '=' || status FROM data_manager.job ORDER BY id;"),
     ).toBe(
       [
-        "01=error",
-        "02=ok",
-        "03=partial",
-        "04=error",
-        "05=canceled",
-        "06=error",
-        "07=error",
-        "08=error",
-        "09=error",
-        "0a=error",
-        "0b=interrupted",
-        "0c=error",
-        "0d=ok",
-        "0e=ok",
+        "01=failed",
+        "02=succeeded",
+        "03=partially_succeeded",
+        "04=failed",
+        "05=cancelled",
+        "06=failed",
+        "07=failed",
+        "08=failed",
+        "09=failed",
+        "0a=failed",
+        "0b=failed",
+        "0c=failed",
+        "0d=succeeded",
+        "0e=succeeded",
       ].join("\n"),
     );
     expect(
       await psql(
-        "SELECT count(*) FROM data_manager.jobs WHERE right(id::text, 2) IN ('01','06','07','08','09','0a','0c') AND (finished_at IS NULL OR metadata->>'failureReason' IS DISTINCT FROM 'restored from backup');",
+        "SELECT count(*) FROM data_manager.job WHERE right(id::text, 2) IN ('01','06','07','08','09','0a','0c') AND (finished_at IS NULL OR metadata->>'failureReason' IS DISTINCT FROM 'restored from backup');",
       ),
     ).toBe("0");
     expect(
       await psql(
-        "SELECT metadata->>'region' FROM data_manager.jobs WHERE right(id::text, 2) = '01';",
+        "SELECT metadata->>'region' FROM data_manager.job WHERE right(id::text, 2) = '01';",
       ),
     ).toBe("de");
     expect(
       await psql(
-        "SELECT count(*) FROM data_manager.jobs WHERE right(id::text, 2) IN ('02','03','04','05','0b','0e') AND metadata IS NOT NULL;",
+        "SELECT count(*) FROM data_manager.job WHERE right(id::text, 2) IN ('02','03','04','05','0b','0e') AND metadata IS NOT NULL;",
       ),
     ).toBe("0");
     const executions = JSON.parse(
       await psql(
-        "SELECT json_agg(json_build_object('id', right(id::text, 2), 'status', status, 'publication', execution_state->>'publication') ORDER BY id) FROM data_manager.jobs;",
+        "SELECT json_agg(json_build_object('id', right(id::text, 2), 'status', status, 'publication', execution_state->>'publication') ORDER BY id) FROM data_manager.job;",
       ),
     ) as Array<{ id: string; status: string; publication: string }>;
     expect(executions).toHaveLength(14);
@@ -1124,18 +1132,18 @@ VALUES
       expect(isDataExecutionTerminal(execution as never), `execution ${execution.id}`).toBe(true);
     expect(
       await psql(
-        "SELECT count(*) FROM data_manager.jobs WHERE (finished_at IS NULL OR execution_state->>'publication' = 'unknown');",
+        "SELECT count(*) FROM data_manager.job WHERE (finished_at IS NULL OR execution_state->>'publication' = 'unknown');",
       ),
     ).toBe("0");
     expect(
       await psql(
-        "SELECT right(id::text, 2) || '=' || coalesce(jsonb_array_length(execution_progress->'children'), 0) FROM data_manager.jobs WHERE right(id::text, 2) IN ('08', '09', '0d', '0e') ORDER BY id;",
+        "SELECT right(id::text, 2) || '=' || coalesce(jsonb_array_length(execution_progress->'children'), 0) FROM data_manager.job WHERE right(id::text, 2) IN ('08', '09', '0d', '0e') ORDER BY id;",
       ),
     ).toBe(["08=0", "09=0", "0d=0", "0e=1"].join("\n"));
     // A closed execution loses its execution row and worker completion; a settled one keeps them.
     expect(
       await psql(
-        "SELECT right(id::text, 2) || '=' || (execution_admission IS NULL AND execution_progress IS NULL AND execution_completion IS NULL)::text FROM data_manager.jobs ORDER BY id;",
+        "SELECT right(id::text, 2) || '=' || (execution_admission IS NULL AND execution_progress IS NULL AND execution_completion IS NULL)::text FROM data_manager.job ORDER BY id;",
       ),
     ).toBe(
       [
@@ -1157,7 +1165,7 @@ VALUES
     );
     expect(
       await psql(
-        "SELECT right(id::text, 2) || '=' || status || '|' || coalesce(error_message, '') || '|' || (lease_owner IS NULL)::text FROM data_manager.offline_package_jobs ORDER BY id;",
+        "SELECT right(id::text, 2) || '=' || status || '|' || coalesce(error_message, '') || '|' || (lease_owner IS NULL)::text FROM data_manager.offline_package_job ORDER BY id;",
       ),
     ).toBe(
       ["11=failed|restored from backup|true", "12=ready-to-download||true", "13=failed||true"].join(
@@ -1175,9 +1183,9 @@ INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
 VALUES ('${DELETED_USER_ID}', 'Unsupported Schema User', '${DELETED_EMAIL}', true, now(), now());
 INSERT INTO verification (id, identifier, value, expires_at, created_at, updated_at)
 VALUES ('unsupported-schema-verification', '${DELETED_EMAIL}', '${DELETED_USER_ID}', now() + interval '1 day', now(), now());
-INSERT INTO admin_audit_log (actor_id, target_id, target_type, action, details, ip_address, user_agent)
-VALUES ('${DELETED_USER_ID}', '${DELETED_USER_ID}', 'user', 'fixture', jsonb_build_object('subject', '${DELETED_USER_ID}'), '192.0.2.20', 'unsupported-schema-fixture-agent');
-INSERT INTO app_logs (level, source, msg, metadata)
+INSERT INTO admin_audit_log (actor_user_id, target_id, target_type, action, details, ip_address, user_agent)
+VALUES ('${DELETED_USER_ID}', '${DELETED_USER_ID}', 'user', 'user.ban', jsonb_build_object('subject', '${DELETED_USER_ID}'), '192.0.2.20', 'unsupported-schema-fixture-agent');
+INSERT INTO app_log (level, source, message, metadata)
 VALUES ('warn', 'unsupported-schema-fixture', 'event for ${DELETED_EMAIL}', jsonb_build_object('subject', '${DELETED_USER_ID}'));
 `);
     await createDatabaseBackup("unsupported-schema");
@@ -1193,11 +1201,11 @@ VALUES ('warn', 'unsupported-schema-fixture', 'event for ${DELETED_EMAIL}', json
     ).toBe("1");
     expect(
       await psql(
-        "SELECT (actor_id IS NOT NULL)::text || ':' || (target_id IS NOT NULL)::text || ':' || (details IS NOT NULL)::text FROM admin_audit_log WHERE user_agent = 'unsupported-schema-fixture-agent';",
+        "SELECT (actor_user_id IS NOT NULL)::text || ':' || (target_id IS NOT NULL)::text || ':' || (details IS NOT NULL)::text FROM admin_audit_log WHERE user_agent = 'unsupported-schema-fixture-agent';",
       ),
     ).toBe("true:true:true");
     expect(
-      await psql("SELECT count(*) FROM app_logs WHERE source = 'unsupported-schema-fixture';"),
+      await psql("SELECT count(*) FROM app_log WHERE source = 'unsupported-schema-fixture';"),
     ).toBe("1");
     expect(await isServiceRunning("api")).toBe(false);
     await compose(["start", "api"]);
@@ -1238,10 +1246,13 @@ FOR EACH ROW WHEN (OLD.id = '${DELETED_USER_ID}') EXECUTE FUNCTION reject_fixtur
     process.env.OPENMAPX_SECRETS_KEY_FILE = keyPath;
     delete process.env.OPENMAPX_SECRETS_KEY;
     try {
-      const { decrypt, encrypt } = await import("../../../apps/api/src/services/secrets");
-      const sealed = encrypt(value);
+      const { decrypt, encrypt, secretAad } = await import(
+        "../../../apps/api/src/services/secrets"
+      );
+      const aad = secretAad.systemSecret("smtp.password");
+      const sealed = encrypt(value, aad);
       await psql(
-        `INSERT INTO system_secret (key, ciphertext, iv, tag) VALUES ('smtpPassword', '${sealed.ciphertext}', '${sealed.iv}', '${sealed.tag}');`,
+        `INSERT INTO system_secret (key, ciphertext, iv, tag, key_version) VALUES ('smtp.password', '${sealed.ciphertext}', '${sealed.iv}', '${sealed.tag}', ${sealed.keyVersion});`,
       );
       const dump = await compose([
         "exec",
@@ -1255,7 +1266,7 @@ FOR EACH ROW WHEN (OLD.id = '${DELETED_USER_ID}') EXECUTE FUNCTION reject_fixtur
         "--table=public.system_secret",
         DATABASE,
       ]);
-      expect(dump).toContain("'smtpPassword'");
+      expect(dump).toContain("'smtp.password'");
       expect(dump).not.toContain(value);
       await createDatabaseBackup("secret-settings");
       await psql("DELETE FROM system_secret;");
@@ -1263,12 +1274,12 @@ FOR EACH ROW WHEN (OLD.id = '${DELETED_USER_ID}') EXECUTE FUNCTION reject_fixtur
 
       await restoreBackup({ rootDir: fixture.root, name: "secret-settings", stopRunning: true });
 
-      const [ciphertext = "", iv = "", tag = ""] = (
+      const [ciphertext = "", iv = "", tag = "", keyVersion = ""] = (
         await psql(
-          "SELECT ciphertext || ' ' || iv || ' ' || tag FROM system_secret WHERE key = 'smtpPassword';",
+          "SELECT ciphertext || ' ' || iv || ' ' || tag || ' ' || key_version FROM system_secret WHERE key = 'smtp.password';",
         )
       ).split(" ");
-      expect(decrypt(ciphertext, iv, tag)).toBe(value);
+      expect(decrypt({ ciphertext, iv, tag, keyVersion: Number(keyVersion) }, aad)).toBe(value);
     } finally {
       if (previousFile === undefined) delete process.env.OPENMAPX_SECRETS_KEY_FILE;
       else process.env.OPENMAPX_SECRETS_KEY_FILE = previousFile;

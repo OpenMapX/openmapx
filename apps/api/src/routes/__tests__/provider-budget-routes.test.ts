@@ -16,10 +16,11 @@ const getFlowTile = vi.hoisted(() => vi.fn());
 vi.mock("../../services/traffic.factory.js", () => ({
   getTrafficProvider: () => ({ getFlowTile }),
 }));
-vi.mock("../../db/index.js", () => ({
-  db: { select: () => ({ from: async () => [] }) },
+vi.mock("../../services/settings.js", () => ({
+  SecretSettingUnreadableError: class extends Error {},
+  resolveSetting: async (key: string) =>
+    key === "maptiler.apiKey" ? process.env.MAPTILER_API_KEY?.trim() || "" : "auto",
 }));
-vi.mock("../../db/schema.js", () => ({ systemSettings: {} }));
 
 function sharedAdmission(decide: (count: number) => SharedRequestDecision) {
   let count = 0;
@@ -174,7 +175,7 @@ describe("TomTom traffic tiles under the daily budget", () => {
 
 describe("MapTiler proxy under the daily budget", () => {
   it("answers 429 once the budget is spent and never calls MapTiler", async () => {
-    vi.stubEnv("MAPTILER_KEY", "test-key");
+    vi.stubEnv("MAPTILER_API_KEY", "test-key");
     const fetchMock = vi.fn(
       async () =>
         new Response(new Uint8Array([1, 2]), {
@@ -197,7 +198,7 @@ describe("MapTiler proxy under the daily budget", () => {
   });
 
   it("keeps serving and meters in process when the shared store is unavailable", async () => {
-    vi.stubEnv("MAPTILER_KEY", "test-key");
+    vi.stubEnv("MAPTILER_API_KEY", "test-key");
     const fetchMock = vi.fn(
       async () =>
         new Response(new Uint8Array([1, 2]), {
@@ -222,7 +223,7 @@ describe("MapTiler proxy under the daily budget", () => {
   });
 
   it("serves without any global budget when none is configured", async () => {
-    vi.stubEnv("MAPTILER_KEY", "test-key");
+    vi.stubEnv("MAPTILER_API_KEY", "test-key");
     vi.stubEnv("MAPTILER_DAILY_REQUEST_LIMIT", "");
     const fetchMock = vi.fn(
       async () =>

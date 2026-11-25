@@ -84,6 +84,33 @@ async function reviewUrl(value = "https://manifest.test/a.json") {
 const previewCalls = () => calls.filter((c) => c.url.pathname.endsWith("/install-preview"));
 const installCalls = () => calls.filter((c) => c.url.pathname.endsWith("/install"));
 describe("actual extension forms and SDK ownership", () => {
+  it("flags an installed version an advisory covers while the update stays reachable", async () => {
+    const advisory = { reason: "Fixed in 2", maxVersion: "1.5.0" };
+    intercept = (u) => {
+      if (u.pathname.endsWith("/installed"))
+        return Response.json({ extensions: [installed({ critical: advisory })] });
+      if (u.pathname.endsWith("/catalog"))
+        return Response.json({
+          entries: [
+            catalogEntry({
+              installed: true,
+              installedVersion: "1",
+              installedCritical: advisory,
+              status: "revoked",
+            }),
+          ],
+          total: 1,
+          revocationDataStale: false,
+        });
+      return undefined;
+    };
+    mount();
+    const message = "The installed version is affected by a security advisory: Fixed in 2";
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Installed" }));
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Update" })).toBeEnabled();
+  });
   it("keeps removal reachable when the update comparison is unavailable", async () => {
     intercept = (u) =>
       u.pathname.endsWith("/installed")

@@ -1,5 +1,6 @@
 "use client";
 
+import { STORAGE_KEYS } from "@openmapx/core";
 import { useCallback, useEffect, useState } from "react";
 
 interface BeforeInstallPromptEvent extends Event {
@@ -8,7 +9,7 @@ interface BeforeInstallPromptEvent extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 }
 
-const DISMISS_KEY = "omx-install-dismissed-at";
+const DISMISS_KEY = STORAGE_KEYS.installPromptDismissedAt.key;
 const DISMISS_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
 export type InstallPlatform = "android" | "ios" | "none";

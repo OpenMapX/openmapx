@@ -312,7 +312,7 @@ function BackupsView() {
                 <TableRow>
                   <TableCell>{t("name")}</TableCell>
                   <TableCell>{t("created")}</TableCell>
-                  <TableCell>{t("version")}</TableCell>
+                  <TableCell>{t("release")}</TableCell>
                   <TableCell>{t("services")}</TableCell>
                   <TableCell>{t("volumes")}</TableCell>
                   <TableCell>{t("size")}</TableCell>
@@ -376,9 +376,7 @@ function BackupsView() {
                           </Typography>
                         )}
                       </TableCell>
-                      <TableCell>
-                        {backup.corrupt ? "—" : (backup.openmapxVersion ?? "—")}
-                      </TableCell>
+                      <TableCell>{backup.corrupt ? "—" : (backup.release ?? "—")}</TableCell>
                       <TableCell>
                         {backup.corrupt ? "—" : format.number(backup.serviceCount)}
                       </TableCell>

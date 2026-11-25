@@ -1,3 +1,4 @@
+import { STORAGE_KEYS } from "@openmapx/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const list = vi.fn();
@@ -12,17 +13,25 @@ describe("privacy browser supplement", () => {
     list.mockReset();
     list.mockResolvedValue([]);
     localStorage.clear();
-    localStorage.setItem("openmapx:unitSystem", "metric");
-    localStorage.setItem("openmapx:aiSearch", "false");
+    localStorage.setItem(STORAGE_KEYS.unitSystem.key, "metric");
+    localStorage.setItem(STORAGE_KEYS.aiSearch.key, "false");
+    localStorage.setItem(STORAGE_KEYS.navigation3d.key, "true");
+    localStorage.setItem(STORAGE_KEYS.globeLighting.key, "false");
+    localStorage.setItem(STORAGE_KEYS.searchHistoryEnabled.key, "false");
     localStorage.setItem("better-auth.session_token", "must-not-export");
-    localStorage.setItem("openmapx-query-cache", "must-not-export");
+    localStorage.setItem(STORAGE_KEYS.queryCache.key, "must-not-export");
+    localStorage.setItem(STORAGE_KEYS.lastMapView.key, "must-not-export");
+    localStorage.setItem(STORAGE_KEYS.crowdGrant.key, "must-not-export");
   });
 
-  it("exports only the explicit preference allowlist and no credentials/caches", async () => {
+  it("exports only the declared preference keys and no credentials/caches", async () => {
     const result = await collectPrivacyDeviceData(new Date("2026-09-04T00:00:00.000Z"));
     expect(result.preferences).toEqual({
-      "openmapx:unitSystem": "metric",
-      "openmapx:aiSearch": "false",
+      "openmapx:settings:unit-system": "metric",
+      "openmapx:search:ai-search": "false",
+      "openmapx:navigation:3d": "true",
+      "openmapx:map:globe-lighting": "false",
+      "openmapx:search:history-enabled": "false",
     });
     expect(JSON.stringify(result)).not.toContain("must-not-export");
   });

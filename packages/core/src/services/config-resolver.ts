@@ -8,17 +8,20 @@
 // Precedence shape that the final merger must implement (highest last):
 //   default  →  database  →  vault  →  env
 //
-// Env pattern is `SERVICE_{ID}_{KEY}` with dashes → underscores, uppercased.
-// e.g. for service `valhalla` with config key `memoryLimit`, the operator sets
-// `SERVICE_VALHALLA_MEMORYLIMIT=2g` — or, for more readable env var names,
-// the config key should already be upper_snake.
+// Env pattern is `SERVICE_{ID}_{KEY}`: the id with dashes → underscores,
+// uppercased, and the UPPER_SNAKE config key as is. For service `valhalla`
+// with config key `BUILD_ELEVATION`, the operator sets
+// `SERVICE_VALHALLA_BUILD_ELEVATION=false`.
 
+import { serviceConfigEnvName, serviceConfigEnvPrefix } from "./config-env-names";
 import {
   isRuntimeResourceKey,
   memoryHostVariable,
   runtimeResourceNumber,
 } from "./runtime-resources";
 import type { ServiceManifest } from "./types";
+
+export { serviceConfigEnvName, serviceConfigEnvPrefix };
 
 export type ConfigSource = "default" | "database" | "vault" | "env";
 
@@ -27,14 +30,6 @@ export interface ConfigValueWithSource {
   source: ConfigSource;
   /** Legacy host resource ownership is displayed, but its original Compose expression is retained. */
   manifestExpression?: true;
-}
-
-/**
- * Build the env-var prefix for a given service id. Exported so callers (admin
- * UI, docs) can surface the exact pattern operators need to set on the host.
- */
-export function serviceConfigEnvPrefix(serviceId: string): string {
-  return `SERVICE_${serviceId.replace(/-/g, "_").toUpperCase()}_`;
 }
 
 /**
@@ -107,19 +102,11 @@ export function resolveServiceConfigFromEnv(
     )
       result[key] = { value: env[variable], source: "env", manifestExpression: true };
   }
-  const prefix = serviceConfigEnvPrefix(manifest.id);
-  const known = new Set(keys.map((k) => k.key));
-  const upperToKey = new Map<string, string>();
-  for (const k of known) upperToKey.set(k.toUpperCase(), k);
-
-  for (const [envKey, envVal] of Object.entries(env)) {
+  for (const { key: canonical } of keys) {
+    const envVal = env[serviceConfigEnvName(manifest.id, canonical)];
     // Empty is unset: the API receives every setting as a `${VAR:-}` reference,
     // which an unset variable resolves to "".
     if (envVal === undefined || envVal === "") continue;
-    if (!envKey.startsWith(prefix)) continue;
-    const rest = envKey.slice(prefix.length);
-    const canonical = upperToKey.get(rest);
-    if (!canonical) continue;
     const value = isRuntimeResourceKey(canonical)
       ? runtimeResourceNumber(
           canonical,

@@ -36,7 +36,7 @@ interface PlatformDef {
 const PLATFORMS: PlatformDef[] = [
   {
     name: "Google Maps",
-    scheme: "googleMaps",
+    scheme: "google-maps",
     searchUrl: (place) => {
       const [lng, lat] = place.coordinates;
       return `https://www.google.com/maps/search/${encodeURIComponent(place.name)}/@${lat},${lng},17z`;

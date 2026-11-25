@@ -1,5 +1,6 @@
 /** Durable ordering for the existing queued Update producer. These records are
  * correlation data; every completed stage still reads its original agent ACK. */
+import { COMPONENT_ID_PATTERN } from "@openmapx/core/component-id";
 import { canonicalJson } from "@openmapx/core/ops";
 import { z } from "zod";
 import { db } from "../db";
@@ -12,10 +13,7 @@ import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "./ops-c
 const revision = z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/);
 export const serviceUpdateBatchSchema = z.strictObject({
   version: z.literal(1),
-  serviceIds: z
-    .array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/))
-    .min(1)
-    .max(256),
+  serviceIds: z.array(z.string().regex(COMPONENT_ID_PATTERN)).min(1).max(256),
   noDeps: z.boolean(),
   initialRevisionId: revision,
 });
@@ -34,7 +32,7 @@ export function parseServiceUpdateBatch(payload: unknown, result: unknown) {
   return batch;
 }
 export async function prepareServiceUpdateBatch(ctx: JobContext) {
-  if (!ctx.execution || ctx.observationOnly || ctx.jobType !== "service.bulk")
+  if (!ctx.execution || ctx.observationOnly || ctx.jobType !== "service.batch.run")
     throw new JobObservationPending("recovery_required");
   if (ctx.checkpointResult?._serviceUpdateBatch)
     return parseServiceUpdateBatch(ctx.payload, ctx.checkpointResult);

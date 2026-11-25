@@ -52,7 +52,7 @@ function context(): JobContext {
 }
 // The execution identity every admission and status carries.
 const identity = {
-  version: 2 as const,
+  version: 1 as const,
   admittedAt: 0,
   deadlineAt: 3_600_000,
   fingerprint: "a".repeat(64),
@@ -60,7 +60,7 @@ const identity = {
 function seedProjection(ctx: JobContext, key: string, kind: OpsOperation["kind"], id?: string) {
   ctx.protocol = {
     operations: {
-      version: 3,
+      version: 1,
       steps: {},
       eventTotal: 0,
       byteTotal: 0,
@@ -143,14 +143,14 @@ describe("administrative job operations broker", () => {
     if (!mapping) throw Error("Missing stable fixture mapping");
     const finalKey = mapping.operationKey;
     expect(saved).toMatchObject({
-      version: 3,
+      version: 1,
       operations: { [finalKey]: { operation, phase: "admitting", operationKey: finalKey } },
     });
     const restarted = context();
     restarted.checkpointResult = durable;
     restarted.protocol = durableProtocol;
     const status = {
-      version: 2,
+      version: 1,
       admittedAt: mapping.requestedDeadlineAt - 300000,
       deadlineAt: mapping.requestedDeadlineAt,
       fingerprint: "a".repeat(64),
@@ -249,9 +249,9 @@ describe("administrative job operations broker", () => {
       errorClass: "host_update_required",
       message: expect.stringContaining("host"),
     });
-    expect(ctx.checkpointResult).toMatchObject({ errorCode: "host_update_required" });
+    expect(ctx.checkpointResult).toMatchObject({ errorCode: "HOST_UPDATE_REQUIRED" });
     expect(vi.mocked(ctx.checkpoint).mock.calls.at(-1)?.[0]).toEqual(
-      expect.objectContaining({ errorCode: "host_update_required" }),
+      expect.objectContaining({ errorCode: "HOST_UPDATE_REQUIRED" }),
     );
   });
 
@@ -310,12 +310,91 @@ describe("administrative job operations broker", () => {
       name: "ApiOpsError",
       errorClass: "recovery_required",
     });
-    expect(ctx.checkpointResult).toMatchObject({ errorCode: "recovery_required" });
+    expect(ctx.checkpointResult).toMatchObject({ errorCode: "RECOVERY_REQUIRED" });
     expect(readProjection(ctx.protocol).operations[operationKey]).toMatchObject({
       terminal: true,
       phase: "terminal",
       errorClass: "recovery_required",
     });
+    expect(client.execute).not.toHaveBeenCalled();
+    expect(client.cancel).not.toHaveBeenCalled();
+  });
+
+  it("settles a finished configuration apply that another release's agent recorded", async () => {
+    const ctx = context();
+    const operationKey = "opk1_abcdefghijklmnop";
+    const operationId = "job1_abcdefghijklmnop";
+    seedProjection(ctx, operationKey, "configurationMaintenance.apply", operationId);
+    const otherRelease = () =>
+      Object.assign(new OpsClientError("other_release", 409), {
+        settlement: {
+          outcome: "committed" as const,
+          summary: {
+            revisionId: `cfg1_${"e".repeat(43)}`,
+            enabledServiceIds: ["api", "web"],
+            followUp: "complete" as const,
+            cleanupFailed: false,
+          },
+        },
+      });
+    const client = {
+      execute: vi.fn(),
+      status: vi.fn(async () => {
+        throw otherRelease();
+      }),
+      events: vi.fn(async () => {
+        throw otherRelease();
+      }),
+      lookup: vi.fn(),
+      cancel: vi.fn(),
+    };
+    const observed = executeAdminJobOperation(
+      ctx,
+      {
+        kind: "configurationMaintenance.apply",
+        maintenanceId: "0c8d7f4e-1c42-4b77-9f0e-0f1a2b3c4d5e",
+      },
+      "configuration-maintenance.apply",
+      { client: client as never, operationKey, pollIntervalMs: 1 },
+    );
+    const configuration = {
+      outcome: "committed",
+      revisionId: `cfg1_${"e".repeat(43)}`,
+      enabledServiceIds: ["api", "web"],
+      followUp: "complete",
+      cleanupFailed: false,
+    };
+    await expect(observed).rejects.toMatchObject({
+      name: "OpsSettledByOtherRelease",
+      configuration,
+    });
+    expect(ctx.checkpointResult).toMatchObject({ configuration });
+    expect(readProjection(ctx.protocol).operations[operationKey]).toMatchObject({
+      terminal: true,
+      phase: "terminal",
+    });
+    expect(readProjection(ctx.protocol).operations[operationKey]).not.toHaveProperty("outcome");
+    expect(readProjection(ctx.protocol).operations[operationKey]?.settlement).toMatchObject({
+      outcome: "committed",
+    });
+
+    // A rerun after the agent pruned the row settles from the projection alone.
+    client.status.mockImplementation(async () => {
+      throw new OpsClientError("not_found", 404);
+    });
+    const statusReads = client.status.mock.calls.length;
+    await expect(
+      executeAdminJobOperation(
+        ctx,
+        {
+          kind: "configurationMaintenance.apply",
+          maintenanceId: "0c8d7f4e-1c42-4b77-9f0e-0f1a2b3c4d5e",
+        },
+        "configuration-maintenance.apply",
+        { client: client as never, operationKey, pollIntervalMs: 1 },
+      ),
+    ).rejects.toMatchObject({ name: "OpsSettledByOtherRelease", configuration });
+    expect(client.status.mock.calls.length).toBe(statusReads);
     expect(client.execute).not.toHaveBeenCalled();
     expect(client.cancel).not.toHaveBeenCalled();
   });
@@ -380,7 +459,7 @@ describe("administrative job operations broker", () => {
     expect(ctx.protocol).toEqual(
       expect.objectContaining({
         operations: expect.objectContaining({
-          version: 3,
+          version: 1,
           eventTotal: 1,
           byteTotal: 4,
           operations: expect.objectContaining({
@@ -402,7 +481,7 @@ describe("administrative job operations broker", () => {
     const ctx = context();
     ctx.protocol = {
       operations: {
-        version: 3,
+        version: 1,
         steps: {},
         eventTotal: 1,
         byteTotal: 4,
@@ -476,7 +555,7 @@ describe("administrative job operations broker", () => {
     const operationId = "job1_abcdefghijklmnop";
     const projection = {
       operations: {
-        version: 3,
+        version: 1,
         steps: {},
         eventTotal: 0,
         byteTotal: 0,
@@ -538,7 +617,7 @@ describe("administrative job operations broker", () => {
     const operationId = "job1_abcdefghijklmnop";
     const projection = {
       operations: {
-        version: 3,
+        version: 1,
         steps: {},
         eventTotal: 0,
         byteTotal: 0,
@@ -588,7 +667,7 @@ describe("administrative job operations broker", () => {
     const canceledId = "job1_bbbbbbbbbbbbbbbb";
     const projection = {
       operations: {
-        version: 3,
+        version: 1,
         steps: {},
         eventTotal: 0,
         byteTotal: 0,
@@ -660,7 +739,7 @@ describe("administrative job operations broker", () => {
     const operationId = "job1_abcdefghijklmnop";
     const projection = {
       operations: {
-        version: 3,
+        version: 1,
         steps: {},
         eventTotal: 0,
         byteTotal: 0,
@@ -774,7 +853,7 @@ it("validates a resumed operation identity before reading its event stream", asy
   const operationId = "job1_abcdefghijklmnop";
   ctx.protocol = {
     operations: {
-      version: 3,
+      version: 1,
       steps: {},
       eventTotal: 0,
       byteTotal: 0,
@@ -850,7 +929,7 @@ it.each([false, true])(
     const tokenFile = join(root, "token");
     await writeFile(tokenFile, token, { mode: 0o600 });
     vi.stubEnv("OPS_AGENT_TOKEN_FILE", tokenFile);
-    const path = join(root, "journal", "jobs-v1.json");
+    const path = join(root, "journal", "jobs.json");
     const journal = await openOpsJobJournal(path);
     const dispatch = vi.fn(async () => {
       if (failed)
@@ -969,7 +1048,7 @@ it.each([false, true])(
       vi.stubEnv("OPS_AGENT_URL", "http://openmapx-ops-agent:4300");
       vi.stubGlobal("fetch", fetcher);
       const reconciled = context();
-      reconciled.jobType = "backup.operation";
+      reconciled.jobType = "backup.operation.run";
       reconciled.observationOnly = true;
       reconciled.payload = { name: "newer-state" };
       reconciled.checkpointResult = durable;
@@ -1009,7 +1088,7 @@ it.each([false, true])(
           url: path,
           headers: {
             authorization: `Bearer ${Buffer.alloc(32, 8).toString("base64url")}`,
-            "x-ops-protocol-version": "2",
+            "x-ops-protocol-version": "1",
           },
         });
         expect(denied.statusCode).toBe(404);
@@ -1021,7 +1100,7 @@ it.each([false, true])(
             url: `/v1/operations/${admitted.operationId}`,
             headers: {
               authorization: `Bearer ${Buffer.alloc(32, 8).toString("base64url")}`,
-              "x-ops-protocol-version": "2",
+              "x-ops-protocol-version": "1",
             },
           })
         ).statusCode,
@@ -1043,7 +1122,7 @@ it("does not read or cancel an attempted child belonging to another API job", as
   const { opsOperationFingerprint } = await import("@openmapx/core/ops");
   ctx.protocol = {
     operations: {
-      version: 3,
+      version: 1,
       steps: {},
       eventTotal: 0,
       byteTotal: 0,

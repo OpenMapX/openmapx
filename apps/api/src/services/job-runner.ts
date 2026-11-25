@@ -4,10 +4,11 @@ import {
   integrationApplyReceiptSchema,
 } from "@openmapx/core/api-contracts";
 import { itemAt } from "@openmapx/core/item-at";
+import { ACTIVE_JOB_STATUSES, type AdminJobType, type JobStatus } from "@openmapx/core/jobs";
 import { canonicalJson, hardlinkApplySummarySchema } from "@openmapx/core/ops";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
-import { ACTIVE_ADMIN_JOB_STATUSES, adminJobStatusIn } from "../db/admin-job-schema";
+import { adminJobStatusIn } from "../db/admin-job-schema";
 import { adminJob } from "../db/schema";
 import { processLogger } from "../process-logger";
 import { actorUserIdOrNull } from "../utils/actor";
@@ -73,7 +74,7 @@ interface ApiRuntimeInfo {
 
 export interface JobContext {
   jobId: string;
-  jobType?: string;
+  jobType?: AdminJobType;
   execution?: JobExecution;
   observationOnly?: boolean;
   payload: Record<string, unknown>;
@@ -154,7 +155,7 @@ const IMMEDIATE_CONFIGURATION_JOB_TYPES = [
   "integration.binding.apply",
   "configuration.migration.apply",
   "credential.import",
-] as const;
+] as const satisfies readonly AdminJobType[];
 
 export const AGENT_RECOVERABLE_ADMIN_JOB_TYPES = [
   "extension.install",
@@ -162,25 +163,25 @@ export const AGENT_RECOVERABLE_ADMIN_JOB_TYPES = [
   "standalone.remove",
   "standalone.preview",
   "standalone.install",
-  "backup.operation",
-  "data.operation",
-  "service.bulk",
+  "backup.operation.run",
+  "data.operation.run",
+  "service.batch.run",
   "service.start",
   "service.stop",
   "service.restart",
-  "service.core-restart",
+  "service.core.restart",
   ...IMMEDIATE_CONFIGURATION_JOB_TYPES,
   "compose.render",
   "compose.start",
-  "system.diagnostics",
+  "system.diagnostics.collect",
   "system.update",
   "release.clear",
-  "service.images.pull",
+  "service.image.pull",
   "backup.prune",
   "artifact.validate",
   "artifact.import",
   "artifact.export",
-] as const;
+] as const satisfies readonly AdminJobType[];
 
 /** Routing only, never admission authority. The selected fixed producer must
  * still authenticate the original private packet, owned row/nonce, source and
@@ -214,7 +215,7 @@ function hasRetainedQueuedCoordinator(job: {
   const payload = job.payload as Record<string, unknown> | null;
   if (!payload) return false;
   const batch = (job.result as Record<string, unknown> | null)?._serviceUpdateBatch;
-  if (job.type === "service.bulk" && payload.action === "update" && batch) return true;
+  if (job.type === "service.batch.run" && payload.action === "update" && batch) return true;
   if (job.type === "system.update")
     return guardedSystemReleasePayloadSchema.safeParse(payload).success;
   return readAdminJobProtocol(job.protocol).candidate !== undefined;
@@ -241,7 +242,7 @@ async function observeExtensionJob(ctx: JobContext): Promise<Record<string, unkn
   try {
     const result = await resumeAdminJobObservation(ctx);
     const settled = ctx.checkpointResult?._settled as { status?: unknown } | undefined;
-    if (settled?.status === "success") return result;
+    if (settled?.status === "succeeded") return result;
   } catch (error) {
     if (!(error instanceof AdminJobFailure)) throw error;
   }
@@ -252,16 +253,16 @@ const PUMP_RETRY_BASE_MS = 1_000;
 const PUMP_RETRY_MAX_MS = 30_000;
 
 class AdminJobRunner {
-  private readonly handlers = new Map<string, JobHandler>();
+  private readonly handlers = new Map<AdminJobType, JobHandler>();
   private readonly active = new Map<string, AbortController>();
   readonly maxConcurrent = 2;
 
-  register(type: string, handler: JobHandler): void {
+  register(type: AdminJobType, handler: JobHandler): void {
     this.handlers.set(type, handler);
   }
 
   async enqueue(
-    type: string,
+    type: AdminJobType,
     payload: Record<string, unknown>,
     createdBy?: string | null,
   ): Promise<string> {
@@ -275,8 +276,7 @@ class AdminJobRunner {
           type,
           status: "queued",
           payload: durablePayload,
-          // Synthetic (loopback) actors have no user row → store null, not a FK violation.
-          createdBy: actorUserIdOrNull(createdBy),
+          createdByUserId: actorUserIdOrNull(createdBy),
         })
         .returning({ id: adminJob.id });
     } catch (error) {
@@ -345,7 +345,7 @@ class AdminJobRunner {
         .values({
           type,
           status: "queued",
-          createdBy: actorUserIdOrNull(actorId),
+          createdByUserId: actorUserIdOrNull(actorId),
           payload: {
             ...payload,
             ownerId: actorId,
@@ -416,7 +416,7 @@ class AdminJobRunner {
               status: "running",
               startedAt: new Date(),
               payload: { operationKey: options.operationKey },
-              createdBy: actorUserIdOrNull(options.actorId),
+              createdByUserId: actorUserIdOrNull(options.actorId),
               protocol: {
                 execution,
                 observationLeaseUntil: new Date(Date.now() + 60000).toISOString(),
@@ -437,11 +437,11 @@ class AdminJobRunner {
       readAdminJobProtocol(job.protocol).immediate?.intentDigest !== intentDigest
     )
       throw new AdminJobFailure("Retained configuration intent conflicts", {
-        errorCode: "conflict",
+        errorCode: "CONFLICT",
       });
     options.accepted?.(job.id);
     if (!(job as { _fresh?: boolean })._fresh) {
-      if (["success", "failed"].includes(job.status)) {
+      if (job.status === "succeeded" || job.status === "failed") {
         if (checkpoint._configurationRejection)
           throw restoreConfigurationRejection(checkpoint._configurationRejection);
         return restore(checkpoint, job.id);
@@ -499,7 +499,7 @@ class AdminJobRunner {
         },
       );
       const [settled] = await db.select().from(adminJob).where(eq(adminJob.id, job.id));
-      if (!settled || !["success", "failed"].includes(settled.status))
+      if (!settled || (settled.status !== "succeeded" && settled.status !== "failed"))
         throw new JobObservationPending("recovery_required");
       if (failure && !(value !== undefined && failure instanceof AdminJobFailure)) throw failure;
       return value ?? restore((settled.result ?? {}) as Record<string, unknown>, job.id);
@@ -544,12 +544,12 @@ class AdminJobRunner {
     const [canceled] = await db
       .select()
       .from(adminJob)
-      .where(jobOwnership(ctx.jobId, ctx.execution, ["canceled"]));
+      .where(jobOwnership(ctx.jobId, ctx.execution, ["cancelled"]));
     if (canceled) {
-      // The producer already recorded its own canceled completion under this
+      // The producer already recorded its own cancelled completion under this
       // nonce. Observe it; generic settlement must not overwrite it with
       // success or failure.
-      this.announce(ctx.jobId, "canceled", {
+      this.announce(ctx.jobId, "cancelled", {
         result: canceled.result as Record<string, unknown> | null,
         finishedAt: canceled.finishedAt?.toISOString(),
       });
@@ -661,7 +661,7 @@ class AdminJobRunner {
         };
       },
       (result, jobId) => {
-        if (result.errorCode === "configuration_prerequisite")
+        if (result.errorCode === "CONFIGURATION_PREREQUISITE")
           throw new ConfigurationPrerequisiteFailure();
         let outcome = parseTrustedConfigurationApplyOutcome(result.configuration);
         let integrationReload:
@@ -881,7 +881,7 @@ class AdminJobRunner {
   /** Publish a status transition so live viewers see it without polling. */
   private announce(
     jobId: string,
-    status: string,
+    status: JobStatus,
     patch: Omit<JobStatusEvent, "type" | "status"> = {},
   ): void {
     jobEventBus.publish(jobId, { type: "status", status, ...patch });
@@ -892,13 +892,13 @@ class AdminJobRunner {
     const canceledAt = new Date();
     const queued = await db
       .update(adminJob)
-      .set({ status: "canceled", finishedAt: canceledAt })
+      .set({ status: "cancelled", finishedAt: canceledAt })
       .where(
         and(eq(adminJob.id, jobId), eq(adminJob.status, "queued"), noUnsettledManagedOperation()),
       )
       .returning({ id: adminJob.id });
     if (queued.length > 0) {
-      this.announce(jobId, "canceled", { finishedAt: canceledAt.toISOString() });
+      this.announce(jobId, "cancelled", { finishedAt: canceledAt.toISOString() });
       return true;
     }
 
@@ -949,7 +949,7 @@ class AdminJobRunner {
     const rows = await db
       .update(adminJob)
       .set({
-        status: "canceled",
+        status: "cancelled",
         finishedAt,
         result: sql`coalesce(${adminJob.result}, '{}'::jsonb) - 'observation'`,
       })
@@ -961,20 +961,18 @@ class AdminJobRunner {
       )
       .returning({ id: adminJob.id, result: adminJob.result });
     if (rows.length === 0) return false;
-    this.announce(jobId, "canceled", {
+    this.announce(jobId, "cancelled", {
       finishedAt: finishedAt.toISOString(),
       result: rows[0]?.result as Record<string, unknown> | null,
     });
     return true;
   }
 
-  async findActive(type: string): Promise<{ id: string; status: string } | null> {
+  async findActive(type: AdminJobType): Promise<{ id: string; status: string } | null> {
     const [job] = await db
       .select({ id: adminJob.id, status: adminJob.status })
       .from(adminJob)
-      .where(
-        and(eq(adminJob.type, type), adminJobStatusIn(adminJob.status, ACTIVE_ADMIN_JOB_STATUSES)),
-      )
+      .where(and(eq(adminJob.type, type), adminJobStatusIn(adminJob.status, ACTIVE_JOB_STATUSES)))
       .orderBy(asc(adminJob.createdAt))
       .limit(1);
     return job ?? null;
@@ -1034,7 +1032,7 @@ class AdminJobRunner {
       const rows = await db
         .update(adminJob)
         .set({
-          status: complete ? "success" : "failed",
+          status: complete ? "succeeded" : "failed",
           finishedAt: new Date(),
           ...(complete
             ? {
@@ -1220,7 +1218,7 @@ class AdminJobRunner {
 
   private async executeJob(
     jobId: string,
-    type: string,
+    type: AdminJobType,
     payload: Record<string, unknown>,
     checkpointResult: Record<string, unknown> | null,
     protocol: unknown,
@@ -1429,7 +1427,7 @@ class AdminJobRunner {
       }
     };
     const settle = async (
-      status: "success" | "failed",
+      status: "succeeded" | "failed",
       result: Record<string, unknown> | null,
       error?: string,
       knownFailure = false,
@@ -1441,7 +1439,7 @@ class AdminJobRunner {
         delete merged.observation;
         const safeMerged = durableRecord(merged);
         if (hasUnsettledManagedOperation(ctx.checkpointResult, ctx.protocol)) {
-          if (status === "success" || knownFailure)
+          if (status === "succeeded" || knownFailure)
             await db
               .update(adminJob)
               .set(
@@ -1460,7 +1458,7 @@ class AdminJobRunner {
             ...mergeJobCheckpoint(safeMerged, { dropObservation: true }),
             error: error ?? null,
             finishedAt,
-            ...(status === "success" ? { progress: 100 } : {}),
+            ...(status === "succeeded" ? { progress: 100 } : {}),
           })
           .where(and(jobOwnership(jobId, execution), noUnsettledManagedOperation()))
           .returning({ id: adminJob.id });
@@ -1468,7 +1466,7 @@ class AdminJobRunner {
           this.announce(jobId, status, {
             result: publicAdminJobResult(safeMerged),
             error: error ?? null,
-            ...(status === "success" ? { progress: 100 } : {}),
+            ...(status === "succeeded" ? { progress: 100 } : {}),
             finishedAt: finishedAt.toISOString(),
           });
         } else {
@@ -1554,7 +1552,7 @@ class AdminJobRunner {
             const rows = await db
               .update(adminJob)
               .set({
-                status: "canceled",
+                status: "cancelled",
                 finishedAt,
                 result: sql`coalesce(${adminJob.result}, '{}'::jsonb) - 'observation'`,
               })
@@ -1566,7 +1564,7 @@ class AdminJobRunner {
               )
               .returning({ id: adminJob.id, result: adminJob.result });
             if (rows.length)
-              this.announce(jobId, "canceled", {
+              this.announce(jobId, "cancelled", {
                 finishedAt: finishedAt.toISOString(),
                 result: rows[0]?.result as Record<string, unknown> | null,
               });
@@ -1586,7 +1584,7 @@ class AdminJobRunner {
       // A failed terminal write is uncertainty, not a handler failure. Never
       // turn an accepted successful effect into failed because PostgreSQL failed.
       try {
-        await settle("success", result ?? null);
+        await settle("succeeded", result ?? null);
       } catch (error) {
         await pending(error instanceof JobObservationPending ? error.reason : "transport");
       }

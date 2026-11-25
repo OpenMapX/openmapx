@@ -9,7 +9,7 @@ import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import type { Disclosure, IntegrationMetadata } from "@openmapx/core/api-contracts";
 import { buildLicensingHtml } from "@openmapx/core/attribution";
-import { legalConfig, sectionSlug } from "@openmapx/core/legal";
+import { sectionSlug } from "@openmapx/core/legal";
 import type { PublicLegalConfig } from "@openmapx/core/server-api";
 import type { Licensing } from "@openmapx/mobility-core/licensing";
 import { TransitFeedAttribution } from "@/components/legal/TransitFeedAttribution";
@@ -29,14 +29,9 @@ export default function TermsContentDe({
 }: {
   integrations?: IntegrationMetadata[];
   disclosures?: Disclosure[];
-  legal?: PublicLegalConfig | null;
+  legal: PublicLegalConfig;
 }) {
-  const name = legal ? legal.name : legalConfig.name;
-  const street = legal ? legal.street : legalConfig.street;
-  const postalCode = legal ? legal.postalCode : legalConfig.postalCode;
-  const city = legal ? legal.city : legalConfig.city;
-  const country = legal ? legal.country : legalConfig.country;
-  const email = legal ? legal.email : legalConfig.email;
+  const { name, street, postalCode, city, country, email } = legal;
 
   return (
     <Box>
@@ -50,7 +45,7 @@ export default function TermsContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: 28. Oktober 2026
+        Zuletzt aktualisiert: 25. November 2026
       </Typography>
       <Section title={T.scope}>
         <Typography>

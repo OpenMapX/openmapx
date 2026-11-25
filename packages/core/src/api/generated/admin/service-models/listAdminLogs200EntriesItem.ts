@@ -10,7 +10,7 @@ export type ListAdminLogs200EntriesItem = {
   id: number;
   level: string;
   source: string;
-  msg: string;
+  message: string;
   time: number;
   metadata?: ListAdminLogs200EntriesItemMetadata;
 };

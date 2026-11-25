@@ -24,7 +24,6 @@
     }
   ],
   "quality": "built-in",
-  "category": "External",
   "dataSources": [
     {
       "sourceId": "ourairports",

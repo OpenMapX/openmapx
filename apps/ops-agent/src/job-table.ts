@@ -23,7 +23,12 @@ import {
   opsKindRequiresControlAuthority,
   parseControlRootOperationKey,
 } from "@openmapx/core/ops";
-import type { OpsJobJournal, PersistedOpsJob } from "./journal";
+import {
+  type ForeignOpsJob,
+  JOURNAL_EXECUTION_VERSION,
+  type OpsJobJournal,
+  type PersistedOpsJob,
+} from "./journal";
 
 export const DEFAULT_JOB_ENTRIES = 256;
 const MAX_RETAINED_EVENTS_PER_JOB = 64;
@@ -119,6 +124,8 @@ const recoveryRequired = (job: JobRecord) =>
 export class JobTable<Observation = unknown> {
   readonly byId = new Map<string, JobRecord>();
   readonly byKey = new Map<string, JobRecord>();
+  /** Finished rows another release wrote that this release cannot read, by operation id. */
+  readonly foreign = new Map<string, ForeignOpsJob>();
   readonly activeControllers = new Map<string, AbortController>();
   readonly activeSettlements = new Map<string, Promise<void>>();
   readonly leases = new Map<string, TargetLeaseAuthority>();
@@ -145,9 +152,11 @@ export class JobTable<Observation = unknown> {
     },
   ) {
     const restoredRecords = options.journal.records();
-    if (restoredRecords.length > 2 * options.maxJobEntries) {
+    const foreignRecords = options.journal.foreignRecords();
+    if (restoredRecords.length + foreignRecords.length > 2 * options.maxJobEntries) {
       throw new Error("Ops job journal exceeds the configured server capacity");
     }
+    for (const row of foreignRecords) this.foreign.set(row.operationId, row);
     for (const persisted of restoredRecords) {
       const restored: JobRecord = {
         ...persisted,
@@ -187,9 +196,14 @@ export class JobTable<Observation = unknown> {
   private write(
     rows: (entries: JobRecord[]) => JobRecord[] = (entries) => entries,
     durable: () => void = () => {},
+    droppedForeign: readonly string[] = [],
   ): Promise<void> {
     const turn = this.writeTail.then(async () => {
-      await this.options.journal.replace(rows([...this.byId.values()]).map(persisted));
+      await this.options.journal.replace(
+        rows([...this.byId.values()]).map(persisted),
+        [...this.foreign.keys()].filter((operationId) => !droppedForeign.includes(operationId)),
+      );
+      for (const operationId of droppedForeign) this.foreign.delete(operationId);
       durable();
     });
     this.writeTail = turn.catch(() => undefined);
@@ -212,8 +226,12 @@ export class JobTable<Observation = unknown> {
     );
   }
 
-  /** Writes the rows without `removed`, and drops those from memory once that is durable. */
-  private writeWithout(removed: (job: JobRecord) => boolean): Promise<void> {
+  /** Writes the rows without `removed` and the foreign rows `droppedForeign`
+   * names, and drops those from memory once that is durable. */
+  private writeWithout(
+    removed: (job: JobRecord) => boolean,
+    droppedForeign: readonly string[] = [],
+  ): Promise<void> {
     let gone: JobRecord[] = [];
     return this.write(
       (entries) => {
@@ -227,7 +245,20 @@ export class JobTable<Observation = unknown> {
           this.authorities.delete(job.operationId);
         }
       },
+      droppedForeign,
     );
+  }
+
+  /** The foreign row with this role and operation key, if any. */
+  foreignByKey(role: string, operationKey: string): ForeignOpsJob | undefined {
+    for (const row of this.foreign.values())
+      if (row.role === role && row.operationKey === operationKey) return row;
+    return undefined;
+  }
+
+  /** Whether any row, of this release or another, has this operation id. */
+  hasOperationId(operationId: string): boolean {
+    return this.byId.has(operationId) || this.foreign.has(operationId);
   }
 
   scheduleDiagnostics(job: JobRecord): void {
@@ -286,10 +317,34 @@ export class JobTable<Observation = unknown> {
     return job.terminalAt + CONTROL_PRUNE_AFTER_MS > nowMs || notAfter > nowMs;
   }
 
+  /** A foreign row's kind and execution are unknown here, so it stays for the
+   * longer of both retentions and until its key, if timed, has expired. One
+   * that needs recovery stays until an operator retries with a new operation. */
+  private retainedForeign(row: ForeignOpsJob, nowMs: number): boolean {
+    if (row.recoveryRequired) return true;
+    let notAfter = 0;
+    try {
+      notAfter = parseControlRootOperationKey(row.operationKey).notAfter;
+    } catch {
+      /* Only a control root key carries an expiry. */
+    }
+    return (
+      Date.parse(row.terminalAt) + Math.max(CONTROL_PRUNE_AFTER_MS, this.options.jobRetentionMs) >
+        nowMs || notAfter > nowMs
+    );
+  }
+
   async prune(nowMs: number): Promise<void> {
     await this.withAdmissionLock(async () => {
-      if ([...this.byId.values()].every((job) => this.retained(job, nowMs))) return;
-      await this.writeWithout((job) => !this.retained(job, nowMs));
+      const expiredForeign = [...this.foreign.values()]
+        .filter((row) => !this.retainedForeign(row, nowMs))
+        .map((row) => row.operationId);
+      if (
+        expiredForeign.length === 0 &&
+        [...this.byId.values()].every((job) => this.retained(job, nowMs))
+      )
+        return;
+      await this.writeWithout((job) => !this.retained(job, nowMs), expiredForeign);
     });
   }
 
@@ -380,6 +435,10 @@ export class JobTable<Observation = unknown> {
         (job.terminalAt !== undefined && job.execution && !job.execution.progress.settlement)
       )
         recovery++;
+    }
+    for (const row of this.foreign.values()) {
+      total++;
+      if (row.recoveryRequired) recovery++;
     }
     return total - recovery >= this.options.maxJobEntries || recovery >= this.options.maxJobEntries;
   }
@@ -567,7 +626,7 @@ function identityFor(job: JobRecord) {
 function persisted(job: JobRecord): PersistedOpsJob {
   return {
     ...(job.leaseChild ? { leaseChild: job.leaseChild } : {}),
-    executionVersion: 2,
+    executionVersion: JOURNAL_EXECUTION_VERSION,
     requestVersion: job.requestVersion,
     admittedAt: job.admittedAt,
     deadlineAt: job.deadlineAt,

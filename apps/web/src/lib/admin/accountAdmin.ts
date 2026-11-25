@@ -10,6 +10,7 @@ import {
   assistedAccountPasswordSchema,
   assistedAccountVerifySchema,
   authPolicyViewSchema,
+  errorCodeSchema,
 } from "@openmapx/core/api-contracts";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLayoutEffect, useMemo, useRef } from "react";
@@ -20,7 +21,9 @@ export class AccountAdminError extends Error {
   readonly code: string;
   constructor(code: unknown) {
     const safe =
-      typeof code === "string" && /^[A-Z0-9_]{1,80}$/.test(code) ? code : "ACCOUNT_REQUEST_FAILED";
+      typeof code === "string" && code.length <= 80 && errorCodeSchema.safeParse(code).success
+        ? code
+        : "ACCOUNT_REQUEST_FAILED";
     // The code is the message; the admin UI words it through useAccountErrorText.
     super(safe);
     this.name = "AccountAdminError";
@@ -50,7 +53,7 @@ export type AccountRecoveryAction =
   | "password";
 function accountResponse(result: { status: number; data: unknown }) {
   if (result.status !== 200 || !result.data)
-    throw new AccountAdminError((result.data as { error?: unknown } | null)?.error);
+    throw new AccountAdminError((result.data as { code?: unknown } | null)?.code);
   return result.data;
 }
 /** Capture the actual auth methods and origin once; an in-flight request never follows a replacement client. */

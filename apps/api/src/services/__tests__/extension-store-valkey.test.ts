@@ -23,6 +23,13 @@ vi.mock("../app-logger", () => ({ appLogger: { add: vi.fn() } }));
 
 import { addExtensionSource, getExtensionCatalog, removeExtensionSource } from "../extension-store";
 
+const feedDocument = (extensions: unknown[] = []) => ({
+  schemaVersion: 1,
+  extensions,
+  removed: [],
+  critical: [],
+});
+
 // Positive mode fails if Docker or the exact cached image is unavailable. No
 // application URL/password/ACL/envfile is consulted, and no image may be pulled.
 describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
@@ -49,7 +56,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         "extstore:extra_sources",
         "extstore:catalog",
       );
-      ports.fetch.mockReset().mockResolvedValue([]);
+      ports.fetch.mockReset().mockResolvedValue(feedDocument());
     });
 
     it("runs the production-pinned runtime and atomically edits/publishes with the original payloads", async () => {
@@ -162,7 +169,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     it("exercises real store add/remove, successful empty and failed empty with synthetic providers", async () => {
       const extra = "https://extra.example.test/catalog.json";
       ports.fetch.mockImplementation(async (url) =>
-        url === extra ? [{ id: "extra", name: "Extra" }] : [],
+        url === extra ? feedDocument([{ id: "extra", name: "Extra" }]) : feedDocument(),
       );
       await addExtensionSource(extra, "Extra");
       expect(await getExtensionCatalog()).toEqual([
@@ -191,7 +198,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         expect(await fixture.client.get("extstore:catalog")).toBeNull();
         await fixture.client.set("extstore:catalog", denied);
       }
-      ports.fetch.mockResolvedValue([]);
+      ports.fetch.mockResolvedValue(feedDocument());
       expect(await getExtensionCatalog(true)).toEqual([]);
       expect(await getExtensionCatalog()).toEqual([]);
     });

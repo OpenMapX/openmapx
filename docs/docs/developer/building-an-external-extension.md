@@ -88,7 +88,10 @@ Then scaffold the integration directory:
 openmapx-ext scaffold integration conditions --domain knowledge --out ./integrations
 ```
 
-This creates `integrations/conditions/` with `manifest.json`, `package.json`, and
+The id must be a lowercase slug of at most 48 characters that starts with a letter.
+This creates `integrations/conditions/` with `manifest.json` (declaring
+`"platform": "1.0"` and version `1.0.0`), a `package.json` named
+`openmapx-integration-<id>` outside the project's npm scope, and
 `strings/en.json`, a `CONTRIBUTOR-CONTRACT.md` authoring note, and a
 `companion-response.example.json` response example, with `__ID__` and `__DOMAIN__`
 tokens substituted throughout. The response example is for your companion
@@ -148,7 +151,7 @@ openmapx-ext validate ./integrations/conditions
 
 This checks the manifest and the same declarative-code and asset rules used by packaging, without writing an archive. Other inputs use `--kind service`, `--kind extension` or `--kind contributors` with a JSON file. Service checks always use community policy; contributor files contain canonical receipt arrays. Extension checks validate component references and the minimum protocol version. Invalid input exits non-zero with diagnostics.
 
-The shared `@openmapx/extension-contracts` package supplies types, semantic validators and structural JSON Schemas for these inputs. Editor schemas supplement the runtime validators; they do not certify download access, installation authority or running-service readiness.
+The shared `@openmapx/extension-contracts` package supplies types, semantic validators and structural JSON Schemas for these inputs. The schemas describe community manifests and are identified by the extension protocol, not the package version: `https://openmapx.org/schemas/extension-contracts/1.0/<integration|service|extension|artifact>.json`. Editor schemas supplement the runtime validators; they do not certify download access, installation authority or running-service readiness.
 
 ## Preserve companion-service contributor receipts
 
@@ -313,15 +316,28 @@ repository must provide at least one service, each with a unique id that no
 built-in or other installed service already uses. The manifests of all installed
 community services together may not exceed 768 KiB.
 
-For a distributable artifact, set `"quality": "community"` in your manifest and
-declare the platform version you build against:
+Every community manifest (integration `manifest.json`, `service.json` and
+`extension.json`) must declare the extension protocol it is written for in
+`platform` and its own release in `version`, a [semantic version](https://semver.org/)
+such as `1.0.0`. `quality` is `community` or absent; a third-party manifest cannot
+call itself `built-in`, and "verified" is a store tier the host assigns, never a
+manifest label:
 
 ```json
 {
-  "quality": "community",
-  "platform": "1.0"
+  "version": "1.0.0",
+  "platform": "1.0",
+  "quality": "community"
 }
 ```
+
+Community manifests are strict at the top level: a key the schema does not name,
+such as a misspelt `platfrom`, fails validation instead of being dropped.
+Extension, service and integration ids are lowercase slugs of at most 48
+characters, `^[a-z0-9]+(-[a-z0-9]+)*$`, so `openmapx-<service-id>` fits one DNS
+label. A capability or data type that is not one of the host's well-known names
+must be namespaced as `<vendor>/<name>` (for example `acme/routing-engine`); any
+other name is a validation error.
 
 The host requires the same extension-protocol major and a host minor at least as high as the declared requirement. Product versions, npm package versions, protocol versions and archive schema versions are separate identities. Protocol `1.0` does not imply a supported OpenMapX product release.
 
@@ -451,7 +467,7 @@ openmapx-ext bundle --input extension.source.json --out extension.json
 openmapx-ext validate extension.json --kind extension
 ```
 
-Sign in as an administrator on that disposable full stack, open **Admin → Extensions → Install from URL**, and enter the controlled HTTPS URL of your `extension.json`. Review and confirm the community extension preview. Use the authenticated UI for this full-stack recipe: the default container stack does not expose the API on the host's `localhost:3001`, which is where the `ext` CLI defaults to connecting.
+Sign in as an administrator on that disposable full stack, open **Admin → Extensions → Install from URL**, and enter the controlled HTTPS URL of your `extension.json`. Review and confirm the community extension preview. From the stack's checkout, `pnpm openmapx ext install <url> --session-file <file>` does the same as that administrator, with the session cookie in a private file (see the [CLI reference](./cli-reference.md)).
 
 Verify configuration forwarding, actual service readiness and displayed data, required attribution, reinstall/update behavior, and recovery from an intentionally failing candidate. A manifest-only integration does not register a provider or introduce executable UI. Passing author CI or showing a healthy manifest does not establish those runtime results.
 
@@ -627,9 +643,10 @@ The operator queues one installation job for the bundle. It installs the
 components, applies configuration, starts services and reloads integrations:
 
 ```sh
-pnpm openmapx ext preview https://example.com/extension.json
+SESSION="$HOME/.local/state/openmapx/admin-session"   # the operator's administrator session cookie
+pnpm openmapx ext preview https://example.com/extension.json --session-file "$SESSION"
 # Inspect the complete output. If it exposes host ports:
-pnpm openmapx ext install https://example.com/extension.json --host-port-confirmation <fingerprint>
+pnpm openmapx ext install https://example.com/extension.json --host-port-confirmation <fingerprint> --session-file "$SESSION"
 # Without host ports, omit the confirmation option. Catalog IDs also work.
 ```
 
@@ -651,8 +668,8 @@ Install/update obtain another preview and refuse missing or mismatched port
 confirmation before writing. A changed snapshot requires new deliberate review;
 there is no automatic consent or retry. Preview may fetch and stage repositories.
 
-Every critical advisory blocks preview, admission and execution until cleared,
-regardless of advisory `maxVersion`. Install/update/remove print a validated queued
+A critical advisory blocks preview, admission and execution of every version up to
+its `maxVersion` (every version when it has none) until cleared. Install/update/remove print a validated queued
 job ID (HTTP 202); check **Admin → Activity** for completion. The CLI does not watch
 jobs. Reads use 30-second deadlines, preview and writes 180 seconds. A timeout is
 ambiguous and does not cancel host work; check Activity before deliberately
@@ -690,7 +707,10 @@ container. Community Compose interpolation is disabled. Sensitive credentials
 should instead be declared as `configSchema` properties marked
 `"x-openmapx-secret": true`: the admin panel's credential vault encrypts them and
 the renderer mounts each as a file-based Docker `secret`, which your service reads
-through the matching `<KEY>_FILE` environment variable. See
+through the matching `<KEY>_FILE` environment variable. List settings and
+secrets the service cannot run without in the schema's root `required` array:
+OpenMapX then refuses to apply a configuration that enables the service until
+the operator has supplied each one, and names the missing keys. See
 [`configSchema`](./service-manifest.md#configschema).
 
 ## See also

@@ -2,18 +2,20 @@
  * Pre-commit guard: for the embedded-provider integrations that aggregate
  * multiple third-party data sources behind one integration id, every
  * credential `configSchema` key must be an exact `<sourceId>-<field>`
- * composition — never a bare camelCase key, never a hand-typed variant that
- * merely starts with a declared sourceId.
+ * composition written in lowerCamel case, like every integration config key —
+ * never a bare `apiKey`, never a hand-typed variant that merely starts with a
+ * declared sourceId.
  *
  * Checks (for each of `CREDENTIAL_KEYED_INTEGRATIONS`):
  *   1. Every `configSchema.properties` key flagged `x-openmapx-secret: true`
- *      matches `/^[a-z0-9]+(-[a-z0-9]+)*$/`.
- *   2. That key decomposes as `${sourceId}-${field}` for some sourceId the
+ *      matches `/^[a-z][a-zA-Z0-9]*$/`.
+ *   2. That key is `credentialKey(sourceId, field)` for some sourceId the
  *      integration's own `manifest.json` `dataSources[]` declares and some
- *      field in `CREDENTIAL_FIELDS` — checked by exact composition (`key ===
- *      sourceId + "-" + field`), not `startsWith`, so a sourceId that is
- *      itself a hyphenated prefix of another (e.g. `dot-ga` vs a hypothetical
- *      `dot-g`) can never be mis-attributed.
+ *      field in `CREDENTIAL_FIELDS` — `de-nw-mobidrom-scooter` and
+ *      `client-id` give `deNwMobidromScooterClientId`. It is checked by exact
+ *      composition, not `startsWith`, so a sourceId that is itself a prefix of
+ *      another (e.g. `dot-ga` vs a hypothetical `dot-g`) can never be
+ *      mis-attributed.
  *   3. Every `ctx.config["<literal>"]` / `ctx.config.<identifier>` access in
  *      that integration's own `.ts` files reads a key its `configSchema`
  *      actually declares. `ctx.config` is typed `Record<string, unknown>`
@@ -60,7 +62,12 @@ export const CREDENTIAL_FIELDS = [
   "access-token",
 ] as const;
 
-export const KEY_FORMAT_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+export const KEY_FORMAT_RE = /^[a-z][a-zA-Z0-9]*$/;
+
+/** The lowerCamel credential key of a hyphenated sourceId and field. */
+export function credentialKey(sourceId: string, field: string): string {
+  return `${sourceId}-${field}`.replace(/-([a-z0-9])/g, (_, next: string) => next.toUpperCase());
+}
 
 interface LoadedManifest {
   id: string;
@@ -109,19 +116,19 @@ export function checkCredentialKey(
   if (!KEY_FORMAT_RE.test(key)) {
     return (
       `${integrationId}: configSchema credential key "${key}" does not match the required ` +
-      `format ${KEY_FORMAT_RE.source} (lowercase, hyphen-separated)`
+      `format ${KEY_FORMAT_RE.source} (lowerCamel)`
     );
   }
 
   const matches = [...sourceIds].some((sourceId) =>
-    CREDENTIAL_FIELDS.some((field) => key === `${sourceId}-${field}`),
+    CREDENTIAL_FIELDS.some((field) => key === credentialKey(sourceId, field)),
   );
   if (!matches) {
     return (
       `${integrationId}: configSchema credential key "${key}" is not a valid ` +
       `"<sourceId>-<field>" composition — expected one of this integration's declared ` +
       `dataSources sourceIds (${[...sourceIds].join(", ") || "none declared"}) followed by ` +
-      `"-" and one of [${CREDENTIAL_FIELDS.join(", ")}]`
+      `one of [${CREDENTIAL_FIELDS.join(", ")}], in lowerCamel case`
     );
   }
 

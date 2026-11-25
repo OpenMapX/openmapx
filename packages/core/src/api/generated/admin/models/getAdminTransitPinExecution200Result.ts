@@ -58,7 +58,7 @@ export type GetAdminTransitPinExecution200Result =
     }
   | {
       kind: "transit-sync";
-      finalStatus: "ok" | "partial" | "error";
+      finalStatus: "succeeded" | "partially_succeeded" | "failed";
       /**
        * @minLength 1
        * @maxLength 512

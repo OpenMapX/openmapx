@@ -1,11 +1,7 @@
-import { type PrivacySource, privacySourceSchema } from "@openmapx/core/privacy";
+import type { PrivacySource } from "@openmapx/core/privacy";
 import { db as defaultDb } from "../db/index.js";
-import { systemSettings } from "../db/schema.js";
-import {
-  adminJobRetentionDays,
-  auditLogRetentionDays,
-  parseRequiredRetentionDays,
-} from "../services/activity-retention.js";
+import { retentionPeriods } from "../services/retention-settings.js";
+import { resolveSettingValues, SettingValueError } from "../services/settings.js";
 
 export interface PrivacyReportLegalFacts {
   controller: {
@@ -37,211 +33,87 @@ export class PrivacyLegalConfigurationError extends Error {
   override name = "PrivacyLegalConfigurationError";
 }
 
-/** A platform retention period, validated as the API's daily retention reads it. */
-function platformRetentionDays(read: () => number): number {
+const LEGAL_REPORT_SETTINGS = {
+  controllerName: "legal.controller.name",
+  controllerStreet: "legal.controller.street",
+  controllerPostalCode: "legal.controller.postalCode",
+  controllerCity: "legal.controller.city",
+  controllerCountry: "legal.controller.country",
+  controllerEmail: "legal.controller.email",
+  controllerPhone: "legal.controller.phone",
+  dataRequestEmail: "legal.dataRequestEmail",
+  deploymentJurisdiction: "legal.deploymentJurisdiction",
+  supervisoryAuthority: "legal.supervisoryAuthority.name",
+  supervisoryAuthorityUrl: "legal.supervisoryAuthority.url",
+  privacySources: "legal.privacySources",
+} as const;
+type LegalReportFact = keyof typeof LEGAL_REPORT_SETTINGS;
+
+/** Settings that resolve invalid are the operator's configuration problem. */
+async function configured<T>(read: () => Promise<T>): Promise<T> {
   try {
-    return read();
+    return await read();
   } catch (error) {
-    throw new PrivacyLegalConfigurationError(
-      error instanceof Error ? error.message : "Invalid retention configuration",
-    );
+    if (error instanceof SettingValueError)
+      throw new PrivacyLegalConfigurationError(
+        `Invalid privacy report legal configuration: ${error.message}`,
+      );
+    throw error;
   }
-}
-
-function backupRetentionDays(): number {
-  return platformRetentionDays(() => parseRequiredRetentionDays("BACKUP_RETENTION_DAYS", 30));
-}
-
-function clean(raw: unknown): string {
-  return typeof raw === "string" ? raw.trim() : "";
-}
-
-function setting(
-  envName: string,
-  key: string,
-  values: Record<string, unknown>,
-  fallback: unknown,
-  parseEnv: (raw: string) => unknown = (raw) => raw,
-): unknown {
-  const envValue = process.env[envName];
-  if (envValue !== undefined && envValue !== "") return parseEnv(envValue);
-  const databaseValue = values[key];
-  if (databaseValue !== undefined) return databaseValue;
-  return fallback;
-}
-
-function stringSetting(envName: string, key: string, values: Record<string, unknown>): string {
-  return clean(setting(envName, key, values, ""));
-}
-
-function numberSetting(
-  envName: string,
-  key: string,
-  values: Record<string, unknown>,
-  fallback: number,
-  min: number,
-  max: number,
-): number {
-  const value = setting(envName, key, values, fallback, Number);
-  return Number.isSafeInteger(value) && Number(value) >= min && Number(value) <= max
-    ? Number(value)
-    : fallback;
-}
-
-function required(name: string, value: string): string {
-  if (!value)
-    throw new PrivacyLegalConfigurationError(`Missing privacy report legal configuration: ${name}`);
-  return value;
-}
-
-function hasControlCharacter(value: string): boolean {
-  return Array.from(value).some((character) => {
-    const code = character.charCodeAt(0);
-    return code < 32 || code === 127;
-  });
-}
-
-function requiredSingleLine(name: string, value: string, maxLength: number): string {
-  const result = required(name, value);
-  if (result.length > maxLength || hasControlCharacter(result))
-    throw new PrivacyLegalConfigurationError(`Invalid privacy report legal configuration: ${name}`);
-  return result;
-}
-
-function optionalPhone(value: string): string | null {
-  if (!value) return null;
-  if (value.length > 64 || !/^[+()0-9 .\-/]+$/.test(value))
-    throw new PrivacyLegalConfigurationError(
-      "Invalid privacy report legal configuration: controllerPhone",
-    );
-  return value;
 }
 
 /** Canonical, secret-free legal facts used by response generation. */
 export async function resolvePrivacyReportLegalFacts(
   database: typeof defaultDb = defaultDb,
 ): Promise<PrivacyReportLegalFacts> {
-  const rows = await database.select().from(systemSettings);
-  const values = Object.fromEntries(rows.map((row) => [row.key, row.value]));
-  const name = requiredSingleLine(
-    "controllerName",
-    stringSetting("LEGAL_NAME", "legalControllerName", values),
-    200,
+  const facts = Object.keys(LEGAL_REPORT_SETTINGS) as LegalReportFact[];
+  const values = await configured(() =>
+    resolveSettingValues(
+      facts.map((fact) => LEGAL_REPORT_SETTINGS[fact]),
+      { database },
+    ),
   );
-  const street = requiredSingleLine(
-    "controllerStreet",
-    stringSetting("LEGAL_STREET", "legalControllerStreet", values),
-    200,
-  );
-  const postalCode = requiredSingleLine(
-    "controllerPostalCode",
-    stringSetting("LEGAL_POSTAL_CODE", "legalControllerPostalCode", values),
-    32,
-  );
-  const city = requiredSingleLine(
-    "controllerCity",
-    stringSetting("LEGAL_CITY", "legalControllerCity", values),
-    120,
-  );
-  const country = requiredSingleLine(
-    "controllerCountry",
-    stringSetting("LEGAL_COUNTRY", "legalControllerCountry", values),
-    120,
-  );
-  const controllerEmail = stringSetting("LEGAL_EMAIL", "legalControllerEmail", values);
-  if (controllerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(controllerEmail))
-    throw new PrivacyLegalConfigurationError(
-      "Invalid privacy report legal configuration: controllerEmail",
-    );
-  const contact =
-    stringSetting("LEGAL_DATA_REQUEST_EMAIL", "legalDataRequestEmail", values) || controllerEmail;
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact))
+  const periods = await configured(() => retentionPeriods({ database }));
+  const text = (fact: LegalReportFact) => (values[LEGAL_REPORT_SETTINGS[fact]] as string).trim();
+  const required = (fact: LegalReportFact) => {
+    const value = text(fact);
+    if (!value)
+      throw new PrivacyLegalConfigurationError(
+        `Missing privacy report legal configuration: ${fact}`,
+      );
+    return value;
+  };
+
+  const name = required("controllerName");
+  const street = required("controllerStreet");
+  const postalCode = required("controllerPostalCode");
+  const city = required("controllerCity");
+  const country = required("controllerCountry");
+  const contact = text("dataRequestEmail") || text("controllerEmail");
+  if (!contact)
     throw new PrivacyLegalConfigurationError(
       "Missing privacy report legal configuration: dataRequestEmail",
     );
-  const jurisdiction = required(
-    "deploymentJurisdiction",
-    stringSetting("LEGAL_DEPLOYMENT_JURISDICTION", "legalDeploymentJurisdiction", values),
-  );
-  if (!/^[A-Z]{2}(?:-[A-Z0-9]{1,8})?$/.test(jurisdiction))
-    throw new PrivacyLegalConfigurationError(
-      "Invalid privacy report legal configuration: deploymentJurisdiction",
-    );
-  const supervisoryAuthority = requiredSingleLine(
-    "supervisoryAuthority",
-    stringSetting("LEGAL_SUPERVISORY_AUTHORITY", "legalSupervisoryAuthority", values),
-    300,
-  );
-  const authorityUrl = stringSetting(
-    "LEGAL_SUPERVISORY_AUTHORITY_URL",
-    "legalSupervisoryAuthorityUrl",
-    values,
-  );
-  if (authorityUrl) {
-    let parsedAuthorityUrl: URL;
-    try {
-      parsedAuthorityUrl = new URL(authorityUrl);
-    } catch {
-      throw new PrivacyLegalConfigurationError(
-        "Invalid privacy report legal configuration: supervisoryAuthorityUrl",
-      );
-    }
-    if (
-      !["http:", "https:"].includes(parsedAuthorityUrl.protocol) ||
-      parsedAuthorityUrl.username !== "" ||
-      parsedAuthorityUrl.password !== ""
-    )
-      throw new PrivacyLegalConfigurationError(
-        "Invalid privacy report legal configuration: supervisoryAuthorityUrl",
-      );
-  }
-  const sourceRaw = setting("LEGAL_PRIVACY_SOURCES", "legalPrivacySources", values, []);
-  let sourceValue: unknown = sourceRaw;
-  if (typeof sourceRaw === "string") {
-    try {
-      sourceValue = JSON.parse(sourceRaw);
-    } catch {
-      throw new PrivacyLegalConfigurationError(
-        "Invalid privacy report legal configuration: privacySources",
-      );
-    }
-  }
-  const sourceResult = privacySourceSchema.array().safeParse(sourceValue);
-  if (!sourceResult.success)
-    throw new PrivacyLegalConfigurationError(
-      "Invalid privacy report legal configuration: privacySources",
-    );
+  const jurisdiction = required("deploymentJurisdiction");
+  const supervisoryAuthority = required("supervisoryAuthority");
+  const phone = text("controllerPhone");
   return {
     controller: {
       name,
       address: `${street}\n${postalCode} ${city}\n${country}`,
       email: contact,
-      phone: optionalPhone(stringSetting("LEGAL_PHONE", "legalControllerPhone", values)),
+      phone: phone || null,
     },
     deployment: {
       jurisdiction,
       supervisoryAuthority,
-      supervisoryAuthorityUrl: authorityUrl || null,
-      privacySources: sourceResult.data,
-      dsarCaseRetentionDays: numberSetting(
-        "LEGAL_DSAR_CASE_RETENTION_DAYS",
-        "legalDsarCaseRetentionDays",
-        values,
-        1095,
-        30,
-        3650,
-      ),
-      backupRetentionDays: backupRetentionDays(),
-      serverLogRetentionDays: numberSetting(
-        "LEGAL_SERVER_LOG_RETENTION_DAYS",
-        "legalServerLogRetentionDays",
-        values,
-        30,
-        1,
-        3650,
-      ),
-      auditLogRetentionDays: platformRetentionDays(auditLogRetentionDays),
-      adminJobRetentionDays: platformRetentionDays(adminJobRetentionDays),
+      supervisoryAuthorityUrl: text("supervisoryAuthorityUrl") || null,
+      privacySources: values[LEGAL_REPORT_SETTINGS.privacySources] as PrivacySource[],
+      dsarCaseRetentionDays: periods.privacyCase,
+      backupRetentionDays: periods.backup,
+      serverLogRetentionDays: periods.serverLog,
+      auditLogRetentionDays: periods.auditLog,
+      adminJobRetentionDays: periods.adminJob,
     },
   };
 }

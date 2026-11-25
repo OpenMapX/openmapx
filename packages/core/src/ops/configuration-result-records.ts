@@ -20,3 +20,15 @@ export const configurationApplyResultSchema = z.discriminatedUnion("outcome", [
   }),
 ]);
 export type ConfigurationApplyResult = z.infer<typeof configurationApplyResultSchema>;
+
+/** Enabled services whose required settings had no value, by service. */
+export const missingServiceSettingsSchema = z
+  .array(
+    z.strictObject({
+      serviceId: serviceIdSchema,
+      keys: z.array(z.string().min(1).max(128)).min(1).max(64),
+    }),
+  )
+  .min(1)
+  .max(256);
+export type MissingServiceSettingsList = z.infer<typeof missingServiceSettingsSchema>;

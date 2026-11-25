@@ -15,8 +15,6 @@ export type GetAdminService200ManifestContainer = {
   tag: string;
   /** @pattern ^sha256:[a-f0-9]{64}$ */
   digest?: string;
-  /** @pattern ^[a-zA-Z0-9][a-zA-Z0-9_.-]*$ */
-  containerName?: string;
   /**
    * @items.minimum 1
    * @items.maximum 65535

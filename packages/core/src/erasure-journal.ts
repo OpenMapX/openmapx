@@ -17,21 +17,21 @@ import {
 } from "node:fs";
 import { dirname } from "node:path";
 
-const VERSION = 2;
+const VERSION = 1;
 const MAX_JOURNAL_BYTES = 4 * 1024 * 1024;
 const MAX_JOURNAL_KEY_BYTES = 4_096;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DIGEST = /^[0-9a-f]{64}$/;
 
 interface CoverageRecord {
-  version: 2;
+  version: 1;
   phase: "coverage";
   at: string;
   keyBinding: string;
 }
 
 export interface ErasureRequestRecord {
-  version: 2;
+  version: 1;
   phase: "requested";
   receiptId: string;
   subjectDigest: string;
@@ -39,7 +39,7 @@ export interface ErasureRequestRecord {
 }
 
 interface ErasureCompletedRecord {
-  version: 2;
+  version: 1;
   phase: "completed";
   receiptId: string;
   at: string;
@@ -217,9 +217,16 @@ function withJournalLock<T>(path: string, action: () => T): T {
 
 function appendRecordUnlocked(path: string, record: ErasureJournalRecord): void {
   const expectedUid = protectedJournalParentUid(path);
-  const created = !existsSync(path);
-  const flags = constants.O_WRONLY | constants.O_APPEND | constants.O_CREAT | constants.O_NOFOLLOW;
-  const fd = openSync(path, flags, 0o600);
+  const flags = constants.O_WRONLY | constants.O_APPEND | constants.O_NOFOLLOW;
+  let created = true;
+  let fd: number;
+  try {
+    fd = openSync(path, flags | constants.O_CREAT | constants.O_EXCL, 0o600);
+  } catch (error) {
+    if (errorCode(error) !== "EEXIST") throw error;
+    created = false;
+    fd = openSync(path, flags);
+  }
   try {
     const stats = fstatSync(fd);
     if (

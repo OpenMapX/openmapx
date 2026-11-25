@@ -479,7 +479,6 @@ function ServiceCatalogView() {
               >
                 <MenuItem value="all">{t("allQualityTiers")}</MenuItem>
                 <MenuItem value="built-in">{t("builtIn")}</MenuItem>
-                <MenuItem value="community-verified">{t("communityVerified")}</MenuItem>
                 <MenuItem value="community">{t("community")}</MenuItem>
               </Select>
             </FormControl>

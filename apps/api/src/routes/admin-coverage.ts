@@ -4,10 +4,7 @@ import {
   type UsageAssessment,
 } from "@openmapx/core/coverage";
 import type { FastifyPluginAsync, FastifyReply } from "fastify";
-import {
-  CoverageCollectionUnavailableError,
-  type CoverageCollectorOptions,
-} from "../services/coverage/collect.js";
+import type { CoverageCollectorOptions } from "../services/coverage/collect.js";
 import {
   CoverageHttpError,
   type CoverageRegionsQuery,
@@ -61,9 +58,13 @@ export interface AdminCoverageRouteOptions extends Partial<CoverageCollectorOpti
   coverageService?: CoverageService;
 }
 
+function invalidQuery(message: string): CoverageHttpError {
+  return new CoverageHttpError(400, "INVALID_QUERY", message);
+}
+
 function queryValue(value: QueryValue, name: string): string | undefined {
   if (value === undefined) return undefined;
-  if (typeof value !== "string") throw new CoverageHttpError(400, `${name}_invalid`);
+  if (typeof value !== "string") throw invalidQuery(`Invalid ${name}`);
   return value;
 }
 
@@ -75,14 +76,14 @@ function boundedText(
 ): string | undefined {
   const parsed = queryValue(value, name);
   if (parsed === undefined || parsed === "") {
-    if (options.required) throw new CoverageHttpError(400, `${name}_required`);
+    if (options.required) throw invalidQuery(`${name} is required`);
     return undefined;
   }
   if (parsed.length > max || hasControlCharacters(parsed)) {
-    throw new CoverageHttpError(400, `${name}_invalid`);
+    throw invalidQuery(`Invalid ${name}`);
   }
   if (options.opaque && (!OPAQUE_KEY_PATTERN.test(parsed) || parsed.includes(".."))) {
-    throw new CoverageHttpError(400, `${name}_invalid`);
+    throw invalidQuery(`Invalid ${name}`);
   }
   return parsed;
 }
@@ -94,7 +95,7 @@ function enumValue<T extends string>(
 ): T | undefined {
   const parsed = queryValue(value, name);
   if (parsed === undefined || parsed === "") return undefined;
-  if (!allowed.includes(parsed as T)) throw new CoverageHttpError(400, `${name}_invalid`);
+  if (!allowed.includes(parsed as T)) throw invalidQuery(`Invalid ${name}`);
   return parsed as T;
 }
 
@@ -103,16 +104,16 @@ function booleanValue(value: QueryValue, name: string): boolean | undefined {
   if (parsed === undefined || parsed === "") return undefined;
   if (parsed === "true") return true;
   if (parsed === "false") return false;
-  throw new CoverageHttpError(400, `${name}_invalid`);
+  throw invalidQuery(`Invalid ${name}`);
 }
 
 function nonNegativeInteger(value: QueryValue, name: string, max: number): number | undefined {
   const parsed = queryValue(value, name);
   if (parsed === undefined || parsed === "") return undefined;
-  if (!/^\d+$/.test(parsed)) throw new CoverageHttpError(400, `${name}_invalid`);
+  if (!/^\d+$/.test(parsed)) throw invalidQuery(`Invalid ${name}`);
   const number = Number(parsed);
   if (!Number.isSafeInteger(number) || number > max) {
-    throw new CoverageHttpError(400, `${name}_invalid`);
+    throw invalidQuery(`Invalid ${name}`);
   }
   return number;
 }
@@ -124,12 +125,11 @@ function applyNoStore(reply: FastifyReply): void {
 
 function sendCoverageError(reply: FastifyReply, error: unknown): FastifyReply {
   if (error instanceof CoverageHttpError) {
-    return reply.code(error.statusCode).send({ error: error.code });
+    return reply.code(error.statusCode).send({ error: error.message, code: error.code });
   }
-  if (error instanceof CoverageCollectionUnavailableError) {
-    return reply.code(503).send({ error: "coverage_unavailable" });
-  }
-  return reply.code(503).send({ error: "coverage_unavailable" });
+  return reply
+    .code(503)
+    .send({ error: "Coverage evidence is unavailable", code: "COVERAGE_UNAVAILABLE" });
 }
 
 function parseRegionsQuery(query: CoverageQuerystring): CoverageRegionsQuery {
@@ -146,7 +146,7 @@ function parseReportQuery(query: CoverageQuerystring): CoverageReportQuery {
     opaque: true,
     required: true,
   });
-  if (!regionId) throw new CoverageHttpError(400, "regionId_required");
+  if (!regionId) throw invalidQuery("regionId is required");
   const enabled = enumValue(query.enabled, "enabled", ["all", "true", "false"] as const);
   return {
     regionId,
@@ -166,7 +166,7 @@ function parseSourceQuery(query: CoverageQuerystring): CoverageSourceQuery {
     opaque: true,
     required: true,
   });
-  if (!key || !regionId) throw new CoverageHttpError(400, "source_query_required");
+  if (!key || !regionId) throw invalidQuery("key and regionId are required");
   return {
     key,
     regionId,

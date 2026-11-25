@@ -26,7 +26,7 @@ beforeEach(() => {
   writeFileSync(
     join(root, "backups", "original", "manifest.json"),
     JSON.stringify({
-      formatVersion: 2,
+      formatVersion: 1,
       name: "original",
       createdAt: "2026-08-01T00:00:00.000Z",
       services: [],

@@ -40,7 +40,7 @@ describe("job persistence", () => {
     const { makePersistingOnStageComplete } = await import("../src/jobs/persistence.js");
     const result = {
       stage: "fetch",
-      status: "error",
+      status: "failed" as const,
       startedAt: "2026-08-21T00:00:00.000Z",
       finishedAt: "2026-08-21T00:00:01.000Z",
       durationMs: 1_000,
@@ -75,7 +75,7 @@ describe("job persistence", () => {
     const hook = makePersistingOnStageComplete(sql, "job-1", { warn }, "example");
     const result = {
       stage: "promote",
-      status: "skipped",
+      status: "skipped" as const,
       startedAt: "2026-08-21T00:00:00.000Z",
       finishedAt: "2026-08-21T00:00:00.000Z",
       durationMs: 0,

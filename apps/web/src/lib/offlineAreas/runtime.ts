@@ -19,7 +19,7 @@ export function ensureOfflinePackageRuntime(): Promise<OfflinePackageResolver | 
       if (record.status !== "ready" || (await hasOfflineGlyphAssets(record.manifest))) continue;
       record.status = "error";
       record.lastError = {
-        code: "offline-assets-unavailable",
+        code: "OFFLINE_ASSETS_UNAVAILABLE",
         message: "The offline glyph cache is missing and must be downloaded again.",
       };
       record.updatedAt = Date.now();

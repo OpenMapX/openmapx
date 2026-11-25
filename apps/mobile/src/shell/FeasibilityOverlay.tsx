@@ -79,7 +79,7 @@ export function FeasibilityOverlay(): ReactElement {
   const [disclosureAccepted, setDisclosureAccepted] = useState(false);
   const [lastAction, setLastAction] = useState<string>("idle");
 
-  const repository = useCallback(async () => new FeasibilityRepository(await getDatabase()), []);
+  const repository = useCallback(async () => FeasibilityRepository.open(await getDatabase()), []);
 
   const refresh = useCallback(async () => {
     setState(await (await repository()).read());

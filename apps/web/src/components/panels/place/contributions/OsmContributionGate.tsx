@@ -8,6 +8,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import type { OsmContributionCapabilities } from "@openmapx/core";
 import { authClient, safeHref } from "@openmapx/core";
+import { MAP_INTENT_PARAMS } from "@openmapx/core/map-link-params";
 import { useTranslations } from "next-intl";
 import { type ReactNode, useState } from "react";
 import {
@@ -17,7 +18,7 @@ import {
 } from "@/components/auth/freshSignIn";
 
 /** The marker the OAuth callback carries back. Deliberately a boolean only. */
-export const OSM_CONTRIBUTE_CALLBACK_PARAM = "osm-contribute";
+export const OSM_CONTRIBUTE_CALLBACK_PARAM = MAP_INTENT_PARAMS.osmContribution;
 
 export type OsmContributionIntent = "edit" | "note";
 

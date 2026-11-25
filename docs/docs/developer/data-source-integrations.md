@@ -193,7 +193,9 @@ to the `data-source` domain list (the typed registrar described in the
 [integration system](./integration-system.md#registering-capabilities)).
 `registerPlaceResolver` plugs the provider into the place-id system so that
 clicking a marker resolves to a full place card: `createDataSourceResolver`
-wraps the provider's `getDetail` for that.
+wraps the provider's `getDetail` for that. The provider's id is the scheme of
+those place ids, so it must start with a letter (`^[a-z][a-z0-9-]*$`); the host
+refuses any other.
 
 The provider uses `wrapSiteResult` (aliased as `wrap`), `siteAttributions`,
 `toBBox` and `withinZoom` from `@openmapx/integration-framework`. This excerpt

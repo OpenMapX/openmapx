@@ -18,7 +18,7 @@ describe("complete generated administration operations", () => {
       )
       .mockResolvedValueOnce(
         Response.json(
-          { error: "Another data job is running.", code: "in-flight", existingJobId: "job" },
+          { error: "Another data job is running.", code: "IN_FLIGHT", existingJobId: "job" },
           { status: 409 },
         ),
       )
@@ -26,7 +26,7 @@ describe("complete generated administration operations", () => {
         Response.json(
           {
             error: "Countries outside configured operations profile",
-            code: "outside-operations-profile",
+            code: "OUTSIDE_OPERATIONS_PROFILE",
           },
           { status: 422 },
         ),
@@ -129,7 +129,8 @@ describe("complete generated administration operations", () => {
       status: "failed",
       startedAt: "2026-10-19T00:00:00Z",
       finishedAt: null,
-      triggeredBy: null,
+      trigger: "cron",
+      triggeredByUserId: null,
       idempotencyKey: null,
       metadata: { nested: [1, null, true] },
       stages: [

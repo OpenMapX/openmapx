@@ -48,6 +48,8 @@ export class DataManagerHttpError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    /** The refusal's machine reason, when its envelope names one. */
+    readonly code?: string,
   ) {
     super(message);
     this.name = "DataManagerHttpError";
@@ -314,7 +316,11 @@ export function unwrapDataManagerResponse<T extends { status: number; data?: unk
       body && typeof body === "object" && "error" in body && typeof body.error === "string"
         ? body.error
         : `Data-manager HTTP ${response.status}`;
-    throw new DataManagerHttpError(message, response.status);
+    const code =
+      body && typeof body === "object" && "code" in body && typeof body.code === "string"
+        ? body.code
+        : undefined;
+    throw new DataManagerHttpError(message, response.status, code);
   }
   return response.data as Successful<T> extends { data: infer D } ? D : T["data"];
 }

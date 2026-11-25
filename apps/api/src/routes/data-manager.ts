@@ -1,12 +1,14 @@
 import { DEFAULT_CATALOG_BRANCH } from "@openmapx/core/data-manager-contracts";
 import * as dm from "@openmapx/core/data-manager-sdk";
+import { ACTIVE_JOB_STATUSES, type DataJobStatus } from "@openmapx/core/jobs";
 import { envString } from "@openmapx/core/server-env";
 import { readDataManagerToken } from "@openmapx/core/service-secret-files";
 import { and, asc, count, desc, eq, inArray, notInArray, sql } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../db/index.js";
-import { dataManagerFeedState, dataManagerJobStages, dataManagerJobs } from "../db/schema.js";
+import { dataManagerFeedState, dataManagerJob, dataManagerJobStage } from "../db/schema.js";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "../services/ops-client.js";
+import { actorUserIdOrNull } from "../utils/actor.js";
 import { writeAuditLog } from "../utils/audit-log.js";
 import { systemMaintenanceLimit } from "../utils/rate-limit.js";
 import { tryAdminSession } from "../utils/require-admin.js";
@@ -35,13 +37,20 @@ const DATA_MANAGER_PROXY_TIMEOUT_MS = 15_000;
 const DATA_MANAGER_PROXY_MAX_BYTES = 4 * 1024 * 1024;
 /** The job kind the durable transit pipeline writes for each sync. */
 const TRANSIT_SYNC_JOB_KIND = "transit-sync";
-/** Durable job states that have not finished yet. */
-const ACTIVE_JOB_STATUSES = ["queued", "running", "cancel_pending"];
+/** Durable job statuses that have not finished yet. */
+const UNFINISHED_JOB_STATUSES: DataJobStatus[] = [...ACTIVE_JOB_STATUSES, "interrupted"];
 
 interface AuthResult {
   kind: "session" | "token" | "denied";
   userId?: string;
   reason?: string;
+}
+
+/** The administrator a data job is started for; the service token names no
+ * account. */
+function jobActor(auth: AuthResult): { triggeredByUserId?: string } {
+  const userId = auth.kind === "session" ? actorUserIdOrNull(auth.userId) : null;
+  return userId ? { triggeredByUserId: userId } : {};
 }
 
 function extractBearerToken(req: FastifyRequest): string | null {
@@ -185,17 +194,14 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
       // must not blank the previous result.
       db
         .select()
-        .from(dataManagerJobs)
+        .from(dataManagerJob)
         .where(
           and(
-            eq(dataManagerJobs.kind, TRANSIT_SYNC_JOB_KIND),
-            notInArray(dataManagerJobs.status, ACTIVE_JOB_STATUSES),
+            eq(dataManagerJob.kind, TRANSIT_SYNC_JOB_KIND),
+            notInArray(dataManagerJob.status, UNFINISHED_JOB_STATUSES),
           ),
         )
-        .orderBy(
-          sql`${dataManagerJobs.finishedAt} desc nulls last`,
-          desc(dataManagerJobs.admittedAt),
-        )
+        .orderBy(sql`${dataManagerJob.finishedAt} desc nulls last`, desc(dataManagerJob.admittedAt))
         .limit(1),
       db.select({ total: count() }).from(dataManagerFeedState),
       db
@@ -208,14 +214,14 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
         .groupBy(dataManagerFeedState.status),
       db
         .select()
-        .from(dataManagerJobs)
+        .from(dataManagerJob)
         .where(
           and(
-            eq(dataManagerJobs.kind, TRANSIT_SYNC_JOB_KIND),
-            inArray(dataManagerJobs.status, ACTIVE_JOB_STATUSES),
+            eq(dataManagerJob.kind, TRANSIT_SYNC_JOB_KIND),
+            inArray(dataManagerJob.status, UNFINISHED_JOB_STATUSES),
           ),
         )
-        .orderBy(desc(dataManagerJobs.admittedAt))
+        .orderBy(desc(dataManagerJob.admittedAt))
         .limit(1),
     ]);
 
@@ -286,12 +292,12 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
     const [jobs, [totalRow]] = await Promise.all([
       db
         .select()
-        .from(dataManagerJobs)
-        .where(eq(dataManagerJobs.kind, kind))
-        .orderBy(desc(dataManagerJobs.admittedAt))
+        .from(dataManagerJob)
+        .where(eq(dataManagerJob.kind, kind))
+        .orderBy(desc(dataManagerJob.admittedAt))
         .limit(limit)
         .offset(offset),
-      db.select({ total: count() }).from(dataManagerJobs).where(eq(dataManagerJobs.kind, kind)),
+      db.select({ total: count() }).from(dataManagerJob).where(eq(dataManagerJob.kind, kind)),
     ]);
     return {
       jobs: jobs.map((j) => ({
@@ -300,7 +306,8 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
         status: j.status,
         startedAt: j.admittedAt.toISOString(),
         finishedAt: j.finishedAt?.toISOString() ?? null,
-        triggeredBy: j.triggeredBy,
+        trigger: j.trigger,
+        triggeredByUserId: j.triggeredByUserId,
         idempotencyKey: j.idempotencyKey,
         metadata: j.metadata,
       })),
@@ -312,18 +319,14 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
 
   registerDataManagerAdminRoute(app, "getApiDataManagerTransitJobsId", async (req, reply) => {
     const id = req.params.id;
-    const [job] = await db
-      .select()
-      .from(dataManagerJobs)
-      .where(eq(dataManagerJobs.id, id))
-      .limit(1);
+    const [job] = await db.select().from(dataManagerJob).where(eq(dataManagerJob.id, id)).limit(1);
     if (!job) return reply.code(404).send({ error: "Job not found" });
 
     const stages = await db
       .select()
-      .from(dataManagerJobStages)
-      .where(eq(dataManagerJobStages.jobId, id))
-      .orderBy(asc(dataManagerJobStages.startedAt));
+      .from(dataManagerJobStage)
+      .where(eq(dataManagerJobStage.jobId, id))
+      .orderBy(asc(dataManagerJobStage.startedAt));
 
     return {
       id: job.id,
@@ -331,7 +334,8 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
       status: job.status,
       startedAt: job.admittedAt.toISOString(),
       finishedAt: job.finishedAt?.toISOString() ?? null,
-      triggeredBy: job.triggeredBy,
+      trigger: job.trigger,
+      triggeredByUserId: job.triggeredByUserId,
       idempotencyKey: job.idempotencyKey,
       metadata: job.metadata,
       stages: stages.map((s) => ({
@@ -352,14 +356,15 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
 
   registerDataManagerAdminRoute(app, "postApiDataManagerTransitSources", async (req, reply) => {
     const auth = await authenticateDataManager(req);
-    const triggeredBy = auth.kind === "session" ? `user:${auth.userId}` : "service-token";
-    const result = await dm.addTransitSource({ ...req.body, triggeredBy }, dataManagerOptions());
+    const result = await dm.addTransitSource(
+      { ...req.body, ...jobActor(auth) },
+      dataManagerOptions(),
+    );
     if (result.status === 202) {
       const body = result.data;
       await writeAuditLog({
         actorId: auth.kind === "session" ? auth.userId : null,
         targetId: body.sourceId ?? null,
-        targetType: "transit-source",
         action: "transit.source.add",
         details: { jobId: body.jobId ?? null },
         request: req,
@@ -373,10 +378,9 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
     "deleteApiDataManagerTransitSourcesSourceId",
     async (req, reply) => {
       const auth = await authenticateDataManager(req);
-      const triggeredBy = auth.kind === "session" ? `user:${auth.userId}` : "service-token";
       const result = await dm.removeTransitSource(
         req.params.sourceId,
-        { ...req.body, triggeredBy },
+        { ...req.body, ...jobActor(auth) },
         dataManagerOptions(),
       );
       if (result.status === 202) {
@@ -384,7 +388,6 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
         await writeAuditLog({
           actorId: auth.kind === "session" ? auth.userId : null,
           targetId: req.params.sourceId,
-          targetType: "transit-source",
           action: "transit.source.remove",
           details: { jobId: body.jobId ?? null },
           request: req,
@@ -399,10 +402,9 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
     "postApiDataManagerTransitSourcesSourceIdEnable",
     async (req, reply) => {
       const auth = await authenticateDataManager(req);
-      const triggeredBy = auth.kind === "session" ? `user:${auth.userId}` : "service-token";
       const result = await dm.enableTransitSource(
         req.params.sourceId,
-        { ...req.body, triggeredBy },
+        { ...req.body, ...jobActor(auth) },
         dataManagerOptions(),
       );
       if (result.status === 202) {
@@ -410,7 +412,6 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
         await writeAuditLog({
           actorId: auth.kind === "session" ? auth.userId : null,
           targetId: req.params.sourceId,
-          targetType: "transit-source",
           action: "transit.source.enable",
           details: { jobId: body.jobId ?? null },
           request: req,
@@ -424,10 +425,9 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
     "postApiDataManagerTransitSourcesSourceIdDisable",
     async (req, reply) => {
       const auth = await authenticateDataManager(req);
-      const triggeredBy = auth.kind === "session" ? `user:${auth.userId}` : "service-token";
       const result = await dm.disableTransitSource(
         req.params.sourceId,
-        { ...req.body, triggeredBy },
+        { ...req.body, ...jobActor(auth) },
         dataManagerOptions(),
       );
       if (result.status === 202) {
@@ -435,7 +435,6 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
         await writeAuditLog({
           actorId: auth.kind === "session" ? auth.userId : null,
           targetId: req.params.sourceId,
-          targetType: "transit-source",
           action: "transit.source.disable",
           details: { jobId: body.jobId ?? null },
           request: req,
@@ -461,14 +460,13 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
     const auth = await authenticateDataManager(req);
 
     const body = req.body ?? {};
-    const triggeredBy = auth.kind === "session" ? `user:${auth.userId}` : "service-token";
     const proxied = await dm.syncTransit(
       {
         idempotencyKey: body.idempotencyKey,
         countries: body.countries,
         preflightId: body.preflightId,
         fingerprint: body.fingerprint,
-        triggeredBy,
+        ...jobActor(auth),
       },
       dataManagerOptions(),
     );
@@ -511,7 +509,6 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
       if (proxied.status >= 200 && proxied.status < 300) {
         await writeAuditLog({
           actorId: auth.userId ?? null,
-          targetType: "transit",
           targetId: "transitous-lock",
           action: "transit.lock.bump",
           details: { branch, force: body.force === true },

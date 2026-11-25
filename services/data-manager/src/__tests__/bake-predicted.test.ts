@@ -100,7 +100,6 @@ describe("bakePredicted", () => {
       openConditionsUrl: "http://openconditions.local",
       csvDir,
       preparedGeneration: "22222222-2222-4222-8222-222222222222",
-      container: "openmapx-valhalla-1",
       getCoveredWayIds: async () => new Set([3001]),
       fetchProfiles: async () => profiles,
       loadWaysToEdges: async () => waysToEdges,

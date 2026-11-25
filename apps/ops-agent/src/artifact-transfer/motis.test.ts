@@ -214,9 +214,9 @@ async function fixture(publicSource = false, actualPinnedTemplate = false) {
   });
   ctx.state.catalogDir = catalog;
   ctx.state.catalogPins = pair;
-  expect((await generate(ctx)).status).toBe("ok");
+  expect((await generate(ctx)).status).toBe("succeeded");
   const assembled = await assemble(ctx);
-  expect(assembled.status).toBe("ok");
+  expect(assembled.status).toBe("succeeded");
   expect(assembled.artifacts?.portableRecipeWritten).toBe(true);
   const stagingDir = join(root, "prepared-motis-live");
   mkdirSync(stagingDir, { mode: 0o755 });

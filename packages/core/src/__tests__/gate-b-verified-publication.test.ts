@@ -55,6 +55,7 @@ describe("Gate B — verified extension publication", () => {
       id: "openconditions",
       name: "OpenConditions",
       version: "1.0.0",
+      platform: "1.0",
       integrations: [
         { artifact: "https://example.test/a.tar.gz", sha256: "a".repeat(64), id: "overlay" },
       ],

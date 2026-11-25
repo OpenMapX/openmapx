@@ -30,7 +30,7 @@ afterEach(() => vi.unstubAllEnvs());
 it.each([7, 30, 365])(
   "uses host retention %i while awaiting held deletion and preserving completed cancellation",
   async (retentionDays) => {
-    vi.stubEnv("BACKUP_RETENTION_DAYS", String(retentionDays));
+    vi.stubEnv("RETENTION_BACKUP_DAYS", String(retentionDays));
     const host = await ownedServiceHost(),
       old = join(host.infraDir, "backups", "old");
     mkdirSync(old, { recursive: true, mode: 0o700 });
@@ -38,7 +38,7 @@ it.each([7, 30, 365])(
       join(old, "manifest.json"),
       JSON.stringify({
         name: "old",
-        formatVersion: 2,
+        formatVersion: 1,
         createdAt: new Date(Date.now() - (retentionDays + 10) * 86400000).toISOString(),
         services: [],
       }),
@@ -52,7 +52,7 @@ it.each([7, 30, 365])(
         join(directory, "manifest.json"),
         JSON.stringify({
           name,
-          formatVersion: 2,
+          formatVersion: 1,
           createdAt: new Date(created).toISOString(),
           services: [],
           ...(name === "stamped-kept"
@@ -142,7 +142,7 @@ it.each([7, 30, 365])(
   30000,
 );
 it("previews and prunes only the unchanged original eligible set through the production agent", async () => {
-  vi.stubEnv("BACKUP_RETENTION_DAYS", "30");
+  vi.stubEnv("RETENTION_BACKUP_DAYS", "30");
   const host = await ownedServiceHost(),
     root = join(host.infraDir, "backups");
   function archive(name: string, ageDays: number) {
@@ -151,10 +151,11 @@ it("previews and prunes only the unchanged original eligible set through the pro
     writeFileSync(
       join(dir, "manifest.json"),
       JSON.stringify({
-        formatVersion: 2,
+        formatVersion: 1,
         name,
         createdAt: new Date(Date.now() - ageDays * 86400000).toISOString(),
-        openmapxVersion: "1.0.0",
+        release: null,
+        databaseMigration: null,
         services: [],
       }),
       { mode: 0o600 },

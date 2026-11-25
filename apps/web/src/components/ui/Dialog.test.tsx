@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { HISTORY_STATE_KEY } from "@openmapx/core";
 import { act, render, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,7 +9,7 @@ import { settleHistory } from "@/test/history";
 import Dialog from "./Dialog";
 
 function depth(): number {
-  return window.history.state?.omx?.depth ?? 0;
+  return window.history.state?.[HISTORY_STATE_KEY]?.depth ?? 0;
 }
 
 async function settled(): Promise<void> {

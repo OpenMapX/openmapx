@@ -117,7 +117,7 @@ If you self-host OpenMapX, a few recommendations:
   names but never opens candidate secret files.
 - Treat persisted application logs as sensitive operational data. Current API
   logs are bounded and redact request data, credentials, and raw external URLs,
-  but historical `app_logs` rows from an older release may not be. Back up the
+  but historical `app_log` rows written before an upgrade may not be. Back up the
   database and follow the operator-controlled cutoff procedure in
   [Monitoring & logs](docs/docs/administration/monitoring.md#purging-historical-application-logs);
   upgrades never delete these records automatically.

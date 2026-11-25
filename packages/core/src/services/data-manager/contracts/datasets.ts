@@ -61,7 +61,13 @@ export const linkResultSchema = z.strictObject({
   skipped: countSchema,
   pruned: countSchema,
 });
-const phase = z.enum(["offline-storage", "job-reconciliation", "cron-schedulers", "complete"]);
+const phase = z.enum([
+  "database-schema",
+  "offline-storage",
+  "job-reconciliation",
+  "cron-schedulers",
+  "complete",
+]);
 export const readyStatusSchema = z.strictObject({
   ok: z.literal(true),
   status: z.literal("ready"),

@@ -6,7 +6,7 @@ describe("subject-data policy gate", () => {
   it("classifies encrypted migration preview actor attribution", () => {
     expect(
       validateSubjectDataInventory({
-        directUserForeignKeys: ["configuration_migration_preview.actor_id"],
+        directUserForeignKeys: ["configuration_migration_preview.actor_user_id"],
       }).errors,
     ).toEqual([]);
   });
@@ -48,16 +48,16 @@ describe("subject-data policy gate", () => {
   it("classifies each located column under the registration that locates it", () => {
     expect(validateSubjectDataInventory({ manifestSubjects: [] }).errors).toEqual([]);
     const result = validateSubjectDataInventory({
-      directUserForeignKeys: ["oauth_access_token.user_id", "account_action_receipt.actor_id"],
+      directUserForeignKeys: ["oauth_access_token.user_id", "account_action_receipt.actor_user_id"],
       directUserForeignKeyClassifications: {
         "oauth_access_token.user_id": "auth-oauth-resources",
-        "account_action_receipt.actor_id": "admin-audit-attribution",
+        "account_action_receipt.actor_user_id": "admin-audit-attribution",
       },
       manifestSubjects: [],
     });
     expect(result.errors).toEqual([
       "direct user foreign key oauth_access_token.user_id is classified under auth-oauth-resources, but the catalogue locates it under auth-oauth-tokens",
-      "direct user foreign key account_action_receipt.actor_id is classified under admin-audit-attribution, but the catalogue locates it under administrative-receipts",
+      "direct user foreign key account_action_receipt.actor_user_id is classified under admin-audit-attribution, but the catalogue locates it under administrative-receipts",
     ]);
   });
 

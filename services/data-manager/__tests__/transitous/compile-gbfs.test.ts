@@ -170,7 +170,7 @@ describe("bounded GBFS candidate validation", () => {
     const result = await run(ctx);
 
     expect(result).toMatchObject({
-      status: "error",
+      status: "failed",
       message: expect.stringContaining("mobilitydata:de:demo:"),
     });
     expect(result.message).toContain("json");
@@ -186,7 +186,7 @@ describe("bounded GBFS candidate validation", () => {
     writeFileSync(
       join(tmp, "data", "overrides", "feeds-overlay.json"),
       JSON.stringify({
-        version: 3,
+        version: 1,
         sources: [],
         patches: [],
         quarantine: [
@@ -242,7 +242,7 @@ describe("bounded GBFS candidate validation", () => {
 
       const result = await run(ctx);
 
-      expect(result.status, result.message).toBe("ok");
+      expect(result.status, result.message).toBe("succeeded");
     } finally {
       vi.unstubAllEnvs();
     }
@@ -316,7 +316,7 @@ describe("bounded GBFS candidate validation", () => {
           gbfsLock.value as unknown as GbfsCatalogLock,
         );
       const result = await run(ctx);
-      expect(result.status).toBe("ok");
+      expect(result.status).toBe("succeeded");
       expect(readFileSync(join(catalog, "feeds", "de.json"), "utf-8")).toContain("openmapx-demo");
       const updated = JSON.parse(readFileSync(join(catalog, "feeds", "de.json"), "utf-8")) as {
         sources: unknown[];

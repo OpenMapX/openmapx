@@ -60,10 +60,10 @@ suite("privacy notification dispatcher against PostgreSQL", () => {
       .values({
         kind: "access",
         channel: "email",
-        encryptedLocator: "synthetic",
+        locatorType: "other_reference",
         receivedAt: new Date(),
         dueAt: new Date(Date.now() + 30 * 86_400_000),
-        state: "in_progress",
+        status: "in_progress",
         identityMethod: "manual",
         identityVerifiedAt: new Date(),
       })
@@ -92,10 +92,10 @@ suite("privacy notification dispatcher against PostgreSQL", () => {
     expect(mocks.smtp).toHaveBeenCalledTimes(MAIL_RECIPIENT_HOURLY_LIMIT + 1);
     expect(mocks.smtp.mock.calls.at(-1)?.[0]).toMatchObject({ to: email });
     const [row] = await fixture.db
-      .select({ state: dataSubjectRequestNotification.state })
+      .select({ status: dataSubjectRequestNotification.status })
       .from(dataSubjectRequestNotification)
       .where(eq(dataSubjectRequestNotification.requestId, request.id));
-    expect(row?.state).toBe("sent");
+    expect(row?.status).toBe("sent");
   });
 
   describe("stale sending claims", () => {
@@ -120,10 +120,10 @@ suite("privacy notification dispatcher against PostgreSQL", () => {
         .values({
           kind: "access",
           channel: "email",
-          encryptedLocator: "synthetic",
+          locatorType: "other_reference",
           receivedAt: new Date(),
           dueAt: new Date(Date.now() + 30 * 86_400_000),
-          state: "in_progress",
+          status: "in_progress",
           identityMethod: "manual",
           identityVerifiedAt: new Date(),
         })
@@ -139,7 +139,7 @@ suite("privacy notification dispatcher against PostgreSQL", () => {
           channel: "email",
           locale: "en",
           payload: {},
-          state: "sending",
+          status: "sending",
           attempts,
           nextAttemptAt: null,
           createdAt: new Date(),
@@ -172,7 +172,7 @@ suite("privacy notification dispatcher against PostgreSQL", () => {
       expect(send).toHaveBeenCalledTimes(1);
       expect(send).toHaveBeenCalledWith(expect.objectContaining({ to: email }));
       const stored = await readRow(row.id);
-      expect(stored).toMatchObject({ state: "sent", attempts: 2 });
+      expect(stored).toMatchObject({ status: "sent", attempts: 2 });
       expect(stored?.sentAt).not.toBeNull();
     });
 
@@ -186,7 +186,7 @@ suite("privacy notification dispatcher against PostgreSQL", () => {
 
       expect(send).not.toHaveBeenCalled();
       const stored = await readRow(row.id);
-      expect(stored).toMatchObject({ state: "sending", attempts: 1 });
+      expect(stored).toMatchObject({ status: "sending", attempts: 1 });
       expect(stored?.updatedAt.getTime()).toBe(claimedAt.getTime());
     });
 
@@ -203,8 +203,8 @@ suite("privacy notification dispatcher against PostgreSQL", () => {
       expect(result).toMatchObject({ failed: 1, sent: 0 });
       expect(send).not.toHaveBeenCalled();
       expect(await readRow(row.id)).toMatchObject({
-        state: "failed",
-        lastErrorCode: "delivery-interrupted",
+        status: "failed",
+        lastErrorCode: "DELIVERY_INTERRUPTED",
         nextAttemptAt: null,
         attempts: 5,
       });
@@ -223,7 +223,7 @@ suite("privacy notification dispatcher against PostgreSQL", () => {
       });
 
       expect(send).not.toHaveBeenCalled();
-      expect(await readRow(row.id)).toMatchObject({ state: "failed" });
+      expect(await readRow(row.id)).toMatchObject({ status: "failed" });
     });
 
     it("sends a recovered claim once when two dispatchers race", async () => {
@@ -239,7 +239,7 @@ suite("privacy notification dispatcher against PostgreSQL", () => {
       ]);
 
       expect(send).toHaveBeenCalledTimes(1);
-      expect(await readRow(row.id)).toMatchObject({ state: "sent", attempts: 2 });
+      expect(await readRow(row.id)).toMatchObject({ status: "sent", attempts: 2 });
     });
 
     it("retries a recovered claim that fails again", async () => {
@@ -252,7 +252,7 @@ suite("privacy notification dispatcher against PostgreSQL", () => {
       await dispatchPrivacyNotifications({ database: fixture.db, send: send as never });
 
       const stored = await readRow(row.id);
-      expect(stored).toMatchObject({ state: "retryable", attempts: 2, lastErrorCode: "error" });
+      expect(stored).toMatchObject({ status: "retryable", attempts: 2, lastErrorCode: "ERROR" });
       expect(stored?.nextAttemptAt?.getTime()).toBeGreaterThan(Date.now());
     });
   });

@@ -44,7 +44,7 @@ export async function checkpointOwnedAdminJob(
       currentProtocol = row.protocol as AdminJobProtocol,
       old = readProjection(currentProtocol, current),
       next = readProjection({ operations }, candidate);
-    if (next.version !== 3) throw Error("Invalid managed checkpoint version");
+    if (next.version !== 1) throw Error("Invalid managed checkpoint version");
     let mergedProjection = old;
     if (admissionKey || stepAddress) {
       if (!admissionKey || !stepAddress || !execution)
@@ -107,7 +107,7 @@ export async function checkpointOwnedAdminJob(
         throw Error("Original root changed");
       mergedProjection = {
         ...old,
-        version: 3,
+        version: 1,
         steps: { ...old.steps, [stepAddress]: mapping },
         operations: { ...old.operations, [admissionKey]: operation },
       };
@@ -154,7 +154,7 @@ export async function checkpointOwnedAdminJob(
           throw Error("Stable step mapping changed outside reservation");
       mergedProjection = {
         ...old,
-        version: 3,
+        version: 1,
         operations,
         eventTotal: Math.min(
           ADMIN_JOB_LOG_LIMITS.events,

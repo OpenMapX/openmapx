@@ -93,7 +93,7 @@ describe("JobEventBus", () => {
   });
 
   it("knows the terminal statuses", () => {
-    expect([...TERMINAL_JOB_STATUSES].sort()).toEqual(["canceled", "failed", "success"]);
+    expect([...TERMINAL_JOB_STATUSES].sort()).toEqual(["cancelled", "failed", "succeeded"]);
   });
 
   describe("terminal retention", () => {

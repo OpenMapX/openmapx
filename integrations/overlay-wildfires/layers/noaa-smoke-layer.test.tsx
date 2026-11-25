@@ -313,7 +313,9 @@ describe("NoaaSmokeLayer", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(response(first))
-      .mockResolvedValueOnce(response({ code: "noaa_hms_unavailable" }, false));
+      .mockResolvedValueOnce(
+        response({ error: "Wildfire layer unavailable", code: "NOAA_HMS_UNAVAILABLE" }, false),
+      );
     vi.stubGlobal("fetch", fetchMock);
 
     render(<NoaaSmokeLayer active popupController={popupController()} />);

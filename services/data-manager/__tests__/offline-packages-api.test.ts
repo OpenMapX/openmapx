@@ -157,7 +157,7 @@ describe("data-manager offline package API", () => {
     expect(response.statusCode).toBe(429);
     expect(response.json()).toEqual({
       error: "offline package capacity: preparation queue is full (64 waiting jobs)",
-      code: "capacity",
+      code: "CAPACITY",
     });
     await app.close();
   });
@@ -170,7 +170,7 @@ describe("data-manager offline package API", () => {
     const failed = {
       jobId: "failed-job",
       status: "failed",
-      errorCode: "capacity",
+      errorCode: "CAPACITY",
       errorMessage: "offline package needs more disk than is free",
     } as Awaited<ReturnType<typeof generator.prepare>>;
     vi.spyOn(generator, "prepare").mockResolvedValue(failed);
@@ -187,7 +187,7 @@ describe("data-manager offline package API", () => {
     expect(response.statusCode).toBe(409);
     expect(response.json()).toEqual({
       error: "offline package needs more disk than is free",
-      code: "capacity",
+      code: "CAPACITY",
     });
     await app.close();
   });
@@ -561,7 +561,7 @@ describe("data-manager offline package API", () => {
       expect(response.statusCode).toBe(400);
       expect(response.json()).toEqual({
         error: "Exactly one valid offline package principal is required",
-        code: "invalid-principal",
+        code: "INVALID_PRINCIPAL",
       });
     }
     expect(prepare).not.toHaveBeenCalled();

@@ -2,6 +2,7 @@
  * that changes it. The caller persists the returned record before it runs any
  * returned effect, so every effect follows the write that records its attempt. */
 import { z } from "zod";
+import { COMPONENT_ID_PATTERN } from "../component-id";
 import {
   type DataConfigurationFenceReceipt,
   dataConfigurationFenceReceiptSchema,
@@ -16,10 +17,7 @@ import { executionRefSchema } from "./execution-ref";
 
 const key = z.string().regex(/^opk1_[A-Za-z0-9_-]{16,64}$/);
 const revision = z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/);
-const ids = z
-  .array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/))
-  .max(256)
-  .refine(strictlyAscending);
+const ids = z.array(z.string().regex(COMPONENT_ID_PATTERN)).max(256).refine(strictlyAscending);
 const time = z.iso.datetime();
 
 export const maintenanceStepOutcomeSchema = z.enum([

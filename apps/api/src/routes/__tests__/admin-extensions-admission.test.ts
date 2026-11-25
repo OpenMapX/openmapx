@@ -52,7 +52,8 @@ vi.mock("../../services/service-registry", () => ({ getServiceRegistry: () => nu
 const manifest = {
   id: "safe-extension",
   name: "Safe extension",
-  version: "2.0",
+  version: "2.0.0",
+  platform: "1.0",
   integrations: [
     { id: "safe-integration", artifact: "https://example.test/a.tar.gz", sha256: "a".repeat(64) },
   ],
@@ -93,7 +94,7 @@ beforeEach(async () => {
   vi.mocked(lookup).mockResolvedValue([{ address: "93.184.216.34", family: 4 }] as never);
   ports.provider.mockImplementation(
     async (input: string) =>
-      new Response(JSON.stringify(input === url ? manifest : advisory), {
+      new Response(JSON.stringify(input === url ? manifest : { schemaVersion: 1, ...advisory }), {
         headers: { "content-type": "application/json" },
       }),
   );
@@ -179,8 +180,16 @@ describe("real resolver through extension routes and final SDK", () => {
       expect(ports.enqueue).toHaveBeenCalledTimes(2);
     },
   );
-  it.each([undefined, "1.0", "2.0", "3.0", "10.0", "arbitrary-release"])(
-    "blocks every critical entry regardless of maxVersion %s",
+  it("admits a version newer than a critical entry's maxVersion", async () => {
+    advisory = { critical: [{ id: manifest.id, reason: "Fixed in 2.0.0", maxVersion: "1.9.9" }] };
+    const opts = options();
+    for (const selector of [{ id: manifest.id }, { manifestUrl: url }]) {
+      await resetLimits();
+      expect((await sdk.previewAdminExtensionInstall(selector, opts)).status).toBe(200);
+    }
+  });
+  it.each([undefined, "2.0.0", "2.0.1-rc.1", "3.0.0", "10.0.0"])(
+    "blocks a critical entry whose maxVersion %s covers the offered version",
     async (maxVersion) => {
       advisory = {
         critical: [{ id: manifest.id, reason: sensitive, ...(maxVersion ? { maxVersion } : {}) }],
@@ -213,7 +222,7 @@ describe("real resolver through extension routes and final SDK", () => {
       "extstore:revocations",
       JSON.stringify({
         removed: [],
-        critical: [[manifest.id, { reason: "Synthetic cached advisory", maxVersion: "0" }]],
+        critical: [[manifest.id, { reason: "Synthetic cached advisory", maxVersion: "2.0.0" }]],
         fetchedAtMs: 1,
       }),
     );

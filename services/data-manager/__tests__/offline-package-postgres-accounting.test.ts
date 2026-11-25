@@ -125,9 +125,9 @@ integration("PostgreSQL offline-package accounting", () => {
 
   afterEach(async () => {
     await sql`
-      TRUNCATE data_manager.offline_package_artifact_references,
-        data_manager.offline_package_job_owners,
-        data_manager.offline_package_jobs CASCADE
+      TRUNCATE data_manager.offline_package_artifact_reference,
+        data_manager.offline_package_job_owner,
+        data_manager.offline_package_job CASCADE
     `;
   });
 
@@ -204,7 +204,7 @@ integration("PostgreSQL offline-package accounting", () => {
       // Bound as text, the request and manifest still land as JSON objects.
       const shapes = await sql<{ request: string; manifest: string }[]>`
         SELECT DISTINCT jsonb_typeof(request) AS request, jsonb_typeof(manifest) AS manifest
-          FROM data_manager.offline_package_jobs WHERE status = 'ready-to-download'`;
+          FROM data_manager.offline_package_job WHERE status = 'ready-to-download'`;
       expect(shapes).toEqual([{ request: "object", manifest: "object" }]);
     } finally {
       release();

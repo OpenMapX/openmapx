@@ -90,7 +90,7 @@ beforeEach(() => {
   ] as const)
     mocks[key].mockResolvedValue({
       status: 403,
-      data: { error: "FORBIDDEN" },
+      data: { error: "Account action failed", code: "FORBIDDEN" },
       error: { code: "FORBIDDEN", message: "synthetic private error" },
     });
   mocks.list.mockResolvedValue({
@@ -99,7 +99,7 @@ beforeEach(() => {
   });
   mocks.create.mockResolvedValue({
     status: 400,
-    data: { error: "INVALID_PASSWORD" },
+    data: { error: "Account action failed", code: "INVALID_PASSWORD" },
     error: { code: "INVALID_PASSWORD", message: "synthetic provider diagnostic" },
   });
   mocks.ban.mockResolvedValue({

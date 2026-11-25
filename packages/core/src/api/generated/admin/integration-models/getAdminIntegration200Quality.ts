@@ -6,6 +6,5 @@ export type GetAdminIntegration200Quality =
 
 export const GetAdminIntegration200Quality = {
   "built-in": "built-in",
-  "community-verified": "community-verified",
   community: "community",
 } as const;

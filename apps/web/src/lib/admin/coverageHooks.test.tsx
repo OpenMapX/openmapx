@@ -57,12 +57,14 @@ describe("coverage query hooks", () => {
   });
 
   it("uses credentialed, cancellable requests and preserves structured HTTP errors", async () => {
-    fetchMock.mockResolvedValue(reply({ error: "snapshot_expired" }, 409));
+    fetchMock.mockResolvedValue(
+      reply({ error: "Coverage snapshot expired", code: "SNAPSHOT_EXPIRED" }, 409),
+    );
     const query = renderHook(() => useCoverageReport({ regionId: "extract:first", limit: 50 }), {
       wrapper: createQueryWrapper(),
     });
     await waitFor(() => expect(query.result.current.isError).toBe(true));
-    expect(query.result.current.error).toMatchObject({ status: 409, code: "snapshot_expired" });
+    expect(query.result.current.error).toMatchObject({ status: 409, code: "SNAPSHOT_EXPIRED" });
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(new URL(url).pathname).toBe("/api/admin/coverage");
     expect(new URL(url).searchParams.get("regionId")).toBe("extract:first");

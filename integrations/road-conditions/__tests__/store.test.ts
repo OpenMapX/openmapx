@@ -87,7 +87,7 @@ describe("remembered road-conditions choices", () => {
 
   it("brings back the layers and filters saved on an earlier visit", async () => {
     const storage = memoryStorage({
-      "openmapx:roadConditions": JSON.stringify({
+      "openmapx:road-conditions:choices": JSON.stringify({
         showIncidents: false,
         shownSources: ["road-weather"],
         hiddenKinds: ["roadworks"],
@@ -109,13 +109,13 @@ describe("remembered road-conditions choices", () => {
     const storage = memoryStorage();
     const { restoreRoadConditionsChoices, useRoadConditionsStore } = await freshStore(storage);
     useRoadConditionsStore.getState().setHorizon("all");
-    expect(storage.getString("openmapx:roadConditions")).toBeNull();
+    expect(storage.getString("openmapx:road-conditions:choices")).toBeNull();
 
     restoreRoadConditionsChoices();
     useRoadConditionsStore.getState().toggleSource("road-maintenance");
     useRoadConditionsStore.getState().setViewportFetchStatus("loading");
 
-    expect(JSON.parse(storage.getString("openmapx:roadConditions") ?? "{}")).toEqual({
+    expect(JSON.parse(storage.getString("openmapx:road-conditions:choices") ?? "{}")).toEqual({
       showIncidents: true,
       shownSources: ["road-maintenance"],
       hiddenKinds: [],
@@ -126,7 +126,7 @@ describe("remembered road-conditions choices", () => {
 
   it("ignores unknown sources and values, falling back field by field", async () => {
     const storage = memoryStorage({
-      "openmapx:roadConditions": JSON.stringify({
+      "openmapx:road-conditions:choices": JSON.stringify({
         showIncidents: "yes",
         shownSources: ["border-crossings", "teleporters", 4, "road-weather"],
         minSeverity: "apocalyptic",
@@ -143,7 +143,7 @@ describe("remembered road-conditions choices", () => {
   });
 
   it("falls back to the defaults when the saved entry is unreadable", async () => {
-    const storage = memoryStorage({ "openmapx:roadConditions": "{not json" });
+    const storage = memoryStorage({ "openmapx:road-conditions:choices": "{not json" });
     const { loadRoadConditionsChoices } = await freshStore(storage);
     expect(loadRoadConditionsChoices()).toEqual({
       showIncidents: true,

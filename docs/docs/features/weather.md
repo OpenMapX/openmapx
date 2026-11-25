@@ -114,12 +114,12 @@ OpenWeatherMap API key. Set it in either place:
 
 - the admin panel, under the `weather-openweathermap` integration's config form,
   where it's stored as an encrypted secret; or
-- the environment, as `INTEGRATION_WEATHER_OPENWEATHERMAP_APIKEY` in
+- the environment, as `INTEGRATION_WEATHER_OPENWEATHERMAP_API_KEY` in
   `infra/docker/.env`.
 
 The **map overlay** (`overlay-weather`) has its own distinct OpenWeatherMap
 configuration setting, `owmApiKey` (environment variable
-`INTEGRATION_OVERLAY_WEATHER_OWMAPIKEY` in `infra/docker/.env` or set in the admin panel).
+`INTEGRATION_OVERLAY_WEATHER_OWM_API_KEY` in `infra/docker/.env` or set in the admin panel).
 When configured, it unlocks precipitation, temperature, cloud, wind, and pressure tile
 layers. If an OpenWeather sublayer is selected while unconfigured or unavailable,
 the UI automatically falls back to the RainViewer radar loop. Its radar loop works out

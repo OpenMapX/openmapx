@@ -5,11 +5,11 @@ impacts: [breaking, operator-action]
 ## What changes
 
 The administrator audit log is kept for 365 days by default instead of 90.
-`AUDIT_LOG_RETENTION_DAYS` and `ADMIN_JOB_RETENTION_DAYS` must be whole numbers
+`RETENTION_AUDIT_LOG_DAYS` and `RETENTION_ADMIN_JOB_DAYS` must be whole numbers
 between 1 and 36500: the API refuses to start with another value instead of
 silently using the default. The daily prune of persisted application logs now
 follows the server-log retention of the legal settings, as the privacy page
-already stated: `LEGAL_SERVER_LOG_RETENTION_DAYS` when it is set, otherwise the
+already stated: `RETENTION_SERVER_LOG_DAYS` when it is set, otherwise the
 value set in the administration. The API service no longer sets that variable
 to 30 when it is unset, which made the administration's value impossible to
 apply. It must be a whole number between 1 and 3650 (before, up to 36500 was
@@ -24,8 +24,8 @@ Martin 2 ignores.
 
 ## Who is affected
 
-Operators who set `AUDIT_LOG_RETENTION_DAYS`, `ADMIN_JOB_RETENTION_DAYS` or
-`LEGAL_SERVER_LOG_RETENTION_DAYS`, who rely on the 90-day audit-log default,
+Operators who set `RETENTION_AUDIT_LOG_DAYS`, `RETENTION_ADMIN_JOB_DAYS` or
+`RETENTION_SERVER_LOG_DAYS`, who rely on the 90-day audit-log default,
 who set the server-log retention in the administration, or who replaced the
 release's Martin configuration with an
 override under `infra/docker/overrides/services/martin/config/martin.yaml`. No
@@ -33,6 +33,6 @@ released installation exists.
 
 ## Required action
 
-Set `AUDIT_LOG_RETENTION_DAYS=90` to keep the previous audit-log period, and
+Set `RETENTION_AUDIT_LOG_DAYS=90` to keep the previous audit-log period, and
 correct any retention value the API refuses at startup. In a Martin
 configuration override, replace `$DATABASE_URL` with `$MARTIN_DATABASE_URL`.

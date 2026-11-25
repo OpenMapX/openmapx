@@ -37,6 +37,11 @@ vi.mock("@openmapx/core/server", async (importOriginal) => {
 
 import { getKillSwitch } from "../extension-store.js";
 
+/** A revocation document in the format this host reads. */
+function feedJson(body: Record<string, unknown>): string {
+  return JSON.stringify({ schemaVersion: 1, ...body });
+}
+
 function jsonResponse(status: number, body: string): Response {
   return {
     status,
@@ -47,13 +52,15 @@ function jsonResponse(status: number, body: string): Response {
   } as unknown as Response;
 }
 
-function serveFeed(feed: () => Response): void {
+function serveFeed(feed: () => Response, catalog: Record<string, unknown> = {}): void {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input instanceof Request ? input.url : input);
       if (url.endsWith("/revocations.json")) return feed();
-      if (url.endsWith("/catalog.json")) return jsonResponse(200, "[]");
+      if (url.endsWith("/catalog.json")) {
+        return jsonResponse(200, feedJson({ extensions: [], ...catalog }));
+      }
       throw new Error(`unexpected request to ${url}`);
     }),
   );
@@ -74,7 +81,7 @@ describe("revocation feed", () => {
     serveFeed(() =>
       jsonResponse(
         200,
-        JSON.stringify({
+        feedJson({
           removed: [{ id: "gone-ext", reason: "abandoned" }],
           critical: [{ id: "bad-ext", reason: "credential theft", maxVersion: "1.2.0" }],
         }),
@@ -92,7 +99,7 @@ describe("revocation feed", () => {
   });
 
   it("treats an empty list as current rather than stale", async () => {
-    serveFeed(() => jsonResponse(200, JSON.stringify({ removed: [], critical: [] })));
+    serveFeed(() => jsonResponse(200, feedJson({ removed: [], critical: [] })));
 
     const kill = await getKillSwitch();
 
@@ -113,7 +120,7 @@ describe("revocation feed", () => {
 
   it("keeps denying from the last good snapshot when the feed later disappears", async () => {
     serveFeed(() =>
-      jsonResponse(200, JSON.stringify({ critical: [{ id: "bad-ext", reason: "advisory" }] })),
+      jsonResponse(200, feedJson({ critical: [{ id: "bad-ext", reason: "advisory" }] })),
     );
     await getKillSwitch();
 
@@ -128,10 +135,17 @@ describe("revocation feed", () => {
     ["unparseable JSON", "{not json"],
     ["a list instead of an object", "[]"],
     ["a null document", "null"],
-    ["a denial list that is not a list", JSON.stringify({ removed: "bad-ext" })],
-    ["an entry without an id", JSON.stringify({ removed: [{ reason: "no id" }] })],
-    ["an entry whose id is not text", JSON.stringify({ critical: [{ id: 7 }] })],
-    ["an entry whose reason is not text", JSON.stringify({ removed: [{ id: "a", reason: 1 }] })],
+    ["a denial list that is not a list", feedJson({ removed: "bad-ext" })],
+    ["an entry without an id", feedJson({ removed: [{ reason: "no id" }] })],
+    ["an entry whose id is not text", feedJson({ critical: [{ id: 7 }] })],
+    ["an entry whose reason is not text", feedJson({ removed: [{ id: "a", reason: 1 }] })],
+    ["a document without a format version", JSON.stringify({ removed: [], critical: [] })],
+    ["a later format version", feedJson({ schemaVersion: 2, removed: [] })],
+    ["a format version given as text", feedJson({ schemaVersion: "1", removed: [] })],
+    [
+      "a maxVersion that is not a semantic version",
+      feedJson({ critical: [{ id: "a", reason: "r", maxVersion: "1.2" }] }),
+    ],
   ])("never reads %s as an empty feed", async (_name, body) => {
     serveFeed(() => jsonResponse(200, body));
 
@@ -142,22 +156,68 @@ describe("revocation feed", () => {
 
   it("keeps the last good snapshot when a later feed is malformed", async () => {
     serveFeed(() =>
-      jsonResponse(200, JSON.stringify({ removed: [{ id: "gone-ext", reason: "abandoned" }] })),
+      jsonResponse(200, feedJson({ removed: [{ id: "gone-ext", reason: "abandoned" }] })),
     );
     await getKillSwitch();
 
-    serveFeed(() => jsonResponse(200, JSON.stringify({ removed: [{ id: 7 }] })));
+    serveFeed(() => jsonResponse(200, feedJson({ removed: [{ id: 7 }] })));
     const kill = await getKillSwitch();
 
     expect(kill.stale).toBe(true);
     expect(kill.removed.get("gone-ext")).toBe("abandoned");
   });
 
+  describe("several advisories for one extension", () => {
+    const allVersions = { id: "bad-ext", reason: "every version" };
+    const upTo = (maxVersion: string) => ({
+      id: "bad-ext",
+      reason: `to ${maxVersion}`,
+      maxVersion,
+    });
+
+    it.each([
+      ["the catalog denies every version, the feed a range", [allVersions], [upTo("0.0.1")]],
+      ["the feed denies every version, the catalog a range", [upTo("0.0.1")], [allVersions]],
+    ])("keeps the unbounded denial when %s", async (_name, catalogCritical, feedCritical) => {
+      serveFeed(() => jsonResponse(200, feedJson({ critical: feedCritical })), {
+        critical: catalogCritical,
+      });
+
+      const kill = await getKillSwitch();
+
+      expect(kill.critical.get("bad-ext")).toEqual({ reason: "every version" });
+    });
+
+    it.each([
+      ["catalog first", [upTo("2.0.0")], [upTo("1.0.0")]],
+      ["feed first", [upTo("1.0.0")], [upTo("2.0.0")]],
+    ])("keeps the higher bound (%s)", async (_name, catalogCritical, feedCritical) => {
+      serveFeed(() => jsonResponse(200, feedJson({ critical: feedCritical })), {
+        critical: catalogCritical,
+      });
+
+      const kill = await getKillSwitch();
+
+      expect(kill.critical.get("bad-ext")?.maxVersion).toBe("2.0.0");
+    });
+
+    it.each([
+      ["unbounded first", [allVersions, upTo("0.0.1")]],
+      ["unbounded last", [upTo("0.0.1"), allVersions]],
+    ])("keeps the widest entry within one document (%s)", async (_name, critical) => {
+      serveFeed(() => jsonResponse(200, feedJson({ critical })));
+
+      const kill = await getKillSwitch();
+
+      expect(kill.critical.get("bad-ext")).toEqual({ reason: "every version" });
+    });
+  });
+
   it("recovers to current data once the feed is published", async () => {
     serveFeed(() => jsonResponse(404, "404: Not Found"));
     expect((await getKillSwitch()).stale).toBe(true);
 
-    serveFeed(() => jsonResponse(200, JSON.stringify({ removed: [], critical: [] })));
+    serveFeed(() => jsonResponse(200, feedJson({ removed: [], critical: [] })));
     expect((await getKillSwitch()).stale).toBe(false);
   });
 });

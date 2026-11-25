@@ -66,7 +66,6 @@ it("generated SDK streams through real admin/API and typed/raw agent paths, enfo
   const agentUrl = await agent.listen({ host: "127.0.0.1", port: 0 });
   vi.stubEnv("OPS_AGENT_URL", agentUrl);
   vi.stubEnv("OPS_AGENT_TOKEN_FILE", tokenFile);
-  vi.stubEnv("OPENMAPX_DISABLE_LOCALHOST_AUTH", "1");
   const app = Fastify();
   await app.register(cors, corsOptions(["https://web.example"]));
   await app.register(adminArtifactTransfersRoute, { prefix: "/api" });

@@ -6,12 +6,10 @@ describe("jobStatusColor", () => {
   it("maps each known status to its color", () => {
     expect(jobStatusColor("queued")).toBe("default");
     expect(jobStatusColor("running")).toBe("primary");
-    expect(jobStatusColor("success")).toBe("success");
-    expect(jobStatusColor("ok")).toBe("success");
+    expect(jobStatusColor("succeeded")).toBe("success");
     expect(jobStatusColor("failed")).toBe("error");
-    expect(jobStatusColor("error")).toBe("error");
-    expect(jobStatusColor("canceled")).toBe("warning");
-    expect(jobStatusColor("partial")).toBe("warning");
+    expect(jobStatusColor("cancelled")).toBe("warning");
+    expect(jobStatusColor("partially_succeeded")).toBe("warning");
     expect(jobStatusColor("stale")).toBe("warning");
     expect(jobStatusColor("interrupted")).toBe("warning");
     expect(jobStatusColor("skipped")).toBe("default");
@@ -25,9 +23,13 @@ describe("jobStatusColor", () => {
 
 describe("jobStatusDescription", () => {
   const t = catalogTranslator("adminShared");
-  it("explains partial as a completed job with warnings", () => {
-    expect(jobStatusDescription("partial", t)).toContain("Completed with warnings");
-    expect(jobStatusDescription("partial", t)).toContain("partially succeeded");
+  it("explains partially_succeeded as a completed job with warnings", () => {
+    expect(jobStatusDescription("partially_succeeded", t)).toContain("Completed with warnings");
+  });
+
+  it("says a failed stage stopped the run at that stage", () => {
+    expect(jobStatusDescription("failed", t)).toContain("the job failed");
+    expect(jobStatusDescription("failed", t, true)).toContain("this stage failed");
   });
 
   it("omits a tooltip for an unknown status", () => {

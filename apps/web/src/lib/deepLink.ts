@@ -4,7 +4,6 @@ import {
   type BikeRoutingOptions,
   type BoundingBox,
   bicycleOptions,
-  bicycleQueryParameters,
   isBikeHillPreference,
   isBikeProfile,
   isBikeSpeedKmh,
@@ -13,6 +12,12 @@ import {
   type Waypoint,
   type WaypointSchedule,
 } from "@openmapx/core";
+import {
+  formatLinkBoolean,
+  type MapLinkParam,
+  MAP_LINK_PARAMS as P,
+  parseLinkBoolean,
+} from "@openmapx/core/map-link-params";
 
 /** An external request to read the URL; UPDATE writes the current stores to it. */
 export const DEEPLINK_OPEN_EVENT = "openmapx:deeplink:open";
@@ -20,67 +25,29 @@ export const DEEPLINK_UPDATE_EVENT = "openmapx:deeplink:update";
 
 /** The overlay parameters, each passed through as its raw string. */
 const OVERLAY_SETTING_PARAMS = [
-  "weather",
-  "sat",
-  "date",
-  "opacity",
-  "eq",
-  "fire",
-  "neDays",
-  "neCat",
-  "alertSev",
-  "envSensor",
-  "sli",
-  "trail",
-  "winter",
-  "cycleAuto",
-  "ltProviders",
-  "ltModes",
-  "ltCodes",
-  "ltVehicle",
+  P.weather,
+  P.satelliteLayer,
+  P.satelliteDate,
+  P.satelliteOpacity,
+  P.earthquakes,
+  P.wildfires,
+  P.naturalEventDays,
+  P.naturalEventCategories,
+  P.weatherAlertSeverities,
+  P.environmentSensor,
+  P.streetLevelImage,
+  P.hikingTrail,
+  P.winterSportsFeature,
+  P.cyclingAutomatic,
+  P.liveTransitExcludedProviders,
+  P.liveTransitExcludedModes,
+  P.liveTransitExcludedCodespaces,
+  P.liveTransitVehicle,
 ] as const;
 
 type OverlaySettingParam = (typeof OVERLAY_SETTING_PARAMS)[number];
 
-export const DEEPLINK_PARAMS = new Set([
-  "map",
-  "base",
-  "globe",
-  "buildings",
-  "ov",
-  "panel",
-  "place",
-  "at",
-  "name",
-  "cat",
-  "raw",
-  "stop",
-  "mode",
-  "bikeProfile",
-  "bikeHillPreference",
-  "bikePreferQuietRoads",
-  "bikePreferSmoothSurfaces",
-  "bikeSpeedKmh",
-  "avoid",
-  "units",
-  "wp",
-  "sched",
-  "categoryId",
-  "search",
-  "bbox",
-  "source",
-  "item",
-  "savedTab",
-  "list",
-  "measure",
-  "measureUnit",
-  "measurePts",
-  "measureDone",
-  "iso",
-  "isoAt",
-  "isoMins",
-  ...OVERLAY_SETTING_PARAMS,
-]);
+export const DEEPLINK_PARAMS: ReadonlySet<MapLinkParam> = new Set(Object.values(P));
 
 export interface CameraDeepLink {
   center: LngLat;
@@ -107,7 +74,7 @@ export interface DeepLinkPlace {
 export interface ParsedDeepLink {
   hasDeepLinkParams: boolean;
   map?: CameraDeepLink;
-  base?: string;
+  baseLayer?: string;
   globe?: boolean;
   buildingsOff?: boolean;
   overlays?: string[];
@@ -116,10 +83,10 @@ export interface ParsedDeepLink {
   directions?: BikeRoutingOptions & {
     mode?: string;
     avoid: string[];
-    units?: string;
     /**
-     * One entry per directions slot; `null` is a blank slot (an empty `wp=`),
-     * kept so later waypoints and the `sched` indices keep their position.
+     * One entry per directions slot; `null` is a blank slot (an empty
+     * `waypoint=`), kept so later waypoints and the `schedule` indices keep
+     * their position.
      */
     waypoints: (LabeledPointDeepLink | null)[];
     /** Per-waypoint time constraints, keyed by waypoint index. */
@@ -229,16 +196,52 @@ export function buildLocationShareUrl(currentHref: string, target: LocationShare
   url.search = "";
   url.hash = "";
   url.searchParams.set(
-    "map",
+    P.camera,
     formatCameraParam({ center: target.coordinates, zoom: 16, bearing: 0, pitch: 0 }),
   );
-  url.searchParams.set("panel", PANEL.PLACE);
-  url.searchParams.set("place", target.id);
-  url.searchParams.set("at", formatLngLat(target.coordinates));
-  if (target.name) url.searchParams.set("name", target.name);
-  if (target.category) url.searchParams.set("cat", target.category);
-  if (target.rawCategory) url.searchParams.set("raw", target.rawCategory);
+  url.searchParams.set(P.panel, PANEL.PLACE);
+  writePlaceParams(url.searchParams, target);
   return url.toString();
+}
+
+/** The place parameters of a link; the transit stop only when the place has one. */
+export function writePlaceParams(
+  params: URLSearchParams,
+  place: LocationShareTarget & { transitStopName?: string },
+): void {
+  params.set(P.place, place.id);
+  params.set(P.placeLocation, formatLngLat(place.coordinates));
+  if (place.name) params.set(P.placeName, place.name);
+  if (place.category) params.set(P.placeCategory, place.category);
+  if (place.rawCategory) params.set(P.placeRawCategory, place.rawCategory);
+  if (place.transitStopName) params.set(P.placeTransitStop, place.transitStopName);
+}
+
+/** The cycling parameters of a link, booleans as `1`/`0`; none for another mode. */
+export function writeBikeParams(
+  params: URLSearchParams,
+  mode: string | undefined,
+  options: BikeRoutingOptions,
+): void {
+  if (mode !== "cycling") return;
+  const bike = bicycleOptions("cycling", options);
+  if (bike.bikeProfile) params.set(P.bikeProfile, bike.bikeProfile);
+  if (bike.bikeHillPreference) params.set(P.bikeHillPreference, bike.bikeHillPreference);
+  params.set(P.bikePreferQuietRoads, formatLinkBoolean(bike.bikePreferQuietRoads === true));
+  params.set(P.bikePreferSmoothSurfaces, formatLinkBoolean(bike.bikePreferSmoothSurfaces === true));
+  if (bike.bikeSpeedKmh !== undefined) params.set(P.bikeSpeedKmh, String(bike.bikeSpeedKmh));
+}
+
+/** The `avoid` list of a link, or nothing when no road class is avoided. */
+export function writeAvoidParam(
+  params: URLSearchParams,
+  options: { avoidHighways?: boolean; avoidTolls?: boolean; avoidFerries?: boolean },
+): void {
+  setCsvParam(params, P.avoid, [
+    options.avoidHighways ? "highways" : "",
+    options.avoidTolls ? "tolls" : "",
+    options.avoidFerries ? "ferries" : "",
+  ]);
 }
 
 export interface DirectionsShareTarget extends BikeRoutingOptions {
@@ -249,23 +252,16 @@ export interface DirectionsShareTarget extends BikeRoutingOptions {
   avoidFerries?: boolean;
 }
 
-/** Deep link into the main app's directions panel (the `wp` param is lat,lng order). */
+/** Deep link into the main app's directions panel (each `waypoint` is lat,lng order). */
 export function buildDirectionsDeepLinkUrl(origin: string, target: DirectionsShareTarget): string {
   const url = new URL("/", origin);
-  url.searchParams.set("panel", PANEL.DIRECTIONS);
-  if (target.mode && target.mode !== "driving") url.searchParams.set("mode", target.mode);
-  if (target.mode === "cycling")
-    for (const [key, value] of Object.entries(bicycleQueryParameters("cycling", target)))
-      url.searchParams.set(key, value);
-  const avoid = [
-    target.avoidHighways ? "highways" : "",
-    target.avoidTolls ? "tolls" : "",
-    target.avoidFerries ? "ferries" : "",
-  ].filter(Boolean);
-  if (avoid.length > 0) url.searchParams.set("avoid", avoid.join(","));
+  url.searchParams.set(P.panel, PANEL.DIRECTIONS);
+  if (target.mode && target.mode !== "driving") url.searchParams.set(P.travelMode, target.mode);
+  writeBikeParams(url.searchParams, target.mode, target);
+  writeAvoidParam(url.searchParams, target);
   for (const waypoint of target.waypoints) {
     url.searchParams.append(
-      "wp",
+      P.waypoint,
       formatLabeledPoint({ coords: waypoint.coords, label: waypoint.label ?? "" }),
     );
   }
@@ -332,10 +328,9 @@ export function parseScheduleParam(value: string | null): Record<number, Waypoin
 }
 
 /**
- * The `wp` values for a directions route: one per slot once any slot has a
- * place, a blank slot as an empty value so the slots after it (and the
- * `sched` indices, which count every slot) keep their position. Older
- * builds drop the empty values and read the compact list as before.
+ * The `waypoint` values for a directions route: one per slot once any slot has
+ * a place, a blank slot as an empty value so the slots after it (and the
+ * `schedule` indices, which count every slot) keep their position.
  */
 export function formatWaypointParams(
   waypoints: readonly Pick<Waypoint, "coords" | "label">[],
@@ -463,10 +458,10 @@ function toSearchParams(search: string | URLSearchParams): URLSearchParams {
  */
 export function navigationPath(search: string | URLSearchParams): string[] {
   const params = toSearchParams(search);
-  const panel = params.get("panel");
-  const categoryId = params.get("categoryId");
-  const text = params.get("search");
-  const source = params.get("source");
+  const panel = params.get(P.panel);
+  const categoryId = params.get(P.category);
+  const text = params.get(P.search);
+  const source = params.get(P.dataSource);
   const path: string[] = [];
 
   if (categoryId) path.push(`category:${categoryId}`);
@@ -474,15 +469,15 @@ export function navigationPath(search: string | URLSearchParams): string[] {
   else if (source) path.push(`datasource:${source}`);
   else if (panel && panel !== PANEL.PLACE && panel !== PANEL.PLACE_CARD) path.push(panel);
 
-  const list = params.get("list");
+  const list = params.get(P.savedList);
   if (panel === PANEL.SAVED && list) path.push(`list:${list}`);
-  const item = params.get("item");
+  const item = params.get(P.dataSourceItem);
   if (source && item) path.push(`item:${item}`);
-  const place = params.get("place");
-  if (place && params.has("at")) path.push(`place:${place}`);
+  const place = params.get(P.place);
+  if (place && params.has(P.placeLocation)) path.push(`place:${place}`);
 
-  if (params.has("measure")) path.push("tool:measure");
-  if (params.has("iso")) path.push("tool:iso");
+  if (params.has(P.measurement)) path.push("tool:measure");
+  if (params.has(P.travelTime)) path.push("tool:iso");
   return path;
 }
 
@@ -496,100 +491,99 @@ function hasAnyDeepLinkParam(params: URLSearchParams): boolean {
 export function parseDeepLinkSearch(search: string | URLSearchParams): ParsedDeepLink {
   const params = toSearchParams(search);
 
-  const placeId = params.get("place");
-  const placeCoords = parseLngLatParam(params.get("at"));
+  const placeId = params.get(P.place);
+  const placeCoords = parseLngLatParam(params.get(P.placeLocation));
 
   const place =
     placeId && placeCoords
       ? {
           id: placeId,
           coords: placeCoords,
-          name: params.get("name") ?? "",
-          category: params.get("cat") ?? undefined,
-          rawCategory: params.get("raw") ?? undefined,
-          stopName: params.get("stop") ?? undefined,
+          name: params.get(P.placeName) ?? "",
+          category: params.get(P.placeCategory) ?? undefined,
+          rawCategory: params.get(P.placeRawCategory) ?? undefined,
+          stopName: params.get(P.placeTransitStop) ?? undefined,
         }
       : undefined;
 
-  const categoryId = params.get("categoryId");
-  const searchText = params.get("search");
-  const sourceId = params.get("source");
-  const measureMode = params.get("measure");
-  const isoMode = params.get("iso");
+  const categoryId = params.get(P.category);
+  const searchText = params.get(P.search);
+  const sourceId = params.get(P.dataSource);
+  const measureMode = params.get(P.measurement);
+  const isoMode = params.get(P.travelTime);
+  const bounds = parseBboxParam(params.get(P.bounds)) ?? undefined;
+  const mode = params.get(P.travelMode);
+  const bikeProfile = params.get(P.bikeProfile);
+  const bikeHillPreference = params.get(P.bikeHillPreference);
+  const bikeSpeedKmh = Number(params.get(P.bikeSpeedKmh));
 
   return {
     hasDeepLinkParams: hasAnyDeepLinkParam(params),
-    map: parseCameraParam(params.get("map")) ?? undefined,
-    base: params.get("base") ?? undefined,
-    globe: params.has("globe") ? params.get("globe") === "1" : undefined,
-    buildingsOff: params.get("buildings") === "0",
-    overlays: splitCsv(params.get("ov")),
-    panel: params.get("panel") ?? undefined,
+    map: parseCameraParam(params.get(P.camera)) ?? undefined,
+    baseLayer: params.get(P.baseLayer) ?? undefined,
+    globe: parseLinkBoolean(params.get(P.globe)),
+    buildingsOff: parseLinkBoolean(params.get(P.buildings)) === false,
+    overlays: splitCsv(params.get(P.overlay)),
+    panel: params.get(P.panel) ?? undefined,
     place,
     directions:
-      params.has("wp") || params.has("mode") || params.get("panel") === "directions"
+      params.has(P.waypoint) || mode !== null || params.get(P.panel) === PANEL.DIRECTIONS
         ? {
-            mode: params.get("mode") ?? undefined,
-            ...(params.get("mode") === "cycling"
+            mode: mode ?? undefined,
+            ...(mode === "cycling"
               ? bicycleOptions("cycling", {
-                  bikeProfile: isBikeProfile(params.get("bikeProfile"))
-                    ? (params.get("bikeProfile") as BikeRoutingOptions["bikeProfile"])
+                  bikeProfile: isBikeProfile(bikeProfile) ? bikeProfile : undefined,
+                  bikeHillPreference: isBikeHillPreference(bikeHillPreference)
+                    ? bikeHillPreference
                     : undefined,
-                  bikeHillPreference: isBikeHillPreference(params.get("bikeHillPreference"))
-                    ? (params.get("bikeHillPreference") as BikeRoutingOptions["bikeHillPreference"])
-                    : undefined,
-                  bikePreferQuietRoads: params.get("bikePreferQuietRoads") === "true",
-                  bikePreferSmoothSurfaces: params.get("bikePreferSmoothSurfaces") === "true",
-                  bikeSpeedKmh: isBikeSpeedKmh(Number(params.get("bikeSpeedKmh")))
-                    ? Number(params.get("bikeSpeedKmh"))
-                    : undefined,
+                  bikePreferQuietRoads: parseLinkBoolean(params.get(P.bikePreferQuietRoads)),
+                  bikePreferSmoothSurfaces: parseLinkBoolean(
+                    params.get(P.bikePreferSmoothSurfaces),
+                  ),
+                  bikeSpeedKmh: isBikeSpeedKmh(bikeSpeedKmh) ? bikeSpeedKmh : undefined,
                 })
               : {}),
-            avoid: splitCsv(params.get("avoid")),
-            units: params.get("units") ?? undefined,
-            waypoints: params.getAll("wp").flatMap((value): (LabeledPointDeepLink | null)[] => {
-              // Empty marks a blank slot; anything else unreadable is dropped, as before.
-              if (value === "") return [null];
-              const point = parseLabeledPoint(value);
-              return point ? [point] : [];
-            }),
-            schedules: parseScheduleParam(params.get("sched")),
+            avoid: splitCsv(params.get(P.avoid)),
+            waypoints: params
+              .getAll(P.waypoint)
+              .flatMap((value): (LabeledPointDeepLink | null)[] => {
+                // Empty marks a blank slot; anything else unreadable is dropped.
+                if (value === "") return [null];
+                const point = parseLabeledPoint(value);
+                return point ? [point] : [];
+              }),
+            schedules: parseScheduleParam(params.get(P.schedule)),
           }
         : undefined,
-    category: categoryId
-      ? { id: categoryId, bbox: parseBboxParam(params.get("bbox")) ?? undefined }
-      : undefined,
-    textSearch:
-      !categoryId && searchText
-        ? { text: searchText, bbox: parseBboxParam(params.get("bbox")) ?? undefined }
-        : undefined,
+    category: categoryId ? { id: categoryId, bbox: bounds } : undefined,
+    textSearch: !categoryId && searchText ? { text: searchText, bbox: bounds } : undefined,
     dataSource: sourceId
       ? {
           id: sourceId,
-          itemId: params.get("item") ?? undefined,
-          bbox: parseBboxParam(params.get("bbox")) ?? undefined,
+          itemId: params.get(P.dataSourceItem) ?? undefined,
+          bbox: bounds,
         }
       : undefined,
     saved:
-      params.has("savedTab") || params.has("list") || params.get("panel") === "saved"
+      params.has(P.savedTab) || params.has(P.savedList) || params.get(P.panel) === PANEL.SAVED
         ? {
-            tab: params.get("savedTab") ?? undefined,
-            listId: params.get("list") ?? undefined,
+            tab: params.get(P.savedTab) ?? undefined,
+            listId: params.get(P.savedList) ?? undefined,
           }
         : undefined,
     measurement: measureMode
       ? {
           mode: measureMode,
-          unitSystem: params.get("measureUnit") ?? undefined,
-          points: parseLngLatListParam(params.get("measurePts")),
-          finalized: params.get("measureDone") === "1",
+          unitSystem: params.get(P.measurementUnits) ?? undefined,
+          points: parseLngLatListParam(params.get(P.measurementPoints)),
+          finalized: parseLinkBoolean(params.get(P.measurementFinished)) === true,
         }
       : undefined,
     travelTime: isoMode
       ? {
           mode: isoMode,
-          origin: parseLngLatParam(params.get("isoAt")) ?? undefined,
-          minutes: splitCsv(params.get("isoMins"))
+          origin: parseLngLatParam(params.get(P.travelTimeOrigin)) ?? undefined,
+          minutes: splitCsv(params.get(P.travelTimeMinutes))
             .map((value) => Number(value))
             .filter((value) => Number.isFinite(value) && value > 0),
         }

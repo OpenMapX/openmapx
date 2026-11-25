@@ -287,7 +287,7 @@ export function SystemMaintenance({
     if (
       !trackedJob ||
       !job ||
-      !["success", "failed", "canceled"].includes(job.status) ||
+      !["succeeded", "failed", "cancelled"].includes(job.status) ||
       hasUnresolvedJobObservation(job.result)
     )
       return;
@@ -295,11 +295,11 @@ export function SystemMaintenance({
       job.result &&
       typeof job.result === "object" &&
       !Array.isArray(job.result) &&
-      job.result.errorCode === "host_update_required"
+      job.result.errorCode === "HOST_UPDATE_REQUIRED"
     ) {
       setBlockedCandidate(trackedJob.expectedDigest ?? candidateToApply?.expectedDigest ?? null);
     }
-    if (job.status === "success") {
+    if (job.status === "succeeded") {
       if (trackedJob.path === "updates/check") setBlockedCandidate(null);
       showToast(t("jobCompleted", { label: trackedJob.label }));
     } else

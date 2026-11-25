@@ -1,3 +1,4 @@
+import { REQUEST_STATUSES } from "@openmapx/core/privacy";
 import { and, asc, eq, inArray, lte, or, sql } from "drizzle-orm";
 import { db as defaultDb } from "../db/index.js";
 import { PRIVACY_ADMIN_NOTIFICATION_TEMPLATES } from "../db/privacy-schema.js";
@@ -12,9 +13,9 @@ import {
   authPolicyState,
   configurationMigrationPreview,
   dataDisclosureEvent,
-  dataManagerOfflinePackageArtifactReferences,
-  dataManagerOfflinePackageJobOwners,
-  dataManagerOfflinePackageJobs,
+  dataManagerOfflinePackageArtifactReference,
+  dataManagerOfflinePackageJob,
+  dataManagerOfflinePackageJobOwner,
   dataSubjectRequest,
   dataSubjectRequestEvent,
   dataSubjectRequestNotification,
@@ -43,13 +44,14 @@ import {
   sessionAuthAssurance,
   shareLink,
   systemSecret,
-  systemSettings,
+  systemSetting,
   transitCredentialPreview,
   twoFactor,
   user,
   verification,
 } from "../db/schema.js";
 import { deriveOfflinePackagePrincipal } from "../services/offline-package-principal.js";
+import { ARCHIVE_SCHEMA_IDS, portableSchemaId } from "./archive-schema-ids.js";
 import { getSubjectDataRegistration, SUBJECT_DATA_CATALOGUE } from "./catalogue.js";
 import {
   type CollectorSourcePart,
@@ -372,7 +374,7 @@ export async function* streamOpenMapxRegistrationRecords(
           .select({
             id: adminActionReauthentication.id,
             purpose: adminActionReauthentication.purpose,
-            state: adminActionReauthentication.state,
+            status: adminActionReauthentication.status,
             createdAt: adminActionReauthentication.createdAt,
             expiresAt: adminActionReauthentication.expiresAt,
             completedAt: adminActionReauthentication.completedAt,
@@ -381,7 +383,7 @@ export async function* streamOpenMapxRegistrationRecords(
           .from(adminActionReauthentication)
           .where(
             and(
-              eq(adminActionReauthentication.actorId, context.userId),
+              eq(adminActionReauthentication.actorUserId, context.userId),
               lte(adminActionReauthentication.createdAt, cutoff),
             ),
           )
@@ -454,7 +456,7 @@ export async function* streamOpenMapxRegistrationRecords(
           .select({
             id: accountMailOutbox.id,
             kind: accountMailOutbox.kind,
-            state: accountMailOutbox.state,
+            status: accountMailOutbox.status,
             createdAt: accountMailOutbox.createdAt,
             expiresAt: accountMailOutbox.expiresAt,
             finishedAt: accountMailOutbox.finishedAt,
@@ -798,7 +800,7 @@ export async function* streamOpenMapxRegistrationRecords(
         database
           .select({
             id: adminAuditLog.id,
-            actorId: adminAuditLog.actorId,
+            actorUserId: adminAuditLog.actorUserId,
             targetUserId: adminAuditLog.targetUserId,
             targetType: adminAuditLog.targetType,
             action: adminAuditLog.action,
@@ -809,7 +811,7 @@ export async function* streamOpenMapxRegistrationRecords(
           .where(
             and(
               or(
-                eq(adminAuditLog.actorId, context.userId),
+                eq(adminAuditLog.actorUserId, context.userId),
                 eq(adminAuditLog.targetUserId, context.userId),
               ),
               lte(adminAuditLog.createdAt, cutoff),
@@ -820,7 +822,7 @@ export async function* streamOpenMapxRegistrationRecords(
           policyCodes: ["rights-of-others", "foreign-identifiers-redacted"],
           map: (row) => ({
             recordId: pseudonymousIdentifier(row.id),
-            actor: row.actorId === context.userId ? "subject" : "other-actor",
+            actor: row.actorUserId === context.userId ? "subject" : "other-actor",
             target: row.targetUserId === context.userId ? "subject" : "other-target",
             targetType: row.targetType,
             action: row.action,
@@ -839,7 +841,7 @@ export async function* streamOpenMapxRegistrationRecords(
           .from(authPolicyState)
           .where(
             and(
-              eq(authPolicyState.activatedBy, context.userId),
+              eq(authPolicyState.activatedByUserId, context.userId),
               lte(authPolicyState.activatedAt, cutoff),
             ),
           )
@@ -862,7 +864,7 @@ export async function* streamOpenMapxRegistrationRecords(
           .from(authPolicyApplication)
           .where(
             and(
-              eq(authPolicyApplication.actorId, context.userId),
+              eq(authPolicyApplication.actorUserId, context.userId),
               lte(authPolicyApplication.createdAt, cutoff),
             ),
           )
@@ -888,8 +890,8 @@ export async function* streamOpenMapxRegistrationRecords(
           .where(
             and(
               or(
-                eq(accountActionReceipt.actorId, context.userId),
-                eq(accountActionReceipt.targetId, context.userId),
+                eq(accountActionReceipt.actorUserId, context.userId),
+                eq(accountActionReceipt.targetUserId, context.userId),
               ),
               lte(accountActionReceipt.createdAt, cutoff),
             ),
@@ -916,7 +918,7 @@ export async function* streamOpenMapxRegistrationRecords(
           .from(integrationApplicationReceipt)
           .where(
             and(
-              eq(integrationApplicationReceipt.actorId, context.userId),
+              eq(integrationApplicationReceipt.actorUserId, context.userId),
               lte(integrationApplicationReceipt.createdAt, cutoff),
             ),
           )
@@ -943,7 +945,7 @@ export async function* streamOpenMapxRegistrationRecords(
           .from(platformConfigurationPreview)
           .where(
             and(
-              eq(platformConfigurationPreview.actorId, context.userId),
+              eq(platformConfigurationPreview.actorUserId, context.userId),
               lte(platformConfigurationPreview.createdAt, cutoff),
             ),
           )
@@ -967,7 +969,7 @@ export async function* streamOpenMapxRegistrationRecords(
             finishedAt: adminJob.finishedAt,
           })
           .from(adminJob)
-          .where(and(eq(adminJob.createdBy, context.userId), lte(adminJob.createdAt, cutoff)))
+          .where(and(eq(adminJob.createdByUserId, context.userId), lte(adminJob.createdAt, cutoff)))
           .orderBy(asc(adminJob.id)),
         { policyCodes: ["job-payload-review"] },
       );
@@ -986,7 +988,7 @@ export async function* streamOpenMapxRegistrationRecords(
           .from(installedExtension)
           .where(
             and(
-              eq(installedExtension.installedBy, context.userId),
+              eq(installedExtension.installedByUserId, context.userId),
               lte(installedExtension.installedAt, cutoff),
             ),
           )
@@ -1006,7 +1008,7 @@ export async function* streamOpenMapxRegistrationRecords(
           .from(installedIntegration)
           .where(
             and(
-              eq(installedIntegration.installedBy, context.userId),
+              eq(installedIntegration.installedByUserId, context.userId),
               lte(installedIntegration.installedAt, cutoff),
             ),
           )
@@ -1022,12 +1024,12 @@ export async function* streamOpenMapxRegistrationRecords(
             key: integrationSecret.key,
             createdAt: integrationSecret.createdAt,
             updatedAt: integrationSecret.updatedAt,
-            updatedBy: integrationSecret.updatedBy,
+            updatedBy: integrationSecret.updatedByUserId,
           })
           .from(integrationSecret)
           .where(
             and(
-              eq(integrationSecret.updatedBy, context.userId),
+              eq(integrationSecret.updatedByUserId, context.userId),
               lte(integrationSecret.createdAt, cutoff),
             ),
           )
@@ -1041,11 +1043,14 @@ export async function* streamOpenMapxRegistrationRecords(
             key: serviceSecret.key,
             createdAt: serviceSecret.createdAt,
             updatedAt: serviceSecret.updatedAt,
-            updatedBy: serviceSecret.updatedBy,
+            updatedBy: serviceSecret.updatedByUserId,
           })
           .from(serviceSecret)
           .where(
-            and(eq(serviceSecret.updatedBy, context.userId), lte(serviceSecret.createdAt, cutoff)),
+            and(
+              eq(serviceSecret.updatedByUserId, context.userId),
+              lte(serviceSecret.createdAt, cutoff),
+            ),
           )
           .orderBy(asc(serviceSecret.serviceId), asc(serviceSecret.key)),
         { policyCodes: ["secret-value-redacted"] },
@@ -1055,11 +1060,14 @@ export async function* streamOpenMapxRegistrationRecords(
           .select({
             key: systemSecret.key,
             updatedAt: systemSecret.updatedAt,
-            updatedBy: systemSecret.updatedBy,
+            updatedBy: systemSecret.updatedByUserId,
           })
           .from(systemSecret)
           .where(
-            and(eq(systemSecret.updatedBy, context.userId), lte(systemSecret.updatedAt, cutoff)),
+            and(
+              eq(systemSecret.updatedByUserId, context.userId),
+              lte(systemSecret.updatedAt, cutoff),
+            ),
           )
           .orderBy(asc(systemSecret.key)),
         { policyCodes: ["secret-value-redacted"] },
@@ -1075,7 +1083,7 @@ export async function* streamOpenMapxRegistrationRecords(
           .from(transitCredentialPreview)
           .where(
             and(
-              eq(transitCredentialPreview.actorId, context.userId),
+              eq(transitCredentialPreview.actorUserId, context.userId),
               lte(transitCredentialPreview.createdAt, cutoff),
             ),
           )
@@ -1096,7 +1104,7 @@ export async function* streamOpenMapxRegistrationRecords(
           .from(configurationMigrationPreview)
           .where(
             and(
-              eq(configurationMigrationPreview.actorId, context.userId),
+              eq(configurationMigrationPreview.actorUserId, context.userId),
               lte(configurationMigrationPreview.createdAt, cutoff),
             ),
           )
@@ -1111,18 +1119,18 @@ export async function* streamOpenMapxRegistrationRecords(
       yield* emit(
         database
           .select({
-            key: systemSettings.key,
-            updatedAt: systemSettings.updatedAt,
-            updatedBy: systemSettings.updatedBy,
+            key: systemSetting.key,
+            updatedAt: systemSetting.updatedAt,
+            updatedBy: systemSetting.updatedByUserId,
           })
-          .from(systemSettings)
+          .from(systemSetting)
           .where(
             and(
-              eq(systemSettings.updatedBy, context.userId),
-              lte(systemSettings.updatedAt, cutoff),
+              eq(systemSetting.updatedByUserId, context.userId),
+              lte(systemSetting.updatedAt, cutoff),
             ),
           )
-          .orderBy(asc(systemSettings.key)),
+          .orderBy(asc(systemSetting.key)),
         { policyCodes: ["setting-value-redacted"] },
       );
       return;
@@ -1139,7 +1147,7 @@ export async function* streamOpenMapxRegistrationRecords(
             id: dataSubjectRequest.id,
             kind: dataSubjectRequest.kind,
             channel: dataSubjectRequest.channel,
-            state: dataSubjectRequest.state,
+            status: dataSubjectRequest.status,
             receivedAt: dataSubjectRequest.receivedAt,
             registeredAt: dataSubjectRequest.registeredAt,
             dueAt: dataSubjectRequest.dueAt,
@@ -1159,7 +1167,7 @@ export async function* streamOpenMapxRegistrationRecords(
             requestId: dataSubjectRequestNotification.requestId,
             template: dataSubjectRequestNotification.template,
             channel: dataSubjectRequestNotification.channel,
-            state: dataSubjectRequestNotification.state,
+            status: dataSubjectRequestNotification.status,
             attempts: dataSubjectRequestNotification.attempts,
             sentAt: dataSubjectRequestNotification.sentAt,
             createdAt: dataSubjectRequestNotification.createdAt,
@@ -1237,6 +1245,8 @@ export async function* streamOpenMapxRegistrationRecords(
       // identity method and the event payload belong to someone else. A case's
       // `received` event records the account that registered it, so the
       // registration on `data_subject_request.actor_user_id` is read here.
+      // A status change names the status the staff member set: a case status
+      // from a closed list, not information about the person.
       yield* emit(
         database
           .select({
@@ -1244,6 +1254,9 @@ export async function* streamOpenMapxRegistrationRecords(
             requestId: dataSubjectRequestEvent.requestId,
             kind: dataSubjectRequest.kind,
             eventType: dataSubjectRequestEvent.eventType,
+            toStatus: sql<
+              string | null
+            >`CASE WHEN ${dataSubjectRequestEvent.eventType} = 'status_changed' THEN ${dataSubjectRequestEvent.payload} ->> 'to' END`,
             createdAt: dataSubjectRequestEvent.createdAt,
           })
           .from(dataSubjectRequestEvent)
@@ -1267,6 +1280,10 @@ export async function* streamOpenMapxRegistrationRecords(
             actor: "subject",
             caseKind: row.kind,
             eventType: row.eventType,
+            ...(typeof row.toStatus === "string" &&
+            (REQUEST_STATUSES as readonly string[]).includes(row.toStatus)
+              ? { toStatus: row.toStatus }
+              : {}),
             createdAt: row.createdAt,
           }),
         },
@@ -1279,7 +1296,7 @@ export async function* streamOpenMapxRegistrationRecords(
             requestId: dataSubjectRequestNotification.requestId,
             template: dataSubjectRequestNotification.template,
             channel: dataSubjectRequestNotification.channel,
-            state: dataSubjectRequestNotification.state,
+            status: dataSubjectRequestNotification.status,
             sentAt: dataSubjectRequestNotification.sentAt,
             createdAt: dataSubjectRequestNotification.createdAt,
           })
@@ -1301,7 +1318,7 @@ export async function* streamOpenMapxRegistrationRecords(
             caseRef: pseudonymousIdentifier(row.requestId),
             template: row.template,
             channel: row.channel,
-            state: row.state,
+            status: row.status,
             sentAt: row.sentAt,
             createdAt: row.createdAt,
           }),
@@ -1314,42 +1331,42 @@ export async function* streamOpenMapxRegistrationRecords(
       yield* emit(
         database
           .select({
-            packageId: dataManagerOfflinePackageArtifactReferences.packageId,
-            byteLength: dataManagerOfflinePackageArtifactReferences.byteLength,
-            retainedAt: dataManagerOfflinePackageArtifactReferences.retainedAt,
+            packageId: dataManagerOfflinePackageArtifactReference.packageId,
+            byteLength: dataManagerOfflinePackageArtifactReference.byteLength,
+            retainedAt: dataManagerOfflinePackageArtifactReference.retainedAt,
           })
-          .from(dataManagerOfflinePackageArtifactReferences)
+          .from(dataManagerOfflinePackageArtifactReference)
           .where(
             and(
-              eq(dataManagerOfflinePackageArtifactReferences.principal, principal),
-              lte(dataManagerOfflinePackageArtifactReferences.retainedAt, cutoff),
+              eq(dataManagerOfflinePackageArtifactReference.principal, principal),
+              lte(dataManagerOfflinePackageArtifactReference.retainedAt, cutoff),
             ),
           )
-          .orderBy(asc(dataManagerOfflinePackageArtifactReferences.packageId)),
+          .orderBy(asc(dataManagerOfflinePackageArtifactReference.packageId)),
         { policyCodes: ["offline-safe-metadata"] },
       );
       yield* emit(
         database
           .select({
-            jobId: dataManagerOfflinePackageJobOwners.jobId,
-            packageId: dataManagerOfflinePackageJobs.packageId,
-            status: dataManagerOfflinePackageJobs.status,
-            createdAt: dataManagerOfflinePackageJobOwners.createdAt,
-            updatedAt: dataManagerOfflinePackageJobs.updatedAt,
+            jobId: dataManagerOfflinePackageJobOwner.jobId,
+            packageId: dataManagerOfflinePackageJob.packageId,
+            status: dataManagerOfflinePackageJob.status,
+            createdAt: dataManagerOfflinePackageJobOwner.createdAt,
+            updatedAt: dataManagerOfflinePackageJob.updatedAt,
           })
-          .from(dataManagerOfflinePackageJobOwners)
+          .from(dataManagerOfflinePackageJobOwner)
           .innerJoin(
-            dataManagerOfflinePackageJobs,
-            eq(dataManagerOfflinePackageJobOwners.jobId, dataManagerOfflinePackageJobs.id),
+            dataManagerOfflinePackageJob,
+            eq(dataManagerOfflinePackageJobOwner.jobId, dataManagerOfflinePackageJob.id),
           )
           .where(
             and(
-              eq(dataManagerOfflinePackageJobOwners.principal, principal),
-              lte(dataManagerOfflinePackageJobOwners.createdAt, cutoff),
-              lte(dataManagerOfflinePackageJobs.createdAt, cutoff),
+              eq(dataManagerOfflinePackageJobOwner.principal, principal),
+              lte(dataManagerOfflinePackageJobOwner.createdAt, cutoff),
+              lte(dataManagerOfflinePackageJob.createdAt, cutoff),
             ),
           )
-          .orderBy(asc(dataManagerOfflinePackageJobOwners.jobId)),
+          .orderBy(asc(dataManagerOfflinePackageJobOwner.jobId)),
         { policyCodes: ["offline-safe-metadata"] },
       );
       return;
@@ -1500,7 +1517,7 @@ async function collectOpenMapxStreams(
           target === "account" || target === "authentication"
             ? "application/json"
             : "application/jsonl",
-        schemaId: "article-15-record-v1",
+        schemaId: ARCHIVE_SCHEMA_IDS.exportRecord,
       });
       const facts = await encoded.facts;
       if (facts.records === 0) continue;
@@ -1542,7 +1559,7 @@ async function collectOpenMapxStreams(
           target === "portable-places" || target === "portable-parking"
             ? "application/geo+json"
             : "application/json",
-        schemaId: "article-20-v1",
+        schemaId: portableSchemaId(target),
       });
       const facts = await encoded.facts;
       if (facts.records === 0) continue;

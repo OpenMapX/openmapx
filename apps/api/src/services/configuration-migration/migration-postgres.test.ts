@@ -51,7 +51,7 @@ vi.mock("../service-registry", async (actual) => ({
 }));
 
 import type { ConfigurationMigrationDocument } from "../../../../../packages/core/src/api/contracts/integration-admin/configuration-migration";
-import { adminJob, integrationConfig, systemSettings, user } from "../../db/schema";
+import { adminJob, integrationConfig, systemSetting, user } from "../../db/schema";
 import { createDurableOpsKey } from "../ops-client";
 
 describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
@@ -62,6 +62,38 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       api: ReturnType<typeof Fastify>,
       installation: ReturnType<typeof openControlInstallation>,
       store: ArtifactTransferStore;
+    const password = "synthetic-migration-password-1234";
+    let credentialed = false;
+    /** Signs in the migration administrator, as the host CLI's session file holds one. */
+    async function signInMigrationAdmin(): Promise<string> {
+      if (!credentialed) {
+        const schema = await import("../../db/schema"),
+          { hashPassword } = await import("better-auth/crypto"),
+          { eq } = await import("drizzle-orm");
+        await state.fixture.db
+          .update(schema.user)
+          .set({ emailVerified: true })
+          .where(eq(schema.user.id, "migration-admin"));
+        await state.fixture.db.insert(schema.account).values({
+          id: randomUUID(),
+          accountId: "migration-admin",
+          providerId: "credential",
+          userId: "migration-admin",
+          password: await hashPassword(password),
+        });
+        credentialed = true;
+      }
+      const { auth } = await import("../../auth");
+      const response = await auth.api.signInEmail({
+        body: { email: "migration-admin@example.test", password },
+        asResponse: true,
+      });
+      expect(response.status).toBe(200);
+      return response.headers
+        .getSetCookie()
+        .map((v) => v.split(";")[0])
+        .join("; ");
+    }
     beforeAll(async () => {
       state.fixture = await createMigratedPostgresFixture();
       host = await ownedServiceHost();
@@ -86,8 +118,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             quality: "built-in",
             configSchema: {
               properties: {
-                VALUE: { type: "string", default: "default" },
-                TOKEN: { type: "string", "x-openmapx-secret": true },
+                value: { type: "string", default: "default" },
+                token: { type: "string", "x-openmapx-secret": true },
               },
             },
           }),
@@ -111,7 +143,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         },
         runtime: host.runtime,
         resourceClaimer: host.claimer,
-        journal: await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs-v1.json")),
+        journal: await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs.json")),
         controlInstallation: installation,
       });
       const baseUrl = await agent.listen({ host: "127.0.0.1", port: 0 }),
@@ -121,8 +153,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         OPS_AGENT_URL: baseUrl,
         OPS_AGENT_TOKEN_FILE: tokenFile,
         OPENMAPX_SECRETS_KEY: Buffer.alloc(32, 0x71).toString("base64url"),
-        OPENMAPX_LOCAL_ADMIN_TOKEN: "migration-local-synthetic",
-        OPENMAPX_DISABLE_LOCALHOST_AUTH: "0",
         BETTER_AUTH_SECRET: "migration-owned-synthetic-auth-secret",
         BETTER_AUTH_URL: "http://localhost:3001",
       }))
@@ -157,10 +187,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         format: "openmapx-configuration",
         version: 1,
         exportedAt: new Date().toISOString(),
-        settings: { instanceName: "Migrated synthetic instance" },
+        settings: { "legal.hosting.locations": "Migrated synthetic locations" },
         integrations: [
-          { integrationId: "alpha", config: { VALUE: value } },
-          { integrationId: "beta", config: { VALUE: value } },
+          { integrationId: "alpha", config: { value: value } },
+          { integrationId: "beta", config: { value: value } },
         ],
         serviceConfigs: [],
         bindings: [],
@@ -169,9 +199,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       };
     }
     it("previews without writes, commits one exact ordinary batch, preserves unrelated settings and replays its durable result", async () => {
-      await state.fixture.db
-        .insert(systemSettings)
-        .values({ key: "unrelated-synthetic-setting", value: "preserved" });
+      await state.fixture.db.insert(systemSetting).values({ key: "smtp.host", value: "preserved" });
       const { jobRunner } = await import("../job-runner");
       const preview = await jobRunner.runImmediateConfigurationMigrationPreview({
         actorId: "migration-admin",
@@ -191,19 +219,19 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(result.outcome).toBe("applied");
       expect(await jobRunner.runImmediateConfigurationMigration(input)).toEqual(result);
       expect(
-        (await state.fixture.db.select().from(integrationConfig)).map((r) => r.config.VALUE),
+        (await state.fixture.db.select().from(integrationConfig)).map((r) => r.config.value),
       ).toEqual(["migrated", "migrated"]);
       expect(
-        (await state.fixture.db.select().from(systemSettings)).find(
-          (r) => r.key === "unrelated-synthetic-setting",
-        )?.value,
+        (await state.fixture.db.select().from(systemSetting)).find((r) => r.key === "smtp.host")
+          ?.value,
       ).toBe("preserved");
       await (await import("./inventory")).configurationMigrationInventory();
       const address = api.server.address();
       if (!address || typeof address === "string") throw Error("HTTP fixture unavailable");
+      const cookie = await signInMigrationAdmin();
       const client = createApiClient({
           baseUrl: `http://127.0.0.1:${address.port}/api`,
-          headerInterceptor: () => ({ "x-openmapx-local-admin": "migration-local-synthetic" }),
+          headerInterceptor: () => ({ cookie }),
         }),
         portable = unwrapAdminResponse(
           await exportAdminConfigurationMigration({
@@ -213,7 +241,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           }),
         );
       expect(portable.integrations).toEqual(
-        expect.arrayContaining([{ integrationId: "alpha", config: { VALUE: "migrated" } }]),
+        expect.arrayContaining([{ integrationId: "alpha", config: { value: "migrated" } }]),
       );
       expect(JSON.stringify(portable)).not.toContain("***");
       expect(JSON.stringify(portable)).not.toContain("OPENMAPX_SECRETS_KEY");
@@ -289,7 +317,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               .select()
               .from(adminJob)
               .where(eq(adminJob.id, row.id));
-            expect(recovered?.status).toBe("success");
+            expect(recovered?.status).toBe("succeeded");
           },
           { timeout: 30000 },
         );
@@ -312,13 +340,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         .from(integrationConfig)
         .orderBy(integrationConfig.integrationId);
       const invalid = document("not-written");
-      itemAt(invalid.integrations, 0).config.TOKEN = "synthetic-secret";
+      itemAt(invalid.integrations, 0).config.token = "synthetic-secret";
       const denied = await jobRunner.runImmediateConfigurationMigrationPreview({
         actorId: "migration-admin",
         operationKey: createDurableOpsKey("migration.test.denial", randomUUID()),
         document: invalid,
       });
-      expect(denied.denials).toContain("integration:alpha:TOKEN:not_portable");
+      expect(denied.denials).toContain("integration:alpha:token:not_portable");
       expect(
         await state.fixture.db
           .select()
@@ -331,7 +359,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         document: document("stale-write"),
       });
       await state.fixture.sql`INSERT INTO integration_config(integration_id,config)
-             VALUES ('beta','{"VALUE":"external-race"}'::jsonb)
+             VALUES ('beta','{"value":"external-race"}'::jsonb)
              ON CONFLICT (integration_id) DO UPDATE SET config=excluded.config`;
       const beforeApply = await state.fixture.db
         .select()
@@ -354,33 +382,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       ).toEqual(beforeApply);
     }, 90000);
     it("round trips actual full-admin sessions and purpose proofs through generated HTTP migration and vault clients", async () => {
-      const schema = await import("../../db/schema"),
-        { hashPassword } = await import("better-auth/crypto"),
-        { eq } = await import("drizzle-orm");
-      const password = "synthetic-migration-password-1234";
-      await state.fixture.db
-        .update(schema.user)
-        .set({ emailVerified: true })
-        .where(eq(schema.user.id, "migration-admin"));
-      await state.fixture.db.insert(schema.account).values({
-        id: randomUUID(),
-        accountId: "migration-admin",
-        providerId: "credential",
-        userId: "migration-admin",
-        password: await hashPassword(password),
-      });
+      const schema = await import("../../db/schema");
       const { auth } = await import("../../auth");
       let cookie = "";
       const login = async () => {
-        const response = await auth.api.signInEmail({
-          body: { email: "migration-admin@example.test", password },
-          asResponse: true,
-        });
-        expect(response.status).toBe(200);
-        cookie = response.headers
-          .getSetCookie()
-          .map((v) => v.split(";")[0])
-          .join("; ");
+        cookie = await signInMigrationAdmin();
         const session = await auth.api.getSession({ headers: new Headers({ cookie }) });
         if (!session) throw Error("Synthetic administrator session unavailable");
         return session;
@@ -413,7 +419,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         ),
         reauth = new AdminActionReauthentication(state.fixture.db);
       const ceremony = async (
-        purpose: "credentials.export" | "credentials.import",
+        purpose: "credential.export" | "credential.import",
         targetId: string,
         intentFingerprint?: string,
       ) => {
@@ -444,13 +450,16 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       };
       await state.fixture.db.insert(schema.integrationSecret).values({
         integrationId: "alpha",
-        key: "TOKEN",
-        ...(await import("../secrets")).encrypt("synthetic-http-vault-value"),
+        key: "token",
+        ...(await import("../secrets")).encrypt(
+          "synthetic-http-vault-value",
+          "integration_secret:alpha:token",
+        ),
       });
-      const exportProof = await ceremony("credentials.export", "vault-transfer"),
+      const exportProof = await ceremony("credential.export", "vault-transfer"),
         response = await exportAdminCredentialTransfer(
           {
-            selection: [{ scope: "integration", id: "alpha", key: "TOKEN" }],
+            selection: [{ scope: "integration", id: "alpha", key: "token" }],
             passphrase: "synthetic transfer passphrase",
             confirmed: true,
           },
@@ -470,10 +479,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           "synthetic transfer passphrase",
         );
       expect(decoded.entries).toEqual([
-        { scope: "integration", id: "alpha", key: "TOKEN", value: "synthetic-http-vault-value" },
+        { scope: "integration", id: "alpha", key: "token", value: "synthetic-http-vault-value" },
       ]);
       const previewProof = await ceremony(
-          "credentials.import",
+          "credential.import",
           "vault-transfer",
           (
             await import(
@@ -487,7 +496,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               envelope,
               passphrase: "synthetic transfer passphrase",
               choices: {
-                entries: [{ scope: "integration", id: "alpha", key: "TOKEN", action: "import" }],
+                entries: [{ scope: "integration", id: "alpha", key: "token", action: "import" }],
               },
             },
             { "idempotency-key": randomUUID(), "x-admin-reauth-proof": previewProof },
@@ -497,7 +506,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(JSON.stringify(credentialPreview)).not.toContain("synthetic-http-vault-value");
       expect(credentialPreview.applyable).toBe(true);
       const importProof = await ceremony(
-          "credentials.import",
+          "credential.import",
           credentialPreview.previewId,
           credentialPreview.intentFingerprint,
         ),
@@ -556,7 +565,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               .select()
               .from(adminJob)
               .where(eq(adminJob.id, row.id));
-            expect(recovered?.status).toBe("success");
+            expect(recovered?.status).toBe("succeeded");
           },
           { timeout: 30000 },
         );
@@ -587,7 +596,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(proofs.map((proof) => proof.id).sort()).toEqual(
         [exportProof, previewProof, importProof].sort(),
       );
-      expect(proofs.every((proof) => proof.state === "consumed")).toBe(true);
+      expect(proofs.every((proof) => proof.status === "consumed")).toBe(true);
     }, 90000);
   },
 );

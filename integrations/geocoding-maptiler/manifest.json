@@ -42,7 +42,6 @@
     "requiredConfigKeys": ["apiKey"]
   },
   "quality": "built-in",
-  "category": "Geocoding",
   "dataSources": [
     {
       "sourceId": "maptiler",

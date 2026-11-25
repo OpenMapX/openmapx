@@ -37,16 +37,23 @@ interface StorageLike {
   setItem(key: string, value: string): void;
   removeItem(key: string): void;
 }
+/** The host-owned Web Storage keys the signer keeps its tab state under. */
+export interface MangroveSignerStorageKeys {
+  /** The signer session token of the current owner. */
+  session: string;
+  /** The OAuth state of a login in progress. */
+  pendingLogin: string;
+  /** Whether the owner chose local signing instead of the signer. */
+  mode: string;
+}
 interface Options {
   owner: string;
   origin: string;
   storage: StorageLike;
+  storageKeys: MangroveSignerStorageKeys;
   transport: SignerTransport;
   now?: () => number;
 }
-const SESSION = "openmapx.mangrove.signer";
-const PENDING = "openmapx.mangrove.login";
-const MODE = "openmapx.mangrove.mode";
 const TEN_MINUTES = 10 * 60 * 1000;
 const DAY = 24 * 60 * 60 * 1000;
 export class MangroveSignerError extends Error {
@@ -69,9 +76,11 @@ export function createMangroveSigner({
   owner,
   origin,
   storage,
+  storageKeys,
   transport,
   now = Date.now,
 }: Options) {
+  const { session: SESSION, pendingLogin: PENDING, mode: MODE } = storageKeys;
   let snapshot: SignerSnapshot = {
     mode: "signer",
     status: "restoring",
@@ -369,8 +378,3 @@ export function createMangroveSigner({
   };
 }
 export type MangroveSignerController = ReturnType<typeof createMangroveSigner>;
-
-/** Remove tab credentials when the host authentication session changes. */
-export function clearMangroveSignerStorage(storage: StorageLike): void {
-  for (const key of [SESSION, PENDING, MODE, "openmapx.mangrove.draft"]) storage.removeItem(key);
-}

@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { OVERTURE_PLACES_SCHEMA_VERSION } from "@openmapx/core/published-data";
 import type postgres from "postgres";
 import { describe, expect, it, vi } from "vitest";
 import { collectCoverageSnapshot } from "../../src/coverage/collect.js";
@@ -92,6 +93,7 @@ describe("data-manager coverage collection", () => {
             status: "ready",
             places_published_at: "2026-09-10T10:00:00.000Z",
             updated_at: "2026-09-10T10:00:00.000Z",
+            schema_version: OVERTURE_PLACES_SCHEMA_VERSION,
           },
           releases: [
             {
@@ -125,6 +127,36 @@ describe("data-manager coverage collection", () => {
     }
   });
 
+  it("serves no Overture places an older builder wrote", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-coverage-overture-outdated-"));
+    try {
+      const result = await collectCoverageSnapshot({
+        dataDir,
+        sql: emptySql({
+          publication: {
+            release: "2026-11-19.0",
+            region: "germany",
+            place_count: "12",
+            status: "ready",
+            places_published_at: "2026-09-10T10:00:00.000Z",
+            updated_at: "2026-09-10T10:00:00.000Z",
+            schema_version: OVERTURE_PLACES_SCHEMA_VERSION + 1,
+          },
+          releases: [],
+        }),
+        store: new StateStore(dataDir),
+        now: () => NOW,
+      });
+      const stream = result.streams.find(
+        (entry) => entry.key === "service:data-manager:overture-places",
+      );
+      expect(stream?.publication.active).toBe(false);
+      expect(stream?.reasons).toContain("active_version_mismatch");
+    } finally {
+      rmSync(dataDir, { recursive: true, force: true });
+    }
+  });
+
   it("credits no other region's Overture import to the published region", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "openmapx-coverage-overture-other-"));
     try {
@@ -135,6 +167,7 @@ describe("data-manager coverage collection", () => {
         status: "ready",
         places_published_at: "2026-09-10T10:00:00.000Z",
         updated_at: "2026-09-10T10:30:00.000Z",
+        schema_version: OVERTURE_PLACES_SCHEMA_VERSION,
       };
       const austria = {
         region: "austria",

@@ -180,7 +180,7 @@ it.skipIf(
               kind: input.kind,
               countries: input.countries,
               sourceRevision: "synthetic-catalog",
-              finalStatus: "ok",
+              finalStatus: "succeeded",
             };
           }
           if (input.kind === "download-fonts") {
@@ -338,9 +338,9 @@ it.skipIf(
       // The final generation's plan went through /link under the update's own
       // lease: data-manager took no lease of its own for it.
       const links = await sql<{ status: string; execution_input: { leaseId: string | null } }[]>`
-        SELECT status, execution_input FROM data_manager.jobs WHERE kind = 'generation-link'`;
+        SELECT status, execution_input FROM data_manager.job WHERE kind = 'generation-link'`;
       expect(links).toHaveLength(1);
-      expect(links[0]).toMatchObject({ status: "ok" });
+      expect(links[0]).toMatchObject({ status: "succeeded" });
       expect(links[0]?.execution_input.leaseId).toEqual(expect.any(String));
       expect(readFileSync(commands, "utf8")).toContain("osrm-extract");
       expect(existsSync(join(data, "osrm-graph/region.osrm"))).toBe(true);
@@ -398,7 +398,7 @@ it.skipIf(
               control.controlChildOperationKey(rootOperationKey, "data-finalization", 1),
             ].includes(row.parent.execution.operationKey))
         )
-          await sql`DELETE FROM data_manager.jobs WHERE id=${row.status.id} AND operation_key=${row.status.operationKey}`;
+          await sql`DELETE FROM data_manager.job WHERE id=${row.status.id} AND operation_key=${row.status.operationKey}`;
       control.closeControlInstallation(dm);
       control.closeControlInstallation(agentInstallation);
       await sql.end();

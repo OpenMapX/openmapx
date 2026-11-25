@@ -53,11 +53,14 @@ export interface CatalogEntry extends GofsFeedConfig {
 export const KEYED_FEEDS: ReadonlyArray<{
   id: string;
   sourceId: string;
+  /** The manifest's secret config key that holds the feed's credential. */
+  credentialKey: string;
   auth: { kind: "header" | "query"; name: string };
 }> = [
   {
     id: "taxi-montreal",
     sourceId: "ca-taxi-montreal",
+    credentialKey: "caTaxiMontrealApiKey",
     auth: { kind: "header", name: "X-API-KEY" },
   },
 ];
@@ -112,7 +115,7 @@ function credential(ctx: IntegrationContext, key: string): string | undefined {
 function namedAuth(ctx: IntegrationContext, id: string): GofsAuth | undefined {
   const keyed = KEYED_FEEDS.find((f) => f.id === id);
   if (!keyed) return undefined;
-  const value = credential(ctx, `${keyed.sourceId}-api-key`);
+  const value = credential(ctx, keyed.credentialKey);
   if (!value) return undefined;
   return { kind: keyed.auth.kind, name: keyed.auth.name, value };
 }
@@ -125,7 +128,7 @@ function namedAuth(ctx: IntegrationContext, id: string): GofsAuth | undefined {
 function slotAuth(ctx: IntegrationContext, entry: Record<string, unknown>): GofsAuth | undefined {
   const slot = entry.credentialSlot;
   if (typeof slot !== "number" || !CUSTOM_SLOTS.includes(slot)) return undefined;
-  const value = credential(ctx, `gofs-custom-${slot}-api-key`);
+  const value = credential(ctx, `gofsCustom${slot}ApiKey`);
   if (!value) return undefined;
   const kind = entry.authKind === "query" ? "query" : "header";
   const name =

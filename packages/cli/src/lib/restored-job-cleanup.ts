@@ -7,13 +7,12 @@ export const RESTORED_JOB_FAILURE_REASON = "restored from backup";
  * and replay host effects against a deployment that has moved on.
  *
  * A data-manager row counts as open when any of these holds: its status is
- * queued, running or cancel-pending; it was interrupted without ever finishing
- * (an execution awaiting recovery); its publication outcome is unknown, which
- * keeps an execution non-terminal whatever its status says; or a child (a cell
- * of its execution row that data-manager took up) or an agent operation has not
- * settled.
+ * queued, running, cancel-pending or interrupted (an execution awaiting
+ * recovery); its publication outcome is unknown, which keeps an execution
+ * non-terminal whatever its status says; or a child (a cell of its execution
+ * row that data-manager took up) or an agent operation has not settled.
  *
- * An open row becomes `error` unless it already carries a final status. Its
+ * An open row becomes `failed` unless it already carries a final status. Its
  * unknown publication is recorded as not started, and its retained child and
  * agent operation attempts, its execution row and its worker completion are
  * dropped: they could only be settled with receipts from a host timeline that
@@ -33,8 +32,8 @@ SET status = 'failed',
     error = ${reason},
     finished_at = COALESCE(finished_at, CURRENT_TIMESTAMP)
 WHERE status IN ('queued', 'running', 'cancel_pending');
-UPDATE data_manager.jobs
-SET status = CASE WHEN status IN ('ok', 'partial', 'error', 'canceled') THEN status ELSE 'error' END,
+UPDATE data_manager.job
+SET status = CASE WHEN status IN ('succeeded', 'partially_succeeded', 'failed', 'cancelled') THEN status ELSE 'failed' END,
     finished_at = COALESCE(finished_at, CURRENT_TIMESTAMP),
     metadata = CASE WHEN jsonb_typeof(metadata) = 'object' THEN metadata ELSE '{}'::jsonb END
       || jsonb_build_object('failureReason', ${reason}::text),
@@ -48,8 +47,7 @@ SET status = CASE WHEN status IN ('ok', 'partial', 'error', 'canceled') THEN sta
     execution_progress = NULL,
     execution_completion = NULL,
     released_at = NULL
-WHERE status IN ('queued', 'running', 'cancel_pending')
-   OR (status = 'interrupted' AND finished_at IS NULL)
+WHERE status IN ('queued', 'running', 'cancel_pending', 'interrupted')
    OR execution_state->>'publication' = 'unknown'
    OR EXISTS (
      SELECT 1 FROM jsonb_array_elements(COALESCE(execution_progress->'children', '[]'::jsonb)) AS child
@@ -62,7 +60,7 @@ WHERE status IN ('queued', 'running', 'cancel_pending')
      SELECT 1 FROM jsonb_array_elements(execution_agent_operations) AS operation
      WHERE operation->>'state' = 'attempted'
    );
-UPDATE data_manager.offline_package_jobs
+UPDATE data_manager.offline_package_job
 SET status = 'failed',
     error_message = ${reason},
     lease_owner = NULL,

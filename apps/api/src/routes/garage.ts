@@ -4,12 +4,16 @@ import type { FastifyPluginAsync } from "fastify";
 import { db } from "../db/index";
 import { parkedLocation, personalVehicle, user } from "../db/schema";
 import { isUniqueViolation } from "../db/unique-violation";
-import { PERSONAL_VEHICLE_NAME_UNIQUE } from "../db/vehicle-schema";
+import { evSpecColumns, PERSONAL_VEHICLE_NAME_UNIQUE } from "../db/vehicle-schema";
 import { getUserId, requireAuthHook } from "../utils/require-auth";
 import { declareRouteAuth } from "../utils/route-auth";
 import { registerGarageRoute } from "./garage-contract";
 
-const { userId: _vehicleOwner, ...vehicleColumns } = getTableColumns(personalVehicle);
+const {
+  userId: _vehicleOwner,
+  evVersion: _evFormat,
+  ...vehicleColumns
+} = getTableColumns(personalVehicle);
 const { userId: _parkingOwner, ...parkingColumns } = getTableColumns(parkedLocation);
 
 type GarageTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -77,7 +81,7 @@ export const garageRoute: FastifyPluginAsync = async (fastify) => {
         }
         const [row] = await tx
           .insert(personalVehicle)
-          .values({ userId, ...draft.value, isDefault })
+          .values({ userId, ...draft.value, ...evSpecColumns(draft.value.ev), isDefault })
           .returning({ id: personalVehicle.id });
         if (!row) throw new Error("Vehicle was not created");
         return { id: row.id, ...draft.value, isDefault };
@@ -115,7 +119,7 @@ export const garageRoute: FastifyPluginAsync = async (fastify) => {
         }
         await tx
           .update(personalVehicle)
-          .set(draft.value)
+          .set({ ...draft.value, ...evSpecColumns(draft.value.ev) })
           .where(and(eq(personalVehicle.id, id), eq(personalVehicle.userId, userId)));
         return null;
       })

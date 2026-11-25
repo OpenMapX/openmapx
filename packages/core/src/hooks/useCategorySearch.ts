@@ -54,8 +54,8 @@ export function isAreaTooLarge(error: unknown): boolean {
     return (
       typeof payload === "object" &&
       payload !== null &&
-      (payload as { error?: unknown }).error === "area_too_large"
+      (payload as { code?: unknown }).code === "AREA_TOO_LARGE"
     );
   }
-  return error instanceof Error && error.message.includes("area_too_large");
+  return false;
 }

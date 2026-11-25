@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import {
   type AccountDelivery,
   type AccountProvisioningResult,
+  type AuditAction,
   accountDeliverySchema,
   accountMailActionSchema,
   accountRoleChangeSchema,
@@ -36,6 +37,14 @@ export class AccountProvisioningError extends Error {
 function fail(code: string, status = 409): never {
   throw new AccountProvisioningError(code, status);
 }
+/** The audit action each assisted account action records. */
+const ASSISTED_ACTION_AUDIT = {
+  invitation: "user.invitation.send",
+  email_verification: "user.email_verification.send",
+  password_reset: "user.password_reset.send",
+  verify: "user.email.verify",
+  password: "user.password.set",
+} as const satisfies Record<string, AuditAction>;
 async function resultFor(
   key: string,
   database: AuthDatabase,
@@ -44,25 +53,25 @@ async function resultFor(
     .select()
     .from(accountActionReceipt)
     .where(eq(accountActionReceipt.key, key));
-  if (!receipt?.targetId || !receipt.result) fail("ACCOUNT_ACTION_NOT_AVAILABLE");
+  if (!receipt?.targetUserId || !receipt.result) fail("ACCOUNT_ACTION_NOT_AVAILABLE");
   const mails = await database
-    .select({ kind: accountMailOutbox.kind, state: accountMailOutbox.state })
+    .select({ kind: accountMailOutbox.kind, status: accountMailOutbox.status })
     .from(accountMailOutbox)
     .where(eq(accountMailOutbox.requestKey, key));
-  const outcome = (kind: "verification" | "password_setup") => {
-    const state = mails.find((row) => row.kind === kind)?.state;
-    return state === "sending"
+  const outcome = (kind: "email_verification" | "password_setup") => {
+    const status = mails.find((row) => row.kind === kind)?.status;
+    return status === "sending"
       ? "queued"
-      : (state ??
-          (kind === "verification"
+      : (status ??
+          (kind === "email_verification"
             ? receipt.result?.verificationDelivery
             : receipt.result?.passwordSetupDelivery) ??
           "not_requested");
   };
   return {
-    userId: receipt.targetId,
+    userId: receipt.targetUserId,
     created: receipt.result.created,
-    verificationDelivery: outcome("verification"),
+    verificationDelivery: outcome("email_verification"),
     passwordSetupDelivery: outcome("password_setup"),
     ...(receipt.result.role ? { role: receipt.result.role, changed: receipt.result.changed } : {}),
   };
@@ -94,13 +103,13 @@ export async function accountDelivery(
     .from(accountActionReceipt)
     .where(
       and(
-        eq(accountActionReceipt.targetId, userId),
+        eq(accountActionReceipt.targetUserId, userId),
         eq(accountActionReceipt.mailRequested, true),
         inArray(accountActionReceipt.action, [
           "create",
           "invitation",
-          "verification-email",
-          "reset-password",
+          "email_verification",
+          "password_reset",
         ]),
       ),
     )
@@ -172,7 +181,7 @@ async function withAccountAction(
           .where(eq(accountActionReceipt.key, key));
         if (prior) {
           if (
-            prior.actorId !== input.actor.id ||
+            prior.actorUserId !== input.actor.id ||
             prior.intentDigest !== digest ||
             prior.action !== input.action
           )
@@ -183,8 +192,8 @@ async function withAccountAction(
           const cutoff = new Date(Date.now() - 3600000).toISOString(),
             [counts] = await tx
               .select({
-                actor: sql<number>`count(*) filter(where ${accountActionReceipt.actorId}=${input.actor.id})::int`,
-                target: sql<number>`count(*) filter(where ${accountActionReceipt.targetId}=${input.targetId})::int`,
+                actor: sql<number>`count(*) filter(where ${accountActionReceipt.actorUserId}=${input.actor.id})::int`,
+                target: sql<number>`count(*) filter(where ${accountActionReceipt.targetUserId}=${input.targetId})::int`,
               })
               .from(accountActionReceipt)
               .where(
@@ -198,8 +207,8 @@ async function withAccountAction(
         }
         await tx.insert(accountActionReceipt).values({
           key,
-          actorId: input.actor.id,
-          targetId: input.targetId,
+          actorUserId: input.actor.id,
+          targetUserId: input.targetId,
           action: input.action,
           intentDigest: digest,
           mailRequested: input.mailRequested,
@@ -212,10 +221,10 @@ async function withAccountAction(
         await tx
           .update(accountActionReceipt)
           .set({
-            targetId: result.userId,
+            targetUserId: result.userId,
             result: {
               created: result.created,
-              verificationDelivery: queued.some((mail) => mail.kind === "verification")
+              verificationDelivery: queued.some((mail) => mail.kind === "email_verification")
                 ? "queued"
                 : "not_requested",
               passwordSetupDelivery: queued.some((mail) => mail.kind === "password_setup")
@@ -235,7 +244,7 @@ async function issueAccountMail(
   tx: AuthDatabase,
   key: string,
   subject: { id: string; email: string; emailVerified: boolean },
-  kind: "verification" | "password_setup",
+  kind: "email_verification" | "password_setup",
   invitation = false,
 ) {
   const origin = configuredTrustedWebOrigins()[0];
@@ -256,7 +265,7 @@ async function issueAccountMail(
       delivery: invitation ? "invitation" : "reset",
     },
     () =>
-      kind === "verification"
+      kind === "email_verification"
         ? auth.api.sendVerificationEmail({
             body: { email: subject.email, callbackURL: `${origin}/` },
           })
@@ -309,7 +318,7 @@ export async function provisionAccount(
       const [subject] = await tx.select().from(user).where(eq(user.id, created.user.id));
       if (!subject || subject.emailVerified) fail("ACCOUNT_CREATION_FAILED", 503);
       if (invite) {
-        await issueAccountMail(tx, key, subject, "verification");
+        await issueAccountMail(tx, key, subject, "email_verification");
         await issueAccountMail(tx, key, subject, "password_setup", true);
       }
       return { userId: subject.id, created: true };
@@ -320,7 +329,7 @@ export async function provisionAccount(
 
 export async function assistedAccountAction(
   input: {
-    action: "invitation" | "verification-email" | "reset-password" | "verify" | "password";
+    action: "invitation" | "email_verification" | "password_reset" | "verify" | "password";
     userId: string;
     body: unknown;
     idempotencyKey: string;
@@ -334,7 +343,7 @@ export async function assistedAccountAction(
     passwordBody =
       input.action === "password" ? assistedAccountPasswordSchema.parse(input.body) : undefined,
     body = verifyBody ?? passwordBody ?? accountMailActionSchema.parse(input.body),
-    mail = ["invitation", "verification-email", "reset-password"].includes(input.action);
+    mail = ["invitation", "email_verification", "password_reset"].includes(input.action);
   return withAccountAction(
     {
       action: input.action,
@@ -352,12 +361,12 @@ export async function assistedAccountAction(
       if (!input.proof) fail("REAUTHENTICATION_REQUIRED", 403);
       const purpose =
         input.action === "verify"
-          ? "account.verify"
+          ? "user.email.verify"
           : input.action === "password"
-            ? "account.password.set"
-            : input.action === "reset-password"
-              ? "account.reset.send"
-              : "account.invite";
+            ? "user.password.set"
+            : input.action === "password_reset"
+              ? "user.password_reset.send"
+              : "user.invitation.send";
       return withAccountRecoveryProof(
         {
           actorId: input.actor.id,
@@ -392,9 +401,9 @@ export async function assistedAccountAction(
                 ),
               );
           } else {
-            if (input.action !== "reset-password" && !subject.emailVerified)
-              await issueAccountMail(tx, key, subject, "verification");
-            if (input.action !== "verification-email")
+            if (input.action !== "password_reset" && !subject.emailVerified)
+              await issueAccountMail(tx, key, subject, "email_verification");
+            if (input.action !== "email_verification")
               await issueAccountMail(
                 tx,
                 key,
@@ -406,8 +415,7 @@ export async function assistedAccountAction(
           await writeAuditLog({
             actorId: input.actor.id,
             targetId: subject.id,
-            targetType: "user",
-            action: input.action === "password" ? "user.password.set" : `user.${input.action}`,
+            action: ASSISTED_ACTION_AUDIT[input.action],
             details: {
               mutationDigest: key,
               ...("reasonCode" in body ? { reasonCode: body.reasonCode } : {}),

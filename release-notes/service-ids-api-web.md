@@ -6,7 +6,7 @@ impacts: [breaking, operator-action]
 
 The API and web services are now called `api` and `web`, like their images,
 instead of `app-api` and `app-web`. Their compose services, containers
-(`openmapx-api-1`, `openmapx-web-1`), service selections and CLI arguments use
+(`openmapx-api`, `openmapx-web`), service selections and CLI arguments use
 the new names, for example `pnpm openmapx services restart api`.
 
 Per-service setting variables follow the ID: the API's settings are now

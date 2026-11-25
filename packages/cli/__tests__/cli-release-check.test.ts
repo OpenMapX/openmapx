@@ -121,6 +121,16 @@ describe("CLI checked candidates without selection", () => {
     },
   );
 
+  it("refuses a candidate of another state epoch without caching it", async () => {
+    const f = await fixture();
+    f.candidate.stateEpoch = services.RELEASE_STATE_EPOCH + 1;
+    await expect(release.checkRelease({ infraDir: f.infraDir, docker: f.docker })).rejects.toThrow(
+      "Release candidate uses installation state epoch 2, and this installation uses epoch 1. It cannot be applied in place",
+    );
+    expect(services.cachedReleases(f.infraDir, "ghcr.io/openmapx")).toEqual([]);
+    expectPinsUnchanged(f);
+  });
+
   it("refuses a disabled channel before any registry call", async () => {
     const f = await fixture();
     vi.stubEnv("OPENMAPX_RELEASE", "local");

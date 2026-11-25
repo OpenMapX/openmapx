@@ -1,12 +1,15 @@
+import { uuidv7 } from "@openmapx/core/ids/uuidv7";
 import {
-  ACTIVE_REQUEST_STATES,
+  ACTIVE_REQUEST_STATUSES,
   acceptsCaseDecision,
   acceptsManualIdentityVerification,
   acceptsSelfServiceExport,
   acceptsTaskResolution,
   canExtendDeadline,
-  INITIAL_REQUEST_STATE,
-  isTerminalRequestState,
+  INITIAL_REQUEST_STATUS,
+  isTerminalRequestStatus,
+  type PrivacyActorKind,
+  type PrivacyEventType,
 } from "@openmapx/core/privacy";
 import { defaultLocale, resolveLocale } from "@openmapx/i18n";
 import { and, desc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
@@ -15,7 +18,7 @@ import {
   ACTIVE_REQUEST_KIND_KEY,
   type PrivacyNotificationTemplate,
   REQUEST_EVENT_IDEMPOTENCY_KEY,
-  type RequestState,
+  type RequestStatus,
 } from "../db/privacy-schema.js";
 import {
   dataSubjectRequest,
@@ -26,7 +29,7 @@ import {
   user,
 } from "../db/schema.js";
 import { isUniqueViolation } from "../db/unique-violation.js";
-import { decrypt, encrypt } from "../services/secrets.js";
+import { decrypt, encrypt, type SealedSecret, secretAad } from "../services/secrets.js";
 import { actorUserIdOrNull } from "../utils/actor.js";
 import { SUBJECT_DATA_CATALOGUE } from "./catalogue.js";
 import { addCalendarMonths, calculateSubjectRequestDueAt } from "./deadline.js";
@@ -52,12 +55,12 @@ export interface PrivacyRequestServiceOptions {
 
 type RequestRow = typeof dataSubjectRequest.$inferSelect;
 type Transaction = Parameters<Parameters<typeof defaultDb.transaction>[0]>[0];
-type Actor = { kind: "subject" | "admin" | "system"; id?: string | null };
+type Actor = { kind: PrivacyActorKind; id?: string | null };
 
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$/;
 const REASON_CODE = /^[a-z0-9][a-z0-9._-]{0,127}$/;
-/** Subject templates sent when a request enters a state. */
-const STATE_TEMPLATES: Partial<Record<RequestState, PrivacyNotificationTemplate>> = {
+/** Subject templates sent when a request enters a status. */
+const STATUS_TEMPLATES: Partial<Record<RequestStatus, PrivacyNotificationTemplate>> = {
   waiting_on_requester: "waiting_on_requester",
   completed: "completed",
   refused: "refused",
@@ -108,7 +111,7 @@ function notificationValues(input: {
     channel: "email" as const,
     locale: resolveLocale(input.locale),
     payload: {},
-    state: "pending" as const,
+    status: "pending" as const,
     attempts: 0,
     nextAttemptAt: input.at,
     occurrenceKey: input.occurrenceKey ?? "",
@@ -117,18 +120,54 @@ function notificationValues(input: {
   };
 }
 
-function encodeLocator(value: string): string {
-  return JSON.stringify(encrypt(JSON.stringify({ value })));
+type StoredLocator = Pick<
+  RequestRow,
+  "locatorCiphertext" | "locatorIv" | "locatorTag" | "locatorKeyVersion"
+>;
+
+function encodeLocator(requestId: string, value: string): StoredLocator {
+  const { ciphertext, iv, tag, keyVersion } = encrypt(
+    JSON.stringify({ value }),
+    secretAad.dataSubjectRequestLocator(requestId),
+  );
+  return {
+    locatorCiphertext: ciphertext,
+    locatorIv: iv,
+    locatorTag: tag,
+    locatorKeyVersion: keyVersion,
+  };
 }
+
+const NO_LOCATOR: StoredLocator = {
+  locatorCiphertext: null,
+  locatorIv: null,
+  locatorTag: null,
+  locatorKeyVersion: null,
+};
 
 /** A stored locator that cannot be decrypted (for example after a changed
  * secrets key) is an operational failure, never "no subject". */
-function decodeLocator(envelope: string): string {
+function decodeLocator(requestId: string, stored: StoredLocator): string {
   let value: unknown;
   try {
-    const parsed = JSON.parse(envelope) as { ciphertext: string; iv: string; tag: string };
-    value = (JSON.parse(decrypt(parsed.ciphertext, parsed.iv, parsed.tag)) as { value?: unknown })
-      .value;
+    if (
+      stored.locatorKeyVersion === null ||
+      !stored.locatorCiphertext ||
+      !stored.locatorIv ||
+      !stored.locatorTag
+    )
+      throw new Error("unreadable locator");
+    const sealed: SealedSecret = {
+      ciphertext: stored.locatorCiphertext,
+      iv: stored.locatorIv,
+      tag: stored.locatorTag,
+      keyVersion: stored.locatorKeyVersion,
+    };
+    value = (
+      JSON.parse(decrypt(sealed, secretAad.dataSubjectRequestLocator(requestId))) as {
+        value?: unknown;
+      }
+    ).value;
   } catch {
     throw new PrivacyRequestError("SUBJECT_LOCATOR_UNREADABLE", 503);
   }
@@ -149,7 +188,6 @@ export async function privacyAlertRecipients(
       and(
         eq(user.role, "admin"),
         or(isNull(user.banned), eq(user.banned, false), lte(user.banExpires, now)),
-        sql`${user.id} <> 'loopback'`,
       ),
     );
   return rows.map((row) => row.id);
@@ -168,10 +206,10 @@ export class PrivacyRequestService {
 
   /** The exact account whose data an export contains, or null when an
    * assisted case names someone only by email or another reference. */
-  subjectUserId(request: Pick<RequestRow, "userId" | "locatorType" | "encryptedLocator">) {
+  subjectUserId(request: Pick<RequestRow, "id" | "userId" | "locatorType"> & StoredLocator) {
     if (request.userId) return request.userId;
-    if (request.locatorType !== "user_id" || !request.encryptedLocator) return null;
-    return decodeLocator(request.encryptedLocator);
+    if (request.locatorType !== "user_id" || request.locatorCiphertext === null) return null;
+    return decodeLocator(request.id, request);
   }
 
   private async activeRequestFor(userId: string, kind: RequestRow["kind"]) {
@@ -182,7 +220,7 @@ export class PrivacyRequestService {
         and(
           eq(dataSubjectRequest.userId, userId),
           eq(dataSubjectRequest.kind, kind),
-          inArray(dataSubjectRequest.state, [...ACTIVE_REQUEST_STATES]),
+          inArray(dataSubjectRequest.status, [...ACTIVE_REQUEST_STATUSES]),
         ),
       )
       .orderBy(desc(dataSubjectRequest.createdAt))
@@ -207,7 +245,8 @@ export class PrivacyRequestService {
     if (!locatorValue) throw new PrivacyRequestError("SUBJECT_LOCATOR_REQUIRED", 400);
     // An assisted request keeps how the person was named; a self-service
     // request is tied to the signed-in account and needs no locator copy.
-    const encryptedLocator = selfService ? null : encodeLocator(locatorValue);
+    const requestId = uuidv7();
+    const storedLocator = selfService ? NO_LOCATOR : encodeLocator(requestId, locatorValue);
     const applicable = this.catalogue.filter(
       (registration) => registration.strategy !== "not_personal",
     );
@@ -250,17 +289,18 @@ export class PrivacyRequestService {
         const [created] = await tx
           .insert(dataSubjectRequest)
           .values({
+            id: requestId,
             kind: parsed.kind,
             channel: parsed.channel,
             userId: parsed.userId,
             actorUserId: actorUserIdOrNull(parsed.actorUserId),
             actorSessionId: parsed.actorSessionId ?? null,
-            encryptedLocator,
+            ...storedLocator,
             locatorType,
             accountState: parsed.subject?.accountState ?? "current",
             locale: parsed.locale,
             timeZone: parsed.timeZone,
-            state: INITIAL_REQUEST_STATE,
+            status: INITIAL_REQUEST_STATUS,
             version: 1,
             receivedAt,
             registeredAt: now,
@@ -426,7 +466,7 @@ export class PrivacyRequestService {
     tx: Transaction,
     current: RequestRow,
     input: {
-      to: RequestState;
+      to: RequestStatus;
       actor: Actor;
       reasonCode?: string;
       idempotencyKey?: string;
@@ -434,14 +474,14 @@ export class PrivacyRequestService {
       set?: Partial<typeof dataSubjectRequest.$inferInsert>;
     },
   ): Promise<RequestRow> {
-    assertValidRequestTransition(current.state, input.to);
+    assertValidRequestTransition(current.status, input.to);
     const now = this.now();
-    const closing = isTerminalRequestState(input.to);
+    const closing = isTerminalRequestStatus(input.to);
     const [updated] = await tx
       .update(dataSubjectRequest)
       .set({
         ...input.set,
-        state: input.to,
+        status: input.to,
         version: sql`${dataSubjectRequest.version} + 1`,
         updatedAt: now,
         ...(input.to === "refused" ? { refusalCode: input.reasonCode ?? null } : {}),
@@ -451,7 +491,7 @@ export class PrivacyRequestService {
       .where(
         and(
           eq(dataSubjectRequest.id, current.id),
-          eq(dataSubjectRequest.state, current.state),
+          eq(dataSubjectRequest.status, current.status),
           eq(dataSubjectRequest.version, current.version),
         ),
       )
@@ -459,11 +499,12 @@ export class PrivacyRequestService {
     if (!updated) throw new PrivacyRequestError("REQUEST_VERSION_CONFLICT", 409);
     await tx.insert(dataSubjectRequestEvent).values({
       requestId: current.id,
-      eventType: `state_${input.to}`,
+      eventType: "status_changed",
       actorKind: input.actor.kind,
       actorUserId: actorUserIdOrNull(input.actor.id),
       payload: boundedEventPayload({
-        from: current.state,
+        from: current.status,
+        to: input.to,
         ...(input.reasonCode ? { reasonCode: input.reasonCode } : {}),
         ...(input.operationDigest ? { operationDigest: input.operationDigest } : {}),
       }),
@@ -471,7 +512,7 @@ export class PrivacyRequestService {
       ...(input.idempotencyKey ? { idempotencyKey: input.idempotencyKey } : {}),
       createdAt: now,
     });
-    const template = STATE_TEMPLATES[input.to];
+    const template = STATUS_TEMPLATES[input.to];
     // A withdrawal is the subject's own act; it needs no completion email.
     if (template && updated.userId && input.reasonCode !== "withdrawn")
       await tx
@@ -513,7 +554,7 @@ export class PrivacyRequestService {
       requestId: string;
       version: number;
       idempotencyKey: string;
-      eventType: string;
+      eventType: PrivacyEventType;
       operationDigest: string;
     },
     work: (tx: Transaction, current: RequestRow) => Promise<RequestRow>,
@@ -561,7 +602,7 @@ export class PrivacyRequestService {
       action: "withdraw",
     });
     return this.mutate(
-      { requestId, version, idempotencyKey, eventType: "state_completed", operationDigest },
+      { requestId, version, idempotencyKey, eventType: "status_changed", operationDigest },
       (tx, current) =>
         this.applyTransition(tx, current, {
           to: "completed",
@@ -589,9 +630,9 @@ export class PrivacyRequestService {
       action: "verify-identity",
     });
     return this.mutate(
-      { ...input, eventType: "state_in_progress", operationDigest },
+      { ...input, eventType: "status_changed", operationDigest },
       async (tx, current) => {
-        if (current.identityMethod || !acceptsManualIdentityVerification(current.state))
+        if (current.identityMethod || !acceptsManualIdentityVerification(current.status))
           throw new PrivacyRequestError("IDENTITY_VERIFICATION_NOT_ALLOWED", 409);
         return this.applyTransition(tx, current, {
           to: "in_progress",
@@ -621,9 +662,9 @@ export class PrivacyRequestService {
       actorId: input.actorId,
     });
     return this.mutate(
-      { ...input, eventType: `state_${input.decision}`, operationDigest },
+      { ...input, eventType: "status_changed", operationDigest },
       async (tx, current) => {
-        if (!acceptsCaseDecision(current.state))
+        if (!acceptsCaseDecision(current.status))
           throw new PrivacyRequestError("CASE_DECISION_NOT_ALLOWED", 409);
         // Work on a case starts only once the requester's identity is known.
         if (input.decision === "in_progress" && !current.identityMethod)
@@ -671,7 +712,7 @@ export class PrivacyRequestService {
     return this.mutate(
       { ...input, eventType: "task_resolved", operationDigest },
       async (tx, current) => {
-        if (!acceptsTaskResolution(current.state))
+        if (!acceptsTaskResolution(current.status))
           throw new PrivacyRequestError("TASK_RESOLUTION_NOT_ALLOWED", 409);
         const now = this.now();
         const [task] = await tx
@@ -731,7 +772,7 @@ export class PrivacyRequestService {
       { ...input, eventType: "extended", operationDigest },
       async (tx, current) => {
         const now = this.now();
-        if (!canExtendDeadline(current.state))
+        if (!canExtendDeadline(current.status))
           throw new PrivacyRequestError("EXTENSION_NOT_ALLOWED", 409);
         const originalDueAt = calculateSubjectRequestDueAt(current.receivedAt, current.timeZone);
         const max = addCalendarMonths(originalDueAt, 2, current.timeZone);
@@ -810,9 +851,9 @@ export class PrivacyRequestService {
       locale: input.locale,
       timeZone: input.timeZone,
     });
-    if (!acceptsSelfServiceExport(request.state))
+    if (!acceptsSelfServiceExport(request.status))
       throw new PrivacyRequestError("REQUEST_NOT_ACTIVE", 409);
-    if (request.state !== "in_progress") {
+    if (request.status !== "in_progress") {
       const current = request;
       const verifying = !current.identityMethod;
       const now = this.now();
@@ -849,7 +890,7 @@ export class PrivacyRequestService {
     const request = await this.getById(requestId);
     if (request.channel === "self_service")
       throw new PrivacyRequestError("ASSISTED_REQUEST_REQUIRED", 409);
-    if (!acceptsCaseDecision(request.state))
+    if (!acceptsCaseDecision(request.status))
       throw new PrivacyRequestError("REQUEST_NOT_ACTIVE", 409);
     if (!request.identityMethod) throw new PrivacyRequestError("IDENTITY_REQUIRED", 409);
     // A fresh sign-in by the account holder proves who they are, not who sent
@@ -873,7 +914,7 @@ export class PrivacyRequestService {
     );
     if (
       actor.kind !== "subject" ||
-      request.state !== "in_progress" ||
+      request.status !== "in_progress" ||
       (await this.openTaskCount(requestId)) > 0
     )
       return request;
@@ -884,7 +925,7 @@ export class PrivacyRequestService {
         .where(eq(dataSubjectRequest.id, requestId))
         .for("update")
         .limit(1);
-      if (!current || current.state !== "in_progress") return current ?? request;
+      if (!current || current.status !== "in_progress") return current ?? request;
       return this.applyTransition(tx, current, {
         to: "completed",
         actor,

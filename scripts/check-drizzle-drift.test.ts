@@ -1,6 +1,18 @@
-import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { baselineComparison, driftProblems } from "./check-drizzle-drift.mjs";
+import {
+  migrationDigest,
+  parseReleasedMigrations,
+  readJournal,
+  readReleasedMigrations,
+  recordReleasedMigrations,
+  releasedMigrationProblems,
+} from "./released-migrations.mjs";
 
 const entry = (idx: number, tag: string) => ({ idx, version: "7", when: idx, tag });
 
@@ -99,44 +111,136 @@ describe("drizzle drift output check", () => {
   });
 });
 
+const digest = (tag: string) => createHash("sha256").update(`sql of ${tag}`).digest("hex");
+const released = (idx: number, tag: string) => ({ tag, when: idx, sha256: digest(tag) });
+const baselinePair = [entry(1, "0000_baseline"), entry(2, "0001_database_objects")];
+const releasedPair = {
+  version: 1 as const,
+  migrations: [released(1, "0000_baseline"), released(2, "0001_database_objects")],
+};
+const none = { version: 1 as const, migrations: [] };
+
 describe("drizzle drift gate", () => {
-  it("compares the committed baseline with a regeneration while only the baseline exists", () => {
+  it("compares the committed baseline with a regeneration while nothing is released", () => {
+    expect(baselineComparison(none)).toEqual({ applies: true });
+  });
+
+  it("applies to the committed lock and journal", () => {
+    const root = fileURLToPath(new URL("..", import.meta.url));
+    const lock = readReleasedMigrations(root);
+    expect(baselineComparison(lock).applies).toBe(lock.migrations.length === 0);
     expect(
-      baselineComparison({
-        entries: [entry(0, "0000_baseline"), entry(1, "0001_database_objects")],
-      }),
-    ).toEqual({ applies: true });
+      releasedMigrationProblems(lock, readJournal(root), (tag) => migrationDigest(root, tag)),
+    ).toEqual([]);
   });
 
-  it("applies to the committed journal", () => {
-    const journal = JSON.parse(
-      readFileSync(
-        new URL("../apps/api/src/db/migrations/meta/_journal.json", import.meta.url),
-        "utf8",
-      ),
-    );
-    expect(baselineComparison(journal).applies).toBe(true);
-  });
-
-  it("skips the comparison once an incremental migration follows the baseline", () => {
-    const result = baselineComparison({
-      entries: [
-        entry(0, "0000_baseline"),
-        entry(1, "0001_database_objects"),
-        entry(2, "0002_add_widget"),
-      ],
-    });
+  it("skips the comparison once a release lists migrations", () => {
+    const result = baselineComparison(releasedPair);
     expect(result.applies).toBe(false);
-    expect(result.reason).toMatch(/later migrations follow the baseline \(0002_add_widget\)/);
-    expect(result.reason).toMatch(/drizzle-kit check and generate still guard drift/);
+    expect(result.reason).toMatch(
+      /lists released migrations \(0000_baseline, 0001_database_objects\)/,
+    );
   });
 
-  it("skips the comparison for a journal that is not the baseline pair", () => {
-    expect(baselineComparison({ entries: [entry(0, "0000_baseline")] }).applies).toBe(false);
+  it("allows only the baseline pair while nothing is released", () => {
+    expect(releasedMigrationProblems(none, { entries: baselinePair }, digest)).toEqual([]);
     expect(
-      baselineComparison({
-        entries: [entry(0, "0001_database_objects"), entry(1, "0000_baseline")],
-      }).applies,
-    ).toBe(false);
+      releasedMigrationProblems(
+        none,
+        { entries: [...baselinePair, entry(3, "0002_add_widget")] },
+        digest,
+      ),
+    ).toEqual([expect.stringMatching(/No migration is released yet.*0002_add_widget/)]);
+  });
+
+  it("accepts a new migration newer than every released one", () => {
+    expect(
+      releasedMigrationProblems(
+        releasedPair,
+        { entries: [...baselinePair, entry(3, "0002_add_widget")] },
+        digest,
+      ),
+    ).toEqual([]);
+  });
+
+  it("refuses a changed, missing or re-dated released migration", () => {
+    expect(
+      releasedMigrationProblems(releasedPair, { entries: baselinePair }, (tag) =>
+        tag === "0000_baseline" ? "0".repeat(64) : null,
+      ),
+    ).toEqual([
+      "Released migration 0000_baseline.sql changed.",
+      "Released migration 0001_database_objects.sql is missing.",
+    ]);
+    expect(
+      releasedMigrationProblems(
+        releasedPair,
+        { entries: [entry(1, "0000_baseline"), entry(5, "0001_database_objects")] },
+        digest,
+      ),
+    ).toEqual(["Released migration 0001_database_objects changed its journal `when` from 2 to 5."]);
+    expect(
+      releasedMigrationProblems(releasedPair, { entries: [entry(1, "0000_baseline")] }, digest),
+    ).toEqual(["Released migration 0001_database_objects is missing from the journal."]);
+  });
+
+  it("refuses a new migration the migrator would skip", () => {
+    expect(
+      releasedMigrationProblems(
+        releasedPair,
+        { entries: [...baselinePair, { ...entry(3, "0002_add_widget"), when: 2 }] },
+        digest,
+      ),
+    ).toEqual([expect.stringMatching(/0002_add_widget has `when` 2, not newer .* \(2\)/)]);
+  });
+
+  it("refuses a malformed lock", () => {
+    expect(() => parseReleasedMigrations("[]")).toThrow(/malformed/);
+    expect(() => parseReleasedMigrations('{"version":2,"migrations":[]}')).toThrow(/version/);
+    expect(() =>
+      parseReleasedMigrations(
+        JSON.stringify({ version: 1, migrations: [{ tag: "0000_baseline", when: 1 }] }),
+      ),
+    ).toThrow(/invalid entry/);
+  });
+});
+
+describe("release preparation", () => {
+  function repository(): string {
+    const root = mkdtempSync(join(tmpdir(), "openmapx-released-migrations-"));
+    mkdirSync(join(root, "apps/api/src/db/migrations/meta"), { recursive: true });
+    for (const tag of ["0000_baseline", "0001_database_objects"])
+      writeFileSync(join(root, `apps/api/src/db/migrations/${tag}.sql`), `sql of ${tag}`);
+    writeFileSync(
+      join(root, "apps/api/src/db/migrations/meta/_journal.json"),
+      JSON.stringify({ entries: baselinePair }),
+    );
+    writeFileSync(
+      join(root, "apps/api/src/db/migrations/released-migrations.json"),
+      JSON.stringify(none),
+    );
+    return root;
+  }
+
+  it("appends every unreleased journal migration with its digest", () => {
+    const root = repository();
+    try {
+      expect(recordReleasedMigrations(root)).toEqual(releasedPair);
+      expect(readReleasedMigrations(root)).toEqual(releasedPair);
+      expect(recordReleasedMigrations(root)).toEqual(releasedPair);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it("refuses when a released migration already changed", () => {
+    const root = repository();
+    try {
+      recordReleasedMigrations(root);
+      writeFileSync(join(root, "apps/api/src/db/migrations/0000_baseline.sql"), "edited");
+      expect(() => recordReleasedMigrations(root)).toThrow(/0000_baseline.sql changed/);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

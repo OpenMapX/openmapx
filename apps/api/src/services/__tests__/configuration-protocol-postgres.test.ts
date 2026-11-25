@@ -86,7 +86,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         role: "ops-agent",
         serviceIds: host.loaded.map((service) => service.manifest.id),
       });
-      journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs-v1.json"));
+      journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs.json"));
       const { openLeaseStore, leaseStoreDirectory } = await import(
         "@openmapx/core/build-artifacts"
       );
@@ -840,10 +840,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       // A running data job keeps data-manager from preparing the fence. Data-
       // manager's tables are shared by every fixture, so the job is removed after.
       const dataJob = randomUUID();
-      await fixture.sql`INSERT INTO data_manager.jobs(id,kind,status,operation_key,operation_fingerprint,
+      await fixture.sql`INSERT INTO data_manager.job(id,kind,status,trigger,operation_key,operation_fingerprint,
           execution_fingerprint,admitted_at,deadline_at,execution_input,execution_state,execution_ref,
           execution_admission,execution_progress)
-        VALUES(${dataJob},'download-fonts','running',${`opk1_${randomUUID().replaceAll("-", "")}`},
+        VALUES(${dataJob},'download-fonts','running','cli',${`opk1_${randomUUID().replaceAll("-", "")}`},
           ${"a".repeat(64)},${"b".repeat(64)},now(),now() + interval '1 hour','{}','{}','{}','{}','{}')`;
       const ctx = await job();
       const outcome = await owned(ctx, async () => {
@@ -857,7 +857,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           (value) => ({ value }),
           (error: Error & { errorClass?: unknown }) => ({ error: error.errorClass }),
         )
-        .finally(() => fixture.sql`DELETE FROM data_manager.jobs WHERE id=${dataJob}`);
+        .finally(() => fixture.sql`DELETE FROM data_manager.job WHERE id=${dataJob}`);
       // The job fails busy without recovery: no fence, no rows, no generation.
       // Data-manager keeps only the record of its refusal.
       expect(outcome).toEqual({ error: "busy" });
@@ -907,7 +907,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         id: randomUUID(),
         type: "service.apply",
         payload: { operationKey: "opk1_fixturesamekeyconflict00" },
-        status: "success",
+        status: "succeeded",
         protocol: {
           immediate: {
             actorId: "fixture-admin",

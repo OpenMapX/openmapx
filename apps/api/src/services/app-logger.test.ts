@@ -75,7 +75,7 @@ describe("AppLogger sanitization boundary", () => {
     const [stored] = appLogger.getEntries({}).entries;
     assert.isDefined(stored);
     expect(consoleRecord.msg).toBe("Bearer [redacted]");
-    expect(stored.msg).toBe(consoleRecord.msg);
+    expect(stored.message).toBe(consoleRecord.msg);
     expect(stored.metadata).toMatchObject({ safe: "kept" });
     expect(consoleChunks.join("")).not.toContain("fixture-shared-boundary-token");
     expect(JSON.stringify(stored)).not.toContain("fixture-shared-boundary-token");
@@ -109,7 +109,7 @@ describe("AppLogger sanitization boundary", () => {
     const [stored] = appLogger.getEntries({}).entries;
     assert.isDefined(stored);
     expect(consoleRecord.msg).toBe("[redacted-url]");
-    expect(stored.msg).toBe(consoleRecord.msg);
+    expect(stored.message).toBe(consoleRecord.msg);
     expect(consoleRecord).toMatchObject({ correlationId: "kept-correlation" });
     expect(stored.metadata).toMatchObject({ correlationId: "kept-correlation" });
     const { level, time, pid, hostname, name, msg, ...consoleMetadata } = consoleRecord;
@@ -132,7 +132,7 @@ describe("AppLogger sanitization boundary", () => {
     logger.add({
       level: "info",
       source: "fixture",
-      msg: `fetch failed at ${PRIVATE_URL}`,
+      message: `fetch failed at ${PRIVATE_URL}`,
       time: 1,
       metadata,
     });
@@ -141,7 +141,7 @@ describe("AppLogger sanitization boundary", () => {
     const [entry] = logger.getEntries({}).entries;
     assert.isDefined(entry);
     const output = stringify(entry);
-    expect(entry.msg).toContain("[redacted-url]");
+    expect(entry.message).toContain("[redacted-url]");
     expect(entry.metadata).toMatchObject({
       safe: "kept",
       nested: {
@@ -164,7 +164,7 @@ describe("AppLogger sanitization boundary", () => {
     logger.add({
       level: "warn",
       source: "fixture",
-      msg: `provider returned ${PRIVATE_URL} with Bearer fixture-bearer-token`,
+      message: `provider returned ${PRIVATE_URL} with Bearer fixture-bearer-token`,
       time: 2,
       metadata: unsafeMetadata(),
     });
@@ -181,7 +181,7 @@ describe("AppLogger sanitization boundary", () => {
     const persist = vi.fn(async (_entry: AppLogEntry) => {});
     const logger = new AppLogger({ persist });
 
-    logger.add({ level: "info", source: "fixture", msg: "safe", time: 3 });
+    logger.add({ level: "info", source: "fixture", message: "safe", time: 3 });
     await Promise.resolve();
 
     expect(persist).not.toHaveBeenCalled();
@@ -244,7 +244,7 @@ describe("AppLogger sanitization boundary", () => {
     const persist = vi.fn(async (_entry: AppLogEntry) => {});
     const logger = new AppLogger({ persist });
 
-    logger.add({ level: "error", source: "fixture", msg: "failed", time: 5, metadata });
+    logger.add({ level: "error", source: "fixture", message: "failed", time: 5, metadata });
 
     await vi.waitFor(() => expect(persist).toHaveBeenCalledOnce());
     expect(getterCalls).toBe(0);
@@ -282,14 +282,14 @@ describe("AppLogger sanitization boundary", () => {
     logger.add({
       level: "warn",
       source: "fixture",
-      msg: "proxy metadata",
+      message: "proxy metadata",
       time: 6,
       metadata: rootProxy as Record<string, unknown>,
     });
     logger.add({
       level: "warn",
       source: "fixture",
-      msg: "nested proxy metadata",
+      message: "nested proxy metadata",
       time: 7,
       metadata: { nestedProxy },
     });
@@ -323,13 +323,13 @@ describe("AppLogger persistence queue", () => {
     const logger = new AppLogger({ persist, maxPersistQueue: 3 });
 
     for (let index = 0; index < 10; index += 1) {
-      logger.add({ level: "error", source: "test", msg: `failure ${index}`, time: Date.now() });
+      logger.add({ level: "error", source: "test", message: `failure ${index}`, time: Date.now() });
     }
     release();
     await logger.flushPersisted();
 
     expect(maxInFlight).toBe(1);
-    expect(persisted.map((entry) => entry.msg)).toEqual([
+    expect(persisted.map((entry) => entry.message)).toEqual([
       "failure 0",
       "failure 1",
       "failure 2",

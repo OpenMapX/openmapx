@@ -100,7 +100,6 @@ describe("transit source proxy", () => {
       expect(JSON.parse(init.body)).toEqual({
         expectedSourceRevision: "a".repeat(64),
         idempotencyKey: "source-disable-fixture",
-        triggeredBy: "service-token",
       });
       return Response.json(
         { jobId: "disable-job", sourceId: "operator:de:local", status: "started" },
@@ -124,7 +123,7 @@ describe("transit source proxy", () => {
   it("preserves unavailable-action codes without a successful removal audit", async () => {
     fetchMock.mockResolvedValue(
       Response.json(
-        { error: "Catalog sources cannot be removed", code: "source_action_not_allowed" },
+        { error: "Catalog sources cannot be removed", code: "SOURCE_ACTION_NOT_ALLOWED" },
         { status: 409 },
       ),
     );
@@ -137,7 +136,7 @@ describe("transit source proxy", () => {
     expect(result.statusCode, result.body).toBe(409);
     expect(result.json()).toEqual({
       error: "Catalog sources cannot be removed",
-      code: "source_action_not_allowed",
+      code: "SOURCE_ACTION_NOT_ALLOWED",
     });
     expect(audit).not.toHaveBeenCalled();
   });
@@ -146,7 +145,7 @@ describe("transit source proxy", () => {
       new Response(
         JSON.stringify({
           error: "Another data job is running. Try again when it finishes.",
-          code: "in-flight",
+          code: "IN_FLIGHT",
           existingJobId: "running-job",
         }),
         {

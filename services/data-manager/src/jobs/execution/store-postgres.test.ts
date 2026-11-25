@@ -41,7 +41,7 @@ describe.skipIf(
   });
   // An unfinished execution keeps the next exclusive one out, so each test removes its rows.
   afterEach(async () => {
-    if (ids.length) await sql`DELETE FROM data_manager.jobs WHERE id=ANY(${ids.splice(0)}::uuid[])`;
+    if (ids.length) await sql`DELETE FROM data_manager.job WHERE id=ANY(${ids.splice(0)}::uuid[])`;
   });
   afterAll(async () => {
     await sql?.end();
@@ -56,11 +56,11 @@ describe.skipIf(
       nonce: randomBytes(16),
     });
     const input = { kind: "download-fonts" as const };
-    const first = await one.admit(input, { operationKey, requestedDeadlineAt });
+    const first = await one.admit(input, { operationKey, requestedDeadlineAt, trigger: "cli" });
     ids.push(first.record.status.id);
     const results = await Promise.all([
-      one.admit(input, { operationKey, requestedDeadlineAt }),
-      two.admit(input, { operationKey, requestedDeadlineAt }),
+      one.admit(input, { operationKey, requestedDeadlineAt, trigger: "cli" }),
+      two.admit(input, { operationKey, requestedDeadlineAt, trigger: "cli" }),
     ]);
     expect(results.map((result) => result.record.status.id)).toEqual([
       first.record.status.id,
@@ -68,10 +68,17 @@ describe.skipIf(
     ]);
     expect(results.every((result) => !result.created)).toBe(true);
     await expect(
-      two.admit(input, { operationKey, requestedDeadlineAt: requestedDeadlineAt + 1000 }),
+      two.admit(input, {
+        operationKey,
+        requestedDeadlineAt: requestedDeadlineAt + 1000,
+        trigger: "cli",
+      }),
     ).rejects.toThrow(/conflict/i);
     await expect(
-      two.admit({ kind: "notable-places-build" }, { operationKey, requestedDeadlineAt }),
+      two.admit(
+        { kind: "notable-places-build" },
+        { operationKey, requestedDeadlineAt, trigger: "cli" },
+      ),
     ).rejects.toThrow(/conflict/i);
   });
   it("stores admission times as instants whatever the session time zone", async () => {
@@ -93,7 +100,7 @@ describe.skipIf(
       });
       const { record } = await store.admit(
         { kind: "download-fonts" },
-        { operationKey, requestedDeadlineAt },
+        { operationKey, requestedDeadlineAt, trigger: "cli" },
       );
       ids.push(record.status.id);
       expect(record.status.admittedAt).toBe(admittedAt);
@@ -103,7 +110,7 @@ describe.skipIf(
           admitted_at = ${new Date(admittedAt).toISOString()}::timestamptz AS admitted,
           requested_deadline_at = ${new Date(requestedDeadlineAt).toISOString()}::timestamptz AS requested,
           deadline_at > admitted_at AS ordered
-        FROM data_manager.jobs WHERE id=${record.status.id}`;
+        FROM data_manager.job WHERE id=${record.status.id}`;
       expect(row).toEqual({ admitted: true, requested: true, ordered: true });
     } finally {
       await zoned.end();
@@ -117,13 +124,13 @@ describe.skipIf(
         nonce: randomBytes(16),
       });
     await expect(
-      sql`INSERT INTO data_manager.jobs(kind,status,finished_at,operation_fingerprint,execution_fingerprint,admitted_at,deadline_at,execution_input,execution_state,execution_ref)
-        VALUES('download-fonts','error',now(),${"a".repeat(64)},${"b".repeat(64)},${at}::timestamptz,${deadline}::timestamptz,'{}','{}','{}')`,
+      sql`INSERT INTO data_manager.job(kind,status,trigger,finished_at,operation_fingerprint,execution_fingerprint,admitted_at,deadline_at,execution_input,execution_state,execution_ref)
+        VALUES('download-fonts','failed','cli',now(),${"a".repeat(64)},${"b".repeat(64)},${at}::timestamptz,${deadline}::timestamptz,'{}','{}','{}')`,
     ).rejects.toMatchObject({ code: "23502", column_name: "operation_key" });
     await expect(
-      sql`INSERT INTO data_manager.jobs(kind,status,finished_at,operation_key,operation_fingerprint,execution_fingerprint,admitted_at,deadline_at,execution_input,execution_state,execution_ref)
-        VALUES('download-fonts','running-legacy',now(),${operationKey},${"a".repeat(64)},${"b".repeat(64)},${at}::timestamptz,${deadline}::timestamptz,'{}','{}','{}')`,
-    ).rejects.toMatchObject({ constraint_name: "jobs_status_check" });
+      sql`INSERT INTO data_manager.job(kind,status,trigger,finished_at,operation_key,operation_fingerprint,execution_fingerprint,admitted_at,deadline_at,execution_input,execution_state,execution_ref)
+        VALUES('download-fonts','running-legacy','cli',now(),${operationKey},${"a".repeat(64)},${"b".repeat(64)},${at}::timestamptz,${deadline}::timestamptz,'{}','{}','{}')`,
+    ).rejects.toMatchObject({ constraint_name: "job_status_check" });
   });
   it("allows one owner-version writer and retains cancel intent before finalization", async () => {
     const store = createPostgresDataExecutionStore(sql, { controlJournal: journal });
@@ -134,7 +141,7 @@ describe.skipIf(
     });
     const admitted = await store.admit(
       { kind: "download-fonts" },
-      { operationKey, requestedDeadlineAt },
+      { operationKey, requestedDeadlineAt, trigger: "cli" },
     );
     const id = admitted.record.status.id;
     ids.push(id);
@@ -152,12 +159,12 @@ describe.skipIf(
     expect(canceled?.status.cancellationRequestedAt).not.toBeNull();
     expect(
       await store.checkpoint(id, 1, {
-        status: "ok",
+        status: "succeeded",
         publication: "committed",
         result: { kind: "download-fonts", completed: true },
       }),
     ).toBeNull();
-    const rows = await sql`SELECT finished_at FROM data_manager.jobs WHERE id=${id}`;
+    const rows = await sql`SELECT finished_at FROM data_manager.job WHERE id=${id}`;
     expect(rows[0]?.finished_at).toBeNull();
   });
   it("refuses an admission on another connection while the configuration transaction owns the nonblocking guard", async () => {
@@ -183,7 +190,10 @@ describe.skipIf(
         nonce: randomBytes(16),
       });
       await expect(
-        store.admit({ kind: "download-fonts" }, { operationKey, requestedDeadlineAt }),
+        store.admit(
+          { kind: "download-fonts" },
+          { operationKey, requestedDeadlineAt, trigger: "cli" },
+        ),
       ).rejects.toThrow("configuration_maintenance_busy");
       expect(await store.lookup(operationKey)).toBeNull();
     } finally {
@@ -202,7 +212,7 @@ describe.skipIf(
     });
     const { record } = await store.admit(
       { kind: "transit-sync", countries: ["de"] },
-      { operationKey, requestedDeadlineAt },
+      { operationKey, requestedDeadlineAt, trigger: "cli" },
     );
     ids.push(record.status.id);
     const child = record.reservations[0];
@@ -248,7 +258,7 @@ describe.skipIf(
       // Only the contained worker's finalization ends an execution.
       await expect(
         store.checkpoint(record.status.id, winner.record.version, {
-          status: "ok",
+          status: "succeeded",
           publication: "committed",
         }),
       ).rejects.toThrow(/terminal commitment required/);
@@ -315,7 +325,7 @@ describe.skipIf(
         store.checkpointChild(record.status.id, observed?.version ?? 0, attempted),
       ).rejects.toThrow("Retained child identity/state conflict");
       const [row] = await sql<Record<string, unknown>[]>`
-          SELECT * FROM data_manager.jobs WHERE id=${record.status.id}`;
+          SELECT * FROM data_manager.job WHERE id=${record.status.id}`;
       expect(row).not.toHaveProperty("execution_children");
       const cell = control.executionProgressSchema.parse(row?.execution_progress).children[0];
       expect(cell?.owner).toEqual({

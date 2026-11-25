@@ -12,6 +12,7 @@ import {
 } from "@openmapx/mangrove-react";
 import type { ReactNode } from "react";
 import { useMemo } from "react";
+import { MANGROVE_SIGNER_STORAGE_KEYS } from "@/lib/signOutStorage";
 import { useSettledSessionAuthority } from "./SessionAuthorityBoundary";
 
 /**
@@ -160,6 +161,7 @@ export function MangroveTransportProvider({ children }: { children: ReactNode })
       transport={transport}
       currentUser={currentUser}
       webauthnKeyName="OpenMapX — Mangrove Reviews"
+      signerStorageKeys={MANGROVE_SIGNER_STORAGE_KEYS}
     >
       {children}
     </MangroveProvider>

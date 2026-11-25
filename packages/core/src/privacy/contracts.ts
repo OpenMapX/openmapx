@@ -29,7 +29,6 @@ export const subjectLocatorDeclarationSchema = z.discriminatedUnion("type", [
   locatorBase.extend({ type: z.literal("target_id") }).strict(),
   locatorBase.extend({ type: z.literal("creator_id") }).strict(),
   locatorBase.extend({ type: z.literal("updater_id") }).strict(),
-  locatorBase.extend({ type: z.literal("triggered_by") }).strict(),
   locatorBase.extend({ type: z.literal("exact_identifier"), format: stableCode }).strict(),
   locatorBase.extend({ type: z.literal("hmac_principal"), purposeCode: stableCode }).strict(),
   locatorBase

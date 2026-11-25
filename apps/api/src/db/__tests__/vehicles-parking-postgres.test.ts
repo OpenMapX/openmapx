@@ -4,6 +4,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { db, sql } from "../index";
 import { parkedLocation, personalVehicle, user } from "../schema";
+import { evSpecColumns } from "../vehicle-schema";
 
 /**
  * The garage's correctness lives in two constraints that no mocked driver can
@@ -212,7 +213,7 @@ describe.skipIf(skipDatabase)("personal vehicles and parking with PostgreSQL", (
       name: "Blue Leaf",
       kind: "car",
       powertrain: "electric",
-      ev,
+      ...evSpecColumns(ev),
     });
 
     const [row] = await db

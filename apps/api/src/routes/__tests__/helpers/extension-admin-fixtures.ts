@@ -47,7 +47,8 @@ export const extensionCatalogFixture = {
 export const extensionManifestFixture = {
   id: "synthetic-extension",
   name: extensionCatalogFixture.name,
-  version: "2.0",
+  version: "2.0.0",
+  platform: "1.0",
   services: [
     {
       repo: "https://github.com/openmapx/community-fixture.git",

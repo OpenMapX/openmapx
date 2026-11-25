@@ -177,7 +177,7 @@ export function installCatalogApprovalRuntime(
       throw Error("Validation was invalidated before slot reuse");
     const validated = await dataManagerTerminal(validation.sourceExecution, context.signal);
     if (
-      validated.status !== "ok" ||
+      validated.status !== "succeeded" ||
       validated.result?.kind !== "catalog.validate" ||
       validated.result.status !== "passed" ||
       validated.result.validationId !== passed.validationId

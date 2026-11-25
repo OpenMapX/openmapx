@@ -1178,7 +1178,7 @@ describe("GET /places/:id", () => {
         instagram: "@openmapx.project",
       }),
     );
-    expect(body.ids.googleMaps).toBeUndefined();
+    expect(body.ids["google-maps"]).toBeUndefined();
     expect(body.ids.facebook).toBeUndefined();
   });
 
@@ -1419,8 +1419,8 @@ describe("GET /places/:id", () => {
     mockIsEnabledIntegrationScheme.mockReturnValue(false);
   });
 
-  it("allows coord-fallback for a non-integration freeform scheme (stylePoi)", async () => {
-    // `stylePoi` is emitted by the web client when the user clicks a basemap
+  it("allows coord-fallback for a non-integration freeform scheme (style-poi)", async () => {
+    // `style-poi` is emitted by the web client when the user clicks a basemap
     // POI symbol. It corresponds to no integration manifest, so the route
     // should let the name+coord lookup run as today — that's how we get the
     // OSM POI's full enrichment when the user genuinely asked for it.
@@ -1430,7 +1430,7 @@ describe("GET /places/:id", () => {
 
     const res = await app.inject({
       method: "GET",
-      url: `/places/${encodeURIComponent("stylePoi:abc")}?${qs({
+      url: `/places/${encodeURIComponent("style-poi:abc")}?${qs({
         lat: "52.52",
         lng: "13.37",
         name: "Some POI",

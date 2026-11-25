@@ -6,6 +6,5 @@ export type ListAdminIntegrations200ItemQuality =
 
 export const ListAdminIntegrations200ItemQuality = {
   "built-in": "built-in",
-  "community-verified": "community-verified",
   community: "community",
 } as const;

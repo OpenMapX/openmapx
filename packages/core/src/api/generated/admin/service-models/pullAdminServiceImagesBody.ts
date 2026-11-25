@@ -5,7 +5,7 @@ export type PullAdminServiceImagesBody = {
   /**
    * @minItems 1
    * @maxItems 64
-   * @items.pattern ^[a-z0-9][a-z0-9-]{0,63}$
+   * @items.pattern ^(?=.{1,48}$)[a-z0-9]+(?:-[a-z0-9]+)*$
    */
   serviceIds: string[];
 };

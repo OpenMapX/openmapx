@@ -69,7 +69,6 @@ export async function adminCacheRoute(app: FastifyInstance): Promise<void> {
     }
     await writeAuditLog({
       actorId: getAdminSession(request).user.id,
-      targetType: "cache",
       targetId: clearAll ? "all" : target,
       action: "cache.clear",
       details: { namespace: clearAll ? "all" : namespace, patterns },

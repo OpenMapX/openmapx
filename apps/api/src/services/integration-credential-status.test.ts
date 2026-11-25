@@ -9,7 +9,7 @@ import {
   openAdministrativeConfigurationRead,
   withAdministrativeConfigurationReadScope,
 } from "./administrative-configuration-context";
-import { encrypt } from "./secrets";
+import { encrypt, secretAad } from "./secrets";
 
 let installed: { id: string; directory: string; manifest: IntegrationManifest };
 vi.mock("./administrative-configuration-writer-owner", () => ({
@@ -46,10 +46,10 @@ vi.mock("./administrative-configuration-writer-owner", () => ({
           {
             integrationId: "fixture",
             key: "apiKey",
-            ...encrypt("synthetic-vault"),
+            ...encrypt("synthetic-vault", secretAad.integrationSecret("fixture", "apiKey")),
             updatedAt: date,
             createdAt: date,
-            updatedBy: "fixture-actor",
+            updatedByUserId: "fixture-actor",
           },
         ],
       });
@@ -84,13 +84,13 @@ it("uses the actual env > file > vault cascade and keeps separate vault audit wi
   };
   installed = integration;
   vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 0x71).toString("base64url"));
-  vi.stubEnv("INTEGRATION_FIXTURE_APIKEY", "synthetic-env");
+  vi.stubEnv("INTEGRATION_FIXTURE_API_KEY", "synthetic-env");
   writeFileSync(join(directory, "config.json"), JSON.stringify({ apiKey: "synthetic-file" }));
   expect((await computeCredentialStatus(integration))[0]).toMatchObject({
     source: "env",
     updatedBy: "fixture-actor",
   });
-  vi.stubEnv("INTEGRATION_FIXTURE_APIKEY", "");
+  vi.stubEnv("INTEGRATION_FIXTURE_API_KEY", "");
   expect((await computeCredentialStatus(integration))[0]?.source).toBe("config.json");
   rmSync(join(directory, "config.json"));
   const status = await computeCredentialStatus(integration);

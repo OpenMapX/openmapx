@@ -1,4 +1,4 @@
-import { takeLocalGarage } from "@openmapx/core";
+import { PREFERENCE_KEYS, takeLocalGarage } from "@openmapx/core";
 import { readNavigationSession } from "./navigation/navigationSessionStorage";
 import { createOfflinePackageStorage, type OfflinePackageRecord } from "./offlineAreas";
 
@@ -17,42 +17,6 @@ function containsUnsafeControlCharacters(value: string): boolean {
   }
   return false;
 }
-
-const PREFERENCE_KEYS = [
-  "openmapx:unitSystem",
-  "openmapx:timeFormat",
-  "openmapx:dateFormat",
-  "openmapx:voiceGuidanceTiming",
-  "openmapx:speedCameraAlerts",
-  "openmapx:aiSearch",
-  "openmapx:incidentAlerts",
-  "openmapx:avoidIncidents",
-  "openmapx:nav:fasterRoutes",
-  "openmapx:nav:autoSwitchFasterRoutes",
-  "openmapx:nav:voiceEnabled",
-  "openmapx:nav:keepScreenOn",
-  "openmapx:avoidHighways",
-  "openmapx:avoidTolls",
-  "openmapx:avoidFerries",
-  "openmapx:voiceName",
-  "openmapx:mapNorthUp",
-  "openmapx:touchZoomButtons",
-  "openmapx:rememberMapView",
-  "openmapx:mapLocalScript",
-  "openmapx:globeView",
-  "openmapx:roadConditions",
-  "openmapx-haptics-enabled",
-  "openmapx.nlp.cloudConsent",
-  "openmapx:evVehicleId",
-  "openmapx:evSocTargetPct",
-  "openmapx:evPreferredNetworks",
-  "openmapx:evAvoidedNetworks",
-  "openmapx:evExclusiveNetworks",
-  "openmapx:evPreferCheaper",
-  "openmapx:evHomePricePerKwh",
-  "openmapx:evHomeCurrency",
-  "openmapx-recent-map-data-cache-enabled",
-] as const;
 
 function safeString(value: unknown, max = 512): string | null {
   if (typeof value !== "string" || value.length > max || containsUnsafeControlCharacters(value))

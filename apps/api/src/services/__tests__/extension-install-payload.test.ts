@@ -7,6 +7,7 @@ const base = {
     id: "fixture-extension",
     name: "Fixture extension",
     version: "1.0.0",
+    platform: "1.0",
     services: [
       {
         repo: "https://GitHub.com:443/openmapx/community-fixture.git",

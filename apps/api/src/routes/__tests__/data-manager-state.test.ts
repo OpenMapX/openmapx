@@ -189,10 +189,11 @@ describe("transit job filters", () => {
     fakeDb.state.lastJob = {
       id: "job-finished",
       kind: "transit-sync",
-      status: "partial",
+      status: "partially_succeeded",
       admittedAt: new Date("2026-11-09T03:00:00.000Z"),
       finishedAt: new Date("2026-11-09T03:40:00.000Z"),
-      triggeredBy: "cron:data-manager-cron",
+      trigger: "cron",
+      triggeredByUserId: null,
       idempotencyKey: null,
       metadata: null,
     };
@@ -202,7 +203,8 @@ describe("transit job filters", () => {
       status: "queued",
       admittedAt: new Date("2026-11-10T03:00:00.000Z"),
       finishedAt: null,
-      triggeredBy: "cron:data-manager-cron",
+      trigger: "cron",
+      triggeredByUserId: null,
       idempotencyKey: null,
       metadata: null,
     };
@@ -214,15 +216,16 @@ describe("transit job filters", () => {
     });
 
     expect(res.json()).toMatchObject({
-      lastSyncStatus: "partial",
+      lastSyncStatus: "partially_succeeded",
       lastSyncAt: "2026-11-09T03:40:00.000Z",
       currentJob: { jobId: "job-queued", startedAt: "2026-11-10T03:00:00.000Z" },
     });
+    const unfinished = ["queued", "running", "cancel_pending", "interrupted"];
     const [last, current] = renderedConditions().filter((query) => query.sql.includes('"kind"'));
     expect(last?.sql).toContain("not in");
-    expect(last?.params).toEqual(["transit-sync", "queued", "running", "cancel_pending"]);
+    expect(last?.params).toEqual(["transit-sync", ...unfinished]);
     expect(current?.sql).not.toContain("not in");
-    expect(current?.params).toEqual(["transit-sync", "queued", "running", "cancel_pending"]);
+    expect(current?.params).toEqual(["transit-sync", ...unfinished]);
     const dialect = new PgDialect();
     const lastOrder = dialect.sqlToQuery(fakeDb.orderings[0]?.[0] as SQL).sql;
     expect(lastOrder).toContain('"finished_at" desc nulls last');
@@ -265,10 +268,11 @@ describe("GET /data-manager/transit/state", () => {
     fakeDb.state.lastJob = {
       id: "job-1",
       kind: "transit-sync",
-      status: "ok",
+      status: "succeeded",
       admittedAt: new Date("2026-05-20T03:00:00.000Z"),
       finishedAt: new Date("2026-05-20T04:00:00.000Z"),
-      triggeredBy: "cron:data-manager-cron",
+      trigger: "cron",
+      triggeredByUserId: null,
       idempotencyKey: null,
       metadata: null,
     };
@@ -293,7 +297,7 @@ describe("GET /data-manager/transit/state", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json() as Record<string, unknown>;
     expect(body.transitousRef).toBe("main@abc123def456");
-    expect(body.lastSyncStatus).toBe("ok");
+    expect(body.lastSyncStatus).toBe("succeeded");
     expect(body.lastSyncAt).toBe("2026-05-20T04:00:00.000Z");
     expect(body.currentJob).toBeNull();
     expect(body.feedCount).toBe(42);
@@ -312,7 +316,8 @@ describe("GET /data-manager/transit/state", () => {
       status: "running",
       admittedAt: new Date("2026-05-21T03:00:00.000Z"),
       finishedAt: null,
-      triggeredBy: "api:user:alice",
+      trigger: "api",
+      triggeredByUserId: "alice",
       idempotencyKey: null,
       metadata: null,
     };

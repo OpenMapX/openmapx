@@ -18,7 +18,7 @@ const service = {
     version: "1.0.0",
     quality: "built-in",
     container: { image: "example/alpha", tag: "1" },
-    configSchema: { properties: { label: { type: "string" } } },
+    configSchema: { properties: { LABEL: { type: "string" } } },
   },
   directory: join(root, "services/alpha"),
   isBuiltIn: true,
@@ -57,7 +57,7 @@ try {
     });
     const payload = {
       domain: `${letter}.example.test`,
-      serviceConfigs: [{ serviceId: "alpha", values: { label: letter } }],
+      serviceConfigs: [{ serviceId: "alpha", values: { LABEL: letter } }],
       integrationConfigs: [],
       serviceSecrets: [],
     };

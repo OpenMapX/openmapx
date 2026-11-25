@@ -54,6 +54,11 @@
       "import": "./src/identifiers.ts",
       "default": "./src/identifiers.ts"
     },
+    "./semver": {
+      "types": "./src/semver.ts",
+      "import": "./src/semver.ts",
+      "default": "./src/semver.ts"
+    },
     "./media-hosts": {
       "types": "./src/media-hosts.ts",
       "import": "./src/media-hosts.ts",
@@ -127,6 +132,10 @@
       "./identifiers": {
         "types": "./dist/identifiers.d.ts",
         "import": "./dist/identifiers.js"
+      },
+      "./semver": {
+        "types": "./dist/semver.d.ts",
+        "import": "./dist/semver.js"
       },
       "./media-hosts": {
         "types": "./dist/media-hosts.d.ts",

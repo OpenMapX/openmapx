@@ -5,12 +5,10 @@ impacts: [breaking, migration, operator-action]
 ## What changes
 
 The Docker Compose project is named `openmapx` instead of `docker`. Compose
-prefixes every container, network and named volume with the project name, so
-they are all renamed: containers such as `docker-valhalla-1` become
-`openmapx-valhalla-1`, the stack network `docker_openmapx` becomes
-`openmapx_openmapx`, and volumes such as `docker_openmapx-pgdata` become
-`openmapx_openmapx-pgdata`. `pnpm redis:flush`, `pnpm openmapx check` and the
-default `VALHALLA_CONTAINER` follow the new name.
+prefixes every network and named volume with the project name, so they are
+renamed: the stack network `docker_openmapx` becomes `openmapx_openmapx`, and
+volumes such as `docker_openmapx-pgdata` become `openmapx_openmapx-pgdata`.
+Containers are named `openmapx-<service-id>` (see `service-container-names.md`).
 
 An existing stack's volumes are not adopted. The renamed stack starts with
 empty databases and state, and the old `docker_*` volumes stay on the host

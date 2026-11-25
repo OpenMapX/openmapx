@@ -104,7 +104,7 @@ function fakeAgent(
       const now = new Date().toISOString();
       const current = state();
       return {
-        version: 2,
+        version: 1,
         admittedAt: Date.now(),
         deadlineAt: options.execution.requestedDeadlineAt,
         fingerprint: options.fingerprint,
@@ -185,6 +185,7 @@ describe.skipIf(
       return target.admit(input, {
         operationKey,
         requestedDeadlineAt: deadline,
+        trigger: "cli",
         ...(work
           ? {
               work: async () => {
@@ -214,7 +215,7 @@ describe.skipIf(
     cleanups.push(async () => {
       fonts.release.resolve();
       for (const created of runtimes) await created.close();
-      await sql`DELETE FROM data_manager.jobs WHERE operation_key = ANY(${keys})`;
+      await sql`DELETE FROM data_manager.job WHERE operation_key = ANY(${keys})`;
       control.closeControlInstallation(installation);
       await sql.end();
       rmSync(root, { recursive: true, force: true });
@@ -232,14 +233,14 @@ describe.skipIf(
     const live = await h.admit(runtime, { kind: "traffic-live" }, async () => {
       leasesDuringLive = await h.leases();
     });
-    expect((await h.terminal(runtime, live.id)).status).toBe("ok");
+    expect((await h.terminal(runtime, live.id)).status).toBe("succeeded");
     // The live run took no lease of its own beside the exclusive job's.
     expect(leasesDuringLive).toHaveLength(1);
     await expect(h.admit(runtime, { kind: "data-reload" }, async () => {})).rejects.toThrow(
       "configuration_maintenance_busy",
     );
     h.fonts.release.resolve();
-    expect((await h.terminal(runtime, fonts.id)).status).toBe("ok");
+    expect((await h.terminal(runtime, fonts.id)).status).toBe("succeeded");
     await expect.poll(() => h.leases(), { timeout: 15_000 }).toEqual([]);
   }, 60_000);
 
@@ -258,7 +259,7 @@ describe.skipIf(
         (reserved[kind] ?? []).map((operation) => [operation, "reserved"]),
       );
       const done = await h.terminal(runtime, admitted.id);
-      expect(done).toMatchObject({ status: "ok", result: { kind } });
+      expect(done).toMatchObject({ status: "succeeded", result: { kind } });
       // Short traffic runs hold no lease; the others lease data-manager.
       expect(leasesDuringWork).toHaveLength(SHORT_DATA_EXECUTION_KINDS.includes(kind) ? 0 : 1);
       // Reservations the work never used do not keep the execution open.
@@ -288,7 +289,7 @@ describe.skipIf(
         operationKey: admitted.operationKey,
         fingerprint: admitted.fingerprint,
       });
-      expect((await h.terminal(runtime, admitted.id)).status).toBe("canceled");
+      expect((await h.terminal(runtime, admitted.id)).status).toBe("cancelled");
       await expect.poll(() => h.leases(), { timeout: 15_000 }).toEqual([]);
     },
     60_000,
@@ -321,7 +322,7 @@ describe.skipIf(
     });
     id = admitted.id;
     const done = await h.terminal(runtime, admitted.id);
-    expect(done.status).toBe("ok");
+    expect(done.status).toBe("succeeded");
     expect(agent.posts).toHaveLength(1);
     expect(stateAtPost).toBe("attempted");
     expect(second).toMatch(/no valhalla.traffic.refreshWaysToEdges reservation left/);
@@ -362,7 +363,7 @@ describe.skipIf(
     expect(held?.finishedAt).toBeNull();
     answer = "succeeded";
     const done = await h.terminal(next, admitted.id);
-    expect(done).toMatchObject({ status: "interrupted", publication: "committed" });
+    expect(done).toMatchObject({ status: "failed", publication: "committed" });
     expect(
       (await h.store.inspect(admitted.id))?.agentOperations.find(
         (op) => op.kind === "valhalla.traffic.refreshWaysToEdges",
@@ -371,7 +372,7 @@ describe.skipIf(
     expect(agent.posts).toHaveLength(1);
     gone.resolve();
     await dead.settled(admitted.id);
-    expect((await h.store.inspect(admitted.id))?.status.status).toBe("interrupted");
+    expect((await h.store.inspect(admitted.id))?.status.status).toBe("failed");
   }, 60_000);
 
   it("keeps the records of many short runs bounded by the prune", async () => {
@@ -398,10 +399,9 @@ describe.skipIf(
       }
       // Every record of a run is on its job row; no file is named after it.
       const named = () => files().filter((name) => batch.some((key) => name.includes(key)));
-      const rows = () =>
-        h.sql`SELECT id FROM data_manager.jobs WHERE operation_key = ANY(${batch})`;
+      const rows = () => h.sql`SELECT id FROM data_manager.job WHERE operation_key = ANY(${batch})`;
       const executionRows = () =>
-        h.sql`SELECT id FROM data_manager.jobs WHERE operation_key = ANY(${batch}) AND execution_admission IS NOT NULL`;
+        h.sql`SELECT id FROM data_manager.job WHERE operation_key = ANY(${batch}) AND execution_admission IS NOT NULL`;
       expect(named()).toEqual([]);
       expect(await executionRows()).toHaveLength(30);
       const removed = await control.pruneControlRecords(h.installation, { now: pruneAfter });
@@ -472,7 +472,7 @@ describe.skipIf(
       if (previousToken === undefined) delete process.env.DATA_MANAGER_TOKEN_FILE;
       else process.env.DATA_MANAGER_TOKEN_FILE = previousToken;
       await app.close();
-      await h.sql`DELETE FROM data_manager.jobs WHERE kind='generation-link'`;
+      await h.sql`DELETE FROM data_manager.job WHERE kind='generation-link'`;
       await h.sql`DELETE FROM data_manager.configuration_fence`;
     });
     const send = (
@@ -502,7 +502,7 @@ describe.skipIf(
     h.sql<{ status: string; publication: string; finished: boolean; lease_id: string | null }[]>`
       SELECT status, execution_state->>'publication' AS publication,
         finished_at IS NOT NULL AS finished, execution_input->>'leaseId' AS lease_id
-      FROM data_manager.jobs WHERE kind='generation-link' ORDER BY admitted_at`;
+      FROM data_manager.job WHERE kind='generation-link' ORDER BY admitted_at`;
 
   it("applies a generation's hardlink plan with real work from the host CLI through data-manager", async () => {
     const { h, runtime, repo, data, revisionId, dataManagerUrl } = await linkFixture();
@@ -516,17 +516,17 @@ describe.skipIf(
     // The same generation's plan again links nothing new.
     expect(await apply()).toMatchObject({ applied: true, linked: 0, skipped: 1 });
     const runs =
-      await h.sql`SELECT status, execution_input FROM data_manager.jobs WHERE kind='generation-link' ORDER BY admitted_at`;
+      await h.sql`SELECT status, execution_input FROM data_manager.job WHERE kind='generation-link' ORDER BY admitted_at`;
     expect(runs.map((row) => [row.status, row.execution_input.revisionId])).toEqual([
-      ["ok", revisionId],
-      ["ok", revisionId],
+      ["succeeded", revisionId],
+      ["succeeded", revisionId],
     ]);
     // Another data job keeps the plan out until it finishes.
     const fonts = await h.admit(runtime, { kind: "download-fonts" });
     await h.fonts.started.promise;
     await expect(apply()).rejects.toBeInstanceOf(DataManagerBusyError);
     h.fonts.release.resolve();
-    expect((await h.terminal(runtime, fonts.id)).status).toBe("ok");
+    expect((await h.terminal(runtime, fonts.id)).status).toBe("succeeded");
     await expect.poll(() => h.leases(), { timeout: 15_000 }).toEqual([]);
   }, 60_000);
 
@@ -561,8 +561,8 @@ describe.skipIf(
     // The same key observes the application it names instead of running another.
     expect(await send("host-cli", held.leaseId, key)).toMatchObject({ linked: 1, skipped: 0 });
     expect((await linkRows(h)).map((row) => [row.status, row.lease_id])).toEqual([
-      ["error", null],
-      ["ok", held.leaseId],
+      ["failed", null],
+      ["succeeded", held.leaseId],
     ]);
     // The sender settles its own lease from the answer it got.
     await leases.settle({
@@ -642,7 +642,7 @@ describe.skipIf(
     await refused(agents.leaseId);
     expect(await send("ops-agent", agents.leaseId)).toMatchObject({ linked: 1 });
     expect((await linkRows(h)).map((row) => [row.status, row.lease_id])).toEqual([
-      ["ok", agents.leaseId],
+      ["succeeded", agents.leaseId],
     ]);
     expect(statSync(join(data, "valhalla", "osm-pbf", "planet.osm.pbf")).ino).toBe(
       statSync(join(data, "osm", "planet.osm.pbf")).ino,
@@ -677,7 +677,7 @@ describe.skipIf(
       },
       maintenanceId = randomUUID();
     await h.sql`INSERT INTO data_manager.configuration_fence
-      (maintenance_id, fence_id, operation_key, candidate_id, plan_digest, input, state)
+      (maintenance_id, fence_id, operation_key, candidate_id, plan_digest, input, status)
       VALUES (${maintenanceId}::uuid, ${randomUUID()}::uuid, ${ownerPrepare.operationKey},
         ${randomUUID()}::uuid, ${"e".repeat(64)}, ${h.sql.json({
           maintenanceId,
@@ -699,7 +699,9 @@ describe.skipIf(
     );
     // The maintenance's own step, sent by the agent under the maintenance's lease.
     expect(await send("ops-agent", own)).toMatchObject({ linked: 1 });
-    expect((await linkRows(h)).map((row) => [row.status, row.lease_id])).toEqual([["ok", own]]);
+    expect((await linkRows(h)).map((row) => [row.status, row.lease_id])).toEqual([
+      ["succeeded", own],
+    ]);
     expect(await h.leases()).toEqual([]);
   }, 60_000);
 
@@ -715,17 +717,17 @@ describe.skipIf(
     // A known outcome: the row is final with its publication committed, so it
     // keeps neither data jobs, nor configuration changes, nor a lease held.
     expect(await linkRows(h)).toEqual([
-      { status: "error", publication: "committed", finished: true, lease_id: null },
+      { status: "failed", publication: "committed", finished: true, lease_id: null },
     ]);
     await expect.poll(() => h.leases(), { timeout: 15_000 }).toEqual([]);
     expect(
-      await h.sql`SELECT id FROM data_manager.jobs WHERE execution_state->>'publication'='unknown'`,
+      await h.sql`SELECT id FROM data_manager.job WHERE execution_state->>'publication'='unknown'`,
     ).toEqual([]);
     // Asking again under the same key reports the same outcome without a second run.
     await expect(send("host-cli", null, key)).rejects.toBeInstanceOf(control.GenerationLinkFailed);
     expect(await linkRows(h)).toHaveLength(1);
     const fonts = await h.admit(runtime, { kind: "download-fonts" });
     h.fonts.release.resolve();
-    expect((await h.terminal(runtime, fonts.id)).status).toBe("ok");
+    expect((await h.terminal(runtime, fonts.id)).status).toBe("succeeded");
   }, 60_000);
 });

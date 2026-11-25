@@ -42,31 +42,42 @@ export function assertDatabaseAllowsRollback(
   newestAppliedMigration: number | null,
 ): void {
   const head = plan.target.manifest.databaseMigrationHead;
-  if (!head)
-    throw new Error(
-      `Release ${plan.target.manifest.release} records no database migration head, so rollback cannot prove its images match the database. Restore a backup taken before the update instead.`,
-    );
-  if (newestAppliedMigration !== null && newestAppliedMigration > head.when)
+  if (hasMigrationsNewerThan(newestAppliedMigration, head))
     throw new Error(
       `The database has migrations newer than release ${plan.target.manifest.release} (its newest is ${head.tag}). Its images would run against a newer schema. Restore a backup taken before the update, or fix forward.`,
     );
 }
 
+/**
+ * Whether a database whose newest applied migration has `created_at`
+ * `newestAppliedMigration` holds migrations newer than a release's migration
+ * head. Images of that release would run against a schema they do not know.
+ */
+export function hasMigrationsNewerThan(
+  newestAppliedMigration: number | null,
+  head: services.ReleaseDatabaseMigrationHead,
+): boolean {
+  return newestAppliedMigration !== null && newestAppliedMigration > head.when;
+}
+
 /** `created_at` of the newest migration the database recorded, or null when it has none. */
-export async function readNewestAppliedMigration(): Promise<number | null> {
-  const result = await dockerCompose([
-    ...databaseClientExec("postgis"),
-    "psql",
-    "-U",
-    "postgres",
-    "-d",
-    "openmapx",
-    "-v",
-    "ON_ERROR_STOP=1",
-    "-At",
-    "-c",
-    "SELECT coalesce(max(created_at), 0) FROM drizzle.__drizzle_migrations",
-  ]);
+export async function readNewestAppliedMigration(rootDir?: string): Promise<number | null> {
+  const result = await dockerCompose(
+    [
+      ...databaseClientExec("postgis"),
+      "psql",
+      "-U",
+      "postgres",
+      "-d",
+      "openmapx",
+      "-v",
+      "ON_ERROR_STOP=1",
+      "-At",
+      "-c",
+      "SELECT coalesce(max(created_at), 0) FROM drizzle.__drizzle_migrations",
+    ],
+    rootDir,
+  );
   const value = result.stdout.trim();
   if (result.exitCode !== 0 || !/^\d+$/.test(value))
     throw new Error(

@@ -38,10 +38,14 @@ describe("end-to-end: built-in manifests render to a valid compose", () => {
 
   describe("OpenConditions bridge", () => {
     const bridges: Record<string, string[]> = {
-      postgis: ["openconditions-ingest", "openconditions-contributions-api"],
+      postgis: [
+        "openconditions-ingest",
+        "openconditions-ingest-heavy",
+        "openconditions-contributions-api",
+      ],
       api: ["openconditions-ingest", "openconditions-contributions-api"],
       "data-manager": ["openconditions-ingest"],
-      overpass: ["openconditions-ingest"],
+      overpass: ["openconditions-ingest", "openconditions-ingest-heavy"],
     };
 
     function community(id: string): LoadedService {
@@ -50,7 +54,7 @@ describe("end-to-end: built-in manifests render to a valid compose", () => {
           id,
           name: id,
           version: "1.0.0",
-          quality: "community-verified",
+          quality: "community",
           container: {
             image: `ghcr.io/openconditions/${id}`,
             tag: "latest",
@@ -101,6 +105,7 @@ describe("end-to-end: built-in manifests render to a valid compose", () => {
       await registry.load();
       const oc = [
         community("openconditions-ingest"),
+        community("openconditions-ingest-heavy"),
         community("openconditions-contributions-api"),
       ];
       const all = [

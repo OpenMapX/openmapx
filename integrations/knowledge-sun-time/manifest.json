@@ -14,7 +14,6 @@
     "routes": true
   },
   "quality": "built-in",
-  "category": "Knowledge",
   "healthCheck": {
     "type": "http",
     "url": "https://api.sunrise-sunset.org/json?lat=0&lng=0&formatted=0"

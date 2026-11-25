@@ -1,5 +1,5 @@
 import type { CategoryPlace } from "@openmapx/core";
-import { haversineDistance } from "@openmapx/core";
+import { coordinateId, haversineDistance } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import type { FilterSpecification, MapGeoJSONFeature, StyleSpecification } from "maplibre-gl";
 import { getAmbientIdentity } from "./ambientPlaceIdentity";
@@ -61,7 +61,7 @@ function targetFromFeature(feature: MapGeoJSONFeature, locale?: string): StylePo
   const className = typeof poiClass === "string" ? poiClass : undefined;
   const subclassName = typeof poiSubclass === "string" ? poiSubclass : undefined;
   return {
-    featureId: String(feature.id ?? `${lng.toFixed(5)}-${lat.toFixed(5)}`),
+    featureId: String(feature.id ?? coordinateId([lng, lat])),
     name,
     coordinates: [lng, lat],
     category: subclassName ?? className,

@@ -155,7 +155,8 @@ normalises all of these, with the reasoning recorded in comments beside each hel
 ## Adding a keyed provider
 
 Declare the credential in `configSchema` with `x-openmapx-secret: true` and an
-`x-openmapx-setup` guide, then read it back from `ctx.config["<sourceId>-<field>"]`: the
+`x-openmapx-setup` guide, then read it back from `ctx.config.<sourceIdField>`, the
+lowerCamel composition of the source id and the field (`deNwMobidromScooterClientId`): the
 resolved configuration supplies it, as for per-source keys in `bike-sharing`. Saving
 a credential in the admin panel reloads the integration, so a new key takes effect without
 a restart. Choose an explicit missing-credential behavior. The current GOFS catalog keeps

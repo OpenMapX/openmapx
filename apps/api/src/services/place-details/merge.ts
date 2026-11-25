@@ -35,8 +35,12 @@ export function foldExternalIdsIntoPlace(
     ) {
       ids.tripadvisor = externalIds.tripadvisor;
     }
-    if (externalIds.google_maps && !ids.googleMaps && buildGoogleMapsUrl(externalIds.google_maps)) {
-      ids.googleMaps = externalIds.google_maps;
+    if (
+      externalIds.google_maps &&
+      !ids["google-maps"] &&
+      buildGoogleMapsUrl(externalIds.google_maps)
+    ) {
+      ids["google-maps"] = externalIds.google_maps;
     }
     if (externalIds.foursquare && !ids.foursquare && buildFoursquareUrl(externalIds.foursquare)) {
       ids.foursquare = externalIds.foursquare;

@@ -772,7 +772,10 @@ describe("GET /api/saved/check", () => {
       { listId: "0193e4a0-0000-7000-8000-000000000002" },
     ]);
 
-    const res = await app.inject({ method: "GET", url: "/api/saved/check?placeId=p-1" });
+    const res = await app.inject({
+      method: "GET",
+      url: `/api/saved/check?placeId=${encodeURIComponent("osm:node/1")}`,
+    });
 
     expect(res.statusCode).toBe(200);
     expect(res.json().listIds).toEqual([

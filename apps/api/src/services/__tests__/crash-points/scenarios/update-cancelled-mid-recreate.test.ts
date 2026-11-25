@@ -22,7 +22,7 @@ crashScenario({
     const releasedAt = host.mark();
     apiRecreate.release();
     const job = await host.settledJob(submitted.jobId as string, 120_000);
-    expect(job.status).not.toBe("success");
+    expect(job.status).not.toBe("succeeded");
     // The recreate in flight completed once; nothing after it began.
     const recreated = host
       .dockerEffects({ command: "compose up", caller: "helper", since: start })

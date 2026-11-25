@@ -22,7 +22,7 @@ crashScenario({
     expect((await host.submitDataJob()).status).toBe(409);
     launch.release();
     const job = await host.waitForJob(submitted.jobId as string);
-    expect(job.status).toBe("success");
+    expect(job.status).toBe("succeeded");
     expect((await host.submitDataJob()).status).toBe(200);
   },
 });

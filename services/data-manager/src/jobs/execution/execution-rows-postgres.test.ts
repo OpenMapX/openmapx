@@ -53,7 +53,7 @@ describe.skipIf(
     const dm = dataManagerProcess(sql, root, async (_input, context) => {
       // The row says the effect started before the dispatcher runs.
       const [row] =
-        await sql`SELECT execution_progress FROM data_manager.jobs WHERE id=${context.execution.executionId}`;
+        await sql`SELECT execution_progress FROM data_manager.job WHERE id=${context.execution.executionId}`;
       observed = row?.execution_progress;
       return { kind: "download-fonts", completed: true };
     });
@@ -63,13 +63,13 @@ describe.skipIf(
         key = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) }),
         admitted = await dm.runtime.admit(
           { kind: "download-fonts" },
-          { operationKey: key, requestedDeadlineAt: deadline },
+          { operationKey: key, requestedDeadlineAt: deadline, trigger: "cli" },
         );
       id = admitted.id;
       await dm.runtime.settled(id);
       expect(observed).toMatchObject({ phase: "held", effectStartedAt: expect.any(Number) });
       const [stored] =
-        await sql`SELECT execution_admission,execution_progress,execution_completion,finished_at FROM data_manager.jobs WHERE id=${id}`;
+        await sql`SELECT execution_admission,execution_progress,execution_completion,finished_at FROM data_manager.job WHERE id=${id}`;
       expect(stored?.execution_admission).toMatchObject({
         serviceIds: ["data-manager"],
         plan: [],
@@ -83,7 +83,7 @@ describe.skipIf(
           publication: "committed",
           receipt: {
             kind: "data-execution",
-            status: { status: "ok", publication: "committed" },
+            status: { status: "succeeded", publication: "committed" },
             terminalAt: (stored?.finished_at as Date).getTime(),
           },
         },
@@ -106,7 +106,7 @@ describe.skipIf(
       await expect(rows.admit(row)).resolves.toBe("retained");
     } finally {
       await dm.runtime.close();
-      if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+      if (id) await sql`DELETE FROM data_manager.job WHERE id=${id}`;
       control.closeControlInstallation(dm.installation);
       await sql.end();
       rmSync(root, { recursive: true, force: true });
@@ -143,7 +143,7 @@ describe.skipIf(
         key = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) }),
         admitted = await first.runtime.admit(
           { kind: "download-fonts" },
-          { operationKey: key, requestedDeadlineAt: deadline },
+          { operationKey: key, requestedDeadlineAt: deadline, trigger: "cli" },
         );
       id = admitted.id;
       await running;
@@ -159,7 +159,7 @@ describe.skipIf(
       expect(recovered?.finishedAt).toBeNull();
       // Its outcome is unknown, so its targets stay held.
       expect(heldTargets(dirname(join(root, "data"))).includes("data-manager")).toBe(true);
-      const [stored] = await sql`SELECT execution_progress FROM data_manager.jobs WHERE id=${id}`;
+      const [stored] = await sql`SELECT execution_progress FROM data_manager.job WHERE id=${id}`;
       expect(stored?.execution_progress).toMatchObject({
         phase: "cancel_pending",
         settlement: null,
@@ -167,7 +167,7 @@ describe.skipIf(
     } finally {
       await first.runtime.close();
       await next.runtime.close();
-      if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+      if (id) await sql`DELETE FROM data_manager.job WHERE id=${id}`;
       control.closeControlInstallation(first.installation);
       control.closeControlInstallation(next.installation);
       await sql.end();
@@ -197,20 +197,20 @@ describe.skipIf(
       await expect(
         foreign.store.admit(
           { kind: "download-fonts" },
-          { operationKey: refusedKey, requestedDeadlineAt: deadline },
+          { operationKey: refusedKey, requestedDeadlineAt: deadline, trigger: "cli" },
         ),
       ).rejects.toThrow(/Unregistered/);
-      expect(await sql`SELECT id FROM data_manager.jobs WHERE operation_key=${refusedKey}`).toEqual(
+      expect(await sql`SELECT id FROM data_manager.job WHERE operation_key=${refusedKey}`).toEqual(
         [],
       );
       // The store alone, before any worker starts: the row is already there.
       const { record } = await dm.store.admit(
         { kind: "download-fonts" },
-        { operationKey: key, requestedDeadlineAt: deadline },
+        { operationKey: key, requestedDeadlineAt: deadline, trigger: "cli" },
       );
       created.push(record.status.id);
       const [stored] =
-        await sql`SELECT execution_admission,execution_progress FROM data_manager.jobs WHERE id=${record.status.id}`;
+        await sql`SELECT execution_admission,execution_progress FROM data_manager.job WHERE id=${record.status.id}`;
       expect(stored?.execution_admission).toMatchObject({ serviceIds: ["data-manager"] });
       expect(stored?.execution_progress).toMatchObject({
         phase: "held",
@@ -219,13 +219,13 @@ describe.skipIf(
       });
       const rowless = randomUUID();
       await expect(
-        sql`INSERT INTO data_manager.jobs(id,kind,status,operation_key,operation_fingerprint,execution_fingerprint,admitted_at,deadline_at,execution_input,execution_state,execution_ref)
-          VALUES(${rowless},'download-fonts','queued',${createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) })},${"a".repeat(64)},${"b".repeat(64)},now(),${new Date(deadline).toISOString()}::text::timestamptz,'{}','{}','{}')`,
-      ).rejects.toThrow(/jobs_execution_row_check/);
+        sql`INSERT INTO data_manager.job(id,kind,status,trigger,operation_key,operation_fingerprint,execution_fingerprint,admitted_at,deadline_at,execution_input,execution_state,execution_ref)
+          VALUES(${rowless},'download-fonts','queued','cli',${createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) })},${"a".repeat(64)},${"b".repeat(64)},now(),${new Date(deadline).toISOString()}::text::timestamptz,'{}','{}','{}')`,
+      ).rejects.toThrow(/job_execution_row_check/);
     } finally {
       await dm.runtime.close();
       await foreign.runtime.close();
-      if (created.length) await sql`DELETE FROM data_manager.jobs WHERE id=ANY(${created}::uuid[])`;
+      if (created.length) await sql`DELETE FROM data_manager.job WHERE id=ANY(${created}::uuid[])`;
       control.closeControlInstallation(dm.installation);
       control.closeControlInstallation(foreign.installation);
       await sql.end();
@@ -250,7 +250,7 @@ describe.skipIf(
         key = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) }),
         { record } = await dm.store.admit(
           { kind: "download-fonts" },
-          { operationKey: key, requestedDeadlineAt: deadline },
+          { operationKey: key, requestedDeadlineAt: deadline, trigger: "cli" },
         );
       id = record.status.id;
       const rows = dataJobExecutionRows(sql);
@@ -268,7 +268,7 @@ describe.skipIf(
         progress.children = cells(22);
       });
       const [stored] =
-        await sql`SELECT octet_length(execution_progress::text) AS text, execution_progress FROM data_manager.jobs WHERE id=${id}`;
+        await sql`SELECT octet_length(execution_progress::text) AS text, execution_progress FROM data_manager.job WHERE id=${id}`;
       expect(Buffer.byteLength(JSON.stringify(stored?.execution_progress))).toBeLessThan(262144);
       expect(Number(stored?.text)).toBeGreaterThan(262144);
       await expect(
@@ -278,7 +278,7 @@ describe.skipIf(
       ).rejects.toThrow(/Execution row capacity/);
     } finally {
       await dm.runtime.close();
-      if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+      if (id) await sql`DELETE FROM data_manager.job WHERE id=${id}`;
       control.closeControlInstallation(dm.installation);
       await sql.end();
       rmSync(root, { recursive: true, force: true });
@@ -302,7 +302,7 @@ describe.skipIf(
         key = createControlRootOperationKey({ notAfter: deadline, nonce: randomBytes(16) }),
         { record } = await dm.store.admit(
           { kind: "download-fonts" },
-          { operationKey: key, requestedDeadlineAt: deadline },
+          { operationKey: key, requestedDeadlineAt: deadline, trigger: "cli" },
         );
       id = record.status.id;
       const authority = await control.retainAdmittedControlExecution(
@@ -321,7 +321,7 @@ describe.skipIf(
         { completion } = await dm.journal.contain(authority, Promise.resolve(result));
       const terminal = {
           ...record.status,
-          status: "ok" as const,
+          status: "succeeded" as const,
           publication: "committed" as const,
           progress: 1,
           result,
@@ -340,7 +340,7 @@ describe.skipIf(
       const saved = await dm.store.finalize(
         id,
         record.version,
-        { status: "ok", publication: "committed", progress: 1, result },
+        { status: "succeeded", publication: "committed", progress: 1, result },
         completion,
       );
       expect(saved?.finishedAt).toBe(first);
@@ -348,7 +348,7 @@ describe.skipIf(
       expect(observationFiles(root)).toEqual([]);
     } finally {
       await dm.runtime.close();
-      if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+      if (id) await sql`DELETE FROM data_manager.job WHERE id=${id}`;
       control.closeControlInstallation(dm.installation);
       await sql.end();
       rmSync(root, { recursive: true, force: true });
@@ -386,18 +386,18 @@ describe.skipIf(
       // Each run left its runner journal, which holds a runner capability.
       const local = installationState(dm.installation);
       for (const row of Object.values(rows)) {
-        await sql`INSERT INTO data_manager.jobs(id,kind,status,finished_at,operation_key,operation_fingerprint,execution_fingerprint,admitted_at,deadline_at,execution_input,execution_state,execution_ref)
-          VALUES(${row.id},'download-fonts','error',${row.finishedAt}::text::timestamptz,${row.key},${"a".repeat(64)},${"b".repeat(64)},${new Date(row.admittedAt).toISOString()}::text::timestamptz,${new Date(row.admittedAt + HOUR).toISOString()}::text::timestamptz,'{}','{}','{}')`;
+        await sql`INSERT INTO data_manager.job(id,kind,status,trigger,finished_at,operation_key,operation_fingerprint,execution_fingerprint,admitted_at,deadline_at,execution_input,execution_state,execution_ref)
+          VALUES(${row.id},'download-fonts','failed','cli',${row.finishedAt}::text::timestamptz,${row.key},${"a".repeat(64)},${"b".repeat(64)},${new Date(row.admittedAt).toISOString()}::text::timestamptz,${new Date(row.admittedAt + HOUR).toISOString()}::text::timestamptz,'{}','{}','{}')`;
         writePrivateRecord(local, "observations", `runners-${row.key}.json`, { attempts: [] });
       }
       const swept = async () =>
         (
-          await sql`SELECT id FROM data_manager.jobs WHERE released_at IS NOT NULL AND id=ANY(${Object.values(rows).map((row) => row.id)}::uuid[])`
+          await sql`SELECT id FROM data_manager.job WHERE released_at IS NOT NULL AND id=ANY(${Object.values(rows).map((row) => row.id)}::uuid[])`
         ).map((row) => row.id);
       await control.pruneControlRecords(dm.installation, { now });
       // Every job row stays for the API's job retention; the swept one is marked.
       expect(
-        await sql`SELECT count(*)::int AS n FROM data_manager.jobs WHERE id=ANY(${Object.values(rows).map((row) => row.id)}::uuid[])`,
+        await sql`SELECT count(*)::int AS n FROM data_manager.job WHERE id=ANY(${Object.values(rows).map((row) => row.id)}::uuid[])`,
       ).toEqual([{ n: 3 }]);
       expect(await swept()).toEqual([rows.expired.id]);
       // The swept job's files are gone; the others keep theirs.
@@ -412,7 +412,7 @@ describe.skipIf(
       expect(observationFiles(root)).toContain(`runners-${rows.expired.key}.json`);
     } finally {
       await dm.runtime.close();
-      await sql`DELETE FROM data_manager.jobs WHERE id=ANY(${Object.values(rows).map((row) => row.id)}::uuid[])`;
+      await sql`DELETE FROM data_manager.job WHERE id=ANY(${Object.values(rows).map((row) => row.id)}::uuid[])`;
       control.closeControlInstallation(dm.installation);
       await sql.end();
       rmSync(root, { recursive: true, force: true });
@@ -439,6 +439,7 @@ describe.skipIf(
             nonce: randomBytes(16),
           }),
           requestedDeadlineAt: deadline,
+          trigger: "cli" as const,
         };
       },
       listed = async () =>
@@ -449,25 +450,25 @@ describe.skipIf(
       const finished = (await dm.runtime.admit({ kind: "download-fonts" }, fresh())).id;
       ids.push(finished);
       await dm.runtime.settled(finished);
-      const [row] = await sql`SELECT released_at FROM data_manager.jobs WHERE id=${finished}`;
+      const [row] = await sql`SELECT released_at FROM data_manager.job WHERE id=${finished}`;
       expect(row?.released_at).toBeInstanceOf(Date);
       expect(await listed()).toEqual([]);
 
       // A crash after the release and before its record leaves the row listed;
       // the next startup finds the lease gone and records that.
-      await sql`UPDATE data_manager.jobs SET released_at=NULL WHERE id=${finished}`;
+      await sql`UPDATE data_manager.job SET released_at=NULL WHERE id=${finished}`;
       expect(await listed()).toEqual([finished]);
       await dm.runtime.reconcile();
       expect(await listed()).toEqual([]);
 
       // A job a backup restore closed has no execution row; the control prune
       // sweeps its key and the API's job retention deletes it.
-      await sql`UPDATE data_manager.jobs SET execution_admission=NULL,execution_progress=NULL,execution_completion=NULL,released_at=NULL WHERE id=${finished}`;
+      await sql`UPDATE data_manager.job SET execution_admission=NULL,execution_progress=NULL,execution_completion=NULL,released_at=NULL WHERE id=${finished}`;
       expect(await listed()).toEqual([]);
       // A release recorded for it would make the API delete it before the
       // prune removed the files named by its key; only that prune marks it.
       await dm.store.recordReleased(finished);
-      const [restored] = await sql`SELECT released_at FROM data_manager.jobs WHERE id=${finished}`;
+      const [restored] = await sql`SELECT released_at FROM data_manager.job WHERE id=${finished}`;
       expect(restored?.released_at).toBeNull();
 
       const { record } = await dm.store.admit({ kind: "download-fonts" }, fresh());
@@ -475,7 +476,7 @@ describe.skipIf(
       expect(await listed()).toEqual([record.status.id]);
     } finally {
       await dm.runtime.close();
-      await sql`DELETE FROM data_manager.jobs WHERE id=ANY(${ids}::uuid[])`;
+      await sql`DELETE FROM data_manager.job WHERE id=ANY(${ids}::uuid[])`;
       control.closeControlInstallation(dm.installation);
       await sql.end();
       rmSync(root, { recursive: true, force: true });

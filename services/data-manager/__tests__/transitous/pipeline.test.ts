@@ -135,7 +135,7 @@ describe("runTransitousPipeline orchestrator", () => {
 
     await expect(runTransitousPipeline(ctx)).rejects.toThrow(/cancel|abort/i);
     expect(persisted.map(({ stage, status }) => ({ stage, status }))).toEqual([
-      { stage: "prepare", status: "ok" },
+      { stage: "prepare", status: "succeeded" },
     ]);
   });
 
@@ -203,7 +203,7 @@ describe("runTransitousPipeline orchestrator", () => {
 
     // The finalized config and attribution are assembled before any import.
     const byStage = Object.fromEntries(results.map((r) => [r.stage, r]));
-    expect(byStage["assemble-staging"]?.status).toBe("ok");
+    expect(byStage["assemble-staging"]?.status).toBe("succeeded");
     const proxy = join(ctx.outDir, ".openmapx-feed-proxy");
     for (const directory of [proxy, join(proxy, "conf")])
       expect(statSync(directory).mode & 0o777).toBe(0o700);
@@ -214,11 +214,11 @@ describe("runTransitousPipeline orchestrator", () => {
     expect(byStage.promote).toBeUndefined();
 
     // Non-stub stages all returned ok against the fixture.
-    expect(byStage.prepare?.status).toBe("ok");
-    expect(byStage.filter?.status).toBe("ok");
-    expect(byStage.fetch?.status).toBe("ok");
+    expect(byStage.prepare?.status).toBe("succeeded");
+    expect(byStage.filter?.status).toBe("succeeded");
+    expect(byStage.fetch?.status).toBe("succeeded");
     expect(byStage.gc).toBeUndefined();
-    expect(finalStatus).toBe("ok");
+    expect(finalStatus).toBe("succeeded");
   });
 
   it("rethrows the underlying error when a hard-stop stage fails", async () => {
@@ -252,7 +252,7 @@ describe("runTransitousPipeline orchestrator", () => {
 
     // prepare ran ok; filter errored hard-stop; nothing after filter ran.
     expect(persisted.map((r) => r.stage)).toEqual(["prepare", "filter"]);
-    expect(persisted[1]?.status).toBe("error");
+    expect(persisted[1]?.status).toBe("failed");
   });
 
   it("runs preparation through fetching on a seeded 3-feed catalog within a 60s wall-clock budget", async () => {
@@ -319,10 +319,10 @@ describe("runTransitousPipeline orchestrator", () => {
       "compile-gbfs",
       "fetch",
     ]);
-    expect(finalStatus).toBe("ok");
+    expect(finalStatus).toBe("succeeded");
     expect(results.at(-1)).toMatchObject({
       stage: "fetch",
-      status: "ok",
+      status: "succeeded",
       artifacts: { fetched: 3, failed: [] },
     });
     expect(elapsedMs).toBeLessThan(60_000);

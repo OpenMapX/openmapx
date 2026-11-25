@@ -153,8 +153,8 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
           WHERE j.status = 'preparing'
             AND (j.lease_expires_at IS NULL OR j.lease_expires_at <= clock_timestamp())
         )::text AS queued
-      FROM data_manager.offline_package_jobs j
-      JOIN data_manager.offline_package_job_owners o ON o.job_id = j.id
+      FROM data_manager.offline_package_job j
+      JOIN data_manager.offline_package_job_owner o ON o.job_id = j.id
       WHERE o.principal = ${principal}
     `;
     return { running: Number(row?.running ?? 0), queued: Number(row?.queued ?? 0) };
@@ -165,7 +165,7 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
     needsQueuedSlot: boolean,
   ): Promise<void> {
     await tx`
-      DELETE FROM data_manager.offline_package_jobs
+      DELETE FROM data_manager.offline_package_job
       WHERE status <> 'preparing'
         AND updated_at < clock_timestamp() - (${this.terminalRetentionMs}::bigint * interval '1 millisecond')
     `;
@@ -176,7 +176,7 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
           WHERE status = 'preparing'
             AND (lease_expires_at IS NULL OR lease_expires_at <= clock_timestamp())
         )::text AS queued
-      FROM data_manager.offline_package_jobs
+      FROM data_manager.offline_package_job
     `;
     if (needsQueuedSlot && Number(counts?.queued ?? 0) >= this.maxGlobalQueued) {
       throw new OfflinePackageCapacityError(
@@ -185,10 +185,10 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
     }
     if (Number(counts?.tracked ?? 0) >= this.maxTrackedJobs) {
       await tx`
-        DELETE FROM data_manager.offline_package_jobs
+        DELETE FROM data_manager.offline_package_job
         WHERE id = (
           SELECT id
-          FROM data_manager.offline_package_jobs
+          FROM data_manager.offline_package_job
           WHERE status <> 'preparing'
           ORDER BY updated_at ASC, created_at ASC, id ASC
           LIMIT 1
@@ -197,7 +197,7 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
       `;
       [counts] = await tx<{ tracked: string; queued: string }[]>`
         SELECT count(*)::text AS tracked, '0'::text AS queued
-        FROM data_manager.offline_package_jobs
+        FROM data_manager.offline_package_job
       `;
     }
     if (Number(counts?.tracked ?? 0) >= this.maxTrackedJobs) {
@@ -209,13 +209,13 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
 
   private async invalidateArtifact(tx: postgres.TransactionSql, packageId: string): Promise<void> {
     await tx`
-      UPDATE data_manager.offline_package_jobs
-      SET status = 'expired', manifest = NULL, error_code = 'expired',
+      UPDATE data_manager.offline_package_job
+      SET status = 'expired', manifest = NULL, error_code = 'EXPIRED',
           error_message = 'offline package artifact unavailable; prepare the area again',
           updated_at = clock_timestamp(), lease_owner = NULL, lease_expires_at = NULL
       WHERE package_id = ${packageId} AND status = 'ready-to-download'
     `;
-    await tx`DELETE FROM data_manager.offline_package_artifact_references WHERE package_id = ${packageId}`;
+    await tx`DELETE FROM data_manager.offline_package_artifact_reference WHERE package_id = ${packageId}`;
   }
 
   async admit(
@@ -230,7 +230,7 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
       await this.lockPrincipal(tx, principal);
       await this.lockRequest(tx, candidate.request.requestKey);
       const sharedRows = await tx<JobRow[]>`
-        SELECT ${tx.unsafe(JOB_COLUMNS)} FROM data_manager.offline_package_jobs j
+        SELECT ${tx.unsafe(JOB_COLUMNS)} FROM data_manager.offline_package_job j
         WHERE j.request_key = ${candidate.request.requestKey}
           AND j.status IN ('preparing', 'ready-to-download')
         ORDER BY j.created_at ASC, j.id ASC LIMIT 1 FOR UPDATE
@@ -238,7 +238,7 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
       let shared: JobRow | undefined = sharedRows[0];
       const owned = shared
         ? await tx`
-        SELECT 1 FROM data_manager.offline_package_job_owners
+        SELECT 1 FROM data_manager.offline_package_job_owner
         WHERE job_id = ${shared.id} AND principal = ${principal}
       `
         : [];
@@ -247,7 +247,7 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
           const counts = await this.principalActiveCounts(tx, principal);
           const [lease] = await tx<{ running: boolean }[]>`
             SELECT lease_expires_at > clock_timestamp() AS running
-            FROM data_manager.offline_package_jobs WHERE id = ${shared.id}
+            FROM data_manager.offline_package_job WHERE id = ${shared.id}
           `;
           const running = lease?.running === true;
           if (
@@ -261,7 +261,7 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
                 : `queued limit is ${this.maxQueuedPerPrincipal}`,
             );
           }
-          await tx`INSERT INTO data_manager.offline_package_job_owners (job_id, principal, created_at)
+          await tx`INSERT INTO data_manager.offline_package_job_owner (job_id, principal, created_at)
             VALUES (${shared.id}, ${principal}, clock_timestamp())`;
         }
         return {
@@ -296,7 +296,7 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
       if (!shared) {
         await this.pruneAndCheckGlobalCapacity(tx, preparing);
         await tx`
-          INSERT INTO data_manager.offline_package_jobs (
+          INSERT INTO data_manager.offline_package_job (
             id, request_key, package_id, request, status, manifest, error_code,
             error_message, created_at, updated_at
           ) VALUES (
@@ -308,7 +308,7 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
         `;
         [shared] = await tx<
           JobRow[]
-        >`SELECT ${tx.unsafe(JOB_COLUMNS)} FROM data_manager.offline_package_jobs j WHERE id = ${candidate.jobId}`;
+        >`SELECT ${tx.unsafe(JOB_COLUMNS)} FROM data_manager.offline_package_job j WHERE id = ${candidate.jobId}`;
       }
       if (!shared) throw new Error("Offline package admission was not persisted");
       const evicted = manifest
@@ -324,11 +324,11 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
       // verified bytes before taking this idempotent owner path.
       const createdOwner = createdJob || owned.length === 0;
       if (createdOwner) {
-        await tx`INSERT INTO data_manager.offline_package_job_owners (job_id, principal, created_at)
+        await tx`INSERT INTO data_manager.offline_package_job_owner (job_id, principal, created_at)
           VALUES (${shared.id}, ${principal}, clock_timestamp())`;
       }
       if (manifest) {
-        await tx`UPDATE data_manager.offline_package_jobs SET manifest = ${JSON.stringify(manifest)} WHERE id = ${shared.id}`;
+        await tx`UPDATE data_manager.offline_package_job SET manifest = ${JSON.stringify(manifest)} WHERE id = ${shared.id}`;
         shared.manifest = manifest;
       }
       return {
@@ -366,17 +366,17 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
       );
     }
     const existing = await tx`
-      SELECT 1 FROM data_manager.offline_package_artifact_references
+      SELECT 1 FROM data_manager.offline_package_artifact_reference
       WHERE principal = ${principal} AND package_id = ${packageId}
     `;
     if (existing.length > 0) return [];
     const refs = await tx<ReferenceRow[]>`
       SELECT r.package_id, r.byte_length::text, r.retained_at,
         EXISTS (
-          SELECT 1 FROM data_manager.offline_package_jobs active
+          SELECT 1 FROM data_manager.offline_package_job active
           WHERE active.package_id = r.package_id AND active.status = 'preparing'
         ) AS protected
-      FROM data_manager.offline_package_artifact_references r
+      FROM data_manager.offline_package_artifact_reference r
       WHERE r.principal = ${principal}
       ORDER BY r.retained_at ASC, r.package_id ASC
       FOR UPDATE
@@ -393,7 +393,7 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
       }
       if (ref.protected) continue;
       await tx`
-        DELETE FROM data_manager.offline_package_artifact_references
+        DELETE FROM data_manager.offline_package_artifact_reference
         WHERE principal = ${principal} AND package_id = ${ref.package_id}
       `;
       referenceCount -= 1;
@@ -407,7 +407,7 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
       throw new OfflinePackagePrincipalQuotaError("retained artifact budget is full");
     }
     await tx`
-      INSERT INTO data_manager.offline_package_artifact_references (
+      INSERT INTO data_manager.offline_package_artifact_reference (
         principal, package_id, byte_length, retained_at
       ) VALUES (${principal}, ${packageId}, ${byteLength}, ${retainedAt})
     `;
@@ -420,11 +420,11 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
       const [row] = await tx<{ referenced: boolean; active: boolean }[]>`
         SELECT
           EXISTS (
-            SELECT 1 FROM data_manager.offline_package_artifact_references
+            SELECT 1 FROM data_manager.offline_package_artifact_reference
             WHERE package_id = ${packageId}
           ) AS referenced,
           EXISTS (
-            SELECT 1 FROM data_manager.offline_package_jobs
+            SELECT 1 FROM data_manager.offline_package_job
             WHERE package_id = ${packageId} AND status = 'preparing'
           ) AS active
       `;
@@ -440,8 +440,8 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
     assertOfflinePackagePrincipal(principal);
     const [row] = await this.sql<JobRow[]>`
       SELECT ${this.sql.unsafe(JOB_COLUMNS)}
-      FROM data_manager.offline_package_jobs j
-      JOIN data_manager.offline_package_job_owners o ON o.job_id = j.id
+      FROM data_manager.offline_package_job j
+      JOIN data_manager.offline_package_job_owner o ON o.job_id = j.id
       WHERE j.id = ${jobId} AND o.principal = ${principal}
       LIMIT 1
     `;
@@ -451,7 +451,7 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
   async loadRunnable(): Promise<OfflinePackageJobRecord[]> {
     const rows = await this.sql<JobRow[]>`
       SELECT ${this.sql.unsafe(JOB_COLUMNS)}
-      FROM data_manager.offline_package_jobs j
+      FROM data_manager.offline_package_job j
       WHERE j.status = 'preparing'
       ORDER BY j.created_at ASC, j.id ASC
     `;
@@ -467,25 +467,25 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
     return await this.sql.begin(async (tx) => {
       await this.lockGlobal(tx);
       const [job] = await tx<JobRow[]>`
-        SELECT ${tx.unsafe(JOB_COLUMNS)} FROM data_manager.offline_package_jobs j
+        SELECT ${tx.unsafe(JOB_COLUMNS)} FROM data_manager.offline_package_job j
         WHERE j.id = ${jobId} FOR UPDATE
       `;
       if (job?.status !== "preparing") return false;
       const [lease] = await tx<{ live: boolean }[]>`
         SELECT lease_expires_at > clock_timestamp() AS live
-        FROM data_manager.offline_package_jobs
+        FROM data_manager.offline_package_job
         WHERE id = ${jobId}
       `;
       if (job.lease_owner === workerId && lease?.live === true) {
         return true;
       }
       const [global] = await tx<{ count: string }[]>`
-        SELECT count(*)::text AS count FROM data_manager.offline_package_jobs
+        SELECT count(*)::text AS count FROM data_manager.offline_package_job
         WHERE status = 'preparing' AND lease_expires_at > clock_timestamp()
       `;
       if (Number(global?.count ?? 0) >= maxRunning) return false;
       const owners = await tx<{ principal: string }[]>`
-        SELECT principal FROM data_manager.offline_package_job_owners WHERE job_id = ${jobId}
+        SELECT principal FROM data_manager.offline_package_job_owner WHERE job_id = ${jobId}
         ORDER BY principal ASC
       `;
       for (const owner of owners) {
@@ -494,7 +494,7 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
         if (counts.running >= this.maxRunningPerPrincipal) return false;
       }
       await tx`
-        UPDATE data_manager.offline_package_jobs
+        UPDATE data_manager.offline_package_job
         SET lease_owner = ${workerId},
             lease_expires_at = clock_timestamp() + (${leaseMs}::bigint * interval '1 millisecond'),
             updated_at = clock_timestamp()
@@ -506,7 +506,7 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
 
   async renew(jobId: string, workerId: string, leaseMs: number): Promise<boolean> {
     const rows = await this.sql`
-      UPDATE data_manager.offline_package_jobs
+      UPDATE data_manager.offline_package_job
       SET lease_expires_at = clock_timestamp() + (${leaseMs}::bigint * interval '1 millisecond')
       WHERE id = ${jobId} AND status = 'preparing' AND lease_owner = ${workerId}
       RETURNING id
@@ -522,14 +522,14 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
     return await this.sql.begin(async (tx) => {
       await this.lockGlobal(tx);
       const [job] = await tx<JobRow[]>`
-        SELECT ${tx.unsafe(JOB_COLUMNS)} FROM data_manager.offline_package_jobs j
+        SELECT ${tx.unsafe(JOB_COLUMNS)} FROM data_manager.offline_package_job j
         WHERE j.id = ${jobId} FOR UPDATE
       `;
       if (job?.status !== "preparing" || job.lease_owner !== workerId) {
         throw new Error("Offline package completion does not own the durable lease");
       }
       const owners = await tx<{ principal: string }[]>`
-        SELECT principal FROM data_manager.offline_package_job_owners
+        SELECT principal FROM data_manager.offline_package_job_owner
         WHERE job_id = ${jobId} ORDER BY principal ASC
       `;
       const evicted: string[] = [];
@@ -546,7 +546,7 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
         );
       }
       await tx`
-        UPDATE data_manager.offline_package_jobs
+        UPDATE data_manager.offline_package_job
         SET status = 'ready-to-download', manifest = ${JSON.stringify(manifest)},
             package_id = ${manifest.packageId}, updated_at = clock_timestamp(),
             lease_owner = NULL, lease_expires_at = NULL
@@ -565,14 +565,14 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
   ): Promise<void> {
     if (workerId) {
       await this.sql`
-        UPDATE data_manager.offline_package_jobs
+        UPDATE data_manager.offline_package_job
         SET status = 'failed', error_code = ${errorCode ?? null}, error_message = ${errorMessage},
             updated_at = ${new Date(updatedAtMs).toISOString()}, lease_owner = NULL, lease_expires_at = NULL
         WHERE id = ${jobId} AND status = 'preparing' AND lease_owner = ${workerId}
       `;
     } else {
       await this.sql`
-        UPDATE data_manager.offline_package_jobs
+        UPDATE data_manager.offline_package_job
         SET status = 'failed', error_code = ${errorCode ?? null}, error_message = ${errorMessage},
             updated_at = ${new Date(updatedAtMs).toISOString()}, lease_owner = NULL, lease_expires_at = NULL
         WHERE id = ${jobId} AND status = 'preparing'
@@ -582,8 +582,8 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
 
   async expire(jobId: string, updatedAtMs: number): Promise<void> {
     await this.sql`
-      UPDATE data_manager.offline_package_jobs
-      SET status = 'expired', error_code = 'expired',
+      UPDATE data_manager.offline_package_job
+      SET status = 'expired', error_code = 'EXPIRED',
           error_message = 'offline package preparation expired',
           updated_at = ${new Date(updatedAtMs).toISOString()}, lease_owner = NULL, lease_expires_at = NULL
       WHERE id = ${jobId} AND status = 'preparing'
@@ -592,7 +592,7 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
 
   async removeTerminal(jobId: string): Promise<void> {
     await this.sql`
-      DELETE FROM data_manager.offline_package_jobs
+      DELETE FROM data_manager.offline_package_job
       WHERE id = ${jobId} AND status <> 'preparing'
     `;
   }
@@ -601,7 +601,7 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
     assertOfflinePackagePrincipal(principal);
     const [row] = await this.sql<{ references: string; logical_bytes: string }[]>`
       SELECT count(*)::text AS references, coalesce(sum(byte_length), 0)::text AS logical_bytes
-      FROM data_manager.offline_package_artifact_references WHERE principal = ${principal}
+      FROM data_manager.offline_package_artifact_reference WHERE principal = ${principal}
     `;
     return {
       references: Number(row?.references ?? 0),
@@ -612,7 +612,7 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
   async hasArtifactReference(packageId: string): Promise<boolean> {
     const [row] = await this.sql<{ referenced: boolean }[]>`
       SELECT EXISTS (
-        SELECT 1 FROM data_manager.offline_package_artifact_references
+        SELECT 1 FROM data_manager.offline_package_artifact_reference
         WHERE package_id = ${packageId}
       ) AS referenced
     `;

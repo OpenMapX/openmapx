@@ -121,8 +121,6 @@ describeDatabase("authentication before the request body, through createApp()", 
     vi.stubEnv("OSM_WEB_URL", CLOSED_LOCAL_URL);
     vi.stubEnv("OSM_DISCOVERY_URL", `${CLOSED_LOCAL_URL}/.well-known/openid-configuration`);
     vi.stubEnv("OPENMAPX_CUSTOM_INTEGRATIONS_DIR", customIntegrations);
-    vi.stubEnv("OPENMAPX_LOCAL_ADMIN_TOKEN", "");
-    vi.stubEnv("OPENMAPX_DISABLE_LOCALHOST_AUTH", "1");
 
     const { createApp } = await import("../../app");
     // Integration setup may request its upstreams; keep this suite off the

@@ -40,7 +40,7 @@ export function PrivacyCaseDecisionForms({
   // The transition table decides what is offered; work only starts once the
   // requester's identity is known, and completion waits for every task.
   const allowed = (value: Decision) =>
-    REQUEST_TRANSITIONS[detail.request.state].includes(value) &&
+    REQUEST_TRANSITIONS[detail.request.status].includes(value) &&
     (value !== "in_progress" || detail.request.identityMethod !== null) &&
     (value !== "completed" || detail.tasks.every((task) => task.status === "resolved"));
   // Statutory deadlines are read and entered in the request's own zone, which

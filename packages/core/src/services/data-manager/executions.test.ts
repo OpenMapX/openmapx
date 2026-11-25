@@ -39,7 +39,7 @@ describe("durable data execution receipts", () => {
       admittedAt: 1000,
       deadlineAt: 2000,
       kind: "download-fonts",
-      status: "ok",
+      status: "succeeded",
       cancellationRequestedAt: null,
       progress: 1,
       diagnostics: { tail: [], truncated: false },

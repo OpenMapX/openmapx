@@ -534,7 +534,7 @@ export const {
   const digest = z.string().regex(/^[a-f0-9]{64}$/);
   const schema = z
     .strictObject({
-      version: z.literal(2),
+      version: z.literal(1),
       origin: controlOriginSchema,
       execution: executionRefSchema,
       admissionDigest: digest,
@@ -634,7 +634,7 @@ export const {
       write(
         authority,
         schema.parse({
-          version: 2,
+          version: 1,
           origin: s.origin,
           execution: s.execution,
           admissionDigest: s.receiptDigest,

@@ -19,10 +19,10 @@ export const ListPrivacyAdminQueue200RequestsItemKind = {
   access_and_portability: "access_and_portability",
 } as const;
 
-export type ListPrivacyAdminQueue200RequestsItemState =
-  (typeof ListPrivacyAdminQueue200RequestsItemState)[keyof typeof ListPrivacyAdminQueue200RequestsItemState];
+export type ListPrivacyAdminQueue200RequestsItemStatus =
+  (typeof ListPrivacyAdminQueue200RequestsItemStatus)[keyof typeof ListPrivacyAdminQueue200RequestsItemStatus];
 
-export const ListPrivacyAdminQueue200RequestsItemState = {
+export const ListPrivacyAdminQueue200RequestsItemStatus = {
   open: "open",
   in_progress: "in_progress",
   waiting_on_requester: "waiting_on_requester",
@@ -54,7 +54,7 @@ export type ListPrivacyAdminQueue200RequestsItem = {
   originalDueAt?: string;
   kind: ListPrivacyAdminQueue200RequestsItemKind;
   channel: string;
-  state: ListPrivacyAdminQueue200RequestsItemState;
+  status: ListPrivacyAdminQueue200RequestsItemStatus;
   /** @nullable */
   userId: string | null;
   locale: string;
@@ -255,10 +255,10 @@ export const CreatePrivacyAdminCase202RequestKind = {
   access_and_portability: "access_and_portability",
 } as const;
 
-export type CreatePrivacyAdminCase202RequestState =
-  (typeof CreatePrivacyAdminCase202RequestState)[keyof typeof CreatePrivacyAdminCase202RequestState];
+export type CreatePrivacyAdminCase202RequestStatus =
+  (typeof CreatePrivacyAdminCase202RequestStatus)[keyof typeof CreatePrivacyAdminCase202RequestStatus];
 
-export const CreatePrivacyAdminCase202RequestState = {
+export const CreatePrivacyAdminCase202RequestStatus = {
   open: "open",
   in_progress: "in_progress",
   waiting_on_requester: "waiting_on_requester",
@@ -290,7 +290,7 @@ export type CreatePrivacyAdminCase202Request = {
   originalDueAt?: string;
   kind: CreatePrivacyAdminCase202RequestKind;
   channel: string;
-  state: CreatePrivacyAdminCase202RequestState;
+  status: CreatePrivacyAdminCase202RequestStatus;
   /** @nullable */
   userId: string | null;
   locale: string;
@@ -425,10 +425,10 @@ export const GetPrivacyAdminCase200RequestKind = {
   access_and_portability: "access_and_portability",
 } as const;
 
-export type GetPrivacyAdminCase200RequestState =
-  (typeof GetPrivacyAdminCase200RequestState)[keyof typeof GetPrivacyAdminCase200RequestState];
+export type GetPrivacyAdminCase200RequestStatus =
+  (typeof GetPrivacyAdminCase200RequestStatus)[keyof typeof GetPrivacyAdminCase200RequestStatus];
 
-export const GetPrivacyAdminCase200RequestState = {
+export const GetPrivacyAdminCase200RequestStatus = {
   open: "open",
   in_progress: "in_progress",
   waiting_on_requester: "waiting_on_requester",
@@ -460,7 +460,7 @@ export type GetPrivacyAdminCase200Request = {
   originalDueAt?: string;
   kind: GetPrivacyAdminCase200RequestKind;
   channel: string;
-  state: GetPrivacyAdminCase200RequestState;
+  status: GetPrivacyAdminCase200RequestStatus;
   /** @nullable */
   userId: string | null;
   locale: string;
@@ -512,11 +512,34 @@ export type GetPrivacyAdminCase200TasksItem = {
   resolvedAt: string | null;
 };
 
+export type GetPrivacyAdminCase200EventsItemEventType =
+  (typeof GetPrivacyAdminCase200EventsItemEventType)[keyof typeof GetPrivacyAdminCase200EventsItemEventType];
+
+export const GetPrivacyAdminCase200EventsItemEventType = {
+  received: "received",
+  status_changed: "status_changed",
+  identity_verified: "identity_verified",
+  task_resolved: "task_resolved",
+  extended: "extended",
+  export_started: "export_started",
+  export_delivered: "export_delivered",
+  export_failed: "export_failed",
+} as const;
+
+export type GetPrivacyAdminCase200EventsItemActorKind =
+  (typeof GetPrivacyAdminCase200EventsItemActorKind)[keyof typeof GetPrivacyAdminCase200EventsItemActorKind];
+
+export const GetPrivacyAdminCase200EventsItemActorKind = {
+  subject: "subject",
+  admin: "admin",
+  system: "system",
+} as const;
+
 export type GetPrivacyAdminCase200EventsItemPayload = { [key: string]: string };
 
 export type GetPrivacyAdminCase200EventsItem = {
-  eventType: string;
-  actorKind: string;
+  eventType: GetPrivacyAdminCase200EventsItemEventType;
+  actorKind: GetPrivacyAdminCase200EventsItemActorKind;
   /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
   createdAt: string;
   payload?: GetPrivacyAdminCase200EventsItemPayload;
@@ -669,10 +692,10 @@ export const DecidePrivacyAdminCase200RequestKind = {
   access_and_portability: "access_and_portability",
 } as const;
 
-export type DecidePrivacyAdminCase200RequestState =
-  (typeof DecidePrivacyAdminCase200RequestState)[keyof typeof DecidePrivacyAdminCase200RequestState];
+export type DecidePrivacyAdminCase200RequestStatus =
+  (typeof DecidePrivacyAdminCase200RequestStatus)[keyof typeof DecidePrivacyAdminCase200RequestStatus];
 
-export const DecidePrivacyAdminCase200RequestState = {
+export const DecidePrivacyAdminCase200RequestStatus = {
   open: "open",
   in_progress: "in_progress",
   waiting_on_requester: "waiting_on_requester",
@@ -704,7 +727,7 @@ export type DecidePrivacyAdminCase200Request = {
   originalDueAt?: string;
   kind: DecidePrivacyAdminCase200RequestKind;
   channel: string;
-  state: DecidePrivacyAdminCase200RequestState;
+  status: DecidePrivacyAdminCase200RequestStatus;
   /** @nullable */
   userId: string | null;
   locale: string;
@@ -959,10 +982,10 @@ export const ExtendPrivacyAdminCase200RequestKind = {
   access_and_portability: "access_and_portability",
 } as const;
 
-export type ExtendPrivacyAdminCase200RequestState =
-  (typeof ExtendPrivacyAdminCase200RequestState)[keyof typeof ExtendPrivacyAdminCase200RequestState];
+export type ExtendPrivacyAdminCase200RequestStatus =
+  (typeof ExtendPrivacyAdminCase200RequestStatus)[keyof typeof ExtendPrivacyAdminCase200RequestStatus];
 
-export const ExtendPrivacyAdminCase200RequestState = {
+export const ExtendPrivacyAdminCase200RequestStatus = {
   open: "open",
   in_progress: "in_progress",
   waiting_on_requester: "waiting_on_requester",
@@ -994,7 +1017,7 @@ export type ExtendPrivacyAdminCase200Request = {
   originalDueAt?: string;
   kind: ExtendPrivacyAdminCase200RequestKind;
   channel: string;
-  state: ExtendPrivacyAdminCase200RequestState;
+  status: ExtendPrivacyAdminCase200RequestStatus;
   /** @nullable */
   userId: string | null;
   locale: string;
@@ -1147,10 +1170,10 @@ export const VerifyPrivacyAdminIdentity200RequestKind = {
   access_and_portability: "access_and_portability",
 } as const;
 
-export type VerifyPrivacyAdminIdentity200RequestState =
-  (typeof VerifyPrivacyAdminIdentity200RequestState)[keyof typeof VerifyPrivacyAdminIdentity200RequestState];
+export type VerifyPrivacyAdminIdentity200RequestStatus =
+  (typeof VerifyPrivacyAdminIdentity200RequestStatus)[keyof typeof VerifyPrivacyAdminIdentity200RequestStatus];
 
-export const VerifyPrivacyAdminIdentity200RequestState = {
+export const VerifyPrivacyAdminIdentity200RequestStatus = {
   open: "open",
   in_progress: "in_progress",
   waiting_on_requester: "waiting_on_requester",
@@ -1182,7 +1205,7 @@ export type VerifyPrivacyAdminIdentity200Request = {
   originalDueAt?: string;
   kind: VerifyPrivacyAdminIdentity200RequestKind;
   channel: string;
-  state: VerifyPrivacyAdminIdentity200RequestState;
+  status: VerifyPrivacyAdminIdentity200RequestStatus;
   /** @nullable */
   userId: string | null;
   locale: string;
@@ -1335,10 +1358,10 @@ export const ResolvePrivacyAdminTask200RequestKind = {
   access_and_portability: "access_and_portability",
 } as const;
 
-export type ResolvePrivacyAdminTask200RequestState =
-  (typeof ResolvePrivacyAdminTask200RequestState)[keyof typeof ResolvePrivacyAdminTask200RequestState];
+export type ResolvePrivacyAdminTask200RequestStatus =
+  (typeof ResolvePrivacyAdminTask200RequestStatus)[keyof typeof ResolvePrivacyAdminTask200RequestStatus];
 
-export const ResolvePrivacyAdminTask200RequestState = {
+export const ResolvePrivacyAdminTask200RequestStatus = {
   open: "open",
   in_progress: "in_progress",
   waiting_on_requester: "waiting_on_requester",
@@ -1370,7 +1393,7 @@ export type ResolvePrivacyAdminTask200Request = {
   originalDueAt?: string;
   kind: ResolvePrivacyAdminTask200RequestKind;
   channel: string;
-  state: ResolvePrivacyAdminTask200RequestState;
+  status: ResolvePrivacyAdminTask200RequestStatus;
   /** @nullable */
   userId: string | null;
   locale: string;

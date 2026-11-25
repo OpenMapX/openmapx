@@ -10,7 +10,7 @@ import {
 import { createControlRootOperationKey } from "@openmapx/core/ops";
 import { buildOpsAgentServer, type BuildOpsAgentServerOptions } from "../server";
 
-/** Stable retry identity with an actual protocol-v2 root expiry. */
+/** Stable retry identity with an actual control root expiry. */
 export function controlTestKey(label: string, notAfter: number): string {
   return createControlRootOperationKey({
     notAfter,

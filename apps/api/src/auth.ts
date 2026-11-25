@@ -200,7 +200,7 @@ function createPolicyAuth(
         await currentAuthDatabase()
           .insert(adminAuditLog)
           .values({
-            actorId: null,
+            actorUserId: null,
             targetType: "user",
             targetId: user.id,
             targetUserId: actorUserIdOrNull(user.id),

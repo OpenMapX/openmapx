@@ -3,12 +3,9 @@ import type { PersistedClient, Persister } from "@tanstack/react-query-persist-c
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen, waitFor } from "@/test";
-import {
-  PERSONAL_TIMELINE_CACHE_BUSTER,
-  removePersonalTimelineMutations,
-} from "./personalTimelineCachePolicy";
+import { removePersonalTimelineMutations } from "./personalTimelineCachePolicy";
 import { RecentMapDataQueryProvider } from "./RecentMapDataQueryProvider";
-import { RECENT_MAP_DATA_CACHE_ENABLED_KEY } from "./recentMapDataCache";
+import { QUERY_CACHE_BUSTER, RECENT_MAP_DATA_CACHE_ENABLED_KEY } from "./recentMapDataCache";
 
 beforeEach(() => localStorage.setItem(RECENT_MAP_DATA_CACHE_ENABLED_KEY, "true"));
 afterEach(() => localStorage.clear());
@@ -21,7 +18,7 @@ function fixture() {
   stored.setQueryData(["place", "test"], "cached");
   const snapshot: PersistedClient = {
     timestamp: Date.now(),
-    buster: PERSONAL_TIMELINE_CACHE_BUSTER,
+    buster: QUERY_CACHE_BUSTER,
     clientState: dehydrate(stored),
   };
   const persister = {
@@ -34,7 +31,7 @@ function fixture() {
     (() => Promise<string>);
   const persistOptions = {
     persister,
-    buster: PERSONAL_TIMELINE_CACHE_BUSTER,
+    buster: QUERY_CACHE_BUSTER,
     maxAge: 24 * 60 * 60 * 1000,
   };
   return { queryClient, snapshot, persister, queryFn, persistOptions };

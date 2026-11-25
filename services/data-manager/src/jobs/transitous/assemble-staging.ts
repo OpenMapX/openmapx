@@ -159,7 +159,7 @@ export const run: StageFn = async (ctx) => {
     }
     const licenseSrc = join(outDir, "license.json");
     if (!existsSync(licenseSrc)) {
-      return finish("error", `required attribution artifact missing at ${licenseSrc}`);
+      return finish("failed", `required attribution artifact missing at ${licenseSrc}`);
     }
     copyMetadata(licenseSrc, join(stagingDir, "license.json"));
     const sourceIndexSrc = join(outDir, "gbfs-source-index.json");
@@ -169,7 +169,7 @@ export const run: StageFn = async (ctx) => {
     const transitSourceManifest = join(outDir, TRANSIT_SOURCE_MANIFEST_FILENAME);
     if (!existsSync(transitSourceManifest)) {
       return finish(
-        "error",
+        "failed",
         `required transit source manifest missing at ${transitSourceManifest}`,
       );
     }
@@ -177,7 +177,7 @@ export const run: StageFn = async (ctx) => {
 
     const proxyCandidateSrc = join(outDir, CANDIDATE_PROXY_DIRNAME);
     if (!existsSync(proxyCandidateSrc)) {
-      return finish("error", `required feed-proxy candidate missing at ${proxyCandidateSrc}`);
+      return finish("failed", `required feed-proxy candidate missing at ${proxyCandidateSrc}`);
     }
     const proxyCandidateDest = join(stagingDir, CANDIDATE_PROXY_DIRNAME);
     rmSync(proxyCandidateDest, { recursive: true, force: true });
@@ -189,7 +189,7 @@ export const run: StageFn = async (ctx) => {
     // feeds, or one whose every referenced archive is missing from the output.)
     if (linkedFeeds.length === 0) {
       return finish(
-        "error",
+        "failed",
         `assembled 0 feed(s) into ${stagingDir}: refusing to import/promote an empty timetable` +
           (missingFeeds.length
             ? `; ${missingFeeds.length} referenced feed(s) missing from output`
@@ -211,7 +211,7 @@ export const run: StageFn = async (ctx) => {
       .filter((relativePath) => !existsSync(join(stagingDir, relativePath)));
     if (missingAdvertised.length > 0) {
       return finish(
-        "error",
+        "failed",
         `source manifest advertises ${missingAdvertised.length} artifact(s) absent from the ` +
           `candidate: ${missingAdvertised.join(", ")}`,
         { stagingDir, missingAdvertised },
@@ -260,7 +260,8 @@ export const run: StageFn = async (ctx) => {
       }
     }
 
-    const status = missingFeeds.length > 0 || osmSource === "missing" ? "partial" : "ok";
+    const status =
+      missingFeeds.length > 0 || osmSource === "missing" ? "partially_succeeded" : "succeeded";
     return finish(
       status,
       `assembled ${linkedFeeds.length} feed(s) into ${stagingDir}` +
@@ -290,7 +291,7 @@ export const run: StageFn = async (ctx) => {
     const err = error as Error;
     return {
       stage: "assemble-staging",
-      status: "error",
+      status: "failed",
       startedAt,
       finishedAt: ctx.now(),
       durationMs: Date.now() - start,

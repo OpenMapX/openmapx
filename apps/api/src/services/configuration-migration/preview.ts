@@ -14,11 +14,12 @@ import {
   configurationMigrationDocumentSchema,
 } from "../../../../../packages/core/src/api/contracts/integration-admin/configuration-migration";
 import {
+  authPolicyDraft,
   authPolicyKeys,
   defaultAuthPolicySettings,
   loadAuthPolicy,
 } from "../../account/auth-policy";
-import { systemSettings } from "../../db/schema";
+import { systemSetting } from "../../db/schema";
 import {
   type AdministrativeConfigurationWriter,
   administrativeConfigurationState,
@@ -30,7 +31,12 @@ import {
 } from "../configuration-ownership-view";
 import { bindingContentRevision, capturedBindingState } from "../integration-binding-state";
 import type { ProspectiveConfigurationOverlay } from "../prospective-configuration";
-import { matchesDeclaredType, SETTING_DEFS } from "../settings";
+import {
+  isSetInEnvironment,
+  matchesDeclaredType,
+  PLATFORM_CONFIGURATION_SETTING,
+  SETTING_DEFS,
+} from "../settings";
 import { migrationSources } from "./sources";
 import { MigrationConflict, retainMigrationStage } from "./staging";
 
@@ -155,32 +161,28 @@ export async function prepareMigrationPlan(
     }
     const existingSettings = await owner.connection
         .select({
-          key: systemSettings.key,
-          value: systemSettings.value,
+          key: systemSetting.key,
+          value: systemSetting.value,
           rowVersion: sql<string>`xmin::text`,
         })
-        .from(systemSettings),
+        .from(systemSetting),
       policy = await loadAuthPolicy(owner.connection);
     for (const [key, value] of Object.entries(document.settings)) {
       const def = SETTING_DEFS.find((d) => d.key === key);
       if (
         !def ||
         def.secret ||
-        (def.env && read.env[def.env] !== undefined) ||
+        def.envOnly ||
+        isSetInEnvironment(def, read.env) ||
         !matchesDeclaredType(def, value)
       )
         denials.push(`account:settings:${key}:not_portable`);
       else settings[key] = value;
     }
-    const authDraft = Object.fromEntries(
-      existingSettings.filter((r) => authPolicyKeys.includes(r.key)).map((r) => [r.key, r.value]),
-    );
     authPolicySettingsSchema.parse({
       ...defaultAuthPolicySettings,
-      ...authDraft,
-      ...Object.fromEntries(
-        Object.entries(settings).filter(([key]) => authPolicyKeys.includes(key)),
-      ),
+      ...authPolicyDraft(Object.fromEntries(existingSettings.map((r) => [r.key, r.value]))),
+      ...authPolicyDraft(settings),
     });
     for (const binding of document.bindings) {
       unique(`binding:${binding.integrationId}:${binding.capability}`);
@@ -259,7 +261,8 @@ export async function prepareMigrationPlan(
           preview: platformPreview,
           sourceSnapshot: source,
           desiredRowVersion:
-            existingSettings.find((r) => r.key === "platformConfiguration")?.rowVersion ?? null,
+            existingSettings.find((r) => r.key === PLATFORM_CONFIGURATION_SETTING)?.rowVersion ??
+            null,
         });
         platformPreview = retained.preview;
       }

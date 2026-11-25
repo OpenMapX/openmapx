@@ -4,8 +4,10 @@ import {
   integrationApplyReceiptSchema,
 } from "@openmapx/core/api-contracts";
 import { controlChildOperationKey } from "@openmapx/core/build-artifacts";
+import { COMPONENT_ID_PATTERN } from "@openmapx/core/component-id";
 import { itemAt } from "@openmapx/core/item-at";
 import {
+  type ConfigurationApplyResult,
   type ConfigurationHardlinksPreview,
   type ConfigurationSourcesInspection,
   type CoordinatorMode,
@@ -111,16 +113,23 @@ import {
 import { capturedBindingState } from "./integration-binding-state";
 import { integrationConfigRevision } from "./integration-runtime-evidence";
 import type { JobContext } from "./job-runner";
-import { ApiOpsError, createApiOpsClient, createDurableOpsKey, executeAndWait } from "./ops-client";
+import {
+  ApiOpsError,
+  createApiOpsClient,
+  createDurableOpsKey,
+  executeAndWait,
+  OpsSettledByOtherRelease,
+} from "./ops-client";
 import {
   assertPlatformConfigurationOverlay,
   assertPlatformConfigurationSource,
   retainedPlatformConfigurationIntent,
   retainedPlatformConfigurationSource,
 } from "./platform-configuration-participant";
-import { encrypt } from "./secrets";
+import { encrypt, secretAad } from "./secrets";
 import { resolveServiceConfigWithSourcesStrict } from "./service-config-resolver";
 import { getServiceRegistry, resolveRequiresForIntegration } from "./service-registry";
+import { PLATFORM_CONFIGURATION_SETTING } from "./setting-defs";
 import {
   completeTrustedConfigurationApply,
   parseTrustedConfigurationApplyOutcome,
@@ -131,7 +140,7 @@ export type BoundedConfigValue =
   TrustedConfigurationPayload["serviceConfigs"][number]["values"][string];
 export type PlatformField<T> = coreServices.PlatformField<T>;
 export type PlatformConfigurationPatch = Omit<coreServices.PlatformConfiguration, "version">;
-const id = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/);
+const id = z.string().regex(COMPONENT_ID_PATTERN);
 const key = z
   .string()
   .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/)
@@ -458,7 +467,7 @@ async function concludeWithoutChange(
     delete result.observation;
     const rows = await connection
       .update(schema.adminJob)
-      .set({ status: "canceled", finishedAt: new Date(), ...replaceJobCheckpoint(result) })
+      .set({ status: "cancelled", finishedAt: new Date(), ...replaceJobCheckpoint(result) })
       .where(jobOwnership(job.jobId, job.execution, ["running", "cancel_pending"]))
       .returning({ id: schema.adminJob.id });
     if (rows.length !== 1) throw new JobOwnershipLost();
@@ -782,7 +791,7 @@ async function applyPhase(candidate: ValidatedConfigurationCandidate): Promise<v
   const { applied, settled } = await applySavedConfigurationMaintenance(candidate);
   // A cancel, or an apply the agent refused, before the maintenance applied
   // anything leaves the generation as it was.
-  if (!applied?.generation) {
+  if (!applied.generation) {
     if (settled.generation !== "not_started") throw new JobObservationPending("recovery_required");
     await recordOutcome(notCommitted("failed"));
     await writePhase(candidate, "generation_applied");
@@ -868,7 +877,7 @@ export async function retireSettledProspectiveConfiguration(
         .where(
           and(
             eq(schema.platformConfigurationPreview.id, fixed.previewId),
-            eq(schema.platformConfigurationPreview.actorId, state.writer.actorId),
+            eq(schema.platformConfigurationPreview.actorUserId, state.writer.actorId),
             eq(schema.platformConfigurationPreview.previewFingerprint, fixed.previewFingerprint),
             eq(schema.platformConfigurationPreview.consumedByJobId, job.jobId),
           ),
@@ -1468,10 +1477,10 @@ async function mergeOverlay(
         rows.serviceSecretRows.push({
           serviceId: change.serviceId,
           key: change.key,
-          ...encrypt(change.value),
+          ...encrypt(change.value, secretAad.serviceSecret(change.serviceId, change.key)),
           createdAt: now,
           updatedAt: now,
-          updatedBy: null,
+          updatedByUserId: null,
         });
     } else {
       rows.integrationSecretRows = rows.integrationSecretRows.filter(
@@ -1481,10 +1490,10 @@ async function mergeOverlay(
         rows.integrationSecretRows.push({
           integrationId: change.integrationId,
           key: change.key,
-          ...encrypt(change.value),
+          ...encrypt(change.value, secretAad.integrationSecret(change.integrationId, change.key)),
           createdAt: now,
           updatedAt: now,
-          updatedBy: null,
+          updatedByUserId: null,
         });
     }
   }
@@ -1888,7 +1897,7 @@ export async function prepareProspectiveConfiguration(input: {
             throw new ConfigurationPrerequisiteFailure();
           }
           throw new AdminJobFailure("Configuration candidate preflight failed", {
-            errorCode: "configuration_preflight_failed",
+            errorCode: "CONFIGURATION_PREFLIGHT_FAILED",
             configurationPreflight: {
               stage: preflightStage,
               coordinatorState: state.preview?.coordinatorState ?? null,
@@ -2213,8 +2222,8 @@ async function readSavedRowVersions(
           ownerId: sql<string>`'platform'`,
           rowVersion: sql<string>`xmin::text`,
         })
-        .from(schema.systemSettings)
-        .where(eq(schema.systemSettings.key, "platformConfiguration"))
+        .from(schema.systemSetting)
+        .where(eq(schema.systemSetting.key, PLATFORM_CONFIGURATION_SETTING))
     : [];
   const receipts = intents.map((intent) => {
     const rows =
@@ -2362,7 +2371,13 @@ async function persistOverlay(
           one(
             await tx
               .update(schema.serviceSecret)
-              .set({ ciphertext: row.ciphertext, iv: row.iv, tag: row.tag, updatedAt: new Date() })
+              .set({
+                ciphertext: row.ciphertext,
+                iv: row.iv,
+                tag: row.tag,
+                keyVersion: row.keyVersion,
+                updatedAt: new Date(),
+              })
               .where(where)
               .returning(returned),
           );
@@ -2400,7 +2415,13 @@ async function persistOverlay(
           one(
             await tx
               .update(schema.integrationSecret)
-              .set({ ciphertext: row.ciphertext, iv: row.iv, tag: row.tag, updatedAt: new Date() })
+              .set({
+                ciphertext: row.ciphertext,
+                iv: row.iv,
+                tag: row.tag,
+                keyVersion: row.keyVersion,
+                updatedAt: new Date(),
+              })
               .where(where)
               .returning(returned),
           );
@@ -2634,11 +2655,14 @@ export async function settleConfigurationMaintenance(
 export async function abandonAppliedConfigurationMaintenance(job: JobContext): Promise<void> {
   const retained = readAdminJobProtocol(job.protocol).candidate;
   if (retained?.phase !== "rows_saved" || !retained.maintenanceId) return;
+  // An apply settled from another release's row has no result to say whether
+  // its steps still run; abandoning is idempotent per key, so it is sent too.
   const applied = Object.values(readProjection(job.protocol).operations).some(
     (operation) =>
       operation.kind === "configurationMaintenance.apply" &&
       operation.terminal &&
-      (operation.result as { outcome?: unknown } | undefined)?.outcome === "running",
+      ((operation.result as { outcome?: unknown } | undefined)?.outcome === "running" ||
+        operation.settlement !== undefined),
   );
   if (applied) await settleJobMaintenance(job, retained.maintenanceId, "abandon");
 }
@@ -2682,6 +2706,8 @@ async function applySavedConfigurationMaintenance(candidate: ValidatedConfigurat
     (operation) => operation.kind === "configurationMaintenance.apply",
   );
   let applied: OpsResultFor<"configurationMaintenance.apply"> | undefined;
+  // The generation the apply committed, also when only its settlement is read.
+  let generation: ConfigurationApplyResult | null = null;
   if (!cancelled() || attempted)
     try {
       applied = await executeAdminJobOperation(
@@ -2690,11 +2716,16 @@ async function applySavedConfigurationMaintenance(candidate: ValidatedConfigurat
         "configuration-maintenance.apply",
         { durableIdentity: maintenanceId },
       );
+      generation = applied.generation;
     } catch (error) {
+      // The agent that replaced the one which finished the apply belongs to
+      // another release: the row's settlement says what the apply committed,
+      // and the record is read again.
+      if (error instanceof OpsSettledByOtherRelease) generation = error.configuration;
       // The agent refused the apply: its deadline passed (`stale`) or the
       // maintenance no longer takes one. The record says what ran; it is
       // settled below like a cancelled one.
-      if (!(error instanceof ApiOpsError) || !["stale", "conflict"].includes(error.errorClass))
+      else if (!(error instanceof ApiOpsError) || !["stale", "conflict"].includes(error.errorClass))
         throw error;
     }
   let record = applied?.record ?? (await inspectConfigurationMaintenance(maintenanceId));
@@ -2726,7 +2757,7 @@ async function applySavedConfigurationMaintenance(candidate: ValidatedConfigurat
   // Data-manager refused the settlement for good: the operator resolves it.
   if (settled.state === "recovery_required") throw new JobObservationPending("recovery_required");
   if (settled.state !== "settled") throw new JobObservationPending("transport");
-  return { applied, settled };
+  return { applied: { generation }, settled };
 }
 
 /** Observation-only after an interrupted attempt; never replay unknown setup. */

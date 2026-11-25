@@ -5,6 +5,7 @@ import type {
   NotablePlacesBuildResult as CanonicalNotablePlacesBuildResult,
   NotablePlacesBuildStage as CanonicalNotablePlacesBuildStage,
 } from "@openmapx/core/data-manager-contracts";
+import { NOTABLE_PLACES_SCHEMA_VERSION } from "@openmapx/core/published-data";
 import type postgres from "postgres";
 import { scrubSecrets } from "../../utils/scrub-secrets.js";
 import { dataWorkerSignal } from "../execution/worker-scope.js";
@@ -212,9 +213,9 @@ export async function buildNotablePlaces(
       const epoch = randomUUID();
       await opts.sql.unsafe(
         `INSERT INTO notable_places__staging.index_state
-          (source, min_sitelinks, epoch, status, started_at, updated_at)
-         VALUES ($1,$2,$3,'building',$4,$4)`,
-        [endpoint, minSitelinks, epoch, startedAt],
+          (source, min_sitelinks, epoch, status, schema_version, started_at, updated_at)
+         VALUES ($1,$2,$3,'building',$5,$4,$4)`,
+        [endpoint, minSitelinks, epoch, startedAt, NOTABLE_PLACES_SCHEMA_VERSION],
       );
 
       progress("places", `Fetching places with at least ${minSitelinks} sitelinks`);

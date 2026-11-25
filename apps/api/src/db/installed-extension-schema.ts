@@ -36,15 +36,15 @@ export const installedExtension = pgTable(
     manifest: jsonb("manifest"),
     installedAt: timestamp("installed_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-    installedBy: text("installed_by"),
+    installedByUserId: text("installed_by_user_id"),
   },
   (table) => [
     foreignKey({
-      name: "installed_extension_installed_by_fkey",
-      columns: [table.installedBy],
+      name: "installed_extension_installed_by_user_id_fkey",
+      columns: [table.installedByUserId],
       foreignColumns: [user.id],
     }).onDelete("set null"),
-    index("installed_extension_installed_by_idx").on(table.installedBy),
+    index("installed_extension_installed_by_user_id_idx").on(table.installedByUserId),
     check(
       "installed_extension_source_trust_check",
       sql`${table.sourceTrust} in ('built-in','verified','community')`,

@@ -9,7 +9,7 @@ import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 
 import { createHash } from "node:crypto";
 import * as fs from "node:fs";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -104,6 +104,8 @@ describe("integration route rate tiers", () => {
       tile: tileLimit,
       typeahead: typeaheadLimit,
       routing: vi.fn(async () => undefined),
+      contribution: vi.fn(async () => undefined),
+      enrollment: vi.fn(async () => undefined),
       unmatched: vi.fn(async () => undefined),
     });
     const app = makeApp();
@@ -130,6 +132,8 @@ describe("host and dispatcher request tier ownership", () => {
       tile: new RateLimiter({ max, windowMs: 60_000 }),
       typeahead: new RateLimiter({ max, windowMs: 60_000 }),
       routing: new RateLimiter({ max, windowMs: 60_000 }),
+      contribution: new RateLimiter({ max, windowMs: 60_000 }),
+      enrollment: new RateLimiter({ max, windowMs: 60_000 }),
     };
     const tiers: RateLimitTiers = {
       public: buckets.public.preHandler(),
@@ -137,6 +141,8 @@ describe("host and dispatcher request tier ownership", () => {
       tile: buckets.tile.preHandler(),
       typeahead: buckets.typeahead.preHandler(),
       routing: buckets.routing.preHandler(),
+      contribution: buckets.contribution.preHandler(),
+      enrollment: buckets.enrollment.preHandler(),
       auth: vi.fn(),
       integrationIngress: vi.fn(),
       status: vi.fn(),
@@ -215,6 +221,8 @@ describe("host and dispatcher request tier ownership", () => {
       unmatched: unexpectedTier,
       typeahead: unexpectedTier,
       routing: unexpectedTier,
+      contribution: unexpectedTier,
+      enrollment: unexpectedTier,
     };
     app.addContentTypeParser("application/x-integration-probe", { parseAs: "string" }, parseBody);
     app.addHook("onRequest", makeRateLimitTierHook(tiers));
@@ -280,6 +288,8 @@ describe("host and dispatcher request tier ownership", () => {
     ["tile", true],
     ["typeahead", true],
     ["routing", true],
+    ["contribution", true],
+    ["enrollment", true],
   ] as const)(
     "charges actual dispatcher requests exactly once to %s (root route: %s)",
     async (tier, rootRoute) => {
@@ -358,7 +368,7 @@ describe("initIntegrations — loader", () => {
         id: "shared-identity",
         name: "Trusted built-in",
         version: "1.0.0",
-        licensing: licensingFromDeclaration("MIT", undefined),
+        platform: "1.0",
         domains: ["knowledge"],
         quality: "built-in",
       });
@@ -366,7 +376,7 @@ describe("initIntegrations — loader", () => {
         id: "shared-identity",
         name: "Untrusted community",
         version: "1.0.0",
-        licensing: licensingFromDeclaration("MIT", undefined),
+        platform: "1.0",
         domains: ["knowledge"],
         quality: "community",
         dependencies: ["missing-community-dependency"],
@@ -398,7 +408,7 @@ describe("initIntegrations — loader", () => {
       id: "shared-secret-identity",
       name: "Trusted built-in",
       version: "1.0.0",
-      licensing: licensingFromDeclaration("MIT", undefined),
+      platform: "1.0",
       domains: ["knowledge"],
       quality: "built-in",
     });
@@ -406,7 +416,7 @@ describe("initIntegrations — loader", () => {
       id: "shared-secret-identity",
       name: "Untrusted community",
       version: "1.0.0",
-      licensing: licensingFromDeclaration("MIT", undefined),
+      platform: "1.0",
       domains: ["knowledge"],
       quality: "community",
       configSchema: {
@@ -444,7 +454,7 @@ describe("initIntegrations — loader", () => {
       id: "duplicate-community",
       name: "First community",
       version: "1.0.0",
-      licensing: licensingFromDeclaration("MIT", undefined),
+      platform: "1.0",
       domains: ["knowledge"],
       quality: "community",
     });
@@ -452,7 +462,7 @@ describe("initIntegrations — loader", () => {
       id: "duplicate-community",
       name: "Second community",
       version: "1.0.0",
-      licensing: licensingFromDeclaration("MIT", undefined),
+      platform: "1.0",
       domains: ["knowledge"],
       quality: "community",
     });
@@ -489,7 +499,7 @@ describe("initIntegrations — loader", () => {
       id: "reload-identity",
       name: "Trusted built-in",
       version: "1.0.0",
-      licensing: licensingFromDeclaration("MIT", undefined),
+      platform: "1.0",
       domains: ["knowledge"],
       quality: "built-in",
     });
@@ -509,7 +519,7 @@ describe("initIntegrations — loader", () => {
         id: "reload-identity",
         name: "Untrusted community",
         version: "1.0.0",
-        licensing: licensingFromDeclaration("MIT", undefined),
+        platform: "1.0",
         domains: ["knowledge"],
         quality: "community",
       });
@@ -537,7 +547,7 @@ describe("initIntegrations — loader", () => {
         id: "landmark-probe",
         version: "1.0.0",
         author: "Test",
-        licensing: licensingFromDeclaration("MIT", undefined),
+        platform: "1.0",
         domains: ["landmark-models"],
         quality: "built-in",
         dataSources: [
@@ -572,6 +582,41 @@ describe("initIntegrations — loader", () => {
     }
   });
 
+  it.each([
+    ["stores a data source whose id is a valid place-id scheme", "probe-stations", 1],
+    ["rejects a data source whose id starts with a digit", "3d-models", 0],
+  ])("registerMobilityDataSource %s", async (_label, providerId, expected) => {
+    const parent = mkdtempSync(join(tmpdir(), "omx-data-source-provider-"));
+    const directory = join(parent, "data-source-probe");
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(
+      join(directory, "manifest.json"),
+      JSON.stringify({
+        id: "data-source-probe",
+        version: "1.0.0",
+        author: "Test",
+        platform: "1.0",
+        domains: ["data-source"],
+        quality: "built-in",
+      }),
+    );
+    writeFileSync(
+      join(directory, "index.js"),
+      [
+        "export function setup(ctx) {",
+        `  ctx.registerMobilityDataSource({ id: '${providerId}', meta: {}, attribution: [] });`,
+        "}",
+      ].join("\n"),
+    );
+    const app = makeApp();
+    try {
+      await initIntegrations(app, [{ directory: parent, isBuiltIn: true }]);
+      expect(getIntegrationProviders("data-source-probe", "data-source")).toHaveLength(expected);
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
   it("discovers, validates, stores, and reloads air-quality providers", async () => {
     const parent = mkdtempSync(join(tmpdir(), "omx-air-quality-provider-"));
     const directory = join(parent, "air-quality-probe");
@@ -582,7 +627,7 @@ describe("initIntegrations — loader", () => {
         id: "air-quality-probe",
         version: "1.0.0",
         author: "Test",
-        licensing: licensingFromDeclaration("MIT", undefined),
+        platform: "1.0",
         domains: ["air-quality"],
         quality: "built-in",
         dataSources: [
@@ -675,7 +720,7 @@ describe("initIntegrations — loader", () => {
         id: "domain-probe",
         version: "1.0.0",
         author: "Test",
-        licensing: licensingFromDeclaration("MIT", undefined),
+        platform: "1.0",
         domains: ["data-source"],
         quality: "built-in",
       }),
@@ -710,6 +755,7 @@ describe("initIntegrations — loader", () => {
       JSON.stringify({
         id: "untrusted-backend",
         version: "1.0.0",
+        platform: "1.0",
         license: "MIT",
         domains: ["knowledge"],
         backend: { routes: true },
@@ -774,7 +820,7 @@ describe("initIntegrations — loader", () => {
     await initIntegrations(app, [FIXTURES_DIR]);
 
     // The broken fixture uses id "BROKEN" (uppercase), which violates the
-    // INTEGRATION_ID_REGEX slug constraint and fails validateManifest.
+    // component id grammar and fails validateManifest.
     expect(getIntegration("BROKEN")).toBeUndefined();
     // The host must have warned about the broken manifest.
     const warnCalls = warnMock.mock.calls.flat().join(" ");
@@ -991,12 +1037,21 @@ describe("integration layer previews", () => {
 
   it("serves the same preview for a community integration", async () => {
     const app = makeApp();
-    await initIntegrations(app, [{ directory: FIXTURES_DIR, isBuiltIn: false }]);
+    // A community manifest may not call itself built-in, so the fixture is relabelled.
+    const parent = mkdtempSync(join(tmpdir(), "omx-community-preview-"));
+    const fixture = JSON.parse(readFileSync(join(FIXTURES_DIR, "alpha", "manifest.json"), "utf-8"));
+    const directory = writeTestIntegration(parent, "alpha", { ...fixture, quality: "community" });
+    copyFileSync(join(FIXTURES_DIR, "alpha", "preview.svg"), join(directory, "preview.svg"));
+    try {
+      await initIntegrations(app, [{ directory: parent, isBuiltIn: false }]);
 
-    const response = await app.inject({ method: "GET", url: "/api/integrations/alpha/preview" });
-    expect(response.statusCode).toBe(200);
-    expect(response.headers["cross-origin-resource-policy"]).toBe("cross-origin");
-    expect(response.body).toBe(readFileSync(join(FIXTURES_DIR, "alpha", "preview.svg"), "utf-8"));
+      const response = await app.inject({ method: "GET", url: "/api/integrations/alpha/preview" });
+      expect(response.statusCode).toBe(200);
+      expect(response.headers["cross-origin-resource-policy"]).toBe("cross-origin");
+      expect(response.body).toBe(readFileSync(join(FIXTURES_DIR, "alpha", "preview.svg"), "utf-8"));
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
   });
 });
 

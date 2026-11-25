@@ -28,7 +28,7 @@ function activityDetail(source = "application") {
     source,
     id: "0193e4a0-0000-7000-8001-000000000001",
     type: "operation",
-    status: source === "application" ? "running" : "partial",
+    status: source === "application" ? "running" : "partially_succeeded",
     payload: { nested: [null, { extra: true }] },
     result: { nested: [42] },
     error: null,
@@ -56,7 +56,7 @@ function activityDetail(source = "application") {
               id: "stage",
               jobId: "0193e4a0-0000-7000-8001-000000000001",
               stage: "download",
-              status: "partial",
+              status: "partially_succeeded",
               startedAt: date,
               finishedAt: date,
               durationMs: 4,
@@ -280,8 +280,7 @@ describe("actual generated Activity SDK through Fastify serialization", () => {
       expect(mocks.writeAuditLog).toHaveBeenCalledWith(
         expect.objectContaining({
           targetId: "0193e4a0-0000-7000-8001-000000000f04",
-          targetType: "data-manager-job",
-          action: "job.cancel",
+          action: "data_manager.job.cancel",
         }),
       );
     } finally {
@@ -349,6 +348,8 @@ describe("actual generated Activity SDK through Fastify serialization", () => {
         public: limiter.preHandler(),
         unmatched: unexpectedTier,
         typeahead: unexpectedTier,
+        contribution: unexpectedTier,
+        enrollment: unexpectedTier,
         routing: unexpectedTier,
       }),
     );

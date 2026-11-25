@@ -12,7 +12,7 @@ describe("ride-partner setup", () => {
   it("still registers nothing when credentials are stored, because no adapter exists yet", () => {
     const ctx = createMockIntegrationContext({
       id: "ride-partner",
-      config: { "yango-api-key": "a-key" },
+      config: { yangoApiKey: "a-key" },
     });
     setup(ctx);
     expect(ctx.registered.ride).toEqual([]);
@@ -22,7 +22,7 @@ describe("ride-partner setup", () => {
     const warn = vi.fn();
     const ctx = createMockIntegrationContext({
       id: "ride-partner",
-      config: { "yango-api-key": "a-key" },
+      config: { yangoApiKey: "a-key" },
     });
     ctx.log.warn = warn;
     setup(ctx);
@@ -34,17 +34,17 @@ describe("ride-partner setup", () => {
     const warn = vi.fn();
     const ctx = createMockIntegrationContext({
       id: "ride-partner",
-      config: { "yango-api-key": "   " },
+      config: { yangoApiKey: "   " },
     });
     ctx.log.warn = warn;
     setup(ctx);
     expect(warn).not.toHaveBeenCalled();
   });
 
-  it("declares every credential key in the <sourceId>-<field> form", () => {
+  it("declares every credential key as the lowerCamel <sourceId><Field> composition", () => {
     for (const cred of PARTNER_CREDENTIALS) {
       for (const key of cred.keys) {
-        expect(key.startsWith(`${cred.sourceId}-`)).toBe(true);
+        expect(key).toMatch(new RegExp(`^${cred.sourceId}(ClientId|ApiKey|ClientSecret)$`));
       }
     }
   });

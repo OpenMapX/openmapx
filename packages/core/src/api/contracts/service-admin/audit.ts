@@ -8,12 +8,15 @@ import {
   adminJsonValueSchema,
   adminTimestampSchema,
 } from "../admin";
+import { AUDIT_ACTION_NAMES, AUDIT_TARGET_TYPES } from "./audit-actions";
 
 const decimal = z.string().regex(/^\d{1,16}$/);
 const filterText = z.string().max(256);
+const auditActionSchema = z.enum(AUDIT_ACTION_NAMES);
+const auditTargetTypeSchema = z.enum(AUDIT_TARGET_TYPES);
 const auditFilters = {
-  action: filterText.optional(),
-  targetType: filterText.optional(),
+  action: auditActionSchema.optional(),
+  targetType: auditTargetTypeSchema.optional(),
   targetId: filterText.optional(),
   actorId: filterText.optional(),
 };
@@ -31,8 +34,8 @@ export const adminAuditEntrySchema = z.strictObject({
   id: z.string(),
   actorId: z.string().nullable(),
   targetId: z.string().nullable(),
-  targetType: z.string().nullable(),
-  action: z.string(),
+  targetType: auditTargetTypeSchema.nullable(),
+  action: auditActionSchema,
   details: adminJsonValueSchema,
   ipAddress: z.string().nullable(),
   userAgent: z.string().nullable(),

@@ -2,9 +2,12 @@ export { openAdminDataWorkflow } from "./admin-data-workflow";
 export {
   type AgentStatePaths,
   agentStatePaths,
+  OPS_JOB_JOURNAL_FILE,
+  OPS_JOB_JOURNAL_VERSION,
   prepareAgentStateDirectories,
 } from "./agent-state";
 export { prepareAgentStores } from "./agent-stores";
+export { BACKUP_FORMAT_VERSION } from "./backup-format";
 export { type BackupPruneCandidate, backupPruneInventory } from "./backup-prune-plan";
 export { backupRetentionExpiry } from "./backup-retention";
 export {
@@ -21,9 +24,8 @@ export {
 export {
   type CapabilityCheck,
   type CapabilityKind,
-  type CapabilityWarning,
+  capabilityNameErrors,
   checkCapabilityName,
-  collectCapabilityWarnings,
   NAMESPACED_NAME_REGEX,
   WELL_KNOWN_CAPABILITIES,
   WELL_KNOWN_DATA_TYPES,
@@ -63,12 +65,16 @@ export {
   resolveProxyHost,
 } from "./compose-renderer";
 export {
+  integrationConfigEnvName,
+  serviceConfigEnvName,
+  serviceConfigEnvPrefix,
+} from "./config-env-names";
+export {
   type ConfigSource,
   type ConfigValueWithSource,
   configSchemaKeys,
   flattenResolvedConfig,
   resolveServiceConfigFromEnv,
-  serviceConfigEnvPrefix,
 } from "./config-resolver";
 export {
   appliedServiceFile,
@@ -86,7 +92,9 @@ export {
   initializeConfigurationGenerations,
   inspectAppliedConfiguration,
   inspectLocalImageIds,
+  type MissingServiceSettings,
   type RenderConfigurationOptions,
+  RequiredServiceSettingsError,
   readAppliedComposeServiceIds,
   readAppliedConfiguration,
   readAppliedPlatformConfiguration,
@@ -125,6 +133,7 @@ export {
   PROTECTED_CONFIGURATION_SERVICE_IDS,
   RELEASE_PINNED_SERVICE_IDS,
   type ReleasePinnedServiceId,
+  serviceContainerName,
   serviceNetworkAlias,
 } from "./core-service-ids";
 export {
@@ -199,6 +208,7 @@ export {
 } from "./embedded-built-in-services";
 export {
   canonicalExtensionLocator,
+  compareSemver,
   type ExtensionComponentRef,
   type ExtensionIntegrationComponent,
   type ExtensionManifest,
@@ -206,6 +216,7 @@ export {
   extensionComponentSummary,
   extensionLocatorSchema,
   extensionManifestSchema,
+  isSemver,
   type VerifiedCatalogEntry,
   validateExtensionManifest,
   verifiedCatalogEntrySchema,
@@ -291,11 +302,14 @@ export {
   RELEASE_MANIFEST_CONTAINER_PATH,
   RELEASE_REPOSITORY_ENV,
   RELEASE_SELECTOR_ENV,
+  RELEASE_STATE_EPOCH,
   type ReleaseChannel,
   ReleaseChannelDisabledError,
+  type ReleaseDatabaseMigrationHead,
   type ReleaseManifest,
   type ReleaseProducer,
   type ReleaseSelection,
+  ReleaseStateEpochError,
   releaseChannel,
   releaseDigestFromPull,
   releaseManifestDigest,

@@ -111,7 +111,7 @@ describe("offline package public API", () => {
     expect(response.statusCode).toBe(502);
     expect(response.json()).toEqual({
       error: "Offline package service unavailable",
-      code: "source-unavailable",
+      code: "SOURCE_UNAVAILABLE",
     });
     expect(fetchMock).not.toHaveBeenCalled();
     await app.close();
@@ -322,7 +322,7 @@ describe("offline package public API", () => {
     expect(limited.headers["retry-after"]).toBe("599");
     expect(limited.json()).toEqual({
       error: "Offline package preparation quota exceeded",
-      code: "prepare-rate-limit",
+      code: "PREPARE_RATE_LIMITED",
       retryAfterSeconds: 599,
     });
     expect(options.prepareLimiter.consume).toHaveBeenCalledTimes(3);
@@ -358,7 +358,7 @@ describe("offline package public API", () => {
       payload: { ...request, provider: "caller-selected-provider" },
     });
     expect(invalid.statusCode).toBe(400);
-    expect(invalid.json()).toMatchObject({ error: expect.any(String), code: "invalid-request" });
+    expect(invalid.json()).toMatchObject({ error: expect.any(String), code: "INVALID_REQUEST" });
 
     const next = await app.inject({
       method: "POST",
@@ -379,7 +379,7 @@ describe("offline package public API", () => {
       new Response(
         JSON.stringify({
           error: "Offline package preparation quota exceeded",
-          code: "principal-quota",
+          code: "PRINCIPAL_QUOTA",
           retryAfterSeconds: 30,
         }),
         {
@@ -401,7 +401,7 @@ describe("offline package public API", () => {
     expect(response.headers["retry-after"]).toBe("30");
     expect(response.json()).toEqual({
       error: "Offline package preparation quota exceeded",
-      code: "principal-quota",
+      code: "PRINCIPAL_QUOTA",
       retryAfterSeconds: 30,
     });
     expect(response.headers["cache-control"]).toBe("private, no-store");

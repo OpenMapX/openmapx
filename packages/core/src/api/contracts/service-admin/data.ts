@@ -55,7 +55,8 @@ export const adminServiceBackupSchema = z.strictObject({
   name: z.string(),
   createdAt: adminTimestampSchema,
   expiresAt: adminTimestampSchema.optional(),
-  openmapxVersion: z.string().optional(),
+  /** The release the installation had applied when the backup was taken; null when it pinned none. */
+  release: z.string().nullable().optional(),
   serviceCount: adminCountSchema,
   volumeCount: adminCountSchema,
   totalBytes: adminCountSchema,

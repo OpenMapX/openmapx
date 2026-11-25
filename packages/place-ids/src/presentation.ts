@@ -25,7 +25,7 @@ export interface IdSchemeView {
   /**
    * When true, the scheme is considered an implementation detail and
    * should be hidden from user-facing lists (coordinate fallbacks,
-   * synthetic `saved`/`label`/`streetLevel` handles, etc.).
+   * synthetic `saved`/`label`/`style-poi` handles, etc.).
    */
   internal?: boolean;
   /** Lower sorts earlier. Unspecified = sorts after numbered entries in insertion order. */

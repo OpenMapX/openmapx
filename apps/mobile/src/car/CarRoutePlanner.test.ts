@@ -1,10 +1,11 @@
-import { carDestinationsSchema } from "@openmapx/core/navigation";
-import { createApiClient, fetchDirections } from "@openmapx/core/navigation/api";
+import { carDestinationsSchema, MOBILE_PROTOCOL_MAX } from "@openmapx/core/navigation";
+import { ApiClientError, createApiClient, fetchDirections } from "@openmapx/core/navigation/api";
 import { createLocationDriver } from "../location/createLocationDriver";
 import { groundSessionFixture } from "../storage/testing/sessionFixture";
 import { CarRoutePlanner } from "./CarRoutePlanner";
 
 jest.mock("@openmapx/core/navigation/api", () => ({
+  ...jest.requireActual("@openmapx/core/navigation/api"),
   createApiClient: jest.fn(() => ({})),
   fetchDirections: jest.fn(),
 }));
@@ -66,6 +67,11 @@ it("fetches outside the authority, omits credentials, preserves preferences and 
   expect(createApiClient).toHaveBeenCalledWith({
     baseUrl: "https://example.com",
     credentials: "omit",
+    headerInterceptor: expect.any(Function),
+  });
+  const { headerInterceptor } = (createApiClient as jest.Mock).mock.calls[0][0];
+  expect(headerInterceptor()).toEqual({
+    "X-OpenMapX-Mobile-Protocol": String(MOBILE_PROTOCOL_MAX),
   });
   expect(fetchDirections).toHaveBeenCalledWith(
     expect.objectContaining({
@@ -122,6 +128,9 @@ test("maps planning failures to the car's distinct messages", () => {
   );
   expect(carPlanError(Object.assign(new Error("x"), { name: "ApiClientError", status: 503 }))).toBe(
     "unavailable",
+  );
+  expect(carPlanError(new ApiClientError(426, { code: "MOBILE_PROTOCOL_UNSUPPORTED" }, null))).toBe(
+    "update-required",
   );
 });
 

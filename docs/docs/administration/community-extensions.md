@@ -141,34 +141,37 @@ Standalone parents use this view rather than bundle update/uninstall controls.
 The same operations are available on the CLI:
 
 ```bash
-pnpm openmapx ext browse                 # list the catalog
-pnpm openmapx ext preview openconditions # inspect current bindings and fingerprint
-pnpm openmapx ext install <catalog-id>    # acquire preview, then queue if consent permits
-pnpm openmapx ext install https://example.com/my-ext/extension.json
-pnpm openmapx ext list                   # what's installed
-pnpm openmapx ext update <id>            # update to the currently authorized version
-pnpm openmapx ext remove <id>            # uninstall (removes its services + integrations)
+SESSION="$HOME/.local/state/openmapx/admin-session"
+pnpm openmapx ext browse --session-file "$SESSION"                 # list the catalog
+pnpm openmapx ext preview openconditions --session-file "$SESSION" # inspect bindings and fingerprint
+pnpm openmapx ext install <catalog-id> --session-file "$SESSION"    # acquire preview, then queue if consent permits
+pnpm openmapx ext install https://example.com/my-ext/extension.json --session-file "$SESSION"
+pnpm openmapx ext list --session-file "$SESSION"                   # what's installed
+pnpm openmapx ext update <id> --session-file "$SESSION"            # update to the currently authorized version
+pnpm openmapx ext remove <id> --session-file "$SESSION"            # uninstall (removes its services + integrations)
 ```
 
-The CLI talks to the admin API; run it on the API host (loopback admin) or set
-`OPENMAPX_API_URL`. The destination is read for each action, in order:
-`API_URL`, `OPENMAPX_API_URL`, then `http://localhost:3001`. The CLI sends
-`x-openmapx-local-admin` on every request, using the trimmed optional
-`OPENMAPX_LOCAL_ADMIN_TOKEN` or an empty value. It omits cookies and does not
-create a browser session; a remote URL alone does not authenticate. The API's
-socket-peer, local-token and administrator-access rules still apply.
-Every accepted install/update/remove is recorded in the audit log.
+The CLI acts as your administrator session, exactly as `pnpm openmapx system
+update` does (see [Upgrading](../install/upgrading.md#3-apply-the-release)).
+`--session-file` names a private file (owned by you, mode `0600`, one link)
+that contains only a signed-in full administrator's Better Auth session cookie;
+the CLI never discovers browser cookies or creates a session. Each action reads
+it once and sends it, for all of that action's requests, only to the HTTPS API
+origin `https://DOMAIN`, or the origin `--api-origin` names, with redirects
+refused. The API's administrator-access rules apply as in the panel.
+Every accepted install/update/remove is recorded in the audit log under that
+administrator.
 
 Install and update always acquire a fresh preview first, using the same API
 client and selector as the subsequent write. Without host ports they may proceed.
 With host ports, first deliberately inspect the explicit preview:
 
 ```bash
-pnpm openmapx ext preview <idOrUrl>
-pnpm openmapx ext install <idOrUrl> --host-port-confirmation <fingerprint>
+pnpm openmapx ext preview <idOrUrl> --session-file "$SESSION"
+pnpm openmapx ext install <idOrUrl> --host-port-confirmation <fingerprint> --session-file "$SESSION"
 # For an update, preview the same catalog ID:
-pnpm openmapx ext preview <id>
-pnpm openmapx ext update <id> --host-port-confirmation <fingerprint>
+pnpm openmapx ext preview <id> --session-file "$SESSION"
+pnpm openmapx ext update <id> --host-port-confirmation <fingerprint> --session-file "$SESSION"
 ```
 
 Use the `confirmation` fingerprint from the inspected output. Preview shows the
@@ -270,8 +273,8 @@ verified and recorded.
 ### The service sandbox
 
 The sandbox is derived from provenance, not the manifest's `quality` label:
-manifests loaded from the community store are third-party whether they say
-`community` or `community-verified`, and the admin lists them as community. They may **not** use any `bindMounts`
+manifests loaded from the community store are third-party, must say `community`,
+and the admin lists them as community. They may **not** use any `bindMounts`
 entry: community service installation and updates reject every host bind mount,
 including read-only mounts, with `community_bind_mount_forbidden`. Use a
 namespaced named volume (`openmapx-<serviceId>-<suffix>`) for persistent service
@@ -371,6 +374,30 @@ budget is not a guarantee for extensions with several repositories. Accepted job
 continue to be observed by the administration layout after leaving the extension
 view; all terminal outcomes refresh the originating extension/component state.
 
+### Catalog document format
+
+A catalog source serves one JSON object, the same format for the default catalog
+and for custom sources:
+
+```json
+{
+  "schemaVersion": 1,
+  "extensions": [
+    { "id": "example-extension", "name": "Example", "manifest": "https://…/extension.json" }
+  ],
+  "removed": [],
+  "critical": []
+}
+```
+
+`schemaVersion` is required and must be `1`; a host refuses a catalog with a
+missing or different format version, as it refuses a bare list of entries.
+`extensions`, `removed` and `critical` are optional. `removed` and `critical`
+follow the rules of the [revocation feed](#publishing-a-revocation). Extension,
+service and integration ids are lowercase slugs of at most 48 characters
+(`^[a-z0-9]+(-[a-z0-9]+)*$`), and a verified entry's `version` is a semantic
+version.
+
 ### Catalog source changes and refresh
 
 A successful source edit invalidates the cached catalog before persisting the
@@ -404,12 +431,22 @@ A storage or refresh error is not evidence that the catalog is empty.
   updated. One listed as `critical` refuses preview, new installation and update
   admission. The worker rechecks before installation effects and before
   committing installed state, including when an advisory arrives while a job is
-  queued. Every critical entry blocks regardless of its version; advisory
-  `maxVersion` is display information only. Wait for the advisory to be cleared
-  before trying another deliberate install or update. Removal remains available.
-  A revocation does not stop or remove a copy that is already installed, and the
-  **Installed** tab does not show revocation state. The **Browse** card of an
-  installed extension does show it, so remove an extension that is revoked.
+  queued. A critical entry without `maxVersion` blocks every version; one with
+  `maxVersion` blocks that version and every earlier one by semantic-version
+  order, so a fixed later release can be installed while the advisory stays in
+  place. A version that is not a semantic version is always blocked. Otherwise
+  wait for the advisory to be cleared before trying another deliberate install
+  or update. Removal remains available.
+  A revocation does not stop or remove a copy that is already installed. An
+  advisory is checked against the installed version as well as the offered one:
+  when it covers the installed version, the **Browse** card shows the extension
+  as revoked and the **Installed** tab names the advisory, even when the
+  catalog already offers a fixed version. Update to that version, or remove an
+  extension that is revoked.
+- When the catalogs and the revocation feed carry several `critical` entries for
+  one extension, the widest one applies: an entry without `maxVersion` wins over
+  any entry with one, and otherwise the highest `maxVersion` wins. A later source
+  can add a denial but never narrow one.
 - If the revocation feed cannot be refreshed, or answers with something that is
   not a valid denial list, known cached denials remain effective and the API
   reports stale revocation data. Browse then shows a stale-data warning on the
@@ -429,6 +466,7 @@ can take a few minutes.
 
 ```json
 {
+  "schemaVersion": 1,
   "removed": [{ "id": "example-extension", "reason": "Abandoned by its maintainer" }],
   "critical": [
     {
@@ -440,10 +478,20 @@ can take a few minutes.
 }
 ```
 
+- `schemaVersion` is required and must be `1`. A host refuses a document with a
+  missing or different format version and keeps its last good denials, so a
+  later format never silently reads as "nothing revoked" on an older host.
 - `removed` delists an extension. `critical` is a security advisory.
 - Both lists are optional; a feed with neither is valid and empty. `id` is
-  required on every entry, and `reason` (and `maxVersion` on `critical` entries)
-  is optional text.
+  required on every entry and `reason` is optional text. `maxVersion` on a
+  `critical` entry is optional and must be a semantic version such as `1.2.0`;
+  it names the newest affected version.
+- `maxVersion` is for an extension whose author shipped a fix. The version it is
+  compared with is the one the extension declares about itself: for an
+  installation from a direct manifest URL, that is whatever the fetched manifest
+  says. An author can step past a bounded advisory by publishing a higher
+  version number, so list a hostile extension without `maxVersion`, or under
+  `removed`.
 - The whole document is validated. One malformed entry makes installations treat
   the entire feed as unreadable and keep their last good denials, so validate
   before merging.
@@ -471,9 +519,10 @@ Inspect the currently authorized catalog entry and pinned service manifests;
 do not assume that a moving upstream release matches an older deployment.
 
 ```bash
-pnpm openmapx ext preview openconditions
+SESSION="$HOME/.local/state/openmapx/admin-session"   # your administrator session cookie
+pnpm openmapx ext preview openconditions --session-file "$SESSION"
 # After reviewing the preview, wait for its preview rate-limit window if needed:
-pnpm openmapx ext install openconditions --host-port-confirmation <fingerprint>
+pnpm openmapx ext install openconditions --host-port-confirmation <fingerprint> --session-file "$SESSION"
 ```
 
 Use the exact fingerprint from the reviewed output when host-port consent is
@@ -531,7 +580,7 @@ installation does not prove that their database and feed credentials are valid.
    starts:
 
    ```bash
-   docker exec -it postgis psql -U postgres -d openmapx
+   docker exec -it openmapx-postgis psql -U postgres -d openmapx
    ```
 
    ```sql
@@ -574,28 +623,65 @@ installation does not prove that their database and feed credentials are valid.
    See OpenConditions'
    [release note](https://github.com/openconditions/openconditions/blob/main/docs/release-notes/database-baseline.md).
 
-3. Set non-secret options in **Configuration**, or use
+3. Set `OPENCONDITIONS_INSTANCE_ID` before any OpenConditions service first
+   starts. It is required and names this instance in every record id it
+   creates (`oc:<class>:<instanceId>:<localId>`), in crowd reports and in the
+   signatures over them, so set it once and never change it: a later change
+   would orphan or invalidate everything stored. Use a stable name you
+   control, such as the instance's domain (`maps.example.org`). Give every
+   OpenConditions service the same value: the ingest service, the
+   contributions service and, when enabled, the heavy-feeds process and a
+   federation service. The ingest service records it at its first start, and
+   every service refuses to start with a different one.
+
+   If a wrong value was recorded, the shared `openmapx` database cannot simply
+   be started empty. Stop every OpenConditions service, then drop the
+   `conditions` schema (`DROP SCHEMA conditions CASCADE;` as the database
+   owner), set the right value and start the services again; the ingest
+   service recreates the schema and records the new value. This deletes every
+   OpenConditions record, report and vote, so do it before the instance is in
+   use.
+
+4. Set the relay token on both sides. OpenMapX's API relays crowd reports from
+   browsers to the contributions service and never forwards the reporter's
+   address, so the contributions service would otherwise count every report
+   against one address. With the token, it recognises the API's requests and
+   rate-limits them in a relay bucket, while the API rate-limits each client
+   address itself. Generate one value of at least 32 characters
+   (`openssl rand -hex 32`) and set it as `OPENCONDITIONS_RELAY_TOKEN` in the
+   **Credentials** of **openconditions-contributions-api** and, for the API, in
+   `infra/docker/.env` (step 7). Use the same value on both sides; a set but
+   shorter token stops the contributions service from starting. Neither side
+   reports a mismatch: with two different values, the contributions service
+   treats every relayed request as the API's one address, so enrollment for
+   the whole instance stops at that service's per-address limit (ten a minute
+   by default). If reporters see enrollments refused with `429` under ordinary
+   use, compare the two values.
+5. Set non-secret options in **Configuration**, or use
    `SERVICE_OPENCONDITIONS_INGEST_<KEY>` and
    `SERVICE_OPENCONDITIONS_CONTRIBUTIONS_API_<KEY>` host overrides. Environment
    values take precedence. Community manifest `container.environment` values
    are literal; `${VAR}` there does not grant access to deployment secrets.
-4. Apply changes, follow every returned job and check health and startup logs.
-5. Set the OpenMapX consumers' endpoints in `infra/docker/.env`:
+6. Apply changes, follow every returned job and check health and startup logs.
+7. Set the OpenMapX consumers' endpoints and the API's relay token in
+   `infra/docker/.env`:
 
    ```bash
    OPENCONDITIONS_URL=http://openmapx-openconditions-ingest:4100
    OPENCONDITIONS_CONTRIBUTIONS_URL=http://openmapx-openconditions-contributions-api:4200
    OPENCONDITIONS_OPERATOR_TOKEN=
+   OPENCONDITIONS_RELAY_TOKEN=<the value from step 4>
    ```
 
-6. Recreate the consumers as described under [Applying a change](#applying-a-change).
+8. Recreate the consumers as described under [Applying a change](#applying-a-change).
 
-The blank token above does not enable restricted feeds. Configure it deliberately
-on both sides when your source terms permit operator-scope access.
+The blank operator token above does not enable restricted feeds. Configure it
+deliberately on both sides when your source terms permit operator-scope access.
 
 Each community service has its own network. Built-in manifests explicitly bridge
 `postgis` and `api` to both OpenConditions services; Data Manager and Overpass
-join the ingest network. These bridges are bidirectional: an ingest container can
+join the ingest network, and `postgis` and Overpass also join the heavy-feeds
+process's network when it is installed. These bridges are bidirectional: an ingest container can
 reach the bridged API, database and Data Manager, including internal endpoints.
 They are granted by service ID, so another extension claiming those IDs receives
 the same network reach. This exception is part of the trust decision; a separate

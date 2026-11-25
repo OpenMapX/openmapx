@@ -21,6 +21,7 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { COMPONENT_ID_PATTERN } from "@openmapx/core/component-id";
 import {
   assertErasureJournalKey,
   isErasedSubject,
@@ -28,10 +29,14 @@ import {
   readErasureJournalKeyFile,
 } from "@openmapx/core/erasure-journal";
 import { services as coreServices } from "@openmapx/core/server";
-import { PLATFORM_VERSION } from "@openmapx/integration-framework";
 import type { Command } from "commander";
 import { execa } from "execa";
 import kleur from "kleur";
+import {
+  nameAppliedMigration,
+  readAppliedRelease,
+  runningMigrationHead,
+} from "../lib/backup-release";
 import { completeCliCommand } from "../lib/control-context";
 import { databaseClientExec } from "../lib/database-session";
 import { assertCliExecutionAvailable, cliProcessOptions } from "../lib/execution-deadline";
@@ -39,6 +44,7 @@ import { withHostTargets } from "../lib/host-effect";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 import { failRestoredJobsSql } from "../lib/restored-job-cleanup";
+import { hasMigrationsNewerThan, readNewestAppliedMigration } from "../lib/rollback";
 import { applyServiceSelection } from "../lib/service-selection";
 
 import {
@@ -48,7 +54,13 @@ import {
   tarVolumeToFile,
 } from "./backup-processes";
 
-const { API_DATABASE_ROLE, ServiceRegistry, isSafePostgresIdentifier } = coreServices;
+const {
+  API_DATABASE_ROLE,
+  BACKUP_FORMAT_VERSION,
+  CORE_SERVICE_ID,
+  ServiceRegistry,
+  isSafePostgresIdentifier,
+} = coreServices;
 
 // ─── Public types ───────────────────────────────────────────────────────────
 
@@ -84,23 +96,37 @@ export interface BackupServiceEntry {
   volumes: BackupVolumeEntry[];
 }
 
+/** The release an installation had applied, as its configuration generation pinned it. */
+export interface BackupRelease {
+  release: string;
+  /** Digest of the applied release manifest. */
+  manifestDigest: string;
+}
+
+/**
+ * A migration the API database recorded: its `when`, which the migrator stores
+ * as `created_at`, and its journal tag, or null when neither the applied
+ * release nor the migration journal names it.
+ */
+export interface BackupDatabaseMigration {
+  tag: string | null;
+  when: number;
+}
+
 export interface BackupManifest {
-  formatVersion: 2;
+  formatVersion: typeof BACKUP_FORMAT_VERSION;
   name: string;
   createdAt: string;
   /** Latest allowed expiry, portable and never extended by a longer policy. */
   expiresAt?: string;
-  openmapxVersion: string;
+  /** The applied release when the backup was taken; null when the configuration pinned none. */
+  release: BackupRelease | null;
+  /**
+   * The newest migration the API database had applied when the backup was
+   * taken; null when the backup holds no API database.
+   */
+  databaseMigration: BackupDatabaseMigration | null;
   services: BackupServiceEntry[];
-  privacySourceProvenance?: {
-    managedDawarich?: {
-      version: "1.19.0";
-      image: "freikin/dawarich";
-      imageDigest: string;
-      upstreamCommit: string;
-      schemaContract: "dawarich-1.19.0";
-    };
-  };
 }
 
 // ─── Validation helpers (pure / unit-testable) ─────────────────────────────
@@ -118,8 +144,8 @@ const VOLUME_NAME_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
 // Backup archives are bare siblings of manifest.json, never paths or traversal.
 const BACKUP_FILE_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
 
-// Compose service ids use the same lowercase slug shape as service manifests.
-const SERVICE_ID_REGEX = /^[a-z0-9][a-z0-9-]*$/;
+// Compose service ids use the same grammar as service manifests.
+const SERVICE_ID_REGEX = COMPONENT_ID_PATTERN;
 
 export function isValidBackupName(name: string): boolean {
   return typeof name === "string" && name.length > 0 && NAME_REGEX.test(name);
@@ -195,19 +221,32 @@ export function defaultBackupName(now: Date = new Date()): string {
     .replace(/\.\d{3}/, "");
 }
 
-/** Major-version comparison. Returns true if `current` major matches `manifest`. */
-export function isCompatiblePlatformVersion(
-  manifestVersion: string,
-  current: string = PLATFORM_VERSION,
-): { compatible: boolean; majorMismatch: boolean; minorMismatch: boolean } {
-  const [mMajor, mMinor = 0] = manifestVersion.split(".").map((n) => Number(n));
-  const [cMajor, cMinor = 0] = current.split(".").map((n) => Number(n));
-  if (Number.isNaN(mMajor) || Number.isNaN(cMajor)) {
-    return { compatible: true, majorMismatch: false, minorMismatch: false };
-  }
-  const majorMismatch = mMajor !== cMajor;
-  const minorMismatch = !majorMismatch && mMinor !== cMinor;
-  return { compatible: !majorMismatch, majorMismatch, minorMismatch };
+const RELEASE_ID_REGEX = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+const MIGRATION_TAG_REGEX = /^\d{4}_[a-z0-9_]{1,120}$/;
+
+function isBackupRelease(value: unknown): value is BackupRelease {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const release = value as Record<string, unknown>;
+  return (
+    Object.keys(release).length === 2 &&
+    typeof release.release === "string" &&
+    RELEASE_ID_REGEX.test(release.release) &&
+    typeof release.manifestDigest === "string" &&
+    /^[a-f0-9]{64}$/.test(release.manifestDigest)
+  );
+}
+
+function isBackupDatabaseMigration(value: unknown): value is BackupDatabaseMigration {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const migration = value as Record<string, unknown>;
+  return (
+    Object.keys(migration).length === 2 &&
+    (migration.tag === null ||
+      (typeof migration.tag === "string" && MIGRATION_TAG_REGEX.test(migration.tag))) &&
+    typeof migration.when === "number" &&
+    Number.isSafeInteger(migration.when) &&
+    migration.when > 0
+  );
 }
 
 /**
@@ -240,26 +279,21 @@ export function readBackupManifest(filePath: string): BackupManifest {
     !raw ||
     typeof raw.name !== "string" ||
     typeof raw.createdAt !== "string" ||
-    typeof raw.openmapxVersion !== "string" ||
     !Array.isArray(raw.services)
   ) {
     throw new Error(`Malformed backup manifest at ${filePath}`);
   }
-  if (raw.formatVersion !== 2) {
+  if (raw.formatVersion !== BACKUP_FORMAT_VERSION) {
     throw new Error(`Malformed backup format version in ${filePath}`);
+  }
+  if (raw.release !== null && !isBackupRelease(raw.release)) {
+    throw new Error(`Malformed backup release in ${filePath}`);
+  }
+  if (raw.databaseMigration !== null && !isBackupDatabaseMigration(raw.databaseMigration)) {
+    throw new Error(`Malformed backup database migration in ${filePath}`);
   }
   if (raw.expiresAt !== undefined)
     coreServices.backupRetentionExpiry(raw.createdAt, 36500, raw.expiresAt);
-  const managed = raw.privacySourceProvenance?.managedDawarich;
-  if (
-    managed &&
-    (managed.version !== "1.19.0" ||
-      managed.image !== "freikin/dawarich" ||
-      !/^sha256:[a-f0-9]{64}$/.test(managed.imageDigest) ||
-      !/^[a-f0-9]{40}$/.test(managed.upstreamCommit) ||
-      managed.schemaContract !== "dawarich-1.19.0")
-  )
-    throw new Error(`Malformed Dawarich privacy provenance in ${filePath}`);
   if (!isValidBackupName(raw.name)) {
     throw new Error(`Malformed backup identity in ${filePath}`);
   }
@@ -658,6 +692,23 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
   }
   const volumeNames = await resolveVolumeNames(ctx, declaredNames);
 
+  // Name the release and the schema before anything is stopped: a restore
+  // compares them with the release it restores onto.
+  const appliedRelease = readAppliedRelease(opts.rootDir);
+  let databaseMigration: BackupDatabaseMigration | null = null;
+  if (
+    targets.some(
+      (service) =>
+        service.id === CORE_SERVICE_ID.postgis &&
+        service.volumes.some((volume) => volume.mode === "pg_dump"),
+    )
+  ) {
+    const newest = await readNewestAppliedMigration(opts.rootDir);
+    if (newest === null)
+      throw new Error("The API database has applied no migrations; start the API before a backup.");
+    databaseMigration = nameAppliedMigration(newest, appliedRelease, opts.rootDir);
+  }
+
   const authoritySignal = cliProcessOptions().cancelSignal;
   mkdirSync(backupDir, { recursive: true, mode: 0o700 });
 
@@ -715,25 +766,14 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
   };
 
   const manifest: BackupManifest = {
-    formatVersion: 2,
+    formatVersion: BACKUP_FORMAT_VERSION,
     name,
     createdAt: new Date().toISOString(),
-    openmapxVersion: PLATFORM_VERSION,
+    release: appliedRelease
+      ? { release: appliedRelease.manifest.release, manifestDigest: appliedRelease.manifestDigest }
+      : null,
+    databaseMigration,
     services: [],
-    ...(targets.some((service) => service.id === "dawarich-postgis")
-      ? {
-          privacySourceProvenance: {
-            managedDawarich: {
-              version: "1.19.0",
-              image: "freikin/dawarich",
-              imageDigest:
-                "sha256:d9385242202ae385a5d8064f41a59a0b58218399e60e7e499d2a6afb449bc304",
-              upstreamCommit: "752641768f37fdc07d5a23e0559fa7c5ff8fae0f",
-              schemaContract: "dawarich-1.19.0",
-            },
-          },
-        }
-      : {}),
   };
   manifest.expiresAt = coreServices.backupRetentionExpiry(manifest.createdAt, retentionDays);
 
@@ -1224,14 +1264,14 @@ export interface RestorePreflight {
   backupDir: string;
   /** Services from the (possibly --services-filtered) manifest. */
   targets: BackupServiceEntry[];
-  /** Whether the backed-up version requires a major-mismatch error. */
+  /** Why the backup's database cannot be restored onto the running release. */
   versionError?: string;
-  versionWarning?: string;
 }
 
 /**
  * Synchronous, no-docker preflight: validates the backup name, loads + filters
- * the manifest, and performs the version-compatibility check. Tested directly.
+ * the manifest, and checks that the running release knows the backed-up
+ * database schema. Tested directly.
  */
 export function preflightRestore(opts: RestoreOptions): RestorePreflight {
   assertValidBackupName(opts.name);
@@ -1243,17 +1283,18 @@ export function preflightRestore(opts: RestoreOptions): RestorePreflight {
     manifest = filterManifestServices(manifest, opts.serviceIds);
   }
 
+  // The migrator only applies migrations newer than the newest applied one, so
+  // an API older than the restored schema would start against it without
+  // complaint. Rollback refuses the same case.
   let versionError: string | undefined;
-  let versionWarning: string | undefined;
-  const cmp = isCompatiblePlatformVersion(manifest.openmapxVersion);
-  if (!cmp.compatible) {
-    versionError =
-      `Backup was created on platform ${manifest.openmapxVersion} ` +
-      `but current platform is ${PLATFORM_VERSION} — major-version mismatch, refusing to restore.`;
-  } else if (cmp.minorMismatch) {
-    versionWarning =
-      `Backup created on platform ${manifest.openmapxVersion}; current is ${PLATFORM_VERSION} ` +
-      `(minor mismatch — proceeding).`;
+  const backedUp = manifest.databaseMigration;
+  if (backedUp && manifest.services.some((service) => service.id === CORE_SERVICE_ID.postgis)) {
+    const release = readAppliedRelease(opts.rootDir);
+    const head = runningMigrationHead(release, opts.rootDir);
+    if (hasMigrationsNewerThan(backedUp.when, head))
+      versionError =
+        `The backup's database has migrations newer than the running ${release ? `release ${release.manifest.release}` : "checkout (no release is pinned, so this compares with the checkout's migrations, or where there is no checkout, as in the operations agent, with the ones this tool was built with)"} ` +
+        `(backup ${backedUp.tag ?? `created_at ${backedUp.when}`}, running ${head.tag}). Apply the backup's release${manifest.release ? ` (${manifest.release.release})` : ""} first, then restore.`;
   }
 
   return {
@@ -1261,14 +1302,12 @@ export function preflightRestore(opts: RestoreOptions): RestorePreflight {
     backupDir,
     targets: manifest.services,
     versionError,
-    versionWarning,
   };
 }
 
 export async function restoreBackup(opts: RestoreOptions): Promise<void> {
   const pre = preflightRestore(opts);
   if (pre.versionError) throw new Error(pre.versionError);
-  if (pre.versionWarning) log.warn(pre.versionWarning);
   validateRestoreDataProtection(pre.manifest, { rootDir: opts.rootDir });
 
   const ctx = ctxFromRepo(opts.rootDir);

@@ -43,8 +43,14 @@ Database dumps stream while the database stays running. For
 afterward. Plan for that interruption. Separate services are captured in
 sequence; this is not a transactionally consistent snapshot of the whole stack.
 
-Each snapshot is stored under `infra/docker/backups/<name>/` with a format-2
-`manifest.json`. It records service/platform versions, archive sizes, SHA-256
+Each snapshot is stored under `infra/docker/backups/<name>/` with a
+`manifest.json` in backup format 1. It records the applied release (its id and
+manifest digest, or `null` when the configuration pins none), the newest
+migration the OpenMapX database had applied (`tag` and `when`, or `null` when
+the snapshot holds no `postgis` dump; `tag` is `null` when neither the applied
+release nor the API migration journal names that migration, for example after
+an update that migrated the database and was then rolled back), service
+versions, archive sizes, SHA-256
 digests and mode-specific metadata. Tar entries retain the resolved Docker
 volume name; database entries retain the database/user target. On another host
 or Compose project, verify that these targets match the deployment you intend to
@@ -211,7 +217,7 @@ contains the server-readable user fields and encrypted credentials that existed
 when it was created. Deleting an account or individual row from the live
 database does not rewrite existing snapshots.
 
-Local backups are automatically removed after `BACKUP_RETENTION_DAYS` (30 by
+Local backups are automatically removed after `RETENTION_BACKUP_DAYS` (30 by
 default), and an expired backup is refused even if its directory was copied back.
 New snapshots also carry a portable `expiresAt` ceiling. Increasing retention
 applies to new snapshots; it cannot make an old snapshot restorable again.
@@ -230,7 +236,7 @@ boundaries in detail.
 
 ## Personal data in backups
 
-Backups are kept for up to `BACKUP_RETENTION_DAYS` and are used only to recover
+Backups are kept for up to `RETENTION_BACKUP_DAYS` and are used only to recover
 from failure. They are not searched automatically for an access request, and no
 per-person extraction runs from them. The privacy page and the export's
 response report state this to the people whose data you hold.
@@ -318,19 +324,19 @@ macOS or Windows cannot connect through such a socket.
 
    The response report names the controller. The script reads each legal fact
    from its `LEGAL_*` environment variable when that is set, and otherwise
-   from the `system_settings` table of the restored snapshot, which holds the
+   from the `system_setting` table of the restored snapshot, which holds the
    facts as they were when the backup was taken. To report the current facts,
    pass them as plain values on the command line, copied from the legal
    settings in the administration area. Do not source the production
-   environment or secrets files to get them. `BACKUP_RETENTION_DAYS` should
+   environment or secrets files to get them. `RETENTION_BACKUP_DAYS` should
    match production; it defaults to 30.
 
    ```bash
-   LEGAL_NAME="Example Maps GmbH" LEGAL_STREET="Example Street 1" \
-   LEGAL_POSTAL_CODE="10115" LEGAL_CITY="Berlin" LEGAL_COUNTRY="Germany" \
-   LEGAL_DATA_REQUEST_EMAIL="privacy@example.org" \
-   LEGAL_DEPLOYMENT_JURISDICTION="DE-BE" LEGAL_SUPERVISORY_AUTHORITY="<authority>" \
-   BACKUP_RETENTION_DAYS=30 \
+   LEGAL_CONTROLLER_NAME="Example Maps GmbH" LEGAL_CONTROLLER_STREET="Example Street 1" \
+   LEGAL_CONTROLLER_POSTAL_CODE="10115" LEGAL_CONTROLLER_CITY="Berlin" \
+   LEGAL_CONTROLLER_COUNTRY="Germany" LEGAL_DATA_REQUEST_EMAIL="privacy@example.org" \
+   LEGAL_DEPLOYMENT_JURISDICTION="DE-BE" LEGAL_SUPERVISORY_AUTHORITY_NAME="<authority>" \
+   RETENTION_BACKUP_DAYS=30 \
    pnpm --filter @openmapx/api exec tsx scripts/privacy/export-from-database.ts \
      --socket-dir "$SCRATCH/socket" --database openmapx \
      --subject <account id> --case <privacy case id> --out "$SCRATCH/backup-export.zip"
@@ -366,13 +372,13 @@ pnpm openmapx backup create --name weekly      # explicit name
 With no `--name` the snapshot is named after the current timestamp. A custom name
 may contain letters, numbers, dots, dashes, and underscores. Creating a snapshot
 whose directory already exists is refused rather than overwriting it. After a
-successful snapshot, the CLI prunes backups older than `BACKUP_RETENTION_DAYS`;
+successful snapshot, the CLI prunes backups older than `RETENTION_BACKUP_DAYS`;
 the operations agent also performs that prune at startup and daily.
 
 The same actions are available without a shell, on **System → Backups** in the admin panel
 ([Admin panel](./admin-panel.md) maps the rest of the surface). Enter an optional
 name, click **Create Backup**, and the operation runs as a background job. The
-table lists every snapshot with its creation time, the platform version, the
+table lists every snapshot with its creation time, the applied release, the
 service and volume counts, and total size; it refreshes on its own and links
 straight to **Activity** so you can watch the job and read its log (see
 [Monitoring](./monitoring.md)). Because the CLI and the admin UI both write to
@@ -440,12 +446,18 @@ pnpm openmapx backup restore weekly             # restore everything in it
 ```
 
 For an OpenMapX database, four checks happen before any data is touched: the
-backup must be within `BACKUP_RETENTION_DAYS`; the erasure journal and its key
+backup must be within `RETENTION_BACKUP_DAYS`; the erasure journal and its key
 must be readable and the journal must be cryptographically bound to that key;
-the backup must not predate the journal's current coverage floor; and
-the platform version in the snapshot's manifest must be compatible. A **major-version**
-mismatch is refused outright, while a minor mismatch prints a warning and
-proceeds. If a targeted tar-volume service is running, or if a client of the
+the backup must not predate the journal's current coverage floor; and the
+running release must know the backed-up schema. The API applies only migrations
+newer than the newest one the database recorded, so an older API would start
+against a newer schema without complaint. A restore is refused when the
+snapshot's recorded migration is newer than the running release's
+`databaseMigrationHead` (the rule rollback applies), and the message names the
+snapshot's release: apply that release first, then restore. When the
+configuration pins no release, the API migration journal of the code it runs
+stands in for the release: the checkout's, or for a backup or restore the
+operations agent runs, the one its CLI was built with. If a targeted tar-volume service is running, or if a client of the
 OpenMapX database being restored is running, the restore refuses unless you opt
 in:
 

@@ -86,7 +86,7 @@ describe("Activity generated SDK consumers", () => {
         job({
           id: "shared /id",
           source,
-          status: "success",
+          status: "succeeded",
           cancelable: false,
           result: { observed: `${url.origin}:${source}` },
         }),
@@ -116,7 +116,7 @@ describe("Activity generated SDK consumers", () => {
           ? job({ logs: [log("Full wire log", 0)], payload: { nested: ["retained", 1] } })
           : job({
               source: "data-manager",
-              status: "partial",
+              status: "partially_succeeded",
               cancelable: false,
               stages: [stage("job-1")],
               result: ["partial", { nested: true }],
@@ -264,12 +264,12 @@ describe("Activity generated SDK consumers", () => {
     const source = FakeEventSource.instances[0];
     if (!source) throw new Error("Missing native stream");
     act(() => source.emit("snapshot", { job: job() }));
-    act(() => source.emit("end", { status: "success" }));
+    act(() => source.emit("end", { status: "succeeded" }));
     await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1));
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["admin", "jobs"] });
     expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
     act(() => {
-      source.emit("end", { status: "success" });
+      source.emit("end", { status: "succeeded" });
       source.emit("status", { type: "status", status: "running" });
     });
     expect(invalidate).toHaveBeenCalledTimes(1);
@@ -282,7 +282,7 @@ describe("Activity generated SDK consumers", () => {
     vi.stubGlobal("fetch", async () =>
       Response.json(
         job({
-          status: ++reads === 1 ? "running" : "success",
+          status: ++reads === 1 ? "running" : "succeeded",
           cancelable: reads === 1,
         }),
       ),
@@ -319,7 +319,7 @@ describe("Activity generated SDK consumers", () => {
       reads += 1;
       return Response.json({
         ...job(),
-        status: reads === 1 ? "running" : reads < 4 ? "cancel_pending" : "canceled",
+        status: reads === 1 ? "running" : reads < 4 ? "cancel_pending" : "cancelled",
         // Deliberately retain an advisory true flag: pending must never offer Cancel.
         cancelable: true,
       });
@@ -344,7 +344,7 @@ describe("Activity generated SDK consumers", () => {
       await vi.advanceTimersByTimeAsync(5_000);
     });
     expect(reads).toBe(4);
-    expect(screen.getByText("canceled")).toBeInTheDocument();
+    expect(screen.getByText("cancelled")).toBeInTheDocument();
     await act(async () => {
       await vi.advanceTimersByTimeAsync(10_000);
     });
@@ -358,7 +358,7 @@ describe("Activity generated SDK consumers", () => {
     vi.stubGlobal("fetch", async () =>
       Response.json(
         job({
-          status: read++ ? "success" : "running",
+          status: read++ ? "succeeded" : "running",
           cancelable: read === 1,
           finishedAt: read > 1 ? timestamp : null,
         }),
@@ -442,7 +442,7 @@ it("opens a direct source-qualified job even when the filtered list fails", asyn
           job({
             id: "not-on-page",
             source: "data-manager",
-            status: "success",
+            status: "succeeded",
             cancelable: false,
             result: { retained: "exact job evidence" },
           }),
@@ -465,7 +465,7 @@ it.each(["id", "source"])("rejects a direct detail response with the wrong %s", 
       job({
         id: field === "id" ? "wrong" : "selected",
         source: field === "source" ? "data-manager" : "application",
-        status: "success",
+        status: "succeeded",
         cancelable: false,
         result: { leak: "mismatched evidence" },
       }),

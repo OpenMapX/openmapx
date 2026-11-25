@@ -33,15 +33,19 @@ afterEach(() => {
 
 const packageId = `omp2-${"a".repeat(64)}`;
 
-const current = { appShell: "app-shell-NEW", style: "style-assets-NEW" };
+const current = { appShell: "openmapx:app-shell-NEW", style: "openmapx:style-assets-NEW" };
 
 describe("service-worker cache names", () => {
   it("lists only existing app-shell caches", async () => {
     vi.stubGlobal("caches", {
-      keys: async () => ["app-shell-abc", "style-assets-abc", "map-tiles"],
+      keys: async () => [
+        "openmapx:app-shell-abc",
+        "openmapx:style-assets-abc",
+        "openmapx:map-tiles",
+      ],
     });
 
-    expect(await appShellCacheNames()).toEqual(["app-shell-abc"]);
+    expect(await appShellCacheNames()).toEqual(["openmapx:app-shell-abc"]);
   });
 
   it("returns no app-shell caches when Cache Storage is unavailable", async () => {
@@ -51,22 +55,22 @@ describe("service-worker cache names", () => {
   });
 
   it("keeps current build caches and removes older build caches", () => {
-    expect(isStalePrecacheName("app-shell-NEW", current)).toBe(false);
-    expect(isStalePrecacheName("style-assets-NEW", current)).toBe(false);
-    expect(isStalePrecacheName("app-shell-OLD", current)).toBe(true);
-    expect(isStalePrecacheName("style-assets-OLD", current)).toBe(true);
-    expect(isStalePrecacheName("style-assets", current)).toBe(true);
+    expect(isStalePrecacheName("openmapx:app-shell-NEW", current)).toBe(false);
+    expect(isStalePrecacheName("openmapx:style-assets-NEW", current)).toBe(false);
+    expect(isStalePrecacheName("openmapx:app-shell-OLD", current)).toBe(true);
+    expect(isStalePrecacheName("openmapx:style-assets-OLD", current)).toBe(true);
+    expect(isStalePrecacheName("openmapx:style-assets-", current)).toBe(true);
   });
 
   it("leaves caches outside the build-versioned precache families alone", () => {
-    expect(isStalePrecacheName("offline-package-glyphs-abc", current)).toBe(false);
+    expect(isStalePrecacheName("openmapx:offline-package-glyphs-abc", current)).toBe(false);
     expect(isStalePrecacheName(MAPLIBRE_RUNTIME_CACHE, current)).toBe(false);
-    expect(isStalePrecacheName("map-tiles", current)).toBe(false);
+    expect(isStalePrecacheName("openmapx:map-tiles", current)).toBe(false);
   });
 
   it("uses a stable, cache-safe package style name", () => {
     expect(offlineGlyphCacheNameForVersion("glyphs/v1?x")).toBe(
-      "offline-package-glyphs-glyphs_v1_x",
+      "openmapx:offline-package-glyphs-glyphs_v1_x",
     );
   });
 
@@ -198,7 +202,7 @@ describe("navigation cache policy", () => {
     );
     const event = new TestExtendableEvent();
     const route = createNavigationRuntimeRoute({
-      appShellCacheName: "app-shell-test",
+      appShellCacheName: "openmapx:app-shell-test",
       cacheStorage,
     });
 

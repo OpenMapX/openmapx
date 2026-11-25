@@ -46,7 +46,7 @@ it("checkpoints a stable address and final timed root together before signing or
   ).rejects.toThrow();
   expect(address).toBe("opk1_stableaddress12345");
   expect(candidate).toMatchObject({
-    version: 3,
+    version: 1,
     steps: {
       opk1_stableaddress12345: {
         operationKey: expect.stringMatching(/^opk1_t1_/),

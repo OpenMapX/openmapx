@@ -1,6 +1,9 @@
 import z from "zod/v4";
-import { type CapabilityWarning, collectCapabilityWarnings } from "./capabilities";
+import { capabilityNameErrors } from "./capabilities";
+import { componentIdSchema } from "./identifiers";
+import { platformVersionSchema } from "./platform";
 import { isValidSecretKey, SECRET_KEY_RE } from "./secret-key";
+import { semverSchema } from "./semver";
 import { checkManifestSandbox, isComposeVarReference } from "./service-policy";
 import type { ManifestProvenance, ServiceManifest } from "./service-types";
 
@@ -27,13 +30,10 @@ export const serviceImageReferenceSchema = z
       (digest === undefined || IMAGE_DIGEST_REGEX.test(digest))
     );
   });
-// Docker's container-name grammar: `[a-zA-Z0-9][a-zA-Z0-9_.-]*` (single-char
-// names are legal, hence `*` not `+` after the leading char).
-const CONTAINER_NAME_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
 const VOLUME_NAME_REGEX = /^openmapx-[a-z0-9-]+$/;
 const ABSOLUTE_PATH_REGEX = /^\/[^\s]+$/;
 const PATH_PREFIX_REGEX = /^\/[a-zA-Z0-9._\-/]*$/;
-const SERVICE_ID_REGEX = /^[a-z0-9][a-z0-9-]*$/;
+const REGISTRATION_ID_REGEX = /^[a-z0-9][a-z0-9-]*$/;
 // A DNS-label-shaped name; the renderer prefixes it to `openmapx-private-<name>`.
 const PRIVATE_NETWORK_REGEX = /^[a-z0-9](?:[a-z0-9-]{0,46}[a-z0-9])?$/;
 const CONFIG_PROPERTY_KEY_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -319,14 +319,12 @@ const buildImageSchema = z.object({
   digest: z.string().regex(IMAGE_DIGEST_REGEX, "must be a sha256 OCI manifest digest"),
 });
 
-const containerSchema = z.object({
+// Strict: a field OpenMapX decides, such as the container name, is refused
+// rather than silently dropped.
+const containerSchema = z.strictObject({
   image: z.string().regex(IMAGE_REGEX, "must be lowercase, no tag suffix (use 'tag' field)"),
   tag: z.string().regex(TAG_REGEX),
   digest: z.string().regex(IMAGE_DIGEST_REGEX, "must be a sha256 OCI manifest digest").optional(),
-  containerName: z
-    .string()
-    .regex(CONTAINER_NAME_REGEX, "must be a valid docker container name")
-    .optional(),
   expose: z.array(z.number().int().min(1).max(65535)).optional(),
   networkAliases: z
     .array(
@@ -403,7 +401,7 @@ export const serviceSubjectDataSchema = z
   .object({
     storesPersonalData: z.boolean(),
     strategy: z.enum(["collector", "operator_task", "not_personal"]),
-    registrationIds: z.array(z.string().regex(SERVICE_ID_REGEX)).max(64),
+    registrationIds: z.array(z.string().regex(REGISTRATION_ID_REGEX)).max(64),
     operatorInstructions: z.string().min(1).max(2_000).nullable(),
   })
   .strict()
@@ -462,17 +460,23 @@ const providesEntrySchema = z.union([
   }),
 ]);
 
+/** Service config keys are UPPER_SNAKE and name the variable `SERVICE_<ID>_<KEY>` as is. */
+const SERVICE_CONFIG_KEY_REGEX = /^[A-Z][A-Z0-9_]*$/;
+
 const configSchema = z
   .object({
     type: z.literal("object"),
-    properties: z.record(z.string(), z.unknown()),
+    properties: z.record(
+      z.string().regex(SERVICE_CONFIG_KEY_REGEX, "service config keys must be UPPER_SNAKE"),
+      z.unknown(),
+    ),
     required: z.array(z.string()).optional(),
     additionalProperties: z.boolean().optional(),
   })
   .passthrough();
 
-export const serviceManifestSchema = z.object({
-  id: z.string().min(1).regex(SERVICE_ID_REGEX, "must be lowercase, hyphen-separated"),
+const serviceManifestShape = {
+  id: componentIdSchema,
   name: z.string().min(1),
   version: z.string().min(1),
   description: z.string().optional(),
@@ -480,8 +484,10 @@ export const serviceManifestSchema = z.object({
   license: z.string().optional(),
   homepage: z.string().url().optional(),
   documentation: z.string().url().optional(),
-  quality: z.enum(["built-in", "community-verified", "community"]),
-  platform: z.string().optional(),
+  /** Display label. Store trust comes from digest pins, never from this field. */
+  quality: z.enum(["built-in", "community"]),
+  // Minimum extension protocol (checked against PLATFORM_VERSION).
+  platform: platformVersionSchema.optional(),
 
   container: containerSchema,
 
@@ -489,11 +495,11 @@ export const serviceManifestSchema = z.object({
   consumes: z.array(consumesSchema).optional(),
   produces: z.array(producesSchema).optional(),
   selectionDependencies: z
-    .array(z.string().regex(SERVICE_ID_REGEX, "must be a service id"))
+    .array(componentIdSchema)
     .refine((ids) => new Set(ids).size === ids.length, "must not contain duplicates")
     .optional(),
   communityNetworkAccess: z
-    .array(z.string().regex(SERVICE_ID_REGEX, "must be a service id"))
+    .array(componentIdSchema)
     .refine((ids) => new Set(ids).size === ids.length, "must not contain duplicates")
     .optional(),
   privateNetworks: z
@@ -519,22 +525,29 @@ export const serviceManifestSchema = z.object({
   exposure: exposureSchema.optional(),
 
   buildCommand: z.string().optional(),
-  buildImages: z.record(z.string().regex(SERVICE_ID_REGEX), buildImageSchema).optional(),
+  buildImages: z.record(componentIdSchema, buildImageSchema).optional(),
 
   ui: uiSchema.optional(),
   subjectData: serviceSubjectDataSchema.optional(),
+};
+
+/** A built-in service manifest. Unknown top-level keys are refused. */
+export const serviceManifestSchema = z.strictObject(serviceManifestShape);
+
+/**
+ * A third-party service manifest: it states the extension protocol it was
+ * written for and a semantic version, and may only call itself `community`.
+ */
+export const communityServiceManifestSchema = z.strictObject({
+  ...serviceManifestShape,
+  version: semverSchema,
+  platform: platformVersionSchema,
+  quality: z.literal("community"),
 });
 
 export interface ManifestValidationResult {
   valid: boolean;
   errors: string[];
-  /**
-   * Non-blocking advisories — currently used for capability/data-type strings
-   * that are neither well-known nor properly namespaced (`<vendor>/<name>`).
-   * Operators see these in the admin UI and the `pnpm openmapx services
-   * capabilities` output; the manifest still loads.
-   */
-  warnings?: CapabilityWarning[];
 }
 
 function hasCommunityBindMountEntries(raw: unknown, provenance: ManifestProvenance): boolean {
@@ -549,9 +562,15 @@ export function validateServiceManifest(
   raw: unknown,
   provenance: ManifestProvenance,
 ): ManifestValidationResult {
-  const result = serviceManifestSchema.safeParse(raw);
+  const result = (
+    provenance.firstParty ? serviceManifestSchema : communityServiceManifestSchema
+  ).safeParse(raw);
   if (!result.success) {
-    const errors = result.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`);
+    // A refused record key reports only "Invalid key in record"; name the rule it broke.
+    const errors = result.error.issues.map(
+      (issue) =>
+        `${issue.path.join(".")}: ${issue.code === "invalid_key" ? issue.issues.map((inner) => inner.message).join("; ") : issue.message}`,
+    );
     if (hasCommunityBindMountEntries(raw, provenance)) {
       errors.unshift(
         "community_bind_mount_forbidden: bindMounts are not allowed for community services",
@@ -638,15 +657,11 @@ export function validateServiceManifest(
     seenProduces.add(key);
   }
 
-  // Capability + data-type advisories are non-blocking and surface namespace
-  // mistakes to the operator.
-  const warnings = collectCapabilityWarnings(m);
+  // A bare name a third party introduces would collide with a future
+  // well-known capability or data type.
+  if (!provenance.firstParty) errors.push(...capabilityNameErrors(m));
 
-  return {
-    valid: errors.length === 0,
-    errors,
-    ...(warnings.length ? { warnings } : {}),
-  };
+  return { valid: errors.length === 0, errors };
 }
 
 export { assertValidSecretKey, isValidSecretKey, SECRET_KEY_RE } from "./secret-key";

@@ -32,6 +32,7 @@ export function DeleteAccountActions() {
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);
   const [state, setState] = useState<"idle" | "working" | "done" | "error">("idle");
+  const [cleanupIncomplete, setCleanupIncomplete] = useState(false);
   // A deletion refused for an old sign-in or an impersonation session explains
   // that instead of the generic failure. A recent sign-in is the confirmation
   // for every kind of account, so no password is asked for.
@@ -47,7 +48,8 @@ export function DeleteAccountActions() {
         setState("error");
         return;
       }
-      await clearPrivateDeviceData({ queryClient });
+      const { failures } = await clearPrivateDeviceData({ queryClient });
+      setCleanupIncomplete(failures > 0);
       setState("done");
     } catch {
       setState("error");
@@ -58,9 +60,14 @@ export function DeleteAccountActions() {
 
   if (state === "done") {
     return (
-      <Alert severity="success" role="status">
-        {t("deleteAccountTimingBody")}
-      </Alert>
+      <Stack spacing={2}>
+        <Alert severity="success" role="status">
+          {t("deleteAccountTimingBody")}
+        </Alert>
+        {cleanupIncomplete && (
+          <Alert severity="warning">{tAccount("deviceCleanupIncomplete")}</Alert>
+        )}
+      </Stack>
     );
   }
 

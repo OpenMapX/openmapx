@@ -40,7 +40,7 @@ export async function inspectIntegrationCredentialView(integration: {
             : "missing",
         ownership: snapshot.ownership[field.key],
         updatedAt: stored?.updatedAt.toISOString(),
-        updatedBy: stored?.updatedBy ?? null,
+        updatedBy: stored?.updatedByUserId ?? null,
       };
     });
     return { ...snapshot, credentials };

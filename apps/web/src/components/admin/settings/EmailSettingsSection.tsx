@@ -22,11 +22,11 @@ export function configuredEmailProvider(
   values: Record<string, unknown>,
 ) {
   if (provider === "emaillabs")
-    return ["emailLabsAppKey", "emailLabsSecretKey", "emailLabsSmtpAccount"].every((key) =>
+    return ["emaillabs.appKey", "emaillabs.secretKey", "emaillabs.smtpAccount"].every((key) =>
       present(values[key]),
     );
-  if (provider === "lettermint") return present(values.lettermintApiToken);
-  return provider === "smtp" && present(values.smtpHost);
+  if (provider === "lettermint") return present(values["lettermint.apiToken"]);
+  return provider === "smtp" && present(values["smtp.host"]);
 }
 /** Mirrors saved-field precedence, never a delivery-health claim or a provider switch. */
 export function savedEmailProvider(values: Record<string, unknown>): EmailProvider {

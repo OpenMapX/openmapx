@@ -15,7 +15,10 @@ describe("parseDeepLinkIntent accepts", () => {
   });
 
   it("a scheme link with a map query", () => {
-    expect(parse("openmapx://?q=cafe&z=14")).toEqual({ kind: "map", query: "?q=cafe&z=14" });
+    expect(parse("openmapx://?query=cafe&z=14")).toEqual({
+      kind: "map",
+      query: "?query=cafe&z=14",
+    });
   });
 
   it.each(["openmapx://navigation/active", "openmapx:///navigation/active"])(
@@ -27,7 +30,10 @@ describe("parseDeepLinkIntent accepts", () => {
   );
 
   it("a verified HTTPS link on the compiled origin", () => {
-    expect(parse("https://openmapx.com/?q=cafe")).toEqual({ kind: "map", query: "?q=cafe" });
+    expect(parse("https://openmapx.com/?query=cafe")).toEqual({
+      kind: "map",
+      query: "?query=cafe",
+    });
   });
 
   it("the compiled origin with a trailing slash and no query", () => {
@@ -41,10 +47,10 @@ describe("parseDeepLinkIntent accepts", () => {
 
 describe("parseDeepLinkIntent refuses", () => {
   it.each([
-    { label: "a different host", link: "https://evil.example/?q=cafe" },
-    { label: "a different port on the right host", link: "https://openmapx.com:8443/?q=cafe" },
-    { label: "plain HTTP on the right host", link: "http://openmapx.com/?q=cafe" },
-    { label: "an unknown scheme", link: "openmapx-evil://?q=cafe" },
+    { label: "a different host", link: "https://evil.example/?query=cafe" },
+    { label: "a different port on the right host", link: "https://openmapx.com:8443/?query=cafe" },
+    { label: "plain HTTP on the right host", link: "http://openmapx.com/?query=cafe" },
+    { label: "an unknown scheme", link: "openmapx-evil://?query=cafe" },
     { label: "a javascript URL", link: "javascript:alert(1)" },
     { label: "an iOS document URL", link: "file:///private/var/mobile/Documents/Inbox/route.gpx" },
     { label: "an Android content URI", link: "content://provider/route.gpx" },
@@ -58,9 +64,9 @@ describe("parseDeepLinkIntent refuses", () => {
   });
 
   it.each([
-    "https://user@openmapx.com/?q=cafe",
-    "https://openmapx.com@evil.example/?q=cafe",
-    "https://user:pass@openmapx.com/?q=cafe",
+    "https://user@openmapx.com/?query=cafe",
+    "https://openmapx.com@evil.example/?query=cafe",
+    "https://user:pass@openmapx.com/?query=cafe",
   ])("a link carrying userinfo: %s", (link) => {
     // The classic way to make one host look like another in a string a human
     // skims.
@@ -98,7 +104,7 @@ describe("parseDeepLinkIntent refuses", () => {
   });
 
   it("a host that only matches after decoding", () => {
-    expect(parse("https://openmapx%2ecom.evil.example/?q=cafe")).toBeNull();
+    expect(parse("https://openmapx%2ecom.evil.example/?query=cafe")).toBeNull();
   });
 });
 
@@ -106,9 +112,9 @@ describe("deep link fragments", () => {
   it("drops a fragment rather than passing it on", () => {
     // It never reaches a server, and it is the part of a URL most likely to have
     // been appended by whoever passed the link along.
-    expect(parse("https://openmapx.com/?q=cafe#/admin;run=1")).toEqual({
+    expect(parse("https://openmapx.com/?query=cafe#/admin;run=1")).toEqual({
       kind: "map",
-      query: "?q=cafe",
+      query: "?query=cafe",
     });
   });
 
@@ -119,8 +125,8 @@ describe("deep link fragments", () => {
 
 describe("coldStartUrl", () => {
   it("builds from the compiled origin, not the inbound link", () => {
-    expect(coldStartUrl({ kind: "map", query: "?q=cafe" }, CONFIG)).toBe(
-      "https://openmapx.com/?q=cafe",
+    expect(coldStartUrl({ kind: "map", query: "?query=cafe" }, CONFIG)).toBe(
+      "https://openmapx.com/?query=cafe",
     );
   });
 
@@ -147,24 +153,25 @@ describe("Android geo map intents", () => {
   it("opens coordinates directly, preserving coordinate order and zoom", () => {
     const p = params("geo:48.137,11.575?z=13");
     expect(p.get("map")).toBe("48.137,11.575,13,0,0");
-    expect(p.get("at")).toBe("48.137,11.575");
+    expect(p.get("placeLocation")).toBe("48.137,11.575");
     expect(p.get("panel")).toBe("place");
+    expect(p.get("place")).toBe("coordinate:48.137000,11.575000");
   });
   it("uses coordinate queries rather than the 0,0 placeholder", () => {
     const p = params("geo:0,0?q=48.137,11.575(Marienplatz)");
-    expect(p.get("at")).toBe("48.137,11.575");
-    expect(p.get("name")).toBe("Marienplatz");
+    expect(p.get("placeLocation")).toBe("48.137,11.575");
+    expect(p.get("placeName")).toBe("Marienplatz");
   });
   it("encodes address text as a single query without granting it URL authority", () => {
     const p = params("geo:0,0?q=Main+Street%26panel%3Dadmin%23fragment");
-    expect(p.get("q")).toBe("Main Street&panel=admin#fragment");
+    expect(p.get("query")).toBe("Main Street&panel=admin#fragment");
     expect(p.has("panel")).toBe(false);
   });
   it("keeps numbered street addresses as text", () => {
-    expect(params("geo:0,0?q=10,+Downing+Street").get("q")).toBe("10, Downing Street");
+    expect(params("geo:0,0?q=10,+Downing+Street").get("query")).toBe("10, Downing Street");
   });
   it("accepts WGS84 altitude/uncertainty without treating altitude as longitude", () => {
-    expect(params("geo:48.137,11.575,10;crs=wgs84;u=5").get("at")).toBe("48.137,11.575");
+    expect(params("geo:48.137,11.575,10;crs=wgs84;u=5").get("placeLocation")).toBe("48.137,11.575");
   });
   it.each([
     "geo:",

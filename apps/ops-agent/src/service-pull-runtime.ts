@@ -8,7 +8,7 @@ import {
   assertCoordinatorPullLeaseCompatibility,
   beginControlEffect,
   retainConfigurationPreEffectRefusal,
-  verifyConfigurationReleaseSourceWitness,
+  verifyConfigurationSourceWitness,
 } from "@openmapx/core/build-artifacts";
 import {
   canonicalJson,
@@ -126,7 +126,7 @@ export function installServicePullRuntime(runtime: OpsRuntime, options: ServiceP
                 operation.expectedConfigurationRevisionId
             )
               throw Error("Coordinator update candidate required");
-            verifyConfigurationReleaseSourceWitness({
+            verifyConfigurationSourceWitness({
               installation: admitted.installation.installation,
               infraDir: options.infraDir,
               sourceRevision: candidate.record.expectedSourceRevision,

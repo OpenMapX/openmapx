@@ -7,7 +7,7 @@ import {
   type AdministrativeConfigurationReadContext,
   assertAdministrativeConfigurationRead,
 } from "./administrative-configuration-context";
-import { decrypt, encrypt, isSecretsConfigured } from "./secrets";
+import { decrypt, encrypt, isSecretsConfigured, secretAad } from "./secrets";
 
 // Vault storage for self-hosted *service* secrets (the container track). Mirrors
 // the integration-secret functions in `./secrets`, reusing the same AES-256-GCM
@@ -21,13 +21,13 @@ export async function setServiceSecret(
   value: string,
   updatedBy?: string | null,
 ): Promise<void> {
-  const { ciphertext, iv, tag } = encrypt(value);
+  const sealed = encrypt(value, secretAad.serviceSecret(serviceId, key));
   await db
     .insert(serviceSecret)
-    .values({ serviceId, key, ciphertext, iv, tag, updatedBy: updatedBy ?? null })
+    .values({ serviceId, key, ...sealed, updatedByUserId: updatedBy ?? null })
     .onConflictDoUpdate({
       target: [serviceSecret.serviceId, serviceSecret.key],
-      set: { ciphertext, iv, tag, updatedAt: new Date(), updatedBy: updatedBy ?? null },
+      set: { ...sealed, updatedAt: new Date(), updatedByUserId: updatedBy ?? null },
     });
 }
 
@@ -39,7 +39,7 @@ export async function getServiceSecret(serviceId: string, key: string): Promise<
       .where(and(eq(serviceSecret.serviceId, serviceId), eq(serviceSecret.key, key)))
       .limit(1);
     if (!row) return null;
-    return decrypt(row.ciphertext, row.iv, row.tag);
+    return decrypt(row, secretAad.serviceSecret(serviceId, key));
   } catch (err) {
     processLogger.warn(
       { component: "service-secrets", err, serviceId, secretKey: key },
@@ -66,7 +66,7 @@ export async function getServiceSecretStrict(
     .where(and(eq(serviceSecret.serviceId, serviceId), eq(serviceSecret.key, key)))
     .limit(1);
   if (!row) return null;
-  return decrypt(row.ciphertext, row.iv, row.tag);
+  return decrypt(row, secretAad.serviceSecret(serviceId, key));
 }
 
 export async function deleteServiceSecret(serviceId: string, key: string): Promise<void> {
@@ -82,7 +82,7 @@ export async function listServiceSecrets(
     .select({
       key: serviceSecret.key,
       updatedAt: serviceSecret.updatedAt,
-      updatedBy: serviceSecret.updatedBy,
+      updatedBy: serviceSecret.updatedByUserId,
     })
     .from(serviceSecret)
     .where(eq(serviceSecret.serviceId, serviceId));
@@ -101,7 +101,7 @@ export async function resolveServiceVaultSecrets(
     const result: Record<string, string> = {};
     for (const row of rows) {
       try {
-        result[row.key] = decrypt(row.ciphertext, row.iv, row.tag);
+        result[row.key] = decrypt(row, secretAad.serviceSecret(serviceId, row.key));
       } catch (err) {
         processLogger.warn(
           { component: "service-secrets", err, serviceId, secretKey: row.key },
@@ -132,7 +132,7 @@ export async function resolveServiceVaultSecretsStrict(
     const result: Record<string, string> = {};
     for (const row of rows) {
       if (Object.hasOwn(result, row.key)) throw new Error("duplicate secret");
-      const value = decrypt(row.ciphertext, row.iv, row.tag);
+      const value = decrypt(row, secretAad.serviceSecret(row.serviceId, row.key));
       result[row.key] =
         serviceId === "data-manager" && row.key === "TRANSITOUS_API_KEYS"
           ? canonicalFeedCredentialMap(value)
@@ -153,7 +153,7 @@ export async function listAllServiceSecrets(): Promise<
       serviceId: serviceSecret.serviceId,
       key: serviceSecret.key,
       updatedAt: serviceSecret.updatedAt,
-      updatedBy: serviceSecret.updatedBy,
+      updatedBy: serviceSecret.updatedByUserId,
     })
     .from(serviceSecret);
 }

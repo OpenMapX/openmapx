@@ -14,6 +14,7 @@ import {
   useSettingsStore,
   writeLastMapView,
 } from "@openmapx/core";
+import { MAP_LINK_PARAMS } from "@openmapx/core/map-link-params";
 import type * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
@@ -120,7 +121,7 @@ export function MapCanvas({
     const { bearing, pitch, ...storeView } = useMapStore.getState();
     // A view the page was opened on (a shared link, a reload) wins; otherwise
     // reopen where the map was last left, unless the user switched that off.
-    const linkedView = new URLSearchParams(window.location.search).has("map");
+    const linkedView = new URLSearchParams(window.location.search).has(MAP_LINK_PARAMS.camera);
     const lastView = carSurface || linkedView ? null : readLastMapView();
     const { center, zoom } = lastView ?? storeView;
 

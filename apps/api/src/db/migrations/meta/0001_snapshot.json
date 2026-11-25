@@ -1,6 +1,6 @@
 {
-  "id": "f0e285aa-fe49-4df7-9338-397dd1404fb2",
-  "prevId": "145c222a-22de-42ff-8ea4-6ca9c7d726bf",
+  "id": "8284679e-bb8c-4e13-b62e-27924218fe6a",
+  "prevId": "0f9cfa3a-1702-47c1-862a-8502dd613aea",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -157,14 +157,14 @@
           "primaryKey": true,
           "notNull": true
         },
-        "actor_id": {
-          "name": "actor_id",
+        "actor_user_id": {
+          "name": "actor_user_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         },
-        "target_id": {
-          "name": "target_id",
+        "target_user_id": {
+          "name": "target_user_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -203,11 +203,11 @@
         }
       },
       "indexes": {
-        "account_action_receipt_actor_id_created_at_idx": {
-          "name": "account_action_receipt_actor_id_created_at_idx",
+        "account_action_receipt_actor_user_id_created_at_idx": {
+          "name": "account_action_receipt_actor_user_id_created_at_idx",
           "columns": [
             {
-              "expression": "actor_id",
+              "expression": "actor_user_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -224,11 +224,11 @@
           "method": "btree",
           "concurrently": false
         },
-        "account_action_receipt_target_id_created_at_idx": {
-          "name": "account_action_receipt_target_id_created_at_idx",
+        "account_action_receipt_target_user_id_created_at_idx": {
+          "name": "account_action_receipt_target_user_id_created_at_idx",
           "columns": [
             {
-              "expression": "target_id",
+              "expression": "target_user_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -262,11 +262,11 @@
         }
       },
       "foreignKeys": {
-        "account_action_receipt_actor_id_fkey": {
-          "name": "account_action_receipt_actor_id_fkey",
+        "account_action_receipt_actor_user_id_fkey": {
+          "name": "account_action_receipt_actor_user_id_fkey",
           "tableFrom": "account_action_receipt",
           "columnsFrom": [
-            "actor_id"
+            "actor_user_id"
           ],
           "tableTo": "user",
           "columnsTo": [
@@ -275,11 +275,11 @@
           "onUpdate": "no action",
           "onDelete": "set null"
         },
-        "account_action_receipt_target_id_fkey": {
-          "name": "account_action_receipt_target_id_fkey",
+        "account_action_receipt_target_user_id_fkey": {
+          "name": "account_action_receipt_target_user_id_fkey",
           "tableFrom": "account_action_receipt",
           "columnsFrom": [
-            "target_id"
+            "target_user_id"
           ],
           "tableTo": "user",
           "columnsTo": [
@@ -295,7 +295,7 @@
       "checkConstraints": {
         "account_action_receipt_action_check": {
           "name": "account_action_receipt_action_check",
-          "value": "\"account_action_receipt\".\"action\" in ('create','invitation','verification-email','reset-password','verify','password','role')"
+          "value": "\"account_action_receipt\".\"action\" in ('create', 'invitation', 'email_verification', 'password_reset', 'verify', 'password', 'role')"
         }
       },
       "isRLSEnabled": false
@@ -363,8 +363,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "state": {
-          "name": "state",
+        "status": {
+          "name": "status",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -385,6 +385,12 @@
         "tag": {
           "name": "tag",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "key_version": {
+          "name": "key_version",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false
         },
@@ -436,11 +442,11 @@
           "method": "btree",
           "concurrently": false
         },
-        "account_mail_outbox_state_created_at_idx": {
-          "name": "account_mail_outbox_state_created_at_idx",
+        "account_mail_outbox_status_created_at_idx": {
+          "name": "account_mail_outbox_status_created_at_idx",
           "columns": [
             {
-              "expression": "state",
+              "expression": "status",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -505,13 +511,17 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "account_mail_outbox_state_check": {
-          "name": "account_mail_outbox_state_check",
-          "value": "\"account_mail_outbox\".\"state\" in ('queued','sending','sent','failed','unknown')"
+        "account_mail_outbox_status_check": {
+          "name": "account_mail_outbox_status_check",
+          "value": "\"account_mail_outbox\".\"status\" in ('queued','sending','sent','failed','unknown')"
         },
         "account_mail_outbox_kind_check": {
           "name": "account_mail_outbox_kind_check",
-          "value": "\"account_mail_outbox\".\"kind\" in ('verification','password_setup')"
+          "value": "\"account_mail_outbox\".\"kind\" in ('email_verification', 'password_reset', 'password_setup')"
+        },
+        "account_mail_outbox_sealed_check": {
+          "name": "account_mail_outbox_sealed_check",
+          "value": "(\"account_mail_outbox\".\"ciphertext\" is null and \"account_mail_outbox\".\"iv\" is null and \"account_mail_outbox\".\"tag\" is null and \"account_mail_outbox\".\"key_version\" is null) or (\"account_mail_outbox\".\"ciphertext\" is not null and \"account_mail_outbox\".\"iv\" is not null and \"account_mail_outbox\".\"tag\" is not null and \"account_mail_outbox\".\"key_version\" is not null)"
         }
       },
       "isRLSEnabled": false
@@ -527,8 +537,8 @@
           "notNull": true,
           "default": "uuidv7()"
         },
-        "actor_id": {
-          "name": "actor_id",
+        "actor_user_id": {
+          "name": "actor_user_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -575,8 +585,8 @@
           "primaryKey": false,
           "notNull": false
         },
-        "state": {
-          "name": "state",
+        "status": {
+          "name": "status",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -628,11 +638,11 @@
         }
       },
       "indexes": {
-        "admin_action_reauthentication_actor_id_expires_at_idx": {
-          "name": "admin_action_reauthentication_actor_id_expires_at_idx",
+        "admin_action_reauthentication_actor_user_id_expires_at_idx": {
+          "name": "admin_action_reauthentication_actor_user_id_expires_at_idx",
           "columns": [
             {
-              "expression": "actor_id",
+              "expression": "actor_user_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -664,11 +674,11 @@
           "method": "btree",
           "concurrently": false
         },
-        "admin_action_reauthentication_actor_id_request_key_key": {
-          "name": "admin_action_reauthentication_actor_id_request_key_key",
+        "admin_action_reauthentication_actor_user_id_request_key_key": {
+          "name": "admin_action_reauthentication_actor_user_id_request_key_key",
           "columns": [
             {
-              "expression": "actor_id",
+              "expression": "actor_user_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -687,11 +697,11 @@
         }
       },
       "foreignKeys": {
-        "admin_action_reauthentication_actor_id_fkey": {
-          "name": "admin_action_reauthentication_actor_id_fkey",
+        "admin_action_reauthentication_actor_user_id_fkey": {
+          "name": "admin_action_reauthentication_actor_user_id_fkey",
           "tableFrom": "admin_action_reauthentication",
           "columnsFrom": [
-            "actor_id"
+            "actor_user_id"
           ],
           "tableTo": "user",
           "columnsTo": [
@@ -705,13 +715,13 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "admin_action_reauthentication_state_check": {
-          "name": "admin_action_reauthentication_state_check",
-          "value": "\"admin_action_reauthentication\".\"state\" in ('pending','completed','consumed','superseded','expired')"
+        "admin_action_reauthentication_status_check": {
+          "name": "admin_action_reauthentication_status_check",
+          "value": "\"admin_action_reauthentication\".\"status\" in ('pending','completed','consumed','superseded','expired')"
         },
         "admin_action_reauthentication_purpose_check": {
           "name": "admin_action_reauthentication_purpose_check",
-          "value": "\"admin_action_reauthentication\".\"purpose\" in ('account.verify','account.password.set','account.reset.send','account.invite','credentials.export','credentials.import','transit.credentials','platform.domain.apply','privacy.export')"
+          "value": "\"admin_action_reauthentication\".\"purpose\" in ('user.email.verify', 'user.password.set', 'user.password_reset.send', 'user.invitation.send', 'credential.export', 'credential.import', 'transit.credential.update', 'platform.domain.apply', 'privacy.export')"
         },
         "admin_action_reauthentication_completed_method_check": {
           "name": "admin_action_reauthentication_completed_method_check",
@@ -731,8 +741,8 @@
           "notNull": true,
           "default": "uuidv7()"
         },
-        "actor_id": {
-          "name": "actor_id",
+        "actor_user_id": {
+          "name": "actor_user_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -788,11 +798,11 @@
         }
       },
       "indexes": {
-        "admin_audit_log_actor_id_idx": {
-          "name": "admin_audit_log_actor_id_idx",
+        "admin_audit_log_actor_user_id_idx": {
+          "name": "admin_audit_log_actor_user_id_idx",
           "columns": [
             {
-              "expression": "actor_id",
+              "expression": "actor_user_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -871,11 +881,11 @@
         }
       },
       "foreignKeys": {
-        "admin_audit_log_actor_id_fkey": {
-          "name": "admin_audit_log_actor_id_fkey",
+        "admin_audit_log_actor_user_id_fkey": {
+          "name": "admin_audit_log_actor_user_id_fkey",
           "tableFrom": "admin_audit_log",
           "columnsFrom": [
-            "actor_id"
+            "actor_user_id"
           ],
           "tableTo": "user",
           "columnsTo": [
@@ -901,7 +911,16 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "admin_audit_log_action_check": {
+          "name": "admin_audit_log_action_check",
+          "value": "\"admin_audit_log\".\"action\" in ('ambient_places.build', 'ambient_places.discard', 'ambient_places.enabled.set', 'ambient_places.resume', 'ambient_places.rollback', 'auth.policy.apply', 'backup.create', 'backup.delete', 'backup.prune', 'backup.restore', 'cache.clear', 'compose.render', 'configuration.migration.apply', 'credential.export', 'credential.import', 'credential.import.preview', 'data.operation.run', 'data_manager.job.cancel', 'dawarich.oidc_secret.rotate', 'dawarich.provision', 'extension.catalog.refresh', 'extension.install', 'extension.remove', 'extension.source.add', 'extension.source.remove', 'extension.update', 'integration.binding.remove', 'integration.binding.set', 'integration.config.update', 'integration.credential.delete', 'integration.credential.set', 'integration.disable', 'integration.enable', 'integration.reload', 'integration.reload_all', 'job.cancel', 'platform.configuration.save', 'provider.reset', 'release.clear', 'service.apply', 'service.build', 'service.config.update', 'service.credential.delete', 'service.credential.set', 'service.health.check', 'service.image.pull', 'service.log.read', 'service.restart', 'service.selection.update', 'service.start', 'service.stop', 'service.update', 'setting.test_email.send', 'setting.update', 'standalone.install', 'standalone.preview', 'standalone.remove', 'system.diagnostics.collect', 'system.update', 'system.update.check', 'timeline.connect', 'timeline.disconnect', 'timeline.switch', 'timeline.test', 'transit.catalog.activate', 'transit.catalog.cancel', 'transit.catalog.propose', 'transit.catalog.validate', 'transit.credential.update', 'transit.lock.bump', 'transit.source.add', 'transit.source.disable', 'transit.source.enable', 'transit.source.remove', 'user.ban', 'user.create', 'user.delete', 'user.email.verify', 'user.email_verification.send', 'user.impersonate', 'user.invitation.send', 'user.password.reset', 'user.password.set', 'user.password_reset.send', 'user.role.change', 'user.session.revoke', 'user.session.revoke_all', 'user.unban')"
+        },
+        "admin_audit_log_target_type_check": {
+          "name": "admin_audit_log_target_type_check",
+          "value": "\"admin_audit_log\".\"target_type\" in ('ambient_places', 'auth_policy', 'backup', 'cache', 'configuration', 'configuration_migration', 'credential_transfer', 'data_manager_job', 'data_operation', 'extension', 'integration', 'job', 'personal_timeline_connection', 'platform', 'provider', 'release', 'service', 'setting', 'system', 'transit', 'transit_credential', 'transit_source', 'user')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.admin_job": {
@@ -973,8 +992,8 @@
           "notNull": true,
           "default": 0
         },
-        "created_by": {
-          "name": "created_by",
+        "created_by_user_id": {
+          "name": "created_by_user_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -1016,11 +1035,11 @@
           "where": "\"admin_job\".\"status\" IN ('queued', 'running', 'cancel_pending')",
           "concurrently": false
         },
-        "admin_job_created_by_idx": {
-          "name": "admin_job_created_by_idx",
+        "admin_job_created_by_user_id_idx": {
+          "name": "admin_job_created_by_user_id_idx",
           "columns": [
             {
-              "expression": "created_by",
+              "expression": "created_by_user_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1059,16 +1078,16 @@
           "isUnique": true,
           "with": {},
           "method": "btree",
-          "where": "\"admin_job\".\"type\" IN ('system.update', 'system.diagnostics') AND \"admin_job\".\"status\" IN ('queued', 'running', 'cancel_pending')",
+          "where": "\"admin_job\".\"type\" IN ('system.update', 'system.diagnostics.collect') AND \"admin_job\".\"status\" IN ('queued', 'running', 'cancel_pending')",
           "concurrently": false
         }
       },
       "foreignKeys": {
-        "admin_job_created_by_fkey": {
-          "name": "admin_job_created_by_fkey",
+        "admin_job_created_by_user_id_fkey": {
+          "name": "admin_job_created_by_user_id_fkey",
           "tableFrom": "admin_job",
           "columnsFrom": [
-            "created_by"
+            "created_by_user_id"
           ],
           "tableTo": "user",
           "columnsTo": [
@@ -1084,7 +1103,11 @@
       "checkConstraints": {
         "admin_job_status_check": {
           "name": "admin_job_status_check",
-          "value": "\"admin_job\".\"status\" in ('queued','running','cancel_pending','success','failed','canceled')"
+          "value": "\"admin_job\".\"status\" IN ('queued', 'running', 'cancel_pending', 'succeeded', 'failed', 'cancelled')"
+        },
+        "admin_job_type_check": {
+          "name": "admin_job_type_check",
+          "value": "\"admin_job\".\"type\" IN ('artifact.export', 'artifact.import', 'artifact.validate', 'backup.operation.run', 'backup.prune', 'compose.render', 'compose.start', 'configuration.apply', 'configuration.migration.apply', 'configuration.migration.preview', 'credential.import', 'data.operation.run', 'extension.install', 'extension.remove', 'integration.binding.apply', 'integration.reload', 'platform.apply', 'release.clear', 'service.apply', 'service.batch.run', 'service.core.restart', 'service.image.pull', 'service.restart', 'service.start', 'service.stop', 'standalone.install', 'standalone.preview', 'standalone.remove', 'system.diagnostics.collect', 'system.update')"
         }
       },
       "isRLSEnabled": false
@@ -1190,20 +1213,20 @@
       },
       "isRLSEnabled": false
     },
-    "public.app_logs": {
-      "name": "app_logs",
+    "public.app_log": {
+      "name": "app_log",
       "schema": "",
       "columns": {
         "id": {
           "name": "id",
-          "type": "integer",
+          "type": "bigint",
           "primaryKey": true,
           "notNull": true,
           "identity": {
-            "name": "app_logs_id_seq",
+            "name": "app_log_id_seq",
             "increment": "1",
             "minValue": "1",
-            "maxValue": "2147483647",
+            "maxValue": "9223372036854775807",
             "startWith": "1",
             "cache": "1",
             "cycle": false,
@@ -1223,8 +1246,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "msg": {
-          "name": "msg",
+        "message": {
+          "name": "message",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -1244,8 +1267,8 @@
         }
       },
       "indexes": {
-        "app_logs_created_at_idx": {
-          "name": "app_logs_created_at_idx",
+        "app_log_created_at_idx": {
+          "name": "app_log_created_at_idx",
           "columns": [
             {
               "expression": "created_at",
@@ -1277,8 +1300,8 @@
           "primaryKey": true,
           "notNull": true
         },
-        "actor_id": {
-          "name": "actor_id",
+        "actor_user_id": {
+          "name": "actor_user_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -1304,11 +1327,11 @@
         }
       },
       "indexes": {
-        "auth_policy_application_actor_id_idx": {
-          "name": "auth_policy_application_actor_id_idx",
+        "auth_policy_application_actor_user_id_idx": {
+          "name": "auth_policy_application_actor_user_id_idx",
           "columns": [
             {
-              "expression": "actor_id",
+              "expression": "actor_user_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1336,11 +1359,11 @@
         }
       },
       "foreignKeys": {
-        "auth_policy_application_actor_id_fkey": {
-          "name": "auth_policy_application_actor_id_fkey",
+        "auth_policy_application_actor_user_id_fkey": {
+          "name": "auth_policy_application_actor_user_id_fkey",
           "tableFrom": "auth_policy_application",
           "columnsFrom": [
-            "actor_id"
+            "actor_user_id"
           ],
           "tableTo": "user",
           "columnsTo": [
@@ -1378,8 +1401,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "activated_by": {
-          "name": "activated_by",
+        "activated_by_user_id": {
+          "name": "activated_by_user_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -1393,11 +1416,11 @@
         }
       },
       "indexes": {
-        "auth_policy_state_activated_by_idx": {
-          "name": "auth_policy_state_activated_by_idx",
+        "auth_policy_state_activated_by_user_id_idx": {
+          "name": "auth_policy_state_activated_by_user_id_idx",
           "columns": [
             {
-              "expression": "activated_by",
+              "expression": "activated_by_user_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1410,11 +1433,11 @@
         }
       },
       "foreignKeys": {
-        "auth_policy_state_activated_by_fkey": {
-          "name": "auth_policy_state_activated_by_fkey",
+        "auth_policy_state_activated_by_user_id_fkey": {
+          "name": "auth_policy_state_activated_by_user_id_fkey",
           "tableFrom": "auth_policy_state",
           "columnsFrom": [
-            "activated_by"
+            "activated_by_user_id"
           ],
           "tableTo": "user",
           "columnsTo": [
@@ -1499,8 +1522,8 @@
           "notNull": true,
           "default": "uuidv7()"
         },
-        "actor_id": {
-          "name": "actor_id",
+        "actor_user_id": {
+          "name": "actor_user_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -1535,6 +1558,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "key_version": {
+          "name": "key_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
         "expires_at": {
           "name": "expires_at",
           "type": "timestamp with time zone",
@@ -1556,11 +1585,11 @@
         }
       },
       "indexes": {
-        "configuration_migration_preview_actor_id_kind_idx": {
-          "name": "configuration_migration_preview_actor_id_kind_idx",
+        "configuration_migration_preview_actor_user_id_kind_idx": {
+          "name": "configuration_migration_preview_actor_user_id_kind_idx",
           "columns": [
             {
-              "expression": "actor_id",
+              "expression": "actor_user_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1594,11 +1623,11 @@
         }
       },
       "foreignKeys": {
-        "configuration_migration_preview_actor_id_fkey": {
-          "name": "configuration_migration_preview_actor_id_fkey",
+        "configuration_migration_preview_actor_user_id_fkey": {
+          "name": "configuration_migration_preview_actor_user_id_fkey",
           "tableFrom": "configuration_migration_preview",
           "columnsFrom": [
-            "actor_id"
+            "actor_user_id"
           ],
           "tableTo": "user",
           "columnsTo": [
@@ -1869,8 +1898,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "state": {
-          "name": "state",
+        "status": {
+          "name": "status",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -1896,11 +1925,11 @@
         }
       },
       "indexes": {
-        "configuration_fence_state_prepared_key": {
-          "name": "configuration_fence_state_prepared_key",
+        "configuration_fence_status_prepared_key": {
+          "name": "configuration_fence_status_prepared_key",
           "columns": [
             {
-              "expression": "state",
+              "expression": "status",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -1909,7 +1938,7 @@
           "isUnique": true,
           "with": {},
           "method": "btree",
-          "where": "\"data_manager\".\"configuration_fence\".\"state\" = 'prepared'",
+          "where": "\"data_manager\".\"configuration_fence\".\"status\" = 'prepared'",
           "concurrently": false
         }
       },
@@ -1933,9 +1962,9 @@
       },
       "policies": {},
       "checkConstraints": {
-        "configuration_fence_state_check": {
-          "name": "configuration_fence_state_check",
-          "value": "(\"data_manager\".\"configuration_fence\".\"state\" = 'prepared' AND \"data_manager\".\"configuration_fence\".\"outcome\" IS NULL AND \"data_manager\".\"configuration_fence\".\"settled_at\" IS NULL) OR (\"data_manager\".\"configuration_fence\".\"state\" = 'settled' AND \"data_manager\".\"configuration_fence\".\"outcome\" IN ('applied','unused','contained') AND \"data_manager\".\"configuration_fence\".\"settled_at\" IS NOT NULL) OR (\"data_manager\".\"configuration_fence\".\"state\" = 'refused' AND \"data_manager\".\"configuration_fence\".\"outcome\" IS NULL AND \"data_manager\".\"configuration_fence\".\"settled_at\" IS NOT NULL)"
+        "configuration_fence_status_check": {
+          "name": "configuration_fence_status_check",
+          "value": "(\"data_manager\".\"configuration_fence\".\"status\" = 'prepared' AND \"data_manager\".\"configuration_fence\".\"outcome\" IS NULL AND \"data_manager\".\"configuration_fence\".\"settled_at\" IS NULL) OR (\"data_manager\".\"configuration_fence\".\"status\" = 'settled' AND \"data_manager\".\"configuration_fence\".\"outcome\" IN ('applied','unused','contained') AND \"data_manager\".\"configuration_fence\".\"settled_at\" IS NOT NULL) OR (\"data_manager\".\"configuration_fence\".\"status\" = 'refused' AND \"data_manager\".\"configuration_fence\".\"outcome\" IS NULL AND \"data_manager\".\"configuration_fence\".\"settled_at\" IS NOT NULL)"
         }
       },
       "isRLSEnabled": false
@@ -2026,122 +2055,8 @@
       },
       "isRLSEnabled": false
     },
-    "data_manager.job_stages": {
-      "name": "job_stages",
-      "schema": "data_manager",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "uuidv7()"
-        },
-        "job_id": {
-          "name": "job_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "stage": {
-          "name": "stage",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "started_at": {
-          "name": "started_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "finished_at": {
-          "name": "finished_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "duration_ms": {
-          "name": "duration_ms",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "message": {
-          "name": "message",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "error": {
-          "name": "error",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "artifacts": {
-          "name": "artifacts",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "job_stages_job_id_idx": {
-          "name": "job_stages_job_id_idx",
-          "columns": [
-            {
-              "expression": "job_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "with": {},
-          "method": "btree",
-          "concurrently": false
-        }
-      },
-      "foreignKeys": {
-        "job_stages_job_id_fkey": {
-          "name": "job_stages_job_id_fkey",
-          "tableFrom": "job_stages",
-          "columnsFrom": [
-            "job_id"
-          ],
-          "tableTo": "jobs",
-          "schemaTo": "data_manager",
-          "columnsTo": [
-            "id"
-          ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {
-        "job_stages_stage_check": {
-          "name": "job_stages_stage_check",
-          "value": "\"data_manager\".\"job_stages\".\"stage\" IN ('prepare','filter','preflight','compile-gbfs','fetch','fetch-operator','validate','gen-motis-config','assemble-staging','stage-proxy','motis-import','motis-health','gen-full-config','gen-attribution','promote','gc','mirror')"
-        },
-        "job_stages_status_check": {
-          "name": "job_stages_status_check",
-          "value": "\"data_manager\".\"job_stages\".\"status\" IN ('ok','skipped','error','partial')"
-        }
-      },
-      "isRLSEnabled": false
-    },
-    "data_manager.jobs": {
-      "name": "jobs",
+    "data_manager.job": {
+      "name": "job",
       "schema": "data_manager",
       "columns": {
         "id": {
@@ -2169,8 +2084,14 @@
           "primaryKey": false,
           "notNull": true
         },
-        "triggered_by": {
-          "name": "triggered_by",
+        "trigger": {
+          "name": "trigger",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "triggered_by_user_id": {
+          "name": "triggered_by_user_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -2287,8 +2208,8 @@
         }
       },
       "indexes": {
-        "jobs_finished_at_idx": {
-          "name": "jobs_finished_at_idx",
+        "job_finished_at_idx": {
+          "name": "job_finished_at_idx",
           "columns": [
             {
               "expression": "finished_at",
@@ -2302,8 +2223,8 @@
           "method": "btree",
           "concurrently": false
         },
-        "jobs_operation_key_idx": {
-          "name": "jobs_operation_key_idx",
+        "job_operation_key_idx": {
+          "name": "job_operation_key_idx",
           "columns": [
             {
               "expression": "operation_key",
@@ -2315,11 +2236,11 @@
           "isUnique": false,
           "with": {},
           "method": "btree",
-          "where": "\"data_manager\".\"jobs\".\"execution_admission\" IS NULL AND \"data_manager\".\"jobs\".\"released_at\" IS NULL",
+          "where": "\"data_manager\".\"job\".\"execution_admission\" IS NULL AND \"data_manager\".\"job\".\"released_at\" IS NULL",
           "concurrently": false
         },
-        "jobs_kind_admitted_at_idx": {
-          "name": "jobs_kind_admitted_at_idx",
+        "job_kind_admitted_at_idx": {
+          "name": "job_kind_admitted_at_idx",
           "columns": [
             {
               "expression": "kind",
@@ -2339,8 +2260,8 @@
           "method": "btree",
           "concurrently": false
         },
-        "jobs_admitted_at_idx": {
-          "name": "jobs_admitted_at_idx",
+        "job_admitted_at_idx": {
+          "name": "job_admitted_at_idx",
           "columns": [
             {
               "expression": "admitted_at",
@@ -2352,11 +2273,11 @@
           "isUnique": false,
           "with": {},
           "method": "btree",
-          "where": "\"data_manager\".\"jobs\".\"finished_at\" IS NULL OR (\"data_manager\".\"jobs\".\"execution_admission\" IS NOT NULL AND \"data_manager\".\"jobs\".\"released_at\" IS NULL)",
+          "where": "\"data_manager\".\"job\".\"finished_at\" IS NULL OR (\"data_manager\".\"job\".\"execution_admission\" IS NOT NULL AND \"data_manager\".\"job\".\"released_at\" IS NULL)",
           "concurrently": false
         },
-        "jobs_idempotency_key_idx": {
-          "name": "jobs_idempotency_key_idx",
+        "job_idempotency_key_idx": {
+          "name": "job_idempotency_key_idx",
           "columns": [
             {
               "expression": "idempotency_key",
@@ -2368,15 +2289,30 @@
           "isUnique": false,
           "with": {},
           "method": "btree",
-          "where": "\"data_manager\".\"jobs\".\"idempotency_key\" IS NOT NULL",
+          "where": "\"data_manager\".\"job\".\"idempotency_key\" IS NOT NULL",
+          "concurrently": false
+        },
+        "job_triggered_by_user_id_idx": {
+          "name": "job_triggered_by_user_id_idx",
+          "columns": [
+            {
+              "expression": "triggered_by_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
           "concurrently": false
         }
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "jobs_operation_key_key": {
-          "name": "jobs_operation_key_key",
+        "job_operation_key_key": {
+          "name": "job_operation_key_key",
           "columns": [
             "operation_key"
           ],
@@ -2385,27 +2321,149 @@
       },
       "policies": {},
       "checkConstraints": {
-        "jobs_status_check": {
-          "name": "jobs_status_check",
-          "value": "\"data_manager\".\"jobs\".\"status\" IN ('queued','running','cancel_pending','ok','partial','error','canceled','interrupted')"
+        "job_status_check": {
+          "name": "job_status_check",
+          "value": "\"data_manager\".\"job\".\"status\" IN ('queued','running','cancel_pending','succeeded','failed','cancelled','partially_succeeded','interrupted')"
         },
-        "jobs_execution_bounds_check": {
-          "name": "jobs_execution_bounds_check",
-          "value": "\"data_manager\".\"jobs\".\"ownership_version\" >= 0 AND (\"data_manager\".\"jobs\".\"execution_progress\" IS NULL OR octet_length(\"data_manager\".\"jobs\".\"execution_progress\"::text) <= 524288)"
+        "job_trigger_check": {
+          "name": "job_trigger_check",
+          "value": "\"data_manager\".\"job\".\"trigger\" IN ('api','agent','cli','cron','bootstrap')"
         },
-        "jobs_execution_row_check": {
-          "name": "jobs_execution_row_check",
-          "value": "(\"data_manager\".\"jobs\".\"execution_admission\" IS NULL) = (\"data_manager\".\"jobs\".\"execution_progress\" IS NULL) AND (\"data_manager\".\"jobs\".\"execution_admission\" IS NOT NULL OR \"data_manager\".\"jobs\".\"finished_at\" IS NOT NULL) AND (\"data_manager\".\"jobs\".\"execution_completion\" IS NULL OR \"data_manager\".\"jobs\".\"execution_admission\" IS NOT NULL) AND (\"data_manager\".\"jobs\".\"released_at\" IS NULL OR \"data_manager\".\"jobs\".\"finished_at\" IS NOT NULL)"
+        "job_triggered_by_user_id_check": {
+          "name": "job_triggered_by_user_id_check",
+          "value": "\"data_manager\".\"job\".\"triggered_by_user_id\" IS NULL OR \"data_manager\".\"job\".\"trigger\" = 'api'"
         },
-        "jobs_execution_shape_check": {
-          "name": "jobs_execution_shape_check",
-          "value": "\"data_manager\".\"jobs\".\"operation_key\" ~ '^opk1_[A-Za-z0-9_-]{16,64}$' AND \"data_manager\".\"jobs\".\"operation_fingerprint\" ~ '^[a-f0-9]{64}$' AND \"data_manager\".\"jobs\".\"execution_fingerprint\" ~ '^[a-f0-9]{64}$' AND \"data_manager\".\"jobs\".\"deadline_at\" > \"data_manager\".\"jobs\".\"admitted_at\""
+        "job_execution_bounds_check": {
+          "name": "job_execution_bounds_check",
+          "value": "\"data_manager\".\"job\".\"ownership_version\" >= 0 AND (\"data_manager\".\"job\".\"execution_progress\" IS NULL OR octet_length(\"data_manager\".\"job\".\"execution_progress\"::text) <= 524288)"
+        },
+        "job_execution_row_check": {
+          "name": "job_execution_row_check",
+          "value": "(\"data_manager\".\"job\".\"execution_admission\" IS NULL) = (\"data_manager\".\"job\".\"execution_progress\" IS NULL) AND (\"data_manager\".\"job\".\"execution_admission\" IS NOT NULL OR \"data_manager\".\"job\".\"finished_at\" IS NOT NULL) AND (\"data_manager\".\"job\".\"execution_completion\" IS NULL OR \"data_manager\".\"job\".\"execution_admission\" IS NOT NULL) AND (\"data_manager\".\"job\".\"released_at\" IS NULL OR \"data_manager\".\"job\".\"finished_at\" IS NOT NULL)"
+        },
+        "job_execution_shape_check": {
+          "name": "job_execution_shape_check",
+          "value": "\"data_manager\".\"job\".\"operation_key\" ~ '^opk1_[A-Za-z0-9_-]{16,64}$' AND \"data_manager\".\"job\".\"operation_fingerprint\" ~ '^[a-f0-9]{64}$' AND \"data_manager\".\"job\".\"execution_fingerprint\" ~ '^[a-f0-9]{64}$' AND \"data_manager\".\"job\".\"deadline_at\" > \"data_manager\".\"job\".\"admitted_at\""
         }
       },
       "isRLSEnabled": false
     },
-    "data_manager.offline_package_artifact_references": {
-      "name": "offline_package_artifact_references",
+    "data_manager.job_stage": {
+      "name": "job_stage",
+      "schema": "data_manager",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "uuidv7()"
+        },
+        "job_id": {
+          "name": "job_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "stage": {
+          "name": "stage",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "finished_at": {
+          "name": "finished_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "duration_ms": {
+          "name": "duration_ms",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "message": {
+          "name": "message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "error": {
+          "name": "error",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "artifacts": {
+          "name": "artifacts",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {
+        "job_stage_job_id_idx": {
+          "name": "job_stage_job_id_idx",
+          "columns": [
+            {
+              "expression": "job_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "job_stage_job_id_fkey": {
+          "name": "job_stage_job_id_fkey",
+          "tableFrom": "job_stage",
+          "columnsFrom": [
+            "job_id"
+          ],
+          "tableTo": "job",
+          "schemaTo": "data_manager",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "job_stage_stage_check": {
+          "name": "job_stage_stage_check",
+          "value": "\"data_manager\".\"job_stage\".\"stage\" IN ('prepare','filter','preflight','compile-gbfs','fetch','fetch-operator','validate','gen-motis-config','assemble-staging','stage-proxy','motis-import','motis-health','gen-full-config','gen-attribution','promote','gc','mirror')"
+        },
+        "job_stage_status_check": {
+          "name": "job_stage_status_check",
+          "value": "\"data_manager\".\"job_stage\".\"status\" IN ('succeeded','partially_succeeded','failed','skipped')"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "data_manager.offline_package_artifact_reference": {
+      "name": "offline_package_artifact_reference",
       "schema": "data_manager",
       "columns": {
         "principal": {
@@ -2434,8 +2492,8 @@
         }
       },
       "indexes": {
-        "offline_package_artifact_references_package_id_idx": {
-          "name": "offline_package_artifact_references_package_id_idx",
+        "offline_package_artifact_reference_package_id_idx": {
+          "name": "offline_package_artifact_reference_package_id_idx",
           "columns": [
             {
               "expression": "package_id",
@@ -2449,8 +2507,8 @@
           "method": "btree",
           "concurrently": false
         },
-        "offline_package_artifact_references_principal_retained_at_idx": {
-          "name": "offline_package_artifact_references_principal_retained_at_idx",
+        "offline_package_artifact_reference_principal_retained_at_idx": {
+          "name": "offline_package_artifact_reference_principal_retained_at_idx",
           "columns": [
             {
               "expression": "principal",
@@ -2473,8 +2531,8 @@
       },
       "foreignKeys": {},
       "compositePrimaryKeys": {
-        "offline_package_artifact_references_pkey": {
-          "name": "offline_package_artifact_references_pkey",
+        "offline_package_artifact_reference_pkey": {
+          "name": "offline_package_artifact_reference_pkey",
           "columns": [
             "principal",
             "package_id"
@@ -2486,78 +2544,8 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "data_manager.offline_package_job_owners": {
-      "name": "offline_package_job_owners",
-      "schema": "data_manager",
-      "columns": {
-        "job_id": {
-          "name": "job_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "principal": {
-          "name": "principal",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {
-        "offline_package_job_owners_principal_idx": {
-          "name": "offline_package_job_owners_principal_idx",
-          "columns": [
-            {
-              "expression": "principal",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "with": {},
-          "method": "btree",
-          "concurrently": false
-        }
-      },
-      "foreignKeys": {
-        "offline_package_job_owners_job_id_fkey": {
-          "name": "offline_package_job_owners_job_id_fkey",
-          "tableFrom": "offline_package_job_owners",
-          "columnsFrom": [
-            "job_id"
-          ],
-          "tableTo": "offline_package_jobs",
-          "schemaTo": "data_manager",
-          "columnsTo": [
-            "id"
-          ],
-          "onUpdate": "no action",
-          "onDelete": "cascade"
-        }
-      },
-      "compositePrimaryKeys": {
-        "offline_package_job_owners_pkey": {
-          "name": "offline_package_job_owners_pkey",
-          "columns": [
-            "job_id",
-            "principal"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "data_manager.offline_package_jobs": {
-      "name": "offline_package_jobs",
+    "data_manager.offline_package_job": {
+      "name": "offline_package_job",
       "schema": "data_manager",
       "columns": {
         "id": {
@@ -2634,8 +2622,8 @@
         }
       },
       "indexes": {
-        "offline_package_jobs_request_key_live_key": {
-          "name": "offline_package_jobs_request_key_live_key",
+        "offline_package_job_request_key_live_key": {
+          "name": "offline_package_job_request_key_live_key",
           "columns": [
             {
               "expression": "request_key",
@@ -2647,11 +2635,11 @@
           "isUnique": true,
           "with": {},
           "method": "btree",
-          "where": "\"data_manager\".\"offline_package_jobs\".\"status\" IN ('preparing', 'ready-to-download')",
+          "where": "\"data_manager\".\"offline_package_job\".\"status\" IN ('preparing', 'ready-to-download')",
           "concurrently": false
         },
-        "offline_package_jobs_status_created_at_idx": {
-          "name": "offline_package_jobs_status_created_at_idx",
+        "offline_package_job_status_created_at_idx": {
+          "name": "offline_package_job_status_created_at_idx",
           "columns": [
             {
               "expression": "status",
@@ -2671,8 +2659,8 @@
           "method": "btree",
           "concurrently": false
         },
-        "offline_package_jobs_package_id_idx": {
-          "name": "offline_package_jobs_package_id_idx",
+        "offline_package_job_package_id_idx": {
+          "name": "offline_package_job_package_id_idx",
           "columns": [
             {
               "expression": "package_id",
@@ -2692,11 +2680,81 @@
       "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {
-        "offline_package_jobs_status_check": {
-          "name": "offline_package_jobs_status_check",
-          "value": "\"data_manager\".\"offline_package_jobs\".\"status\" IN ('preparing','ready-to-download','failed','expired')"
+        "offline_package_job_status_check": {
+          "name": "offline_package_job_status_check",
+          "value": "\"data_manager\".\"offline_package_job\".\"status\" IN ('preparing','ready-to-download','failed','expired')"
         }
       },
+      "isRLSEnabled": false
+    },
+    "data_manager.offline_package_job_owner": {
+      "name": "offline_package_job_owner",
+      "schema": "data_manager",
+      "columns": {
+        "job_id": {
+          "name": "job_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "principal": {
+          "name": "principal",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        }
+      },
+      "indexes": {
+        "offline_package_job_owner_principal_idx": {
+          "name": "offline_package_job_owner_principal_idx",
+          "columns": [
+            {
+              "expression": "principal",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "with": {},
+          "method": "btree",
+          "concurrently": false
+        }
+      },
+      "foreignKeys": {
+        "offline_package_job_owner_job_id_fkey": {
+          "name": "offline_package_job_owner_job_id_fkey",
+          "tableFrom": "offline_package_job_owner",
+          "columnsFrom": [
+            "job_id"
+          ],
+          "tableTo": "offline_package_job",
+          "schemaTo": "data_manager",
+          "columnsTo": [
+            "id"
+          ],
+          "onUpdate": "no action",
+          "onDelete": "cascade"
+        }
+      },
+      "compositePrimaryKeys": {
+        "offline_package_job_owner_pkey": {
+          "name": "offline_package_job_owner_pkey",
+          "columns": [
+            "job_id",
+            "principal"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
       "isRLSEnabled": false
     },
     "data_manager.overture_release": {
@@ -2789,9 +2847,27 @@
           "primaryKey": false,
           "notNull": false
         },
-        "encrypted_locator": {
-          "name": "encrypted_locator",
+        "locator_ciphertext": {
+          "name": "locator_ciphertext",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "locator_iv": {
+          "name": "locator_iv",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "locator_tag": {
+          "name": "locator_tag",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "locator_key_version": {
+          "name": "locator_key_version",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false
         },
@@ -2823,8 +2899,8 @@
           "notNull": true,
           "default": "'UTC'"
         },
-        "state": {
-          "name": "state",
+        "status": {
+          "name": "status",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -2920,8 +2996,8 @@
         }
       },
       "indexes": {
-        "data_subject_request_user_id_state_idx": {
-          "name": "data_subject_request_user_id_state_idx",
+        "data_subject_request_user_id_status_idx": {
+          "name": "data_subject_request_user_id_status_idx",
           "columns": [
             {
               "expression": "user_id",
@@ -2930,7 +3006,7 @@
               "nulls": "last"
             },
             {
-              "expression": "state",
+              "expression": "status",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2941,11 +3017,11 @@
           "method": "btree",
           "concurrently": false
         },
-        "data_subject_request_state_due_at_idx": {
-          "name": "data_subject_request_state_due_at_idx",
+        "data_subject_request_status_due_at_idx": {
+          "name": "data_subject_request_status_due_at_idx",
           "columns": [
             {
-              "expression": "state",
+              "expression": "status",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -3011,7 +3087,7 @@
           "isUnique": true,
           "with": {},
           "method": "btree",
-          "where": "\"data_subject_request\".\"user_id\" is not null and \"data_subject_request\".\"state\" in ('open', 'in_progress', 'waiting_on_requester')",
+          "where": "\"data_subject_request\".\"user_id\" is not null and \"data_subject_request\".\"status\" in ('open', 'in_progress', 'waiting_on_requester')",
           "concurrently": false
         }
       },
@@ -3068,9 +3144,13 @@
           "name": "data_subject_request_channel_check",
           "value": "\"data_subject_request\".\"channel\" in ('self_service', 'email', 'post', 'representative', 'internal')"
         },
-        "data_subject_request_state_check": {
-          "name": "data_subject_request_state_check",
-          "value": "\"data_subject_request\".\"state\" in ('open', 'in_progress', 'waiting_on_requester', 'completed', 'refused')"
+        "data_subject_request_status_check": {
+          "name": "data_subject_request_status_check",
+          "value": "\"data_subject_request\".\"status\" in ('open', 'in_progress', 'waiting_on_requester', 'completed', 'refused')"
+        },
+        "data_subject_request_locator_ciphertext_check": {
+          "name": "data_subject_request_locator_ciphertext_check",
+          "value": "(\"data_subject_request\".\"locator_ciphertext\" is null and \"data_subject_request\".\"locator_iv\" is null and \"data_subject_request\".\"locator_tag\" is null and \"data_subject_request\".\"locator_key_version\" is null) or (\"data_subject_request\".\"locator_ciphertext\" is not null and \"data_subject_request\".\"locator_iv\" is not null and \"data_subject_request\".\"locator_tag\" is not null and \"data_subject_request\".\"locator_key_version\" is not null)"
         },
         "data_subject_request_version_check": {
           "name": "data_subject_request_version_check",
@@ -3249,6 +3329,14 @@
         "data_subject_request_event_payload_version_check": {
           "name": "data_subject_request_event_payload_version_check",
           "value": "\"data_subject_request_event\".\"payload_version\" > 0"
+        },
+        "data_subject_request_event_event_type_check": {
+          "name": "data_subject_request_event_event_type_check",
+          "value": "\"data_subject_request_event\".\"event_type\" in ('received', 'status_changed', 'identity_verified', 'task_resolved', 'extended', 'export_started', 'export_delivered', 'export_failed')"
+        },
+        "data_subject_request_event_actor_kind_check": {
+          "name": "data_subject_request_event_actor_kind_check",
+          "value": "\"data_subject_request_event\".\"actor_kind\" in ('subject', 'admin', 'system')"
         }
       },
       "isRLSEnabled": false
@@ -3303,8 +3391,8 @@
           "notNull": true,
           "default": "'{}'::jsonb"
         },
-        "state": {
-          "name": "state",
+        "status": {
+          "name": "status",
           "type": "text",
           "primaryKey": false,
           "notNull": true,
@@ -3397,11 +3485,11 @@
           "method": "btree",
           "concurrently": false
         },
-        "data_subject_request_notification_state_next_attempt_at_idx": {
-          "name": "data_subject_request_notification_state_next_attempt_at_idx",
+        "data_subject_request_notification_status_next_attempt_at_idx": {
+          "name": "data_subject_request_notification_status_next_attempt_at_idx",
           "columns": [
             {
-              "expression": "state",
+              "expression": "status",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -3480,9 +3568,9 @@
           "name": "data_subject_request_notification_channel_check",
           "value": "\"data_subject_request_notification\".\"channel\" in ('email')"
         },
-        "data_subject_request_notification_state_check": {
-          "name": "data_subject_request_notification_state_check",
-          "value": "\"data_subject_request_notification\".\"state\" in ('pending', 'sending', 'sent', 'retryable', 'failed', 'canceled')"
+        "data_subject_request_notification_status_check": {
+          "name": "data_subject_request_notification_status_check",
+          "value": "\"data_subject_request_notification\".\"status\" in ('pending', 'sending', 'sent', 'retryable', 'failed', 'canceled')"
         },
         "data_subject_request_notification_attempts_check": {
           "name": "data_subject_request_notification_attempts_check",
@@ -3752,6 +3840,10 @@
         "data_subject_request_task_status_check": {
           "name": "data_subject_request_task_status_check",
           "value": "\"data_subject_request_task\".\"status\" in ('open', 'resolved')"
+        },
+        "data_subject_request_task_source_check": {
+          "name": "data_subject_request_task_source_check",
+          "value": "\"data_subject_request_task\".\"source\" in ('openmapx-db', 'redis', 'managed-service', 'operator')"
         }
       },
       "isRLSEnabled": false
@@ -3762,14 +3854,14 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "integer",
+          "type": "bigint",
           "primaryKey": true,
           "notNull": true,
           "identity": {
             "name": "health_history_id_seq",
             "increment": "1",
             "minValue": "1",
-            "maxValue": "2147483647",
+            "maxValue": "9223372036854775807",
             "startWith": "1",
             "cache": "1",
             "cycle": false,
@@ -3933,19 +4025,19 @@
           "notNull": true,
           "default": "now()"
         },
-        "installed_by": {
-          "name": "installed_by",
+        "installed_by_user_id": {
+          "name": "installed_by_user_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         }
       },
       "indexes": {
-        "installed_extension_installed_by_idx": {
-          "name": "installed_extension_installed_by_idx",
+        "installed_extension_installed_by_user_id_idx": {
+          "name": "installed_extension_installed_by_user_id_idx",
           "columns": [
             {
-              "expression": "installed_by",
+              "expression": "installed_by_user_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -3958,11 +4050,11 @@
         }
       },
       "foreignKeys": {
-        "installed_extension_installed_by_fkey": {
-          "name": "installed_extension_installed_by_fkey",
+        "installed_extension_installed_by_user_id_fkey": {
+          "name": "installed_extension_installed_by_user_id_fkey",
           "tableFrom": "installed_extension",
           "columnsFrom": [
-            "installed_by"
+            "installed_by_user_id"
           ],
           "tableTo": "user",
           "columnsTo": [
@@ -4115,8 +4207,8 @@
           "notNull": true,
           "default": "now()"
         },
-        "installed_by": {
-          "name": "installed_by",
+        "installed_by_user_id": {
+          "name": "installed_by_user_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -4129,11 +4221,11 @@
         }
       },
       "indexes": {
-        "installed_integration_installed_by_idx": {
-          "name": "installed_integration_installed_by_idx",
+        "installed_integration_installed_by_user_id_idx": {
+          "name": "installed_integration_installed_by_user_id_idx",
           "columns": [
             {
-              "expression": "installed_by",
+              "expression": "installed_by_user_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -4146,11 +4238,11 @@
         }
       },
       "foreignKeys": {
-        "installed_integration_installed_by_fkey": {
-          "name": "installed_integration_installed_by_fkey",
+        "installed_integration_installed_by_user_id_fkey": {
+          "name": "installed_integration_installed_by_user_id_fkey",
           "tableFrom": "installed_integration",
           "columnsFrom": [
-            "installed_by"
+            "installed_by_user_id"
           ],
           "tableTo": "user",
           "columnsTo": [
@@ -4244,6 +4336,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "key_version": {
+          "name": "key_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -4258,19 +4356,19 @@
           "notNull": true,
           "default": "now()"
         },
-        "updated_by": {
-          "name": "updated_by",
+        "updated_by_user_id": {
+          "name": "updated_by_user_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         }
       },
       "indexes": {
-        "integration_secret_updated_by_idx": {
-          "name": "integration_secret_updated_by_idx",
+        "integration_secret_updated_by_user_id_idx": {
+          "name": "integration_secret_updated_by_user_id_idx",
           "columns": [
             {
-              "expression": "updated_by",
+              "expression": "updated_by_user_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -4283,11 +4381,11 @@
         }
       },
       "foreignKeys": {
-        "integration_secret_updated_by_fkey": {
-          "name": "integration_secret_updated_by_fkey",
+        "integration_secret_updated_by_user_id_fkey": {
+          "name": "integration_secret_updated_by_user_id_fkey",
           "tableFrom": "integration_secret",
           "columnsFrom": [
-            "updated_by"
+            "updated_by_user_id"
           ],
           "tableTo": "user",
           "columnsTo": [
@@ -4430,6 +4528,26 @@
           "type": "jsonb",
           "primaryKey": false,
           "notNull": false
+        },
+        "field_contributors_version": {
+          "name": "field_contributors_version",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
         }
       },
       "indexes": {},
@@ -4460,7 +4578,24 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "labeled_place_place_id_check": {
+          "name": "labeled_place_place_id_check",
+          "value": "\"labeled_place\".\"place_id\" ~ '^[a-z][a-z0-9-]*:.+' and split_part(\"labeled_place\".\"place_id\", ':', 1) not in ('style-poi', 'saved', 'label', 'coordinate')"
+        },
+        "labeled_place_lat_check": {
+          "name": "labeled_place_lat_check",
+          "value": "\"labeled_place\".\"lat\" between -90 and 90"
+        },
+        "labeled_place_lng_check": {
+          "name": "labeled_place_lng_check",
+          "value": "\"labeled_place\".\"lng\" between -180 and 180"
+        },
+        "labeled_place_field_contributors_version_check": {
+          "name": "labeled_place_field_contributors_version_check",
+          "value": "(\"labeled_place\".\"field_contributors\" is null) = (\"labeled_place\".\"field_contributors_version\" is null) and (\"labeled_place\".\"field_contributors_version\" is null or \"labeled_place\".\"field_contributors_version\" = 1)"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.mangrove_keypair": {
@@ -6099,6 +6234,14 @@
         "parked_location_source_check": {
           "name": "parked_location_source_check",
           "value": "\"parked_location\".\"source\" in ('device','manual','arrival')"
+        },
+        "parked_location_lat_check": {
+          "name": "parked_location_lat_check",
+          "value": "\"parked_location\".\"lat\" between -90 and 90"
+        },
+        "parked_location_lng_check": {
+          "name": "parked_location_lng_check",
+          "value": "\"parked_location\".\"lng\" between -180 and 180"
         }
       },
       "isRLSEnabled": false
@@ -6277,21 +6420,27 @@
           "primaryKey": false,
           "notNull": true
         },
-        "encrypted_api_key": {
-          "name": "encrypted_api_key",
+        "api_key_ciphertext": {
+          "name": "api_key_ciphertext",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "encryption_iv": {
-          "name": "encryption_iv",
+        "api_key_iv": {
+          "name": "api_key_iv",
           "type": "text",
           "primaryKey": false,
           "notNull": true
         },
-        "encryption_tag": {
-          "name": "encryption_tag",
+        "api_key_tag": {
+          "name": "api_key_tag",
           "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "api_key_key_version": {
+          "name": "api_key_key_version",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true
         },
@@ -6453,6 +6602,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "ev_version": {
+          "name": "ev_version",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
         "fuel_consumption_l_per_100km": {
           "name": "fuel_consumption_l_per_100km",
           "type": "double precision",
@@ -6474,7 +6629,24 @@
           "default": "now()"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "personal_vehicle_user_id_default_key": {
+          "name": "personal_vehicle_user_id_default_key",
+          "columns": [
+            {
+              "expression": "user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "with": {},
+          "method": "btree",
+          "where": "\"personal_vehicle\".\"is_default\"",
+          "concurrently": false
+        }
+      },
       "foreignKeys": {
         "personal_vehicle_user_id_fkey": {
           "name": "personal_vehicle_user_id_fkey",
@@ -6510,6 +6682,10 @@
         "personal_vehicle_powertrain_check": {
           "name": "personal_vehicle_powertrain_check",
           "value": "\"personal_vehicle\".\"powertrain\" in ('electric','plugin_hybrid','hybrid','petrol','diesel','other')"
+        },
+        "personal_vehicle_ev_version_check": {
+          "name": "personal_vehicle_ev_version_check",
+          "value": "(\"personal_vehicle\".\"ev\" is null) = (\"personal_vehicle\".\"ev_version\" is null) and (\"personal_vehicle\".\"ev_version\" is null or \"personal_vehicle\".\"ev_version\" = 1)"
         }
       },
       "isRLSEnabled": false
@@ -6525,8 +6701,8 @@
           "notNull": true,
           "default": "uuidv7()"
         },
-        "actor_id": {
-          "name": "actor_id",
+        "actor_user_id": {
+          "name": "actor_user_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -6606,11 +6782,11 @@
         }
       },
       "indexes": {
-        "platform_configuration_preview_actor_id_operation_key_key": {
-          "name": "platform_configuration_preview_actor_id_operation_key_key",
+        "platform_configuration_preview_actor_user_id_operation_key_key": {
+          "name": "platform_configuration_preview_actor_user_id_operation_key_key",
           "columns": [
             {
-              "expression": "actor_id",
+              "expression": "actor_user_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -6659,11 +6835,11 @@
         }
       },
       "foreignKeys": {
-        "platform_configuration_preview_actor_id_fkey": {
-          "name": "platform_configuration_preview_actor_id_fkey",
+        "platform_configuration_preview_actor_user_id_fkey": {
+          "name": "platform_configuration_preview_actor_user_id_fkey",
           "tableFrom": "platform_configuration_preview",
           "columnsFrom": [
-            "actor_id"
+            "actor_user_id"
           ],
           "tableTo": "user",
           "columnsTo": [
@@ -6826,6 +7002,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "field_contributors_version": {
+          "name": "field_contributors_version",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
         "note": {
           "name": "note",
           "type": "text",
@@ -6841,6 +7023,13 @@
         },
         "created_at": {
           "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": true,
@@ -6882,7 +7071,24 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "saved_place_place_id_check": {
+          "name": "saved_place_place_id_check",
+          "value": "\"saved_place\".\"place_id\" ~ '^[a-z][a-z0-9-]*:.+' and split_part(\"saved_place\".\"place_id\", ':', 1) not in ('style-poi', 'saved', 'label', 'coordinate')"
+        },
+        "saved_place_lat_check": {
+          "name": "saved_place_lat_check",
+          "value": "\"saved_place\".\"lat\" between -90 and 90"
+        },
+        "saved_place_lng_check": {
+          "name": "saved_place_lng_check",
+          "value": "\"saved_place\".\"lng\" between -180 and 180"
+        },
+        "saved_place_field_contributors_version_check": {
+          "name": "saved_place_field_contributors_version_check",
+          "value": "(\"saved_place\".\"field_contributors\" is null) = (\"saved_place\".\"field_contributors_version\" is null) and (\"saved_place\".\"field_contributors_version\" is null or \"saved_place\".\"field_contributors_version\" = 1)"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.service_config": {
@@ -7016,6 +7222,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "key_version": {
+          "name": "key_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -7030,19 +7242,19 @@
           "notNull": true,
           "default": "now()"
         },
-        "updated_by": {
-          "name": "updated_by",
+        "updated_by_user_id": {
+          "name": "updated_by_user_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         }
       },
       "indexes": {
-        "service_secret_updated_by_idx": {
-          "name": "service_secret_updated_by_idx",
+        "service_secret_updated_by_user_id_idx": {
+          "name": "service_secret_updated_by_user_id_idx",
           "columns": [
             {
-              "expression": "updated_by",
+              "expression": "updated_by_user_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -7055,11 +7267,11 @@
         }
       },
       "foreignKeys": {
-        "service_secret_updated_by_fkey": {
-          "name": "service_secret_updated_by_fkey",
+        "service_secret_updated_by_user_id_fkey": {
+          "name": "service_secret_updated_by_user_id_fkey",
           "tableFrom": "service_secret",
           "columnsFrom": [
-            "updated_by"
+            "updated_by_user_id"
           ],
           "tableTo": "user",
           "columnsTo": [
@@ -7362,6 +7574,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "snapshot_version": {
+          "name": "snapshot_version",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp with time zone",
@@ -7462,6 +7680,10 @@
         "share_link_snapshot_check": {
           "name": "share_link_snapshot_check",
           "value": "(\"share_link\".\"mode\" = 'snapshot') = (\"share_link\".\"snapshot\" is not null)"
+        },
+        "share_link_snapshot_version_check": {
+          "name": "share_link_snapshot_version_check",
+          "value": "(\"share_link\".\"snapshot\" is null) = (\"share_link\".\"snapshot_version\" is null) and (\"share_link\".\"snapshot_version\" is null or \"share_link\".\"snapshot_version\" = 1)"
         }
       },
       "isRLSEnabled": false
@@ -7494,6 +7716,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "key_version": {
+          "name": "key_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
         "updated_at": {
           "name": "updated_at",
           "type": "timestamp with time zone",
@@ -7501,19 +7729,19 @@
           "notNull": true,
           "default": "now()"
         },
-        "updated_by": {
-          "name": "updated_by",
+        "updated_by_user_id": {
+          "name": "updated_by_user_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         }
       },
       "indexes": {
-        "system_secret_updated_by_idx": {
-          "name": "system_secret_updated_by_idx",
+        "system_secret_updated_by_user_id_idx": {
+          "name": "system_secret_updated_by_user_id_idx",
           "columns": [
             {
-              "expression": "updated_by",
+              "expression": "updated_by_user_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -7526,11 +7754,11 @@
         }
       },
       "foreignKeys": {
-        "system_secret_updated_by_fkey": {
-          "name": "system_secret_updated_by_fkey",
+        "system_secret_updated_by_user_id_fkey": {
+          "name": "system_secret_updated_by_user_id_fkey",
           "tableFrom": "system_secret",
           "columnsFrom": [
-            "updated_by"
+            "updated_by_user_id"
           ],
           "tableTo": "user",
           "columnsTo": [
@@ -7550,11 +7778,16 @@
       },
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "system_secret_key_check": {
+          "name": "system_secret_key_check",
+          "value": "\"system_secret\".\"key\" in ('emaillabs.appKey','emaillabs.secretKey','lettermint.apiToken','smtp.password','maptiler.apiKey')"
+        }
+      },
       "isRLSEnabled": false
     },
-    "public.system_settings": {
-      "name": "system_settings",
+    "public.system_setting": {
+      "name": "system_setting",
       "schema": "",
       "columns": {
         "key": {
@@ -7573,22 +7806,22 @@
           "name": "updated_at",
           "type": "timestamp with time zone",
           "primaryKey": false,
-          "notNull": false,
+          "notNull": true,
           "default": "now()"
         },
-        "updated_by": {
-          "name": "updated_by",
+        "updated_by_user_id": {
+          "name": "updated_by_user_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false
         }
       },
       "indexes": {
-        "system_settings_updated_by_idx": {
-          "name": "system_settings_updated_by_idx",
+        "system_setting_updated_by_user_id_idx": {
+          "name": "system_setting_updated_by_user_id_idx",
           "columns": [
             {
-              "expression": "updated_by",
+              "expression": "updated_by_user_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -7601,11 +7834,11 @@
         }
       },
       "foreignKeys": {
-        "system_settings_updated_by_fkey": {
-          "name": "system_settings_updated_by_fkey",
-          "tableFrom": "system_settings",
+        "system_setting_updated_by_user_id_fkey": {
+          "name": "system_setting_updated_by_user_id_fkey",
+          "tableFrom": "system_setting",
           "columnsFrom": [
-            "updated_by"
+            "updated_by_user_id"
           ],
           "tableTo": "user",
           "columnsTo": [
@@ -7618,7 +7851,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "system_setting_key_check": {
+          "name": "system_setting_key_check",
+          "value": "\"system_setting\".\"key\" in ('auth.emailVerificationRequired','auth.sessionDurationHours','auth.twoFaEnabled','auth.passwordMinLength','email.fromAddress','emaillabs.smtpAccount','smtp.host','smtp.port','smtp.user','smtp.security','basemap.provider','dataUse.allowNonCommercial','dataUse.allowGreyArea','legal.controller.name','legal.controller.street','legal.controller.postalCode','legal.controller.city','legal.controller.country','legal.controller.email','legal.controller.phone','legal.dataRequestEmail','legal.hosting.provider','legal.hosting.locations','legal.supervisoryAuthority.name','legal.supervisoryAuthority.url','legal.deploymentJurisdiction','legal.privacySources','retention.serverLogDays','retention.privacyCaseDays','retention.auditLogDays','retention.adminJobDays','platform.configuration')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.transit_credential_preview": {
@@ -7632,8 +7870,8 @@
           "notNull": true,
           "default": "uuidv7()"
         },
-        "actor_id": {
-          "name": "actor_id",
+        "actor_user_id": {
+          "name": "actor_user_id",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -7668,6 +7906,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "key_version": {
+          "name": "key_version",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
         "authorization_ciphertext": {
           "name": "authorization_ciphertext",
           "type": "text",
@@ -7683,6 +7927,12 @@
         "authorization_tag": {
           "name": "authorization_tag",
           "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "authorization_key_version": {
+          "name": "authorization_key_version",
+          "type": "integer",
           "primaryKey": false,
           "notNull": false
         },
@@ -7719,11 +7969,11 @@
         }
       },
       "indexes": {
-        "transit_credential_preview_actor_id_operation_key_key": {
-          "name": "transit_credential_preview_actor_id_operation_key_key",
+        "transit_credential_preview_actor_user_id_operation_key_key": {
+          "name": "transit_credential_preview_actor_user_id_operation_key_key",
           "columns": [
             {
-              "expression": "actor_id",
+              "expression": "actor_user_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -7757,11 +8007,11 @@
         }
       },
       "foreignKeys": {
-        "transit_credential_preview_actor_id_fkey": {
-          "name": "transit_credential_preview_actor_id_fkey",
+        "transit_credential_preview_actor_user_id_fkey": {
+          "name": "transit_credential_preview_actor_user_id_fkey",
           "tableFrom": "transit_credential_preview",
           "columnsFrom": [
-            "actor_id"
+            "actor_user_id"
           ],
           "tableTo": "user",
           "columnsTo": [
@@ -7778,6 +8028,10 @@
         "transit_credential_preview_bounds_check": {
           "name": "transit_credential_preview_bounds_check",
           "value": "octet_length(\"transit_credential_preview\".\"ciphertext\") <= 1500000 and length(\"transit_credential_preview\".\"intent_fingerprint\") = 64 and length(\"transit_credential_preview\".\"iv\") = 16 and length(\"transit_credential_preview\".\"tag\") = 24"
+        },
+        "transit_credential_preview_authorization_check": {
+          "name": "transit_credential_preview_authorization_check",
+          "value": "(\"transit_credential_preview\".\"authorization_ciphertext\" is null and \"transit_credential_preview\".\"authorization_iv\" is null and \"transit_credential_preview\".\"authorization_tag\" is null and \"transit_credential_preview\".\"authorization_key_version\" is null) or (\"transit_credential_preview\".\"authorization_ciphertext\" is not null and \"transit_credential_preview\".\"authorization_iv\" is not null and \"transit_credential_preview\".\"authorization_tag\" is not null and \"transit_credential_preview\".\"authorization_key_version\" is not null)"
         }
       },
       "isRLSEnabled": false
@@ -8072,8 +8326,8 @@
           "primaryKey": true,
           "notNull": true
         },
-        "actor_id": {
-          "name": "actor_id",
+        "actor_user_id": {
+          "name": "actor_user_id",
           "type": "text",
           "primaryKey": false,
           "notNull": false
@@ -8150,11 +8404,11 @@
           "method": "btree",
           "concurrently": false
         },
-        "integration_application_receipt_actor_id_idx": {
-          "name": "integration_application_receipt_actor_id_idx",
+        "integration_application_receipt_actor_user_id_idx": {
+          "name": "integration_application_receipt_actor_user_id_idx",
           "columns": [
             {
-              "expression": "actor_id",
+              "expression": "actor_user_id",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -8182,11 +8436,11 @@
         }
       },
       "foreignKeys": {
-        "integration_application_receipt_actor_id_fkey": {
-          "name": "integration_application_receipt_actor_id_fkey",
+        "integration_application_receipt_actor_user_id_fkey": {
+          "name": "integration_application_receipt_actor_user_id_fkey",
           "tableFrom": "integration_application_receipt",
           "columnsFrom": [
-            "actor_id"
+            "actor_user_id"
           ],
           "tableTo": "user",
           "columnsTo": [

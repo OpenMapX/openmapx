@@ -6,7 +6,6 @@ export * from "./archive";
 export {
   configurationHostFields,
   observeConfigurationSources,
-  verifyConfigurationReleaseSourceWitness,
   verifyConfigurationSourceWitness,
 } from "./configuration-source-witness";
 export { type ControlInstallation, controlDigest } from "./control-records";

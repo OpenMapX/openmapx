@@ -69,8 +69,8 @@ value):
 ```bash
 # infra/docker/.env
 INTEGRATION_STREET_LEVEL_IMAGERY_MAPILLARY_ENABLED=true
-INTEGRATION_STREET_LEVEL_IMAGERY_MAPILLARY_ACCESSTOKEN="MLY|<app_id>|<token>"
-INTEGRATION_PHOTOS_MAPILLARY_ACCESSTOKEN="MLY|<app_id>|<token>"
+INTEGRATION_STREET_LEVEL_IMAGERY_MAPILLARY_ACCESS_TOKEN="MLY|<app_id>|<token>"
+INTEGRATION_PHOTOS_MAPILLARY_ACCESS_TOKEN="MLY|<app_id>|<token>"
 ```
 
 The overlay/viewer and photos on place panels are separate integrations. They
@@ -102,7 +102,7 @@ depends on the instance you point at.
 ## How it works
 
 The viewer uses provider-qualified image references, including links such as
-`?sli=panoramax:<id>`. A link can stop working if its source removes the image
+`?streetLevelImage=panoramax:<id>`. A link can stop working if its source removes the image
 or the instance disables that provider.
 
 ### Navigation arrows

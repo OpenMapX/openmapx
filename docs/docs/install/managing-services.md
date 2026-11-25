@@ -45,7 +45,7 @@ printed to stderr. Narrow the list with filters:
 
 ```bash
 pnpm openmapx services list --capability geocoder       # only services that provide a capability
-pnpm openmapx services list --quality built-in          # built-in | community-verified | community
+pnpm openmapx services list --quality built-in          # built-in | community
 pnpm openmapx services list --enabled                   # only services in the current selection
 ```
 

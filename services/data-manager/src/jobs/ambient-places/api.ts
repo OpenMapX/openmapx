@@ -8,7 +8,9 @@ import { readAmbientManifest } from "@openmapx/core/ambient-places-server";
 import { itemAt } from "@openmapx/core/item-at";
 import type { FastifyInstance } from "fastify";
 import type postgres from "postgres";
+import { requestActor } from "../../auth.js";
 import { registerDataManagerRoute } from "../../route-contract.js";
+import type { DataJobActor } from "../execution/api.js";
 import { runLocalDataExecution } from "../execution/local.js";
 import {
   buildAmbientPlaces,
@@ -100,6 +102,7 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
       options: { onProgress: (p: AmbientBuildProgress) => void },
     ) => Promise<unknown>,
     reply: import("fastify").FastifyReply,
+    actor: DataJobActor,
   ) {
     if (building) return reply.code(409).send({ error: "An ambient build is already running" });
     // Claim the local slot before the first await. Cross-process admission is
@@ -114,19 +117,22 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
       accept = resolve;
       reject = rejectPromise;
     });
-    void runLocalDataExecution({ kind: "ambient-publication", action }, (worker) =>
-      job(
-        worker,
-        () => {
-          claimed = true;
-          accept();
-        },
-        {
-          onProgress: (value) => {
-            if (building === attempt) progress = value;
+    void runLocalDataExecution(
+      { kind: "ambient-publication", action },
+      (worker) =>
+        job(
+          worker,
+          () => {
+            claimed = true;
+            accept();
           },
-        },
-      ),
+          {
+            onProgress: (value) => {
+              if (building === attempt) progress = value;
+            },
+          },
+        ),
+      actor,
     )
       .catch((error) => {
         if (!claimed) {
@@ -164,6 +170,7 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
       "build",
       (worker, claim, options) => buildAmbientPlaces(worker, region, claim, options),
       reply,
+      requestActor(request),
     );
   });
   for (const action of ["resume", "discard"] as const) {
@@ -177,12 +184,14 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
             "resume",
             (worker, claim, options) => resumePlanetPlaces(worker, generation, claim, options),
             reply,
+            requestActor(request),
           );
         if (building) return reply.code(409).send({ error: "An ambient build is already running" });
         try {
           await runLocalDataExecution(
             { kind: "ambient-publication", action: "discard" },
             (worker) => discardPlanetPlaces(worker, generation),
+            requestActor(request),
           );
           return { ok: true };
         } catch (error) {
@@ -196,16 +205,19 @@ export function registerAmbientPlacesApi(app: FastifyInstance, sql: postgres.Sql
       await runLocalDataExecution(
         { kind: "ambient-publication", action: request.body.enabled ? "enable" : "disable" },
         (worker) => setAmbientEnabled(worker, request.body.enabled),
+        requestActor(request),
       );
       return { ok: true };
     } catch (error) {
       return reply.code(409).send({ error: (error as Error).message });
     }
   });
-  registerDataManagerRoute(app, "rollbackAmbientPlaces", async (_request, reply) => {
+  registerDataManagerRoute(app, "rollbackAmbientPlaces", async (request, reply) => {
     try {
-      await runLocalDataExecution({ kind: "ambient-publication", action: "rollback" }, (worker) =>
-        rollbackAmbientPlaces(worker),
+      await runLocalDataExecution(
+        { kind: "ambient-publication", action: "rollback" },
+        (worker) => rollbackAmbientPlaces(worker),
+        requestActor(request),
       );
       return { ok: true };
     } catch (error) {

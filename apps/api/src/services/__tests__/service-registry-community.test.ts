@@ -21,7 +21,8 @@ function communityService(id: string, repository: string) {
       id,
       name: id,
       version: "1.0.0",
-      quality: "community-verified",
+      platform: "1.0",
+      quality: "community",
       container: {
         image: `registry.example.test/${id}`,
         tag: "1.0.0",

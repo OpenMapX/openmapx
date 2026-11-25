@@ -11,7 +11,7 @@ import {
   integrationOwnershipSnapshot,
   projectFieldOwnership,
 } from "./configuration-ownership-view";
-import { encrypt } from "./secrets";
+import { encrypt, secretAad } from "./secrets";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -82,10 +82,10 @@ describe("effective configuration ownership metadata", () => {
         {
           integrationId: "fixture",
           key: "TOKEN",
-          ...encrypt("vault-private"),
+          ...encrypt("vault-private", secretAad.integrationSecret("fixture", "TOKEN")),
           createdAt: now,
           updatedAt: now,
-          updatedBy: null,
+          updatedByUserId: null,
         },
       ],
     });

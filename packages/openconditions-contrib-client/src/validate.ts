@@ -1,10 +1,11 @@
-import type {
-  Effect,
-  GeoJsonGeometry,
-  ObservationClaim,
-  ReportClaim,
-  SituationClaim,
-  SubClaimBody,
+import {
+  CLAIM_VERSION,
+  type Effect,
+  type GeoJsonGeometry,
+  type ObservationClaim,
+  type ReportClaim,
+  type SituationClaim,
+  type SubClaimBody,
 } from "./types";
 
 /**
@@ -47,6 +48,7 @@ const GEOMETRY_TYPES = new Set([
 ]);
 
 const SITUATION_KEYS = new Set([
+  "v",
   "claimClass",
   "kind",
   "type",
@@ -62,6 +64,7 @@ const SITUATION_KEYS = new Set([
 ]);
 
 const OBSERVATION_KEYS = new Set([
+  "v",
   "claimClass",
   "subject",
   "property",
@@ -73,6 +76,7 @@ const OBSERVATION_KEYS = new Set([
 ]);
 
 const SUB_CLAIM_KEYS = new Set([
+  "v",
   "subject",
   "claimType",
   "reason",
@@ -159,6 +163,12 @@ function assertIJsonTree(value: unknown, path: string, depth = 0): void {
       throw new TypeError(`object key with a lone surrogate at ${path}`);
     }
     assertIJsonTree(member, `${path}.${key}`, depth + 1);
+  }
+}
+
+function assertClaimVersion(v: unknown, path: string): void {
+  if (v !== CLAIM_VERSION) {
+    throw new TypeError(`${path}.v must be ${CLAIM_VERSION}, the signed claim protocol version`);
   }
 }
 
@@ -353,6 +363,7 @@ function validateObservationClaim(claim: ObservationClaim): void {
  */
 export function validateReportClaim(claim: ReportClaim): void {
   assertPlainObject(claim, "claim");
+  assertClaimVersion(claim.v, "claim");
   switch (claim.claimClass) {
     case "situation":
       validateSituationClaim(claim);
@@ -384,6 +395,7 @@ export function validateSubClaimBody(body: SubClaimBody): void {
     }
   }
   assertOnlyKeys(body, SUB_CLAIM_KEYS, "subClaim");
+  assertClaimVersion(body.v, "subClaim");
   assertPlainObject(body.subject, "subClaim.subject");
   assertOnlyKeys(body.subject, RECORD_REF_KEYS, "subClaim.subject");
   if (!RECORD_CLASSES.has(body.subject.class)) {

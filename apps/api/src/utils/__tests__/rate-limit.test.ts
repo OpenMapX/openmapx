@@ -13,11 +13,34 @@ function buildApp(limiter: RateLimiter, opts: { trustProxy?: boolean | string | 
 }
 
 describe("RateLimiter", () => {
-  it("sweeps stale buckets when a new bucket arrives, without a timer", async () => {
+  it("forgets an idle client within three windows of a minute, with no other client arriving", async () => {
     vi.useFakeTimers();
     const limiter = new RateLimiter({
       max: 5,
-      windowMs: 1_000,
+      windowMs: 60_000,
+      keyFn: (request) => String(request.headers["x-key"]),
+    });
+    // An idle limiter holds no timer; one sweep timer runs while it holds clients.
+    expect(vi.getTimerCount()).toBe(0);
+    const hook = limiter.preHandler();
+    const hit = (key: string) => hook({ headers: { "x-key": key } } as never, {} as never);
+    const bucketCount = () =>
+      (limiter as unknown as { buckets: Map<string, unknown> }).buckets.size;
+
+    await hit("idle");
+    expect(vi.getTimerCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(2 * 60_000);
+    expect(bucketCount()).toBe(1);
+    await vi.advanceTimersByTimeAsync(60_000 + 1);
+    expect(bucketCount()).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("sweeps stale buckets when a new bucket arrives between timer runs", async () => {
+    vi.useFakeTimers();
+    const limiter = new RateLimiter({
+      max: 5,
+      windowMs: 3_600_000,
       keyFn: (request) => String(request.headers["x-key"]),
     });
     const hook = limiter.preHandler();
@@ -25,12 +48,9 @@ describe("RateLimiter", () => {
     const bucketCount = () =>
       (limiter as unknown as { buckets: Map<string, unknown> }).buckets.size;
 
-    expect(vi.getTimerCount()).toBe(0);
     await hit("stale");
-    expect(vi.getTimerCount()).toBe(0);
-    await vi.advanceTimersByTimeAsync(5 * 60_000 + 1);
-    expect(bucketCount()).toBe(1);
-
+    // Two windows idle, before the hourly timer runs again.
+    vi.setSystemTime(Date.now() + 2 * 3_600_000 + 1);
     await hit("fresh");
 
     expect(bucketCount()).toBe(1);

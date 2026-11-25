@@ -127,15 +127,14 @@ describe("POST /admin/operations/:id/run", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ ok: true, jobId: "job-123" });
     expect(mockJobRunnerEnqueue).toHaveBeenCalledWith(
-      "data.operation",
+      "data.operation.run",
       { operation: "search-index-build", version: 1, input: { region: "europe/germany" } },
       fakeSession.user.id,
     );
     expect(mockWriteAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
-        targetType: "data",
         targetId: "search-index-build",
-        action: "data.search-index-build",
+        action: "data.operation.run",
         details: { region: "europe/germany" },
       }),
     );
@@ -174,7 +173,7 @@ describe("POST /admin/operations/:id/run", () => {
     });
     expect(response.statusCode).toBe(200);
     expect(mockJobRunnerEnqueue).toHaveBeenCalledWith(
-      "data.operation",
+      "data.operation.run",
       { operation: "link", version: 1, input: {} },
       fakeSession.user.id,
     );

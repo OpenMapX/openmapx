@@ -353,6 +353,7 @@ describe("GET /api/shares/:token (public)", () => {
         ...baseRow,
         mode: "snapshot",
         snapshot: { name: "Trip", icon: null, places: [] },
+        snapshotVersion: 1,
       },
     ]);
     const res = await app.inject({ method: "GET", url: `/api/shares/${VALID_TOKEN}` });
@@ -374,6 +375,7 @@ describe("GET /api/shares/:token (public)", () => {
         targetId: null,
         mode: "snapshot",
         snapshot: ROUTE_PAYLOAD,
+        snapshotVersion: 1,
       },
     ]);
     const res = await app.inject({ method: "GET", url: `/api/shares/${VALID_TOKEN}` });
@@ -428,6 +430,7 @@ describe("sharing wire contracts", () => {
         targetId: "0193e4a0-0000-7000-8000-000000000001",
         expiresAt: null,
         snapshot: { name: "Trip", icon: null, places: [{ name: "Invalid", lat: 999, lng: 13 }] },
+        snapshotVersion: 1,
       },
     ]);
     const response = await app.inject({ method: "GET", url: `/api/shares/${"A".repeat(43)}` });

@@ -119,7 +119,7 @@ export type GetOfflinePackageJob200 =
          */
         attribution: string[];
       };
-      errorCode?: "invalid-request" | "capacity" | "generation-failed" | "expired";
+      errorCode?: "INVALID_REQUEST" | "CAPACITY" | "GENERATION_FAILED" | "EXPIRED";
       errorMessage?: string;
     }
   | {
@@ -239,7 +239,7 @@ export type GetOfflinePackageJob200 =
          */
         attribution: string[];
       };
-      errorCode?: "invalid-request" | "capacity" | "generation-failed" | "expired";
+      errorCode?: "INVALID_REQUEST" | "CAPACITY" | "GENERATION_FAILED" | "EXPIRED";
       errorMessage?: string;
     }
   | {
@@ -359,7 +359,7 @@ export type GetOfflinePackageJob200 =
          */
         attribution: string[];
       };
-      errorCode: "invalid-request" | "capacity" | "generation-failed" | "expired";
+      errorCode: "INVALID_REQUEST" | "CAPACITY" | "GENERATION_FAILED" | "EXPIRED";
       errorMessage: string;
     }
   | {
@@ -479,6 +479,6 @@ export type GetOfflinePackageJob200 =
          */
         attribution: string[];
       };
-      errorCode: "expired";
+      errorCode: "EXPIRED";
       errorMessage: string;
     };

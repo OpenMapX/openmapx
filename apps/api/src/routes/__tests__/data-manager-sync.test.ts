@@ -105,10 +105,10 @@ describe("POST /data-manager/transit/sync", () => {
     const args = callArg(fetchMock, 0, 1) as RequestInit;
     expect(new Headers(args.headers).get("authorization")).toBe("Bearer service-token");
     expect(new Headers(args.headers).get("content-type")).toBe("application/json");
-    expect(JSON.parse(args.body as string)).toMatchObject({
-      idempotencyKey: "abc-123",
-      triggeredBy: "service-token",
-    });
+    const body = JSON.parse(args.body as string);
+    expect(body).toMatchObject({ idempotencyKey: "abc-123" });
+    // The service token acts for no administrator.
+    expect(body).not.toHaveProperty("triggeredByUserId");
   });
 
   it("propagates 409 from data-manager when a sync is already in flight", async () => {
@@ -116,7 +116,7 @@ describe("POST /data-manager/transit/sync", () => {
       new Response(
         JSON.stringify({
           error: "Another data job is running. Try again when it finishes.",
-          code: "in-flight",
+          code: "IN_FLIGHT",
           existingJobId: "running-job",
         }),
         { status: 409, headers: { "content-type": "application/json" } },
@@ -133,7 +133,7 @@ describe("POST /data-manager/transit/sync", () => {
     expect(res.statusCode).toBe(409);
     expect(res.json()).toEqual({
       error: "Another data job is running. Try again when it finishes.",
-      code: "in-flight",
+      code: "IN_FLIGHT",
       existingJobId: "running-job",
     });
   });

@@ -62,7 +62,7 @@ function LocalInstallations() {
     ...activityJobQueryOptions(client, apiUrl, accepted?.jobId, "application"),
     refetchInterval: (q) =>
       q.state.data &&
-      ["success", "failed", "canceled"].includes(q.state.data.status) &&
+      ["succeeded", "failed", "cancelled"].includes(q.state.data.status) &&
       !hasUnresolvedJobObservation(q.state.data.result)
         ? false
         : 1000,
@@ -70,7 +70,7 @@ function LocalInstallations() {
   const pending =
     !!accepted &&
     (!operation.data ||
-      !["success", "failed", "canceled"].includes(operation.data.status) ||
+      !["succeeded", "failed", "cancelled"].includes(operation.data.status) ||
       hasUnresolvedJobObservation(operation.data.result));
   useEffect(() => {
     const job = operation.data;
@@ -78,11 +78,11 @@ function LocalInstallations() {
       !owner.active ||
       !accepted ||
       job?.id !== accepted.jobId ||
-      !["success", "failed", "canceled"].includes(job.status) ||
+      !["succeeded", "failed", "cancelled"].includes(job.status) ||
       hasUnresolvedJobObservation(job.result)
     )
       return;
-    if (job.status === "success") {
+    if (job.status === "succeeded") {
       const result = job.result as {
         operationId?: unknown;
         integrationId?: unknown;

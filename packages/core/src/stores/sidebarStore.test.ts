@@ -5,8 +5,8 @@ import { usePlaceStore } from "./placeStore";
 import { useSidebarStore } from "./sidebarStore";
 
 const place = createPlace({
-  primaryScheme: "stylePoi",
-  ids: { stylePoi: "1" },
+  primaryScheme: "style-poi",
+  ids: { "style-poi": "1" },
   name: "Grotesque",
   address: "Grotesque",
   coordinates: [6.08, 50.78],

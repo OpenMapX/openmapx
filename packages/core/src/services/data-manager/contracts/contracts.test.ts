@@ -118,7 +118,7 @@ describe("data-manager wire contracts", () => {
   it("retains the reservation conflict before the job ID exists", () => {
     const body = {
       error: "Another data job is running. Try again when it finishes.",
-      code: "in-flight",
+      code: "IN_FLIGHT",
       existingJobId: null,
     };
     expect(dataManagerOperations.syncTransit.responses[409].schema.parse(body)).toEqual(body);
@@ -139,14 +139,14 @@ describe("data-manager wire contracts", () => {
       false,
     );
     const refused = dataManagerOperations.addTransitSource.responses[409].schema;
-    const actionRefusal = { error: "Source is pinned", code: "source_action_not_allowed" };
+    const actionRefusal = { error: "Source is pinned", code: "SOURCE_ACTION_NOT_ALLOWED" };
     expect(refused.parse(actionRefusal)).toEqual(actionRefusal);
     expect(refused.safeParse({ ok: false, ...actionRefusal }).success).toBe(false);
   });
   it("names a transit scope outside the operations profile in the error envelope", () => {
     const body = {
       error: "Countries outside configured operations profile",
-      code: "outside-operations-profile",
+      code: "OUTSIDE_OPERATIONS_PROFILE",
     };
     const schema = dataManagerOperations.syncTransit.responses[422].schema;
     expect(schema.parse(body)).toEqual(body);
@@ -161,19 +161,21 @@ describe("data-manager wire contracts", () => {
   it("answers offline preparation refusals in the error envelope", () => {
     const refusal = {
       error: "Offline package preparation quota exceeded",
-      code: "principal-quota",
+      code: "PRINCIPAL_QUOTA",
       retryAfterSeconds: 30,
     };
     const responses = dataManagerOperations.prepareOfflinePackage.responses;
     expect(responses[429].schema.parse(refusal)).toEqual(refusal);
-    expect(responses[409].schema.parse({ error: "busy", code: "capacity" })).toEqual({
-      error: "busy",
-      code: "capacity",
+    expect(
+      responses[409].schema.parse({ error: "Offline capacity is full", code: "CAPACITY" }),
+    ).toEqual({
+      error: "Offline capacity is full",
+      code: "CAPACITY",
     });
     expect(
       responses[400].schema.safeParse({
         ok: false,
-        errorCode: "invalid-request",
+        errorCode: "INVALID_REQUEST",
         errorMessage: "minZoom must be non-negative",
       }).success,
     ).toBe(false);
@@ -188,7 +190,7 @@ describe("data-manager wire contracts", () => {
     const body = {
       jobId: "failed-job",
       status: "failed",
-      errorCode: "invalid-request",
+      errorCode: "INVALID_REQUEST",
       errorMessage: "minZoom must be non-negative",
       request: {
         request,

@@ -55,7 +55,7 @@ function render(revisionId: string, payloadDigest: string) {
 
 function request(operation: unknown, body?: unknown) {
   return {
-    version: 2,
+    version: 1,
     requestId: "ops1_0123456789abcdef0123456789ab",
     operationKey,
     issuedAt: new Date(now).toISOString(),
@@ -257,7 +257,7 @@ describe("configuration payload", () => {
               ],
             },
           },
-          { integrationId: "routing-valhalla", values: { "bidirectional-alternates": true } },
+          { integrationId: "routing-valhalla", values: { bidirectionalAlternates: true } },
         ],
       }),
     ).not.toThrow();

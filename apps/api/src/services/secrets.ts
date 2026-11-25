@@ -112,32 +112,74 @@ export function assertSecretsConfigured(): void {
   getSecretsKey();
 }
 
-export function encrypt(plaintext: string): { ciphertext: string; iv: string; tag: string } {
+/**
+ * The version of the secrets key that `encrypt` uses. Every sealed value
+ * records the version it was written with, so a later key can be introduced
+ * beside this one and rows told apart during a rotation.
+ */
+export const SECRETS_KEY_VERSION = 1 as const;
+
+/** One value sealed with the secrets key, as it is stored. */
+export interface SealedSecret {
+  ciphertext: string;
+  iv: string;
+  tag: string;
+  keyVersion: number;
+}
+
+/**
+ * The additional authenticated data that binds a sealed value to the row that
+ * holds it: `<table>:<row natural key>`. A ciphertext copied into another row
+ * then fails to decrypt.
+ */
+export const secretAad = {
+  systemSecret: (key: string) => `system_secret:${key}`,
+  integrationSecret: (integrationId: string, key: string) =>
+    `integration_secret:${integrationId}:${key}`,
+  serviceSecret: (serviceId: string, key: string) => `service_secret:${serviceId}:${key}`,
+  personalTimelineConnection: (userId: string) => `personal_timeline_connection:${userId}`,
+  transitCredentialPreview: (id: string) => `transit_credential_preview:${id}`,
+  transitCredentialAuthorization: (id: string) => `transit_credential_preview:${id}:authorization`,
+  configurationMigrationPreview: (id: string) => `configuration_migration_preview:${id}`,
+  dataSubjectRequestLocator: (id: string) => `data_subject_request:${id}:locator`,
+  platformConfigurationAuthorization: (jobId: string, operationKey: string) =>
+    `platform_configuration_intent:${jobId}:${operationKey}`,
+} as const;
+
+export function encrypt(
+  plaintext: string,
+  aad: string,
+): SealedSecret & { keyVersion: typeof SECRETS_KEY_VERSION } {
   const key = getSecretsKey();
   const iv = randomBytes(IV_BYTES);
   const cipher = createCipheriv(ALGORITHM, key, iv, { authTagLength: TAG_BYTES });
+  cipher.setAAD(Buffer.from(aad, "utf8"));
   const encrypted = Buffer.concat([cipher.update(plaintext, "utf8"), cipher.final()]);
   const tag = cipher.getAuthTag();
   return {
     ciphertext: encrypted.toString("base64"),
     iv: iv.toString("base64"),
     tag: tag.toString("base64"),
+    keyVersion: SECRETS_KEY_VERSION,
   };
 }
 
-export function decrypt(ciphertext: string, iv: string, tag: string): string {
+/** Opens a sealed value for the row named by `aad`. Refuses an unknown key version. */
+export function decrypt(sealed: SealedSecret, aad: string): string {
+  if (sealed.keyVersion !== SECRETS_KEY_VERSION) throw new SecretDecryptionError();
   const key = getSecretsKey();
-  const ivBytes = Buffer.from(iv, "base64");
-  const tagBytes = Buffer.from(tag, "base64");
+  const ivBytes = Buffer.from(sealed.iv, "base64");
+  const tagBytes = Buffer.from(sealed.tag, "base64");
   // A shortened tag would weaken authentication; only the lengths encrypt() writes open.
   if (ivBytes.length !== IV_BYTES || tagBytes.length !== TAG_BYTES) {
     throw new SecretDecryptionError();
   }
   try {
     const decipher = createDecipheriv(ALGORITHM, key, ivBytes, { authTagLength: TAG_BYTES });
+    decipher.setAAD(Buffer.from(aad, "utf8"));
     decipher.setAuthTag(tagBytes);
     const decrypted = Buffer.concat([
-      decipher.update(Buffer.from(ciphertext, "base64")),
+      decipher.update(Buffer.from(sealed.ciphertext, "base64")),
       decipher.final(),
     ]);
     return decrypted.toString("utf8");
@@ -152,25 +194,21 @@ export async function setSecret(
   value: string,
   updatedBy?: string | null,
 ): Promise<void> {
-  const { ciphertext, iv, tag } = encrypt(value);
+  const sealed = encrypt(value, secretAad.integrationSecret(integrationId, key));
   await db
     .insert(integrationSecret)
     .values({
       integrationId,
       key,
-      ciphertext,
-      iv,
-      tag,
-      updatedBy: updatedBy ?? null,
+      ...sealed,
+      updatedByUserId: updatedBy ?? null,
     })
     .onConflictDoUpdate({
       target: [integrationSecret.integrationId, integrationSecret.key],
       set: {
-        ciphertext,
-        iv,
-        tag,
+        ...sealed,
         updatedAt: new Date(),
-        updatedBy: updatedBy ?? null,
+        updatedByUserId: updatedBy ?? null,
       },
     });
 }
@@ -185,7 +223,7 @@ export async function getSecret(integrationId: string, key: string): Promise<str
       )
       .limit(1);
     if (!row) return null;
-    return decrypt(row.ciphertext, row.iv, row.tag);
+    return decrypt(row, secretAad.integrationSecret(integrationId, key));
   } catch (err) {
     processLogger.warn(
       { component: "secrets", err, integrationId, secretKey: key },
@@ -208,7 +246,7 @@ export async function listSecrets(
     .select({
       key: integrationSecret.key,
       updatedAt: integrationSecret.updatedAt,
-      updatedBy: integrationSecret.updatedBy,
+      updatedBy: integrationSecret.updatedByUserId,
     })
     .from(integrationSecret)
     .where(eq(integrationSecret.integrationId, integrationId));
@@ -225,7 +263,7 @@ export async function resolveVaultSecrets(integrationId: string): Promise<Record
     const result: Record<string, string> = {};
     for (const row of rows) {
       try {
-        result[row.key] = decrypt(row.ciphertext, row.iv, row.tag);
+        result[row.key] = decrypt(row, secretAad.integrationSecret(integrationId, row.key));
       } catch (err) {
         processLogger.warn(
           { component: "secrets", err, integrationId, secretKey: row.key },
@@ -251,7 +289,7 @@ export async function listAllSecrets(): Promise<
       integrationId: integrationSecret.integrationId,
       key: integrationSecret.key,
       updatedAt: integrationSecret.updatedAt,
-      updatedBy: integrationSecret.updatedBy,
+      updatedBy: integrationSecret.updatedByUserId,
     })
     .from(integrationSecret);
 }
@@ -267,7 +305,7 @@ export async function resolveIntegrationVaultSecretsStrict(
       (row) => row.integrationId === integrationId,
     )) {
       if (Object.hasOwn(result, row.key)) throw new Error("duplicate secret");
-      result[row.key] = decrypt(row.ciphertext, row.iv, row.tag);
+      result[row.key] = decrypt(row, secretAad.integrationSecret(row.integrationId, row.key));
     }
     return result;
   } catch {

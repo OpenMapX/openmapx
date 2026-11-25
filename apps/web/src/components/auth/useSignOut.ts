@@ -2,13 +2,13 @@
 
 import { authClient } from "@openmapx/core";
 import {
-  clearMangroveSignerStorage,
   MANGROVE_KEYPAIR_QUERY_KEY,
   useKeypairStore,
   useMangroveSigner,
 } from "@openmapx/mangrove-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
+import { clearSignOutWebStorage } from "@/lib/signOutStorage";
 
 /** Signs out, wiping the review-signing keys first. Shared by every sign-out entry. */
 export function useSignOut(): () => Promise<void> {
@@ -23,7 +23,7 @@ export function useSignOut(): () => Promise<void> {
     useKeypairStore.getState().clear();
     queryClient.removeQueries({ queryKey: MANGROVE_KEYPAIR_QUERY_KEY });
     const revocation = signer.controller?.disconnect();
-    clearMangroveSignerStorage(window.sessionStorage);
+    clearSignOutWebStorage();
     if (revocation) {
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {

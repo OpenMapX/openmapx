@@ -1024,8 +1024,8 @@ describe("metered DB API Marketplace health checks", () => {
 
     const integration = makeIntegration(healthCheck);
     integration.config = {
-      "db-bike-client-id": "must-not-be-sent",
-      "db-bike-api-key": "must-not-be-sent",
+      dbBikeClientId: "must-not-be-sent",
+      dbBikeApiKey: "must-not-be-sent",
     };
 
     const results = await executeIntegrationHealthCheck(integration);

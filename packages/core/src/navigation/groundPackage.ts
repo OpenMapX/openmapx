@@ -76,7 +76,7 @@ const MAX_ROUTE_STEPS = 4_000;
 /**
  * Copies only the fields the shell's route schema names.
  *
- * `routeSchema` passes unknown keys through, which is right for forwards
+ * `navigationRouteSchema` passes unknown keys through, which is right for forwards
  * compatibility with the router but wrong for a durable native record: a route
  * that has been through a query client and several components may still be
  * holding references nobody meant to persist.

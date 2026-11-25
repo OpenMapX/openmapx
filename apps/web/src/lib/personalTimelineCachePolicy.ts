@@ -1,12 +1,6 @@
 import { PERSONAL_TIMELINE_QUERY_KEY } from "@openmapx/core";
 import { defaultShouldDehydrateMutation, type QueryClient } from "@tanstack/react-query";
 
-/**
- * Invalidates the old cache format that could contain paused timeline mutation
- * variables, including API keys, through TanStack's default mutation policy.
- */
-export const PERSONAL_TIMELINE_CACHE_BUSTER = "v3-no-private-account-mutations";
-
 export function isPersonalTimelineMutationKey(key: readonly unknown[] | undefined): boolean {
   return key?.[0] === PERSONAL_TIMELINE_QUERY_KEY[0];
 }

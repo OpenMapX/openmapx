@@ -9,6 +9,7 @@ import type {
   LocalDataExecutionKind,
   linkRequestSchema,
 } from "@openmapx/core/data-manager-contracts";
+import type { DataJobTrigger } from "@openmapx/core/jobs";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type postgres from "postgres";
 import type z from "zod/v4";
@@ -20,7 +21,7 @@ import { registerDataManagerRoute } from "../../route-contract.js";
  * country outside the configured operations profile. */
 export class TransitScopeRejected extends Error {
   readonly statusCode = 422;
-  readonly code = "outside-operations-profile";
+  readonly code = "OUTSIDE_OPERATIONS_PROFILE";
   constructor() {
     super("Countries outside configured operations profile");
   }
@@ -28,17 +29,23 @@ export class TransitScopeRejected extends Error {
 
 /** The receiver checks the delegation a caller names, after bearer
  * authentication. A missing receiver never authorizes a compatibility worker. */
+/** What started a job, and the administrator the API started it for. */
+export interface DataJobActor {
+  trigger: DataJobTrigger;
+  triggeredByUserId?: string;
+}
+
 export interface DataExecutionReceiver {
   observeReviewedTransit?(request: {
     key: string;
     countries: string[];
     preflightId: string;
     fingerprint: string;
-    triggeredBy?: string;
+    actor: DataJobActor;
   }): Promise<DataExecutionStatus | null>;
   admitLocal(
     input: DataExecutionInput,
-    options?: { triggeredBy?: string; idempotencyKey?: string },
+    options: DataJobActor & { idempotencyKey?: string },
   ): Promise<DataExecutionStatus>;
   /** Admits in-process work as a durable execution. Admission is awaited; the
    * completion settles once the execution is terminal, with the work's value
@@ -49,11 +56,11 @@ export interface DataExecutionReceiver {
       { kind: Exclude<LocalDataExecutionKind, "generation-link"> }
     >,
     work: (sql: postgres.Sql) => Promise<T>,
-    options?: { triggeredBy?: string },
+    options: DataJobActor,
   ): Promise<{ status: DataExecutionStatus; completion: Promise<T> }>;
   admitMaintenance(
     action: "restart-primary" | "reload-feed-proxy",
-    options?: { triggeredBy: "cron" },
+    options: DataJobActor,
   ): Promise<DataExecutionStatus>;
   subscribe(id: string, onEvent: (event: Record<string, unknown>) => void): () => void;
   legacyResult(id: string): Record<string, unknown> | undefined;
@@ -131,7 +138,10 @@ export function registerDataExecutionApi(
     } catch (error) {
       // The agent tells a busy refusal, which wrote nothing, from other conflicts by this name.
       if ((error as Error).message === "configuration_maintenance_busy")
-        return reply.code(409).send({ error: "configuration_maintenance_busy" });
+        return reply.code(409).send({
+          error: "Configuration maintenance is busy",
+          code: "CONFIGURATION_MAINTENANCE_BUSY",
+        });
       throw error;
     }
   });

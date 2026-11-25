@@ -9,8 +9,8 @@ journal, its lease store and maintenance records, the control records of Data
 Manager and the host CLI, and the Data Manager job rows that the removed
 in-process job path wrote. Each execution now has one record instead of
 several: the agent keeps it on the operation's row in its job journal
-(`infra/docker/state/ops-agent/jobs-v1.json`), Data Manager on the job's row in
-`data_manager.jobs`, and the host CLI and the agent's maintenance steps and
+(`infra/docker/state/ops-agent/jobs.json`), Data Manager on the job's row in
+`data_manager.job`, and the host CLI and the agent's maintenance steps and
 fixed CLI children as one file under `control/executions` in their state
 directory, which no longer holds separate effect, effect-start or lifecycle
 files. None of the old

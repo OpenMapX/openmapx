@@ -57,7 +57,7 @@ describe("operator runtime resources", () => {
         maximum: 256,
       });
     }
-    expect(manifest("valhalla").configSchema?.properties).toHaveProperty("build_elevation");
+    expect(manifest("valhalla").configSchema?.properties).toHaveProperty("BUILD_ELEVATION");
     expect(manifest("dawarich-app").configSchema?.properties).toHaveProperty("DATABASE_PASSWORD");
   });
   it("renders resource limits instead of environment, preserving unoverridden defaults and GPU", () => {
@@ -116,8 +116,8 @@ describe("operator runtime resources", () => {
       render("elasticsearch", { OPENMAPX_JAVA_HEAP_MIB: 1024 }).environment,
     ).not.toHaveProperty("OPENMAPX_JAVA_HEAP_MIB");
     expect(
-      render("valhalla", { serve_tiles: false, build_elevation: true }).environment,
-    ).toMatchObject({ serve_tiles: "False", build_elevation: "True" });
+      render("valhalla", { SERVE_TILES: false, BUILD_ELEVATION: true }).environment,
+    ).toMatchObject({ SERVE_TILES: "False", BUILD_ELEVATION: "True" });
     expect(() =>
       render("elasticsearch", { OPENMAPX_JAVA_HEAP_MIB: "1024 -javaagent:x" }),
     ).toThrow();

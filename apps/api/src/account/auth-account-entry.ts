@@ -79,7 +79,7 @@ export async function accountAuthEntry<T>(
   const targetId =
     typeof body.userId === "string" ? body.userId : descriptor.action === "delete" ? actorId : null;
   if (descriptor.action === "password")
-    assertAccountRecoveryProof(actorId, targetId, "account.password.set");
+    assertAccountRecoveryProof(actorId, targetId, "user.password.set");
   if (descriptor.action === "role") {
     if (!actorId || !targetId || !role)
       throw new APIError("UNAUTHORIZED", {

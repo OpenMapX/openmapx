@@ -153,6 +153,8 @@ export const REROUTE_RETRY_DELAYS_MS = [3_000, 6_000, 12_000, 24_000, 30_000] as
 export const REROUTE_RETRY_JITTER_MS = 1_000;
 /** Consecutive failures after which rerouting is reported as failed. */
 export const REROUTE_FAILURES_REPORTED = REROUTE_RETRY_DELAYS_MS.length;
+/** The failure code of a reroute the server refused because this build is too old. */
+export const REROUTE_UPDATE_REQUIRED = "update-required";
 /** Successful reroutes within this window that start the churn pause. */
 export const REROUTE_CHURN_WINDOW_MS = 120_000;
 export const REROUTE_CHURN_LIMIT = 3;
@@ -268,8 +270,12 @@ export function onRerouteFailed(
   jitter01: number,
 ): RerouteRuntime {
   // Counted up to the point where rerouting is reported as failed; the delay
-  // stays at its longest from there on.
-  const attempts = Math.min(runtime.attempts + 1, REROUTE_FAILURES_REPORTED);
+  // stays at its longest from there on. A server that no longer serves this
+  // build will refuse every retry, so that failure is reported at once.
+  const attempts =
+    code === REROUTE_UPDATE_REQUIRED
+      ? REROUTE_FAILURES_REPORTED
+      : Math.min(runtime.attempts + 1, REROUTE_FAILURES_REPORTED);
   return {
     status: attempts >= REROUTE_FAILURES_REPORTED ? "failed" : "pending",
     attempts,

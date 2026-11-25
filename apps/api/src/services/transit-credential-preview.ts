@@ -8,7 +8,7 @@ import { and, eq, lt, sql } from "drizzle-orm";
 import { db } from "../db";
 import { transitCredentialPreview } from "../db/schema";
 import { withPreservationRetentionLock } from "../privacy/preservation";
-import { decrypt, encrypt } from "./secrets";
+import { decrypt, encrypt, secretAad } from "./secrets";
 import { pruneTransitCredentialPreviews } from "./transit-credential-retention";
 export class TransitCredentialConflict extends Error {
   constructor(readonly code = "TRANSIT_CREDENTIALS_CHANGED") {
@@ -46,7 +46,7 @@ export function feedCredentialIntent(input: {
   return createHash("sha256")
     .update(
       canonicalJson({
-        purpose: "transit.credentials",
+        purpose: "transit.credential.update",
         previewId: input.previewId,
         actorId: input.actorId,
         catalogRevisionId: input.catalogRevisionId,
@@ -63,11 +63,11 @@ export function feedCredentialIntent(input: {
 function decoded(row: typeof transitCredentialPreview.$inferSelect): PrivateFeedCredentialPreview {
   try {
     const value: PrivateFeedCredentialPreview = JSON.parse(
-      decrypt(row.ciphertext, row.iv, row.tag),
+      decrypt(row, secretAad.transitCredentialPreview(row.id)),
     );
     if (
       value.version !== 1 ||
-      value.actorId !== row.actorId ||
+      value.actorId !== row.actorUserId ||
       value.operationKey !== row.operationKey ||
       value.preview.previewId !== row.id ||
       value.preview.intentFingerprint !== row.intentFingerprint ||
@@ -75,7 +75,7 @@ function decoded(row: typeof transitCredentialPreview.$inferSelect): PrivateFeed
       feedCredentialIntent({
         ...value.preview,
         previewId: row.id,
-        actorId: row.actorId,
+        actorId: row.actorUserId,
         credentialsRevision: value.preview.credentialsRevision,
         changes: value.changes,
       }) !== row.intentFingerprint
@@ -104,7 +104,7 @@ export async function retainFeedCredentialPreview(
       .from(transitCredentialPreview)
       .where(
         and(
-          eq(transitCredentialPreview.actorId, input.actorId),
+          eq(transitCredentialPreview.actorUserId, input.actorId),
           eq(transitCredentialPreview.operationKey, input.operationKey),
         ),
       )
@@ -135,7 +135,7 @@ export async function retainFeedCredentialPreview(
       await tx
         .select({
           total: sql<number>`count(*)::int`,
-          actor: sql<number>`count(*) filter (where ${transitCredentialPreview.actorId} = ${input.actorId})::int`,
+          actor: sql<number>`count(*) filter (where ${transitCredentialPreview.actorUserId} = ${input.actorId})::int`,
         })
         .from(transitCredentialPreview),
       0,
@@ -169,11 +169,11 @@ export async function retainFeedCredentialPreview(
       throw new TransitCredentialConflict("TRANSIT_CREDENTIALS_PREVIEW_CAPACITY");
     await tx.insert(transitCredentialPreview).values({
       id: previewId,
-      actorId: input.actorId,
+      actorUserId: input.actorId,
       operationKey: input.operationKey,
       intentFingerprint: preview.intentFingerprint,
       expiresAt: new Date(expiresAt),
-      ...encrypt(plaintext),
+      ...encrypt(plaintext, secretAad.transitCredentialPreview(previewId)),
     });
     return preview;
   });
@@ -188,7 +188,7 @@ export async function readFeedCredentialPreview(
     .where(
       and(
         eq(transitCredentialPreview.id, input.previewId),
-        eq(transitCredentialPreview.actorId, input.actorId),
+        eq(transitCredentialPreview.actorUserId, input.actorId),
         eq(transitCredentialPreview.operationKey, input.operationKey),
         eq(transitCredentialPreview.intentFingerprint, input.intentFingerprint),
       ),
@@ -208,7 +208,7 @@ export async function readRetainedFeedCredentialPreview(
     .from(transitCredentialPreview)
     .where(
       and(
-        eq(transitCredentialPreview.actorId, input.actorId),
+        eq(transitCredentialPreview.actorUserId, input.actorId),
         eq(transitCredentialPreview.operationKey, input.operationKey),
       ),
     )

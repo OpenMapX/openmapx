@@ -143,7 +143,7 @@ it("publishes the validated planet snapshot unclipped without following a pre-cr
   await expect(pullOverture(options)).resolves.toBe(join(options.outDir, "planet.parquet"));
   expect(readFileSync(protectedFile, "utf8")).toBe("keep this file");
   expect(readOverturePullContract(options.dataDir, release, "planet")).toMatchObject({
-    contractVersion: 3,
+    contractVersion: 1,
     rowCount: 2,
     contributors: ["meta"],
     parquetFile: "planet.parquet",
@@ -219,7 +219,7 @@ it("clips regional pulls via staged WKT, SET VARIABLE region_poly, per-ring ST_M
   expect(statsSql).toContain("AS outside_region");
 
   expect(readOverturePullContract(options.dataDir, release, "africa/south-africa")).toMatchObject({
-    contractVersion: 3,
+    contractVersion: 1,
     regionEnvelopes: [{ west: 16.5, south: -34.8, east: 32.9, north: -22.1 }],
     regionClip: {
       kind: "geofabrik-poly",

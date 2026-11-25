@@ -2,7 +2,7 @@ import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest"
 
 // The policy module pulls in the DB pool and the integration host at import
 // time; stub both so these stay offline. `getAllIntegrations` and the
-// system_settings rows are made controllable so the gating resolvers can be
+// system_setting rows are made controllable so the gating resolvers can be
 // driven directly.
 type FakeSource = { sourceId: string; commercialUse?: string };
 type FakeIntegration = { id: string; manifest: { dataSources?: FakeSource[] } };
@@ -13,9 +13,9 @@ const { getAllIntegrationsMock, dbRowsMock } = vi.hoisted(() => ({
 }));
 
 vi.mock("../../db", () => ({
-  db: { select: () => ({ from: () => Promise.resolve(dbRowsMock()) }) },
+  db: { select: () => ({ from: () => ({ where: () => Promise.resolve(dbRowsMock()) }) }) },
 }));
-vi.mock("../../db/schema", () => ({ systemSettings: {} }));
+vi.mock("../../db/schema", () => ({ systemSetting: {}, systemSecret: {} }));
 vi.mock("../../integration-host.js", () => ({
   getAllIntegrations: () => getAllIntegrationsMock(),
 }));
@@ -34,10 +34,10 @@ const { appLogger } = await import("../app-logger.js");
 
 beforeEach(() => {
   vi.unstubAllEnvs();
-  // Neutralize any ambient OPENMAPX_ALLOW_* in the host env so each test starts
+  // Neutralize any ambient DATA_USE_ALLOW_* in the host env so each test starts
   // from "unset" (empty string reads as undefined); tests opt in via stubEnv.
-  vi.stubEnv("OPENMAPX_ALLOW_NONCOMMERCIAL", "");
-  vi.stubEnv("OPENMAPX_ALLOW_GREY_AREA", "");
+  vi.stubEnv("DATA_USE_ALLOW_NON_COMMERCIAL", "");
+  vi.stubEnv("DATA_USE_ALLOW_GREY_AREA", "");
   invalidateDataUsePolicy();
   getAllIntegrationsMock.mockReturnValue([]);
   dbRowsMock.mockReturnValue([]);
@@ -49,25 +49,25 @@ describe("getDataUsePolicy", () => {
   });
 
   it("an env var overrides the default", async () => {
-    vi.stubEnv("OPENMAPX_ALLOW_NONCOMMERCIAL", "false");
+    vi.stubEnv("DATA_USE_ALLOW_NON_COMMERCIAL", "false");
     expect(await getDataUsePolicy()).toEqual({ allowNonCommercial: false, allowGreyArea: true });
   });
 
-  it("falls back to the system_settings row when no env var pins the key", async () => {
-    dbRowsMock.mockReturnValue([{ key: "allowGreyArea", value: false }]);
+  it("falls back to the system_setting row when no env var pins the key", async () => {
+    dbRowsMock.mockReturnValue([{ key: "dataUse.allowGreyArea", value: false }]);
     expect(await getDataUsePolicy()).toEqual({ allowNonCommercial: true, allowGreyArea: false });
   });
 
   it("an env var wins over the DB row for the same key", async () => {
-    vi.stubEnv("OPENMAPX_ALLOW_GREY_AREA", "true");
-    dbRowsMock.mockReturnValue([{ key: "allowGreyArea", value: false }]);
+    vi.stubEnv("DATA_USE_ALLOW_GREY_AREA", "true");
+    dbRowsMock.mockReturnValue([{ key: "dataUse.allowGreyArea", value: false }]);
     expect((await getDataUsePolicy()).allowGreyArea).toBe(true);
   });
 
   it("caches the resolved policy until invalidated", async () => {
-    vi.stubEnv("OPENMAPX_ALLOW_NONCOMMERCIAL", "false");
+    vi.stubEnv("DATA_USE_ALLOW_NON_COMMERCIAL", "false");
     expect((await getDataUsePolicy()).allowNonCommercial).toBe(false);
-    vi.stubEnv("OPENMAPX_ALLOW_NONCOMMERCIAL", "true"); // changed underneath the cache
+    vi.stubEnv("DATA_USE_ALLOW_NON_COMMERCIAL", "true"); // changed underneath the cache
     expect((await getDataUsePolicy()).allowNonCommercial).toBe(false);
     invalidateDataUsePolicy();
     expect((await getDataUsePolicy()).allowNonCommercial).toBe(true);
@@ -91,25 +91,25 @@ describe("getGatedSourceIds", () => {
   });
 
   it("gates only commercialUse:'no' sources when non-commercial is disallowed", async () => {
-    vi.stubEnv("OPENMAPX_ALLOW_NONCOMMERCIAL", "false");
+    vi.stubEnv("DATA_USE_ALLOW_NON_COMMERCIAL", "false");
     expect([...(await getGatedSourceIds())]).toEqual(["nc-src"]);
   });
 
   it("gates only commercialUse:'unknown' sources when grey-area is disallowed", async () => {
-    vi.stubEnv("OPENMAPX_ALLOW_GREY_AREA", "false");
+    vi.stubEnv("DATA_USE_ALLOW_GREY_AREA", "false");
     expect([...(await getGatedSourceIds())]).toEqual(["grey-src"]);
   });
 
   it("gates both 'no' and 'unknown' when both are disallowed", async () => {
-    vi.stubEnv("OPENMAPX_ALLOW_NONCOMMERCIAL", "false");
-    vi.stubEnv("OPENMAPX_ALLOW_GREY_AREA", "false");
+    vi.stubEnv("DATA_USE_ALLOW_NON_COMMERCIAL", "false");
+    vi.stubEnv("DATA_USE_ALLOW_GREY_AREA", "false");
     expect([...(await getGatedSourceIds())].sort()).toEqual(["grey-src", "nc-src"]);
   });
 });
 
 describe("getGatedIntegrationIds", () => {
   it("includes an integration only when ALL its sources are gated", async () => {
-    vi.stubEnv("OPENMAPX_ALLOW_NONCOMMERCIAL", "false");
+    vi.stubEnv("DATA_USE_ALLOW_NON_COMMERCIAL", "false");
     getAllIntegrationsMock.mockReturnValue([
       {
         id: "fully",
@@ -151,14 +151,14 @@ describe("synchronous gated getters (preSerialization hook path)", () => {
   });
 
   it("mirrors the async set after a refresh", async () => {
-    vi.stubEnv("OPENMAPX_ALLOW_NONCOMMERCIAL", "false");
+    vi.stubEnv("DATA_USE_ALLOW_NON_COMMERCIAL", "false");
     await refreshDataUsePolicy();
     expect([...getGatedSourceIdsSync()]).toEqual(["nc-src"]);
     expect([...(await getGatedSourceIds())]).toEqual(["nc-src"]);
   });
 
   it("keeps the last-good set after invalidate — no allow-everything window", async () => {
-    vi.stubEnv("OPENMAPX_ALLOW_NONCOMMERCIAL", "false");
+    vi.stubEnv("DATA_USE_ALLOW_NON_COMMERCIAL", "false");
     await refreshDataUsePolicy();
     expect(getGatedSourceIdsSync().has("nc-src")).toBe(true);
     invalidateDataUsePolicy();
@@ -286,7 +286,7 @@ describe("road-condition writer policy authority", () => {
       allowGreyArea: true,
       allowNonCommercial: true,
     });
-    vi.stubEnv("OPENMAPX_ALLOW_GREY_AREA", "false");
+    vi.stubEnv("DATA_USE_ALLOW_GREY_AREA", "false");
     invalidateDataUsePolicy();
     expect(await getRoadConditionsPolicySnapshot()).toMatchObject({
       allowGreyArea: false,
@@ -320,8 +320,8 @@ describe("a failed policy refresh", () => {
 
   it("keeps the stored exclusions from the last good policy", async () => {
     dbRowsMock.mockReturnValue([
-      { key: "allowNonCommercial", value: false },
-      { key: "allowGreyArea", value: false },
+      { key: "dataUse.allowNonCommercial", value: false },
+      { key: "dataUse.allowGreyArea", value: false },
     ]);
     await refreshDataUsePolicy();
     expect([...getGatedSourceIdsSync()].sort()).toEqual(["grey-src", "nc-src"]);
@@ -337,7 +337,7 @@ describe("a failed policy refresh", () => {
       expect.objectContaining({
         level: "warn",
         source: "data-use-policy",
-        msg: expect.stringContaining("keeping the last good policy"),
+        message: expect.stringContaining("keeping the last good policy"),
       }),
     );
     // Display stays restricted, but the writer is told the policy is not proven current.
@@ -345,23 +345,23 @@ describe("a failed policy refresh", () => {
   });
 
   it("applies the stored policy again once the database answers", async () => {
-    dbRowsMock.mockReturnValue([{ key: "allowNonCommercial", value: false }]);
+    dbRowsMock.mockReturnValue([{ key: "dataUse.allowNonCommercial", value: false }]);
     await refreshDataUsePolicy();
     outage();
     await refreshDataUsePolicy();
     expect([...getGatedSourceIdsSync()]).toEqual(["nc-src"]);
 
     dbRowsMock.mockReset();
-    dbRowsMock.mockReturnValue([{ key: "allowNonCommercial", value: true }]);
+    dbRowsMock.mockReturnValue([{ key: "dataUse.allowNonCommercial", value: true }]);
     await refreshDataUsePolicy();
     expect([...getGatedSourceIdsSync()]).toEqual([]);
     expect((await getRoadConditionsPolicySnapshot()).authoritative).toBe(true);
   });
 
   it("still lets an environment pin override the kept policy", async () => {
-    dbRowsMock.mockReturnValue([{ key: "allowNonCommercial", value: false }]);
+    dbRowsMock.mockReturnValue([{ key: "dataUse.allowNonCommercial", value: false }]);
     await refreshDataUsePolicy();
-    vi.stubEnv("OPENMAPX_ALLOW_NONCOMMERCIAL", "true");
+    vi.stubEnv("DATA_USE_ALLOW_NON_COMMERCIAL", "true");
     outage();
     await refreshDataUsePolicy();
     expect((await getDataUsePolicy()).allowNonCommercial).toBe(true);
@@ -387,14 +387,14 @@ describe("a failed policy refresh", () => {
       expect.objectContaining({
         level: "warn",
         source: "data-use-policy",
-        msg: expect.stringContaining("could not be loaded"),
+        message: expect.stringContaining("could not be loaded"),
       }),
     );
     expect((await fresh.getRoadConditionsPolicySnapshot()).authoritative).toBe(false);
 
     // The next successful load replaces the fallback.
     dbRowsMock.mockReset();
-    dbRowsMock.mockReturnValue([{ key: "allowNonCommercial", value: false }]);
+    dbRowsMock.mockReturnValue([{ key: "dataUse.allowNonCommercial", value: false }]);
     await fresh.refreshDataUsePolicy();
     expect([...fresh.getGatedSourceIdsSync()]).toEqual(["nc-src"]);
     expect((await fresh.getRoadConditionsPolicySnapshot()).authoritative).toBe(true);
@@ -403,7 +403,7 @@ describe("a failed policy refresh", () => {
   it("lets an environment pin allow a class even when the very first load fails", async () => {
     vi.resetModules();
     const fresh = await import("../data-use-policy.js");
-    vi.stubEnv("OPENMAPX_ALLOW_NONCOMMERCIAL", "true");
+    vi.stubEnv("DATA_USE_ALLOW_NON_COMMERCIAL", "true");
     outage();
 
     await fresh.refreshDataUsePolicy();

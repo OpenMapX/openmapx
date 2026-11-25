@@ -61,10 +61,10 @@ const service = "service" as const;
 const admin = "admin" as const;
 const sourceParams = z.strictObject({ sourceId: z.string().min(1) });
 export const adminSourceMutationRequestSchema = transitMutationRequestSchema.omit({
-  triggeredBy: true,
+  triggeredByUserId: true,
 });
 export const adminAddTransitSourceRequestSchema = addTransitSourceRequestSchema.omit({
-  triggeredBy: true,
+  triggeredByUserId: true,
 });
 export const adminTransitSyncRequestSchema = transitPreflightSelectionSchema.extend({
   preflightId: z.uuid(),

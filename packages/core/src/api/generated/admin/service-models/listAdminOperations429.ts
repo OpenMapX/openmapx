@@ -3,6 +3,8 @@
 
 export type ListAdminOperations429 = {
   error: string;
+  /** @pattern ^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$ */
+  code?: string;
   /**
    * @minimum 0
    * @maximum 9007199254740991

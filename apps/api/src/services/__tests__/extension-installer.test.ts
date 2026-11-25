@@ -152,7 +152,7 @@ let currentJob: JobContext | undefined;
  * checkpoint, so a second context given the same `checkpointResult` resumes
  * the job.
  */
-function makeCtx(jobType = "extension.install"): JobContext {
+function makeCtx(jobType: JobContext["jobType"] = "extension.install"): JobContext {
   const ctx: JobContext = {
     jobId: JOB_ID,
     jobType,
@@ -220,6 +220,7 @@ const MANIFEST = {
   id: "bundle-x",
   name: "Bundle X",
   version: "1.2.3",
+  platform: "1.0",
   services: [{ repo: "https://github.com/example/repo.git", service: "svc-one" }],
   integrations: [INTEGRATION],
 } satisfies ExtensionManifest;
@@ -237,6 +238,7 @@ const INTEGRATION_ONLY = {
   id: "bundle-x",
   name: "Bundle X",
   version: "1.2.3",
+  platform: "1.0",
   integrations: [
     { artifact: "https://ex.example/intg-one.tar.gz", id: "intg-one", sha256: "a".repeat(64) },
   ],
@@ -387,15 +389,19 @@ afterEach(() => {
 });
 
 describe("installExtension", () => {
-  it.each([undefined, "0.0", "1.0.0", "2.0", "10.0", "arbitrary-release"])(
-    "blocks critical preview and queued execution regardless of maxVersion %s",
-    async (maxVersion) => {
+  it.each([
+    [undefined, ["0.1.0", "1.0.0", "2.0.0", "10.0.0"]],
+    ["1.0.0", ["0.1.0", "1.0.0-rc.1", "1.0.0"]],
+    ["10.0.0", ["2.0.0", "10.0.0"]],
+  ])(
+    "blocks critical preview and queued execution up to maxVersion %s",
+    async (maxVersion, versions) => {
       vi.mocked(getKillSwitch).mockResolvedValue({
         removed: new Map(),
         critical: new Map([[MANIFEST.id, { reason: "Synthetic advisory", maxVersion }]]),
         stale: false,
       });
-      for (const version of ["0.1", "1.0.0", "2.0", "10.0", "arbitrary-version"]) {
+      for (const version of versions) {
         const opts = { manifest: { ...MANIFEST, version }, sourceTrust: "community" as const };
         await expect(previewExtensionInstall(opts)).rejects.toThrow(/critical/);
         await expect(installExtension(makeCtx(), opts)).rejects.toThrow(/critical/);
@@ -406,13 +412,23 @@ describe("installExtension", () => {
       expect(publishIntegrationMock).not.toHaveBeenCalled();
     },
   );
+  it("lets a version newer than the advisory's maxVersion through", async () => {
+    vi.mocked(getKillSwitch).mockResolvedValue({
+      removed: new Map(),
+      critical: new Map([[MANIFEST.id, { reason: "Fixed in 1.2.4", maxVersion: "1.2.3" }]]),
+      stale: false,
+    });
+    const opts = { manifest: { ...MANIFEST, version: "1.2.4" }, sourceTrust: "community" as const };
+    await expect(previewExtensionInstall(opts)).resolves.toBeDefined();
+    await expect(installExtension(makeCtx(), opts)).resolves.toBeDefined();
+  });
   it("rechecks revocation after preview while queued and permits flow once cleared", async () => {
     const opts = { manifest: MANIFEST, sourceTrust: "community" as const };
     await previewExtensionInstall(opts);
     inspectMock.mockClear();
     vi.mocked(getKillSwitch).mockResolvedValue({
       removed: new Map(),
-      critical: new Map([[MANIFEST.id, { reason: "Arrived while queued", maxVersion: "0" }]]),
+      critical: new Map([[MANIFEST.id, { reason: "Arrived while queued", maxVersion: "2.0.0" }]]),
       stale: true,
     });
     await expect(installExtension(makeCtx(), opts)).rejects.toThrow(/critical/);

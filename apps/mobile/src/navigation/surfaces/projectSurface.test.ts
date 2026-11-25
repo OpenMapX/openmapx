@@ -148,6 +148,23 @@ it("shows the upcoming maneuver rather than the maneuver already performed", () 
   });
   expect(projectSurface(s, now)?.instruction).toBe("Turn right into Example Street");
 });
+it("asks for an app update when the server refused a reroute for this build", () => {
+  const s = ground();
+  s.payload.offRoute = true;
+  s.payload.reroute = { status: "failed", attempts: 5, lastFailureCode: "update-required" };
+  const p = requireProjection(s);
+  expect(p.instruction).toBe("Update the app to reroute");
+  expect(p.compactText).toBe("Update app");
+  expect(p.detail).toBe("");
+});
+it("asks for an app update when the server refused live transit updates", () => {
+  const s = transitSessionFixture();
+  s.payload.tickState.currentLegIndex = 1;
+  s.payload.tickState.phase = "riding";
+  s.lastAcceptedFix = { coords: [8.68, 50.11], accuracy: 5, timestampMs: now };
+  s.payload.refresh = { status: "broken", generation: 1, attempts: 0, updateRequired: true };
+  expect(projectSurface(s, now)?.detail).toBe("Update the app for live times");
+});
 it("hides outdated remaining-distance and ETA while rerouting or GPS is weak", () => {
   const s = ground();
   s.payload.offRoute = true;

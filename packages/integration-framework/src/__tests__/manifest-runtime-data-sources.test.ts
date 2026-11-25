@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { validateDataSource, validateManifest } from "../manifest.js";
+import { validateDataSource, validateManifest as validateWithProvenance } from "../manifest.js";
+
+const validateManifest = (raw: unknown) => validateWithProvenance(raw, { firstParty: true });
 
 const source = {
   sourceId: "nl-ndw-events",

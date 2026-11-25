@@ -3,7 +3,7 @@
   "type": "object",
   "required": ["version", "sources", "patches", "quarantine"],
   "properties": {
-    "version": { "const": 3 },
+    "version": { "const": 1 },
     "comment": { "type": "string" },
     "sources": {
       "type": "array",

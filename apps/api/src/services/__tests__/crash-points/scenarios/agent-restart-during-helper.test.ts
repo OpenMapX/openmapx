@@ -21,7 +21,7 @@ crashScenario({
     await host.restart("agent");
     apiRecreate.release();
     const job = await host.waitForJob(submitted.jobId as string);
-    expect(job.status).toBe("success");
+    expect(job.status).toBe("succeeded");
     const recreated = host
       .dockerEffects({ command: "compose up", caller: "helper", since: start })
       .map((call) => call.args.at(-1));

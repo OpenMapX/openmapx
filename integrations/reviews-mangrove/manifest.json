@@ -33,7 +33,6 @@
   },
   "healthCheckIntervalMs": 900000,
   "quality": "built-in",
-  "category": "External",
   "dataSources": [
     {
       "sourceId": "mangrove",

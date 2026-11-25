@@ -13,7 +13,7 @@
           "min_zoom": 13,
           "tenant": false,
           "sources": "osm,overture",
-          "format_version": 2,
+          "format_version": 1,
           "_mapAttributions": "sha256:feaba46ea8fbc003f5aeff45fd636cab5a012a77020eef637b6da1eea3e412d5",
           "field_contributors": "sha256:f129d88ab81ed39b79bc399b53da014bba2be6922cf6eeca90a090a9ea37e158",
           "source_lineage": "{\"release\": \"2026-10-01.0\", \"sources\": [{\"dataset\": \"meta\", \"property\": \"/names/primary\"}]}"
@@ -29,7 +29,7 @@
           "min_zoom": 15,
           "tenant": false,
           "sources": "osm",
-          "format_version": 2,
+          "format_version": 1,
           "_mapAttributions": "sha256:32b5fa1734afd208a956f7941464c305326489ad8ff6d6660fbfa2a7ced617af",
           "field_contributors": "sha256:5db61ef8c5ca26d5c12c86cb06ccb448b57fb4060f1bf1996434552d4d6bb4e5"
         },
@@ -46,7 +46,7 @@
           "min_zoom": 15,
           "tenant": false,
           "sources": "overture",
-          "format_version": 2,
+          "format_version": 1,
           "_mapAttributions": "[{\"name\": \"Overture Maps\", \"sourceId\": \"overture\"}, {\"name\": \"Microsoft\", \"sourceId\": \"microsoft-places\"}]",
           "field_contributors": "sha256:7ca20997a0351dcc1c2a784a8776de8a759addf064e9c2429fe230c33843f1b9",
           "source_lineage": "{\"release\": \"2026-10-01.0\", \"sources\": [{\"dataset\": \"Microsoft\", \"property\": \"/names/common/de\"}]}"
@@ -67,7 +67,7 @@
           "min_zoom": 13,
           "tenant": false,
           "sources": "osm,overture",
-          "format_version": 2,
+          "format_version": 1,
           "_mapAttributions": "sha256:feaba46ea8fbc003f5aeff45fd636cab5a012a77020eef637b6da1eea3e412d5",
           "field_contributors": "sha256:f129d88ab81ed39b79bc399b53da014bba2be6922cf6eeca90a090a9ea37e158",
           "source_lineage": "{\"release\": \"2026-10-01.0\", \"sources\": [{\"dataset\": \"meta\", \"property\": \"/names/primary\"}]}"
@@ -85,7 +85,7 @@
           "min_zoom": 18,
           "tenant": true,
           "sources": "osm",
-          "format_version": 2,
+          "format_version": 1,
           "_mapAttributions": "sha256:32b5fa1734afd208a956f7941464c305326489ad8ff6d6660fbfa2a7ced617af",
           "field_contributors": "sha256:5db61ef8c5ca26d5c12c86cb06ccb448b57fb4060f1bf1996434552d4d6bb4e5"
         },
@@ -110,7 +110,7 @@
           "min_zoom": 13,
           "tenant": false,
           "sources": "osm,overture",
-          "format_version": 2,
+          "format_version": 1,
           "_mapAttributions": "sha256:feaba46ea8fbc003f5aeff45fd636cab5a012a77020eef637b6da1eea3e412d5",
           "field_contributors": "sha256:f129d88ab81ed39b79bc399b53da014bba2be6922cf6eeca90a090a9ea37e158",
           "source_lineage": "{\"release\": \"2026-10-01.0\", \"sources\": [{\"dataset\": \"meta\", \"property\": \"/names/primary\"}]}"
@@ -126,7 +126,7 @@
           "min_zoom": 15,
           "tenant": false,
           "sources": "osm",
-          "format_version": 2,
+          "format_version": 1,
           "_mapAttributions": "sha256:32b5fa1734afd208a956f7941464c305326489ad8ff6d6660fbfa2a7ced617af",
           "field_contributors": "sha256:5db61ef8c5ca26d5c12c86cb06ccb448b57fb4060f1bf1996434552d4d6bb4e5"
         },
@@ -146,7 +146,7 @@
           "min_zoom": 13,
           "tenant": false,
           "sources": "osm,overture",
-          "format_version": 2,
+          "format_version": 1,
           "_mapAttributions": "sha256:feaba46ea8fbc003f5aeff45fd636cab5a012a77020eef637b6da1eea3e412d5",
           "field_contributors": "sha256:f129d88ab81ed39b79bc399b53da014bba2be6922cf6eeca90a090a9ea37e158",
           "source_lineage": "{\"release\": \"2026-10-01.0\", \"sources\": [{\"dataset\": \"meta\", \"property\": \"/names/primary\"}]}"
@@ -164,7 +164,7 @@
           "min_zoom": 18,
           "tenant": true,
           "sources": "osm",
-          "format_version": 2,
+          "format_version": 1,
           "_mapAttributions": "sha256:32b5fa1734afd208a956f7941464c305326489ad8ff6d6660fbfa2a7ced617af",
           "field_contributors": "sha256:5db61ef8c5ca26d5c12c86cb06ccb448b57fb4060f1bf1996434552d4d6bb4e5"
         },
@@ -182,7 +182,7 @@
           "min_zoom": 13,
           "tenant": false,
           "sources": "osm,overture",
-          "format_version": 2,
+          "format_version": 1,
           "_mapAttributions": "sha256:feaba46ea8fbc003f5aeff45fd636cab5a012a77020eef637b6da1eea3e412d5",
           "field_contributors": "sha256:14dcc4a9d30b510b39ee6aff40ce2abe0faa1ab59e5852c6afa758ede69ac2bd",
           "source_lineage": "{\"release\": \"2026-10-01.0\", \"sources\": []}"
@@ -200,7 +200,7 @@
           "min_zoom": 13,
           "tenant": false,
           "sources": "osm",
-          "format_version": 2,
+          "format_version": 1,
           "_mapAttributions": "sha256:32b5fa1734afd208a956f7941464c305326489ad8ff6d6660fbfa2a7ced617af",
           "field_contributors": "sha256:5db61ef8c5ca26d5c12c86cb06ccb448b57fb4060f1bf1996434552d4d6bb4e5"
         },
@@ -215,7 +215,7 @@
           "min_zoom": 13,
           "tenant": false,
           "sources": "osm",
-          "format_version": 2,
+          "format_version": 1,
           "_mapAttributions": "sha256:32b5fa1734afd208a956f7941464c305326489ad8ff6d6660fbfa2a7ced617af",
           "field_contributors": "sha256:5db61ef8c5ca26d5c12c86cb06ccb448b57fb4060f1bf1996434552d4d6bb4e5"
         },
@@ -232,7 +232,7 @@
           "min_zoom": 13,
           "tenant": false,
           "sources": "osm",
-          "format_version": 2,
+          "format_version": 1,
           "_mapAttributions": "sha256:32b5fa1734afd208a956f7941464c305326489ad8ff6d6660fbfa2a7ced617af",
           "field_contributors": "sha256:5db61ef8c5ca26d5c12c86cb06ccb448b57fb4060f1bf1996434552d4d6bb4e5"
         },
@@ -247,7 +247,7 @@
           "min_zoom": 13,
           "tenant": false,
           "sources": "osm",
-          "format_version": 2,
+          "format_version": 1,
           "_mapAttributions": "sha256:32b5fa1734afd208a956f7941464c305326489ad8ff6d6660fbfa2a7ced617af",
           "field_contributors": "sha256:5db61ef8c5ca26d5c12c86cb06ccb448b57fb4060f1bf1996434552d4d6bb4e5"
         },

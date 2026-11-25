@@ -18,7 +18,6 @@ async function fixture(mode = "success") {
   const root = mkdtempSync(join(tmpdir(), "openmapx-update-client-"));
   cleanup.push(() => rmSync(root, { recursive: true, force: true }));
   vi.stubEnv("OPENMAPX_RELEASE", "main");
-  vi.stubEnv("OPENMAPX_LOCAL_ADMIN_TOKEN", "must-never-be-sent");
   const manifest: services.ReleaseManifest = {
     schemaVersion: 1,
     release: "candidate",
@@ -38,7 +37,7 @@ async function fixture(mode = "success") {
     url: string;
     key?: string;
     body: Record<string, unknown>;
-    local?: string;
+    cookie?: string;
   }> = [];
   const backupId = randomUUID(),
     applyId = randomUUID();
@@ -73,7 +72,7 @@ async function fixture(mode = "success") {
     finishedAt: new Date().toISOString(),
     cancelable: false,
     source: "application",
-    status: "success",
+    status: "succeeded",
     result,
     logs: [],
     stages: [],
@@ -90,7 +89,7 @@ async function fixture(mode = "success") {
       url,
       key: req.headers["idempotency-key"] as string | undefined,
       body,
-      local: req.headers["x-openmapx-local-admin"] as string | undefined,
+      cookie: req.headers.cookie,
     });
     res.setHeader("content-type", "application/json");
     const send = (value: unknown, status = 200) => {
@@ -116,7 +115,7 @@ async function fixture(mode = "success") {
           logs: _logs,
           stages: _stages,
           ...summary
-        } = detail(randomUUID(), "service.bulk", null);
+        } = detail(randomUUID(), "service.batch.run", null);
         return send({ jobs: [{ ...summary, actor: null, status: "running" }], total: 1 });
       }
       return send({ jobs: [], total: 0 });
@@ -138,7 +137,7 @@ async function fixture(mode = "success") {
     }
     if (req.url?.startsWith(`/api/admin/jobs/${backupId}`))
       return send(
-        detail(backupId, "backup.operation", {
+        detail(backupId, "backup.operation.run", {
           backupId: mode === "wrong-backup" ? "different" : backupName,
         }),
       );
@@ -215,11 +214,13 @@ async function fixture(mode = "success") {
     },
   };
 }
-it("backs up then reviews and applies the exact checked release without local-admin authority", async () => {
+it("backs up then reviews and applies the exact checked release as the administrator session", async () => {
   const f = await fixture();
   await runSystemUpdate(f.options);
   expect(f.counts()).toEqual({ backupPosts: 1, previewPosts: 1, applyPosts: 1 });
-  expect(f.requests.every((r) => r.local === undefined)).toBe(true);
+  expect(f.requests.every((r) => r.cookie === "better-auth.session_token=synthetic.signed")).toBe(
+    true,
+  );
   expect(f.requests.filter((r) => r.method === "POST").map((r) => r.url)).toEqual([
     "/api/admin/services/backups",
     "/api/admin/platform/configuration/preview",
@@ -317,6 +318,11 @@ it("refreshes an expired session and resumes the same preview without another ba
   await runSystemUpdate({ ...f.options, resume: true });
   const posts = f.requests.filter((r) => r.url.endsWith("/preview"));
   expect(posts).toHaveLength(2);
-  expect(posts[0]).toEqual(posts[1]);
+  // The same request again, under the refreshed session.
+  expect({ ...posts[0], cookie: undefined }).toEqual({ ...posts[1], cookie: undefined });
+  expect(posts.map((post) => post.cookie)).toEqual([
+    "better-auth.session_token=synthetic.signed",
+    "better-auth.session_token=synthetic.fresh",
+  ]);
   expect(f.counts().backupPosts).toBe(1);
 });

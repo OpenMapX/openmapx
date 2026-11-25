@@ -83,7 +83,7 @@ no standalone install recorded a source, and entries no longer carry
 locator type; OpenMapX accounts have no usernames.
 
 Secret system settings, such as the SMTP password, live encrypted in a new
-`system_secret` table instead of in clear in `system_settings`; its updater is
+`system_secret` table instead of in clear in `system_setting`; its updater is
 cleared when that account is deleted. See the separate note on the generated
 secrets key.
 
@@ -94,7 +94,7 @@ no longer carry an `id`; the region and name identify a feed. The Overture
 release each region imported is recorded in its own
 `data_manager.overture_release` table instead of a transit feed row.
 
-`data_manager.jobs` holds only durable executions, the only kind of job
+`data_manager.job` holds only durable executions, the only kind of job
 data-manager writes. Every execution column is required, the operation key is
 a plain unique key, and the status is one of the eight execution statuses. The
 admission time, deadline and requested deadline are `timestamptz` instead of
@@ -106,7 +106,7 @@ always its execution input.
 
 A finished data-manager job, with the account that started it, is deleted 90
 days after it finished, as the privacy catalogue now states (it stated ten
-years). `ADMIN_JOB_RETENTION_DAYS` no longer applies to data-manager jobs, and
+years). `RETENTION_ADMIN_JOB_DAYS` no longer applies to data-manager jobs, and
 the newest run of each kind is no longer kept past that period. Data-manager's
 control prune removes only a job's execution row and the files named by its
 key; the job row stays until then. A finished job that data-manager has not

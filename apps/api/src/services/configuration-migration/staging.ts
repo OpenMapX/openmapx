@@ -6,7 +6,7 @@ import { db } from "../../db";
 import { adminJob, configurationMigrationPreview } from "../../db/schema";
 import { noUnsettledManagedOperation, openCandidateCondition } from "../admin-job-state";
 import type { ConfigurationWriteTransaction } from "../administrative-configuration-writer-owner";
-import { decrypt, encrypt } from "../secrets";
+import { decrypt, encrypt, secretAad } from "../secrets";
 
 export class MigrationConflict extends Error {
   constructor() {
@@ -36,7 +36,7 @@ export function assertRetainedMigrationStage(stage: MigrationStage) {
 function sealed(stage: MigrationStage) {
   const text = canonicalJson(stage);
   if (Buffer.byteLength(text) > 1179648) throw new MigrationConflict();
-  return encrypt(text);
+  return encrypt(text, secretAad.configurationMigrationPreview(stage.previewId));
 }
 /** Never expires an admitted/unknown owner. Settled ciphertext needs an exact
  * terminal job plus delivered child receipts before removal. */
@@ -48,9 +48,9 @@ export async function pruneMigrationStages() {
         and(
           isNull(configurationMigrationPreview.consumedByJobId),
           lt(configurationMigrationPreview.expiresAt, new Date()),
-          sql`not exists(select 1 from ${adminJob} where ${adminJob.protocol}->'handler'->'_migrationStage'->>'id'=${configurationMigrationPreview.id}::text and (${adminJob.status} not in ('success','failed','canceled') or ${openCandidateCondition()}))`,
+          sql`not exists(select 1 from ${adminJob} where ${adminJob.protocol}->'handler'->'_migrationStage'->>'id'=${configurationMigrationPreview.id}::text and (${adminJob.status} not in ('succeeded','failed','cancelled') or ${openCandidateCondition()}))`,
         ),
-        sql`exists(select 1 from ${adminJob} where ${adminJob.id}=${configurationMigrationPreview.consumedByJobId} and ${adminJob.status} in ('success','failed','canceled') and ${adminJob.finishedAt} is not null and not ${openCandidateCondition()} and ${noUnsettledManagedOperation()})`,
+        sql`exists(select 1 from ${adminJob} where ${adminJob.id}=${configurationMigrationPreview.consumedByJobId} and ${adminJob.status} in ('succeeded','failed','cancelled') and ${adminJob.finishedAt} is not null and not ${openCandidateCondition()} and ${noUnsettledManagedOperation()})`,
       ),
     )
     .returning({ id: configurationMigrationPreview.id });
@@ -84,13 +84,13 @@ export async function retainMigrationStage(input: {
         and(
           isNull(configurationMigrationPreview.consumedByJobId),
           lt(configurationMigrationPreview.expiresAt, new Date()),
-          sql`not exists(select 1 from ${adminJob} where ${adminJob.protocol}->'handler'->'_migrationStage'->>'id'=${configurationMigrationPreview.id}::text and (${adminJob.status} not in ('success','failed','canceled') or ${openCandidateCondition()}))`,
+          sql`not exists(select 1 from ${adminJob} where ${adminJob.protocol}->'handler'->'_migrationStage'->>'id'=${configurationMigrationPreview.id}::text and (${adminJob.status} not in ('succeeded','failed','cancelled') or ${openCandidateCondition()}))`,
         ),
       );
     const [counts] = await tx
       .select({
         total: sql<number>`count(*)::int`,
-        actor: sql<number>`count(*) filter (where ${configurationMigrationPreview.actorId} = ${input.actorId})::int`,
+        actor: sql<number>`count(*) filter (where ${configurationMigrationPreview.actorUserId} = ${input.actorId})::int`,
       })
       .from(configurationMigrationPreview);
     if (!counts || counts.total >= 4096 || counts.actor >= 100) throw new MigrationConflict();
@@ -103,7 +103,7 @@ export async function retainMigrationStage(input: {
     };
     await tx.insert(configurationMigrationPreview).values({
       id: stage.previewId,
-      actorId: stage.actorId,
+      actorUserId: stage.actorId,
       kind: stage.kind,
       intentFingerprint: stage.fingerprint,
       ...sealed(stage),
@@ -125,17 +125,19 @@ export async function readMigrationStage(
     .where(
       and(
         eq(configurationMigrationPreview.id, input.previewId),
-        eq(configurationMigrationPreview.actorId, input.actorId),
+        eq(configurationMigrationPreview.actorUserId, input.actorId),
         eq(configurationMigrationPreview.kind, input.kind),
         eq(configurationMigrationPreview.intentFingerprint, input.fingerprint),
       ),
     );
   if (!row || row.expiresAt <= new Date() || row.consumedByJobId) throw new MigrationConflict();
   try {
-    const stage: MigrationStage = JSON.parse(decrypt(row.ciphertext, row.iv, row.tag));
+    const stage: MigrationStage = JSON.parse(
+      decrypt(row, secretAad.configurationMigrationPreview(row.id)),
+    );
     if (
       stage.version !== 1 ||
-      stage.actorId !== row.actorId ||
+      stage.actorId !== row.actorUserId ||
       stage.kind !== row.kind ||
       stage.previewId !== row.id ||
       stage.fingerprint !== row.intentFingerprint ||
@@ -188,7 +190,7 @@ export async function consumeMigrationStage(
     .where(
       and(
         eq(configurationMigrationPreview.id, stage.previewId),
-        eq(configurationMigrationPreview.actorId, stage.actorId),
+        eq(configurationMigrationPreview.actorUserId, stage.actorId),
         eq(configurationMigrationPreview.intentFingerprint, stage.fingerprint),
         isNull(configurationMigrationPreview.consumedByJobId),
         sql`${configurationMigrationPreview.expiresAt} > now()`,

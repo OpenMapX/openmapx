@@ -93,7 +93,20 @@ export const savedImportResultSchema = z.strictObject({
 });
 export const savedIdParamsSchema = z.object({ id });
 export const savedLabelParamsSchema = z.object({ label: z.string().min(1) });
-export const savedCheckQuerySchema = z.object({ placeId: z.string().min(1) });
+/**
+ * The place to look up, as `savedPlaceKey` gives it: a durable place id, or
+ * `coordinate:<lat>,<lng>` (six decimals) for a session-local place, which
+ * matches the stored rows without an id at those coordinates.
+ */
+export const savedCheckQuerySchema = z.object({
+  placeId: z
+    .string()
+    .max(200)
+    .regex(
+      /^(?:coordinate:-?\d{1,2}\.\d{6},-?\d{1,3}\.\d{6}|(?!(?:style-poi|saved|label|coordinate):)[a-z][a-z0-9-]*:.+)$/,
+      "Invalid placeId",
+    ),
+});
 export const savedExportQuerySchema = z.object({
   format: z.enum(SAVED_EXPORT_FORMATS).default("geojson"),
 });
@@ -105,12 +118,21 @@ export const savedCreateListSchema = z.object({
 export const savedUpdateListSchema = savedCreateListSchema
   .partial()
   .extend({ icon: z.string().max(50).nullable().optional(), sortOrder: integer.optional() });
+/**
+ * A stored place id: `scheme:value` naming a durable record. The session-local
+ * schemes (`style-poi`, `saved`, `label`, `coordinate`) are refused; the
+ * client sends `null` for them.
+ */
+export const persistedPlaceIdSchema = z
+  .string()
+  .max(200)
+  .regex(/^(?!(?:style-poi|saved|label|coordinate):)[a-z][a-z0-9-]*:.+$/, "Invalid placeId");
 const placeInput = {
   name: z.string().max(500),
   address: z.string().max(500).nullable().optional(),
   lat: latitude,
   lng: longitude,
-  placeId: z.string().max(200).nullable().optional(),
+  placeId: persistedPlaceIdSchema.nullable().optional(),
   fieldContributors: savedFieldContributorsSchema.optional(),
 };
 export const savedCreatePlaceSchema = z.object({

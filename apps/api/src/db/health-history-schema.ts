@@ -1,10 +1,10 @@
 import { sql } from "drizzle-orm";
-import { check, index, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { bigint, check, index, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 
 export const healthHistory = pgTable(
   "health_history",
   {
-    id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
+    id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
     serviceId: text("service_id").notNull(),
     status: text("status").notNull(),
     responseTime: integer("response_time"), // ms

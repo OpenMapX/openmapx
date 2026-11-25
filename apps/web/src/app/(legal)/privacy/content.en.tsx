@@ -8,7 +8,7 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import type { Disclosure, IntegrationMetadata } from "@openmapx/core/api-contracts";
-import { legalConfig, sectionSlug } from "@openmapx/core/legal";
+import { sectionSlug } from "@openmapx/core/legal";
 import type { PublicLegalConfig } from "@openmapx/core/server-api";
 import { emailCountryName, emailTransferNote } from "../emailDisclosure";
 import { generatePrivacySectionsFromManifests } from "../generateLegalSections";
@@ -21,41 +21,25 @@ export default function PrivacyContent({
 }: {
   integrations?: IntegrationMetadata[];
   disclosures?: Disclosure[];
-  legal?: PublicLegalConfig | null;
+  legal: PublicLegalConfig;
 }) {
+  // Every published fact comes from the API, which resolves environment,
+  // administration settings and defaults in one place.
   const {
-    name: nameEnv,
-    street: streetEnv,
-    postalCode: postalCodeEnv,
-    city: cityEnv,
-    country: countryEnv,
-    email: emailEnv,
-    supervisoryAuthority: supervisoryAuthorityEnv,
-    supervisoryAuthorityUrl: supervisoryAuthorityUrlEnv,
-    hostingProvider: hostingProviderEnv,
-    hostingLocations: hostingLocationsEnv,
-    serverLogRetentionDays: serverLogRetentionDaysEnv,
-  } = legalConfig;
-  // Hosting, supervisory authority and log retention resolve env > admin-
-  // database > default in the API and arrive via `legal`. Fall back to the
-  // web-process env (legalConfig) only when the API is unreachable during SSR,
-  // so a configured value still renders.
-  const name = legal ? legal.name : nameEnv;
-  const street = legal ? legal.street : streetEnv;
-  const postalCode = legal ? legal.postalCode : postalCodeEnv;
-  const city = legal ? legal.city : cityEnv;
-  const country = legal ? legal.country : countryEnv;
-  const email = legal ? legal.dataRequestEmail : emailEnv;
-  const hostingProvider = legal ? legal.hostingProvider : hostingProviderEnv;
-  const hostingLocations = legal ? legal.hostingLocations : hostingLocationsEnv;
-  const supervisoryAuthority = legal ? legal.supervisoryAuthority : supervisoryAuthorityEnv;
-  const supervisoryAuthorityUrl = legal
-    ? legal.supervisoryAuthorityUrl
-    : supervisoryAuthorityUrlEnv;
-  const serverLogRetentionDays = legal ? legal.serverLogRetentionDays : serverLogRetentionDaysEnv;
-  // Backup retention is a platform setting only the API reports.
-  const backupRetentionDays = legal ? legal.backupRetentionDays : null;
-  const auditLogRetentionDays = legal ? legal.auditLogRetentionDays : null;
+    name,
+    street,
+    postalCode,
+    city,
+    country,
+    dataRequestEmail: email,
+    hostingProvider,
+    hostingLocations,
+    supervisoryAuthority,
+    supervisoryAuthorityUrl,
+    serverLogRetentionDays,
+    backupRetentionDays,
+    auditLogRetentionDays,
+  } = legal;
   const T = privacyTitles("en");
 
   return (
@@ -70,7 +54,7 @@ export default function PrivacyContent({
           mb: 4,
         }}
       >
-        Last updated: November 25, 2026
+        Last updated: November 26, 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -677,12 +661,15 @@ export default function PrivacyContent({
             <Typography>
               <strong>A reporting identity on this device, not linked to your account.</strong> When
               you first send a report or vote, your browser creates a key pair and keeps it in this
-              browser&apos;s local storage, together with a reporting permission that is valid for
-              about a day and renewed with your next report or vote after that. Every report and
-              vote is signed with the private key, which never leaves the browser. The key is never
-              connected to your OpenMapX account, and OpenMapX does not store reports in its own
-              database. It acts as a pseudonym: OpenConditions can tell that reports came from the
-              same device, but not from whom.
+              browser&apos;s IndexedDB storage (database <code>openmapx:crowd</code>). The private
+              key is created as non-extractable: the browser can sign with it, but no script,
+              OpenMapX&apos;s own included, can read or copy it. A reporting permission that is
+              valid for about a day, and renewed with your next report or vote after that, is kept
+              in local storage (<code>openmapx:crowd:grant</code>) together with the identifier of
+              the key it was issued for. Every report and vote is signed with the private key, which
+              never leaves the browser. The key is never connected to your OpenMapX account, and
+              OpenMapX does not store reports in its own database. It acts as a pseudonym:
+              OpenConditions can tell that reports came from the same device, but not from whom.
             </Typography>
           </li>
           <li>
@@ -693,7 +680,9 @@ export default function PrivacyContent({
               the time and the public key with its signature; since you are asked only when you
               approach a report, a vote also shows that the device was near that place at that time.
               OpenMapX&apos;s server forwards them without your IP address or browser details, so
-              OpenConditions sees only the server.
+              OpenConditions sees only the server. To limit abuse, OpenMapX&apos;s server counts the
+              reports, votes and enrollments each address sends, only in memory, and forgets the
+              address within about three minutes of its last request.
             </Typography>
           </li>
           <li>
@@ -993,16 +982,19 @@ export default function PrivacyContent({
             <Typography>
               <strong>View preferences</strong> — A small number of display settings (e.g., globe
               vs. flat map projection) are saved in localStorage so the interface restores your
-              last-used view. No personal data is involved.
+              last-used view. No personal data is involved. Every localStorage and sessionStorage
+              key and every IndexedDB database OpenMapX creates in this browser starts with{" "}
+              <code>openmapx:</code> (for example <code>openmapx:map:globe-view</code>), and the
+              device data download in your account settings contains these preferences.
             </Typography>
           </li>
           <li>
             <Typography>
-              <strong>Traffic reporting key</strong> (<code>openconditions.contrib.deviceKey</code>,{" "}
-              <code>openconditions.contrib.grant</code>) — If you send a traffic or hazard report or
-              vote, the reporting key pair and its current reporting permission are kept in
-              localStorage (see Section&nbsp;8). They stay until you clear this browser&apos;s site
-              data or delete your account in it.
+              <strong>Traffic reporting key</strong> (IndexedDB database <code>openmapx:crowd</code>
+              , localStorage <code>openmapx:crowd:grant</code>) — If you send a traffic or hazard
+              report or vote, the non-extractable reporting key pair is kept in IndexedDB and its
+              current reporting permission in localStorage (see Section&nbsp;8). They stay until you
+              clear this browser&apos;s site data or delete your account in it.
             </Typography>
           </li>
           <li>
@@ -1028,7 +1020,7 @@ export default function PrivacyContent({
             <Typography>
               <strong>Optional recent map-data cache</strong> — If you enable &quot;Remember recent
               map data on this device&quot; in Settings, OpenMapX stores a curated set of recent
-              map-related API responses in localStorage and Cache Storage. This can include typed
+              map-related API responses in IndexedDB and Cache Storage. This can include typed
               search text, route waypoints, place details, weather lookups, photo lookup results,
               nearby results, and exact map coordinates. Entries expire automatically according to
               their cache type (usually within minutes to 24 hours; photo lookup caches can remain
@@ -1237,11 +1229,8 @@ export default function PrivacyContent({
               <strong>Administrator activity log</strong> — records of what administrators did, such
               as changing an account&apos;s role, blocking or deleting an account, or changing
               settings, with the administrator&apos;s IP address and browser, are deleted after{" "}
-              {auditLogRetentionDays !== null
-                ? `${auditLogRetentionDays} days`
-                : "the period the operator configures (365 days by default)"}
-              . Deleting an account removes it from the entries that name it, together with the IP
-              address and browser recorded for its own actions.
+              {`${auditLogRetentionDays} days`}. Deleting an account removes it from the entries
+              that name it, together with the IP address and browser recorded for its own actions.
             </Typography>
           </li>
           <li>
@@ -1324,9 +1313,7 @@ export default function PrivacyContent({
           <li>
             <Typography>
               <strong>Backups</strong> —{" "}
-              {backupRetentionDays !== null
-                ? `backups are kept for up to ${backupRetentionDays} days under the configured backup retention`
-                : "backups are kept for the backup retention period the operator configures (30 days by default)"}{" "}
+              {`backups are kept for up to ${backupRetentionDays} days under the configured backup retention`}{" "}
               and are used only to recover from failure, not for any other processing. Data deleted
               or changed recently may remain in backups until they expire: deleting live data does
               not rewrite a backup. A restore replays a pseudonymous erasure journal, so a deleted

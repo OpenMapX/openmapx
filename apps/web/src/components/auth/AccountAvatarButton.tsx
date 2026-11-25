@@ -1,8 +1,10 @@
 "use client";
 
 import PersonIcon from "@mui/icons-material/Person";
+import Alert from "@mui/material/Alert";
 import Avatar from "@mui/material/Avatar";
 import Button from "@mui/material/Button";
+import Snackbar from "@mui/material/Snackbar";
 import type { SxProps, Theme } from "@mui/material/styles";
 import Tooltip from "@mui/material/Tooltip";
 import { getInitials, proxyImageUrl } from "@openmapx/core";
@@ -55,7 +57,9 @@ export function AccountAvatarButton({
 }: Props) {
   const t = useTranslations("map");
   const { authorityKey, data: session, isPending } = useSettledSessionAuthority();
+  const tAccount = useTranslations("account");
   const [authOpen, setAuthOpen] = useState(false);
+  const [cleanupIncomplete, setCleanupIncomplete] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
   const settingsOpen = useAccountSettingsStore((state) => state.open);
   const settingsLoaded = useOpenedOnce(settingsOpen);
@@ -148,11 +152,28 @@ export function AccountAvatarButton({
             key={`settings:${authorityKey}`}
             open={settingsOpen}
             onClose={closeSettings}
+            onAccountDeleted={(cleanupIncomplete) => {
+              closeSettings();
+              setCleanupIncomplete(cleanupIncomplete);
+            }}
             user={user}
             initialSection={settingsSection}
           />
         </Suspense>
       )}
+
+      {/* Outside the signed-in branch: the account is already gone when this shows. */}
+      <Snackbar
+        open={cleanupIncomplete}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+        onClose={(_event, reason) => {
+          if (reason !== "clickaway") setCleanupIncomplete(false);
+        }}
+      >
+        <Alert severity="warning" onClose={() => setCleanupIncomplete(false)}>
+          {tAccount("deviceCleanupIncomplete")}
+        </Alert>
+      </Snackbar>
     </>
   );
 }

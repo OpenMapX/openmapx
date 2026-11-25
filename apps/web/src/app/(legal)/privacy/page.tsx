@@ -1,6 +1,7 @@
 import { fetchIntegrationMetadata, fetchLegalConfig } from "@openmapx/core/server-api";
 import type { Metadata } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
+import { LegalConfigUnavailable } from "@/components/legal/LegalConfigUnavailable";
 import { LegalPageShell } from "@/components/legal/LegalPageShell";
 import { privacyNav } from "./sections";
 
@@ -29,12 +30,16 @@ export default async function PrivacyPage() {
   const [metadata, legal] = await Promise.all([fetchIntegrationMetadata(), fetchLegalConfig()]);
 
   return (
-    <LegalPageShell sections={sections}>
-      <Content
-        integrations={metadata?.integrations ?? []}
-        disclosures={metadata?.disclosures ?? []}
-        legal={legal}
-      />
+    <LegalPageShell sections={legal ? sections : []}>
+      {legal ? (
+        <Content
+          integrations={metadata?.integrations ?? []}
+          disclosures={metadata?.disclosures ?? []}
+          legal={legal}
+        />
+      ) : (
+        <LegalConfigUnavailable />
+      )}
     </LegalPageShell>
   );
 }

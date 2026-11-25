@@ -23,7 +23,6 @@
     }
   },
   "quality": "built-in",
-  "category": "Knowledge",
   "healthCheck": [
     {
       "name": "WSV Pegelonline",

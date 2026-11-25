@@ -107,7 +107,7 @@ export const run: StageFn = async (ctx) => {
     if (allFailures.length > 0) {
       return {
         stage: "fetch-operator",
-        status: "error",
+        status: "failed",
         startedAt,
         finishedAt: ctx.now(),
         durationMs: Date.now() - start,
@@ -118,7 +118,7 @@ export const run: StageFn = async (ctx) => {
     await finalizeTransitSourceManifest(ctx);
     return {
       stage: "fetch-operator",
-      status: operatorFeeds.length === 0 ? "skipped" : "ok",
+      status: operatorFeeds.length === 0 ? "skipped" : "succeeded",
       startedAt,
       finishedAt: ctx.now(),
       durationMs: Date.now() - start,
@@ -139,7 +139,7 @@ export const run: StageFn = async (ctx) => {
     );
     return {
       stage: "fetch-operator",
-      status: "error",
+      status: "failed",
       startedAt,
       finishedAt: ctx.now(),
       durationMs: Date.now() - start,

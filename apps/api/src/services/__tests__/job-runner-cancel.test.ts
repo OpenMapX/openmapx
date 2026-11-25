@@ -8,7 +8,7 @@ const database = vi.hoisted(() => {
   const result = {};
   const protocol = {
     operations: {
-      version: 3,
+      version: 1,
       steps: {},
       eventTotal: 0,
       byteTotal: 0,
@@ -29,7 +29,7 @@ const database = vi.hoisted(() => {
               returning: vi
                 .fn()
                 .mockResolvedValue(
-                  value.status === "canceled" && updates.length === 1
+                  value.status === "cancelled" && updates.length === 1
                     ? []
                     : [{ id: "job-1", status: value.status ?? "running", result, protocol }],
                 ),
@@ -81,7 +81,7 @@ describe("admin job cancellation", () => {
     );
     expect(database.updates).toContainEqual(expect.objectContaining({ status: "cancel_pending" }));
     expect(database.updates).toContainEqual(
-      expect.objectContaining({ status: "canceled", finishedAt: expect.any(Date) }),
+      expect.objectContaining({ status: "cancelled", finishedAt: expect.any(Date) }),
     );
   });
 
@@ -95,7 +95,7 @@ describe("admin job cancellation", () => {
 
 it("observer abort without backend containment never publishes canceled", async () => {
   const controller = new AbortController();
-  jobRunner.register("test.observer-abort", async () => {
+  jobRunner.register("integration.reload", async () => {
     controller.abort();
     throw new DOMException("Aborted", "AbortError");
   });
@@ -109,8 +109,8 @@ it("observer abort without backend containment never publishes canceled", async 
       signal: AbortSignal,
     ): Promise<void>;
   };
-  await execute.executeJob("job-1", "test.observer-abort", {}, null, {}, controller.signal);
-  expect(database.updates).not.toContainEqual(expect.objectContaining({ status: "canceled" }));
+  await execute.executeJob("job-1", "integration.reload", {}, null, {}, controller.signal);
+  expect(database.updates).not.toContainEqual(expect.objectContaining({ status: "cancelled" }));
   const patch = new PgDialect().sqlToQuery(database.updates.at(-1)?.result as SQL);
   expect(firstJsonParam(patch)).toMatchObject({
     observation: { state: "unknown" },
@@ -130,13 +130,13 @@ it("retains a fulfilled backend's partial failure evidence in failed DB and SSE 
   };
   const events: unknown[] = [];
   const unsubscribe = jobEventBus.subscribe("job-evidence", ({ event }) => events.push(event));
-  jobRunner.register("test.partial", async () => {
+  jobRunner.register("integration.reload", async () => {
     const result = await Promise.resolve(evidence);
     throw new ApiOpsError("runtime", result);
   });
   await (jobRunner as unknown as { executeJob(...args: unknown[]): Promise<void> }).executeJob(
     "job-evidence",
-    "test.partial",
+    "integration.reload",
     {},
     { phase: "build" },
     {},

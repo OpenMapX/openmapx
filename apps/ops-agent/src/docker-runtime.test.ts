@@ -333,7 +333,9 @@ describe("fixed Docker runtime adapters", () => {
         calls.push([...args]);
         return {
           stdout:
-            args[0] === "container" ? `motis\t${++listings === 1 ? "running" : "exited"}\n` : "",
+            args[0] === "container"
+              ? `openmapx-motis\t${++listings === 1 ? "running" : "exited"}\n`
+              : "",
           stderr: "",
         };
       },
@@ -351,15 +353,31 @@ describe("fixed Docker runtime adapters", () => {
       "motis-staging",
     ]);
     expect(calls.slice(1, -1)).toEqual([
-      ["container", "ls", "-a", "--filter", "name=^/motis$", "--format", "{{.Names}}\t{{.State}}"],
-      ["stop", "motis"],
-      ["container", "ls", "-a", "--filter", "name=^/motis$", "--format", "{{.Names}}\t{{.State}}"],
+      [
+        "container",
+        "ls",
+        "-a",
+        "--filter",
+        "name=^/openmapx-motis$",
+        "--format",
+        "{{.Names}}\t{{.State}}",
+      ],
+      ["stop", "openmapx-motis"],
+      [
+        "container",
+        "ls",
+        "-a",
+        "--filter",
+        "name=^/openmapx-motis$",
+        "--format",
+        "{{.Names}}\t{{.State}}",
+      ],
     ]);
   });
 
   describe.each([
-    ["motis.primary.stop", "motis"],
-    ["motis.staging.stop", "motis-staging"],
+    ["motis.primary.stop", "openmapx-motis"],
+    ["motis.staging.stop", "openmapx-motis-staging"],
   ] as const)("%s confirmed stop", (kind, name) => {
     const listing = [
       "container",
@@ -544,7 +562,7 @@ describe("fixed Docker runtime adapters", () => {
 
     // Capacity owns its fixed path. A bare candidate ID cannot authorize proxy effects;
     // actual owned-candidate positives live in data-transit-resource-source.test.ts.
-    expect(calls).toEqual([["exec", "postgis", "df", "-Pk", "/var/lib/postgresql"]]);
+    expect(calls).toEqual([["exec", "openmapx-postgis", "df", "-Pk", "/var/lib/postgresql"]]);
   });
 
   describe("Valhalla traffic effects", () => {
@@ -627,7 +645,7 @@ describe("fixed Docker runtime adapters", () => {
         expect(calls[3]).toEqual(
           expect.arrayContaining([
             "--volumes-from",
-            "openmapx-valhalla-1",
+            "openmapx-valhalla",
             `sha256:${"c".repeat(64)}`,
           ]),
         );
@@ -776,7 +794,7 @@ describe("fixed Docker runtime adapters", () => {
         ).resolves.toEqual({ changed: false, skipped: "valhalla_absent" });
         // Only the read-only listing ran: no stop, no fence, no tool container.
         expect(calls).toEqual([
-          ["ps", "--all", "--quiet", "--no-trunc", "--filter", "name=^/openmapx-valhalla-1$"],
+          ["ps", "--all", "--quiet", "--no-trunc", "--filter", "name=^/openmapx-valhalla$"],
         ]);
         expect(readdirSync(join(dataRoot, "valhalla", "osm-pbf"))).toEqual([]);
       } finally {
@@ -825,7 +843,7 @@ describe("fixed Docker runtime adapters", () => {
           "inspect",
           "--format",
           "{{.State.Running}}",
-          "openmapx-valhalla-1",
+          "openmapx-valhalla",
         ]);
         expect(existsSync(join(dataRoot, "valhalla", "osm-pbf", ".traffic-maintenance.json"))).toBe(
           true,
@@ -890,8 +908,8 @@ describe("fixed Docker runtime adapters", () => {
         dispatchOpsOperation(runtime, { kind: "valhalla.traffic.disable" }, context()),
       ).resolves.toEqual({ changed: true });
       expect(calls).toEqual([
-        ["stop", "--time", "1", "openmapx-valhalla-1"],
-        ["inspect", "--format", "{{.State.Running}}", "openmapx-valhalla-1"],
+        ["stop", "--time", "1", "openmapx-valhalla"],
+        ["inspect", "--format", "{{.State.Running}}", "openmapx-valhalla"],
       ]);
     });
 
@@ -1008,14 +1026,14 @@ describe("fixed Docker runtime adapters", () => {
       expect(calls).toEqual([
         [
           "exec",
-          "openmapx-valhalla-1",
+          "openmapx-valhalla",
           "valhalla_ways_to_edges",
           "-c",
           "/custom_files/valhalla.json",
         ],
         [
           "exec",
-          "openmapx-valhalla-1",
+          "openmapx-valhalla",
           "chown",
           CHOWN_ID,
           "/custom_files/valhalla_tiles/way_edges.txt",
@@ -1712,8 +1730,8 @@ describe("recoverInterruptedTrafficMaintenance", () => {
             "--format",
             "{{.Names}}",
           ],
-          ["stop", "--time", "1", "openmapx-valhalla-1"],
-          ["inspect", "--format", "{{.State.Running}}", "openmapx-valhalla-1"],
+          ["stop", "--time", "1", "openmapx-valhalla"],
+          ["inspect", "--format", "{{.State.Running}}", "openmapx-valhalla"],
         ]);
         expect(calls.some((call) => call[0] === "start")).toBe(false);
         expect(readdirSync(shared).sort()).toEqual([
@@ -1727,6 +1745,35 @@ describe("recoverInterruptedTrafficMaintenance", () => {
         ).toBe(fence);
       },
     );
+  });
+
+  it("releases the fence of an interrupted job another release recorded", async () => {
+    await withDataRoot({ ".traffic-maintenance.json": fence }, async (dataRoot, shared) => {
+      const calls: string[][] = [];
+      await expect(
+        recoverInterruptedTrafficMaintenance({
+          trafficDataRoot: dataRoot,
+          journalRecords: [job("succeeded", undefined, "2026-10-29T05:00:00.000Z")],
+          // The operation is in a form this release cannot read; the
+          // fingerprint and the interruption are in the kept row.
+          foreignRecords: [
+            {
+              state: "failed",
+              submittedAt: "2026-10-30T15:44:08.048Z",
+              row: {
+                operation: { kind: "valhalla.traffic.maintain", plan: { later: true } },
+                operationFingerprint: fingerprint,
+                state: "failed",
+                errorClass: "recovery_required",
+              },
+            },
+          ],
+          execFile: docker(calls),
+          descriptorAnchorRoot: null,
+        }),
+      ).resolves.toEqual({ state: "released", operationId: fingerprint, plan: "rebuild-extract" });
+      expect(existsSync(join(shared, ".traffic-maintenance.json"))).toBe(false);
+    });
   });
 
   it("keeps the fence when only another operation's job is interrupted", async () => {

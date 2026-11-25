@@ -3,7 +3,7 @@ import type { OpsJobStatus } from "./contract";
 import { controlTerminalReceiptDigest } from "./control-terminal-receipt";
 
 const status: OpsJobStatus = {
-  version: 2,
+  version: 1,
   operationId: "job1_abcdefghijklmnop",
   operationKey: "opk1_abcdefghijklmnop",
   kind: "backup.delete",
@@ -33,6 +33,6 @@ it("binds exact safe terminal evidence while excluding observation-only timestam
     }),
   ).toThrow();
   expect(() =>
-    controlTerminalReceiptDigest({ ...status, version: 1 } as unknown as OpsJobStatus),
+    controlTerminalReceiptDigest({ ...status, version: 2 } as unknown as OpsJobStatus),
   ).toThrow();
 });

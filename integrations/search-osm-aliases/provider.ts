@@ -5,6 +5,7 @@ import {
   type SearchSuggestionProviderResult,
   type SearchSuggestionQuery,
 } from "@openmapx/core";
+import { OSM_SEARCH_SCHEMA_VERSION } from "@openmapx/core/published-data";
 import type { IntegrationContext, SearchSuggestionProvider } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { snapshotContributors } from "@openmapx/mobility-core/contributors";
@@ -12,6 +13,7 @@ import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 interface IndexStateRow {
   epoch: string;
   status: string;
+  schema_version: number;
 }
 
 interface SearchRow {
@@ -137,12 +139,13 @@ export function createOsmAliasSuggestionProvider(
         return { suggestions: [], attributions: [], freshnessSeconds: 86_400 };
       }
       const states = await ctx.db.execute<IndexStateRow[]>(
-        "SELECT epoch, status FROM osm_search.index_state WHERE singleton = 1",
+        "SELECT epoch, status, schema_version FROM osm_search.index_state WHERE singleton = 1",
         undefined,
         { signal },
       );
       const state = states[0];
-      if (state?.status !== "ready") {
+      // A snapshot of another layout version waits for data-manager's rebuild.
+      if (state?.status !== "ready" || state.schema_version !== OSM_SEARCH_SCHEMA_VERSION) {
         return { suggestions: [], attributions: [], freshnessSeconds: 86_400 };
       }
       const normalized = normalizeSearchTerm(query.query);

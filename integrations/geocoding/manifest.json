@@ -8,7 +8,6 @@
     "routes": true
   },
   "quality": "built-in",
-  "category": "Geocoding",
   "configSchema": {
     "type": "object",
     "properties": {

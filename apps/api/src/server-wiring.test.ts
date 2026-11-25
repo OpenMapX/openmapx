@@ -4,6 +4,11 @@ import { Writable } from "node:stream";
 import cors from "@fastify/cors";
 import { ApiClientError, createApiClient } from "@openmapx/core";
 import { getApiDataManagerTransitState, unwrapAdminResponse } from "@openmapx/core/api-admin-sdk";
+import {
+  MOBILE_PROTOCOL_HEADER,
+  MOBILE_PROTOCOL_MAX,
+  MOBILE_PROTOCOL_MIN,
+} from "@openmapx/core/api-contracts";
 import { exportSavedList, unwrapSavedResponse } from "@openmapx/core/saved-places-sdk";
 import { httpError } from "@openmapx/integration-framework";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -13,6 +18,7 @@ import { registerSavedRoute } from "./routes/saved-contract";
 import {
   controlledRequestLoggingOptions,
   corsOptions,
+  makeMobileProtocolHook,
   makeRateLimitTierHook,
   makeSecurityResponseHeaderHook,
   makeStatusAwareRateLimit,
@@ -323,6 +329,76 @@ describe("corsOptions", () => {
   });
 });
 
+describe("makeMobileProtocolHook", () => {
+  async function protocolApp() {
+    const handler = vi.fn(async () => ({ ok: true }));
+    const app = Fastify({ logger: false });
+    app.addHook("onRequest", makeMobileProtocolHook());
+    app.get("/api/integrations/routing/directions", handler);
+    await app.ready();
+    return { app, handler };
+  }
+
+  it("leaves requests without the header, as the web app sends them, alone", async () => {
+    const { app, handler } = await protocolApp();
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/integrations/routing/directions",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(handler).toHaveBeenCalledTimes(1);
+    await app.close();
+  });
+
+  it("serves a native request that names a supported protocol", async () => {
+    const { app, handler } = await protocolApp();
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/integrations/routing/directions",
+      headers: { [MOBILE_PROTOCOL_HEADER]: String(MOBILE_PROTOCOL_MAX) },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(handler).toHaveBeenCalledTimes(1);
+    await app.close();
+  });
+
+  it.each([
+    String(MOBILE_PROTOCOL_MIN - 1),
+    String(MOBILE_PROTOCOL_MAX + 1),
+    "",
+    "one",
+    `${MOBILE_PROTOCOL_MAX}.5`,
+  ])("refuses protocol %j with 426 before the route runs", async (value) => {
+    const { app, handler } = await protocolApp();
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/integrations/routing/directions",
+      headers: { [MOBILE_PROTOCOL_HEADER]: value },
+    });
+    expect(response.statusCode).toBe(426);
+    expect(response.json()).toEqual({
+      error: expect.any(String),
+      code: "MOBILE_PROTOCOL_UNSUPPORTED",
+    });
+    expect(handler).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it("refuses a repeated header", async () => {
+    const { app, handler } = await protocolApp();
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/integrations/routing/directions",
+      headers: {
+        [MOBILE_PROTOCOL_HEADER]: [String(MOBILE_PROTOCOL_MAX), String(MOBILE_PROTOCOL_MAX)],
+      },
+    });
+    expect(response.statusCode).toBe(426);
+    expect(handler).not.toHaveBeenCalled();
+    await app.close();
+  });
+});
+
 describe("makeRateLimitTierHook", () => {
   function stubTiers(): {
     hook: RateLimitTiers;
@@ -337,6 +413,8 @@ describe("makeRateLimitTierHook", () => {
       public: vi.fn(async () => {}),
       unmatched: vi.fn(async () => {}),
       typeahead: vi.fn(async () => {}),
+      contribution: vi.fn(async () => {}),
+      enrollment: vi.fn(async () => {}),
       routing: vi.fn(async () => {}),
     };
     return { hook: stubs as unknown as RateLimitTiers, stubs };
@@ -863,7 +941,7 @@ describe("controlled request lifecycle logging", () => {
     expect(failed.statusCode).toBe(500);
     expect(persist).toHaveBeenCalledOnce();
     expect(persist).toHaveBeenCalledWith(
-      expect.objectContaining({ level: "error", msg: "Request failed" }),
+      expect.objectContaining({ level: "error", message: "Request failed" }),
     );
     await app.close();
   });

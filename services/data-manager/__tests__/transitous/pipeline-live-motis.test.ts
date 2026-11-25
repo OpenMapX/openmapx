@@ -705,7 +705,7 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
       feedsOverlayPath,
       `${JSON.stringify(
         {
-          version: 3,
+          version: 1,
           sources: [],
           patches: [],
           quarantine: [],
@@ -858,21 +858,23 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
 
       // assemble-staging populated the staging mount from the build output (no
       // OPENMAPX_E9_STAGING_DIR stub mirror), so the previously-stubbed stages
-      // now actually run. Assert "ok" (not "skipped") with container logs folded
-      // into the message so the real MOTIS error surfaces inline on failure.
+      // now actually run. Assert "succeeded" (not "skipped") with container logs
+      // folded into the message so the real MOTIS error surfaces inline on failure.
       expect(
-        ["ok", "partial"].includes(byStage["assemble-staging"]?.status ?? ""),
+        ["succeeded", "partially_succeeded"].includes(byStage["assemble-staging"]?.status ?? ""),
         byStage["assemble-staging"]?.message ?? "assemble-staging",
       ).toBe(true);
       for (const stage of ["stage-proxy", "motis-import", "motis-health"] as const) {
-        if (byStage[stage]?.status !== "ok") {
+        if (byStage[stage]?.status !== "succeeded") {
           const diag = await failureDiagnostics(stage, STAGING_SERVICE, byStage[stage]?.message);
-          expect(byStage[stage]?.status, `${diag}\n${stagingDirReport(stagingDataDir)}`).toBe("ok");
+          expect(byStage[stage]?.status, `${diag}\n${stagingDirReport(stagingDataDir)}`).toBe(
+            "succeeded",
+          );
         }
       }
-      if (byStage.promote?.status !== "ok") {
+      if (byStage.promote?.status !== "succeeded") {
         const diag = await failureDiagnostics("promote", PRIMARY_SERVICE, byStage.promote?.message);
-        expect(byStage.promote?.status, diag).toBe("ok");
+        expect(byStage.promote?.status, diag).toBe("succeeded");
       }
 
       // The atomic swap happened on disk: live holds the imported timetable,
@@ -1069,7 +1071,10 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
       // live epoch or immutable source manifest.
       const failedCtx = makeContext();
       const failedBuild = await runFixturePipeline(failedCtx, { stopAt: "motis-health" });
-      expect(failedBuild.results.at(-1)).toMatchObject({ stage: "motis-health", status: "ok" });
+      expect(failedBuild.results.at(-1)).toMatchObject({
+        stage: "motis-health",
+        status: "succeeded",
+      });
       const failedCandidate = readCandidateManifest(stagingDataDir);
       expect(failedCandidate.epoch).toBe(failedCtx.jobId);
       expect(failedCandidate.epoch).not.toBe(firstCandidate.epoch);
@@ -1079,7 +1084,7 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
         `${readFileSync(stagedSourceManifestPath, "utf-8")} `,
       );
       const failedPromotion = await runPromote(failedCtx);
-      expect(failedPromotion.status).toBe("error");
+      expect(failedPromotion.status).toBe("failed");
       expect(failedPromotion.message).toMatch(/Candidate artifact hash mismatch/);
       expect(readCandidateManifest(motisDataDir).epoch).toBe(firstCandidate.epoch);
       expect(readFileSync(liveSourceManifestPath, "utf-8")).toBe(firstSourceManifestText);
@@ -1089,7 +1094,9 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
       // from the first epoch are rejected before route-details is queried.
       const secondCtx = makeContext();
       const secondRun = await runFixturePipeline(secondCtx);
-      expect(secondRun.results.find((result) => result.stage === "promote")?.status).toBe("ok");
+      expect(secondRun.results.find((result) => result.stage === "promote")?.status).toBe(
+        "succeeded",
+      );
       const secondCandidate = readCandidateManifest(motisDataDir);
       expect(secondCandidate.epoch).toBe(secondCtx.jobId);
       expect(secondCandidate.epoch).not.toBe(firstCandidate.epoch);

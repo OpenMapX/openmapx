@@ -21,7 +21,7 @@ import type { StageFn, StageResult } from "./types.js";
  * Import *completion* is verified by the downstream motis-health stage (which
  * polls the staging server until it serves), so this stage returns as soon as
  * the (re)start is issued. On a failure to (re)start the container the stage
- * returns `status: "error"` with a short message so operators can diagnose.
+ * returns `status: "failed"` with a short message so operators can diagnose.
  *
  * Neither data-manager nor the API holds the Docker socket: the restart is a
  * typed operation that the operations agent performs.
@@ -71,7 +71,7 @@ export const run: StageFn = async (ctx) => {
       const err = error as Error;
       return {
         stage: "motis-import",
-        status: "error",
+        status: "failed",
         startedAt,
         finishedAt: ctx.now(),
         durationMs: Date.now() - start,
@@ -109,7 +109,7 @@ export const run: StageFn = async (ctx) => {
     }
     return {
       stage: "motis-import",
-      status: "ok",
+      status: "succeeded",
       startedAt,
       finishedAt,
       durationMs,
@@ -126,7 +126,7 @@ export const run: StageFn = async (ctx) => {
     const err = error as Error;
     return {
       stage: "motis-import",
-      status: "error",
+      status: "failed",
       startedAt,
       finishedAt: ctx.now(),
       durationMs: Date.now() - start,

@@ -25,12 +25,18 @@ const register = createAdminRouteRegistrar(adminReauthOperations, {
   tag: "account-admin",
   validationPhase: "preHandler",
 });
+function reauthenticationFailure(error: unknown) {
+  return error instanceof AdminReauthenticationError
+    ? { error: "Reauthentication failed", code: error.code }
+    : { error: "Reauthentication is unavailable", code: "REAUTHENTICATION_UNAVAILABLE" };
+}
+
 export async function adminReauthenticationRoute(app: FastifyInstance) {
   declareRouteAuth(app, "admin");
   app.addHook("onRequest", async (request, reply) => {
     request.adminSession = await requireAdmin(request);
     const actor = getAdminSession(request);
-    if (actor.user.id === "loopback" || actor.session.impersonatedBy)
+    if (actor.session.impersonatedBy)
       return reply.code(403).send({ error: "A real full administrator session is required" });
   });
   const limits = () =>
@@ -65,12 +71,9 @@ export async function adminReauthenticationRoute(app: FastifyInstance) {
           loginPath: "/auth/admin" as const,
         };
       } catch (error) {
-        return reply.code(error instanceof AdminReauthenticationError ? 409 : 503).send({
-          error:
-            error instanceof AdminReauthenticationError
-              ? error.code
-              : "REAUTHENTICATION_UNAVAILABLE",
-        });
+        return reply
+          .code(error instanceof AdminReauthenticationError ? 409 : 503)
+          .send(reauthenticationFailure(error));
       }
     },
     { preHandler: [startLimit.preHandler()] },
@@ -81,7 +84,10 @@ export async function adminReauthenticationRoute(app: FastifyInstance) {
     async (request, reply) => {
       const nonce = adminReauthNonce(request.headers.cookie);
       reply.header("Cache-Control", "no-store");
-      if (!nonce) return reply.code(409).send({ error: "REAUTHENTICATION_FAILED" });
+      if (!nonce)
+        return reply
+          .code(409)
+          .send({ error: "Reauthentication failed", code: "REAUTHENTICATION_FAILED" });
       try {
         const actor = getAdminSession(request),
           assurance = await getSessionAuthAssurance(actor.session.id);
@@ -99,12 +105,9 @@ export async function adminReauthenticationRoute(app: FastifyInstance) {
         });
         return { completed: true as const };
       } catch (error) {
-        return reply.code(error instanceof AdminReauthenticationError ? 409 : 503).send({
-          error:
-            error instanceof AdminReauthenticationError
-              ? error.code
-              : "REAUTHENTICATION_UNAVAILABLE",
-        });
+        return reply
+          .code(error instanceof AdminReauthenticationError ? 409 : 503)
+          .send(reauthenticationFailure(error));
       }
     },
     { preHandler: [completeLimit.preHandler()] },

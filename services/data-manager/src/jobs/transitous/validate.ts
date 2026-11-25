@@ -60,8 +60,8 @@ export const run: StageFn = async (ctx) => {
 
     // A schedule archive that cannot be imported is a completeness failure:
     // the desired source set would silently shrink, so this is never
-    // "partial" — it hard-stops the pipeline before config generation.
-    const status: StageStatus = invalid.length > 0 ? "error" : "ok";
+    // "partially_succeeded" — it hard-stops the pipeline before config generation.
+    const status: StageStatus = invalid.length > 0 ? "failed" : "succeeded";
 
     return {
       stage: "validate",
@@ -83,7 +83,7 @@ export const run: StageFn = async (ctx) => {
     const err = error as Error;
     return {
       stage: "validate",
-      status: "error",
+      status: "failed",
       startedAt,
       finishedAt: ctx.now(),
       durationMs: Date.now() - start,

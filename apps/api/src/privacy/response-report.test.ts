@@ -122,7 +122,7 @@ describe("localized privacy response report", () => {
     expect(report.html).toContain("Example &lt;Street&gt; 1");
     expect(report.html).not.toContain("<script");
     expect(report.html).not.toMatch(/(?:src|href)=["']https?:/);
-    expect(report.processingInformation.version).toBe(2);
+    expect(report.processingInformation.version).toBe(1);
     expect(report.processingInformation.recipientSummary).toMatchObject({
       truncated: true,
       totalGroupCount: 2,

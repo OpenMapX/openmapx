@@ -184,7 +184,7 @@ describe("transit source lifecycle", () => {
       patches: Array<{ sourceId: string; skip: boolean }>;
     };
     expect(overlay).toMatchObject({
-      version: 3,
+      version: 1,
       sources: [],
       patches: [{ sourceId: "catalog:de:active-feed", skip: false }],
     });

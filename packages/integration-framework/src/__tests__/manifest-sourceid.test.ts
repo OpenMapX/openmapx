@@ -1,6 +1,8 @@
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import { describe, expect, it } from "vitest";
-import { dataSourceSchema, validateManifest } from "../manifest.js";
+import { dataSourceSchema, validateManifest as validateWithProvenance } from "../manifest.js";
+
+const validateManifest = (raw: unknown) => validateWithProvenance(raw, { firstParty: true });
 
 const base = {
   name: "x",

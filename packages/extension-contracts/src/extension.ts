@@ -1,6 +1,10 @@
 import z from "zod/v4";
+import { componentIdSchema, isComponentId } from "./identifiers";
 import { platformVersionSchema } from "./platform";
+import { semverSchema } from "./semver";
 import type { ManifestValidationResult } from "./service";
+
+export { compareSemver, isSemver, semverSchema } from "./semver";
 
 // `extension.json` — the Extension *bundle* primitive. One versioned, pinned,
 // atomically-installed unit that ties together N integrations (in-process,
@@ -10,13 +14,16 @@ import type { ManifestValidationResult } from "./service";
 // (git ref-pinned). See "Bundle it as an extension" in
 // docs/docs/developer/building-an-external-extension.md.
 
-const ID_REGEX = /^[a-z0-9][a-z0-9-]*$/;
 // Git tag or commit SHA.
 const REF_REGEX = /^[a-zA-Z0-9._\-/]+$/;
 const SHA256_REGEX = /^[a-f0-9]{64}$/i;
 // `service:<id>` | `integration:<id>` — the component a config key / readiness
 // requirement targets.
-const COMPONENT_TARGET_REGEX = /^(service|integration):[a-z0-9][a-z0-9-]*$/;
+const COMPONENT_TARGET_MESSAGE = "must be 'service:<id>' or 'integration:<id>'";
+const componentTargetSchema = z
+  .string()
+  .regex(/^(service|integration):[a-z0-9]+(-[a-z0-9]+)*$/, COMPONENT_TARGET_MESSAGE)
+  .refine((value) => isComponentId(value.slice(value.indexOf(":") + 1)), COMPONENT_TARGET_MESSAGE);
 
 function parsePortableExtensionUrl(s: string): URL | null {
   if (s.length > 2048) return null;
@@ -60,7 +67,7 @@ const serviceComponentSchema = z.object({
   // resolved HEAD SHA at install time (so it is still immutable until updated).
   ref: z.string().regex(REF_REGEX, "must be a tag or commit ref").optional(),
   // Which service.json in that repo to enable.
-  service: z.string().regex(ID_REGEX, "must be a valid service id"),
+  service: componentIdSchema,
 });
 
 const integrationComponentSchema = z.object({
@@ -69,23 +76,21 @@ const integrationComponentSchema = z.object({
   // Mandatory content pin, verified before extraction.
   sha256: z.string().regex(SHA256_REGEX, "must be a 64-char hex sha256"),
   // The integration id (manifest id) this artifact installs.
-  id: z.string().regex(ID_REGEX, "must be a valid integration id"),
+  id: componentIdSchema,
 });
 
 const configEntrySchema = z.object({
   key: z.string().min(1),
   // Which component this bundle-level config value is forwarded to.
-  target: z.string().regex(COMPONENT_TARGET_REGEX, "must be 'service:<id>' or 'integration:<id>'"),
+  target: componentTargetSchema,
   default: z.string().optional(),
 });
 
 const readinessSchema = z.object({
   // Components that must be up for the extension to be "ready".
-  requires: z
-    .array(z.string().regex(COMPONENT_TARGET_REGEX, "must be 'service:<id>' or 'integration:<id>'"))
-    .optional(),
+  requires: z.array(componentTargetSchema).optional(),
   // Integration whose registerHealthCheck() gates overall readiness.
-  integrationHealth: z.string().regex(ID_REGEX).optional(),
+  integrationHealth: componentIdSchema.optional(),
 });
 
 /**
@@ -96,8 +101,8 @@ const readinessSchema = z.object({
  */
 export const verifiedCatalogEntrySchema = z
   .object({
-    id: z.string().min(1).regex(ID_REGEX, "must be lowercase, hyphen-separated"),
-    version: z.string().min(1),
+    id: componentIdSchema,
+    version: semverSchema,
     manifest: extensionLocatorSchema,
     manifestSha256: z.string().regex(SHA256_REGEX, "must be a 64-char hex sha256"),
     platform: platformVersionSchema.optional(),
@@ -118,11 +123,11 @@ function declaredComponents(m: {
 
 export const extensionManifestSchema = z
   .object({
-    id: z.string().min(1).regex(ID_REGEX, "must be lowercase, hyphen-separated"),
+    id: componentIdSchema,
     name: z.string().min(1),
-    version: z.string().min(1),
+    version: semverSchema,
     // Minimum PLATFORM_VERSION (checked at install via satisfiesPlatformVersion).
-    platform: platformVersionSchema.optional(),
+    platform: platformVersionSchema,
     description: z.string().optional(),
     author: z.string().optional(),
     license: z.string().optional(),

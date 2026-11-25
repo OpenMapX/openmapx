@@ -1,13 +1,15 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseContributors } from "@openmapx/extension-contracts/contributors";
-import { validateServiceManifest } from "@openmapx/extension-contracts/service";
 import {
   packageIntegration,
   validateIntegrationDirectory,
 } from "@openmapx/integration-framework/installer";
 
-import { validateExtensionAuthoringInput } from "../extension-validation.js";
+import {
+  validateExtensionAuthoringInput,
+  validateServiceAuthoringInput,
+} from "../extension-validation.js";
 
 export type AuthoringKind = "integration" | "service" | "extension" | "contributors";
 export interface AuthoringValidationResult {
@@ -32,7 +34,7 @@ export async function validateAuthoringInput(
       return { valid: true, errors: [] };
     }
     const raw: unknown = JSON.parse(readFileSync(source, "utf8"));
-    if (kind === "service") return validateServiceManifest(raw, { firstParty: false });
+    if (kind === "service") return validateServiceAuthoringInput(raw);
     if (kind === "extension") return validateExtensionAuthoringInput(raw);
     if (kind === "contributors")
       return parseContributors(raw) !== undefined

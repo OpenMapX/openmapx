@@ -479,7 +479,7 @@ it.skipIf(
       send({ type: "release" });
       await expect
         .poll(async () => (await runtime.inspect(present(id)))?.status, { timeout: 15000 })
-        .toBe("ok");
+        .toBe("succeeded");
       expect((await runtime.inspect(id))?.result).toEqual({
         kind: "transit-maintenance",
         action: "restart-primary",
@@ -508,7 +508,7 @@ it.skipIf(
         ...(id ? [id] : []),
         ...(await dataJobsSince(sql, store, startedAt)).map((row) => row.status.id),
       ]);
-      for (const ownId of ownIds) await sql`DELETE FROM data_manager.jobs WHERE id=${ownId}`;
+      for (const ownId of ownIds) await sql`DELETE FROM data_manager.job WHERE id=${ownId}`;
       control.closeControlInstallation(dm);
       await sql.end();
       lines.close();
@@ -584,7 +584,7 @@ it
             executionContext: context,
             abortSignal: context.signal,
           });
-          let finalStatus: "ok" | "error" = "ok";
+          let finalStatus: "succeeded" | "failed" = "succeeded";
           if (kind === "promotion") {
             mkdirSync(join(data, "motis/staging"), { mode: 0o700, recursive: true });
             writePreparedFixture(join(data, "motis/staging"), context.execution.executionId);
@@ -605,7 +605,7 @@ it
             linkProxyFixture(data);
             writePreparedFixture(job.motisStagingDataDir, context.execution.executionId);
             const staged = await stageProxy(job);
-            if (staged.status !== "ok") finalStatus = "error";
+            if (staged.status !== "succeeded") finalStatus = "failed";
           }
           if (kind === "promotion") await runTransitOwnedPhase(job, phase);
           context.signal.throwIfAborted();
@@ -830,7 +830,7 @@ it
             .poll(
               async () =>
                 (
-                  await sql`SELECT execution_completion FROM data_manager.jobs WHERE id=${present(id)}`
+                  await sql`SELECT execution_completion FROM data_manager.job WHERE id=${present(id)}`
                 )[0]?.execution_completion != null,
               { timeout: 15000 },
             )
@@ -853,7 +853,7 @@ it
           ]);
           await closeRuntime();
           // An older/inconsistent terminal SQL row is not release authority.
-          await sql`UPDATE data_manager.jobs SET status='error',finished_at=${new Date().toISOString()}::text::timestamptz,execution_state=jsonb_set(execution_state,'{publication}','"committed"'::jsonb) WHERE id=${id}`;
+          await sql`UPDATE data_manager.job SET status='failed',finished_at=${new Date().toISOString()}::text::timestamptz,execution_state=jsonb_set(execution_state,'{publication}','"committed"'::jsonb) WHERE id=${id}`;
           const restarted = createDataExecutionRuntime({
             store,
             dispatch: async () => {
@@ -882,7 +882,7 @@ it
         }
         await expect
           .poll(async () => (await receiver.inspect(present(id)))?.status, { timeout: 15000 })
-          .toBe("error");
+          .toBe("failed");
         const failed = await store.inspect(id);
         expect(failed?.children).toMatchObject([
           {
@@ -929,7 +929,7 @@ it
       send({ type: "release" });
       await expect
         .poll(async () => (await receiver.inspect(present(id)))?.status, { timeout: 15000 })
-        .toBe("canceled");
+        .toBe("cancelled");
       expect((await receiver.inspect(id))?.publication).toBe("committed");
       await expect.poll(lease, { timeout: 10000 }).toBeUndefined();
       expect(await admission()).toEqual(original);
@@ -948,7 +948,7 @@ it
       agent.stdin.end();
       await exited;
       resetOpsClient();
-      if (id) await sql`DELETE FROM data_manager.jobs WHERE id=${id}`;
+      if (id) await sql`DELETE FROM data_manager.job WHERE id=${id}`;
       control.closeControlInstallation(dm);
       await sql.end();
       lines.close();
@@ -1129,7 +1129,7 @@ it.each(["before-proof", "before-terminal", "after-terminal"] as const)(
       } else {
         expect(status.errorClass).toBe("recovery_required");
       }
-      const jobs = JSON.parse(readFileSync(join(root, "state/ops-agent/jobs-v1.json"), "utf8"));
+      const jobs = JSON.parse(readFileSync(join(root, "state/ops-agent/jobs.json"), "utf8"));
       expect(JSON.stringify(jobs)).toContain(bound.execution.operationKey);
       await expect(control.releaseArtifactTargetLease(lease)).rejects.toThrow();
       expect(heldTargets(dirname(data)).includes("motis-feed-proxy")).toBe(true);

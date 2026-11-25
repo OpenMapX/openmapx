@@ -145,7 +145,7 @@ async function roleChange<T>(input: RoleChange, tx: AuthDatabase, write: () => P
   if (changed) {
     await tx.delete(session).where(eq(session.userId, input.userId));
     await tx.insert(adminAuditLog).values({
-      actorId: input.actorId,
+      actorUserId: input.actorId,
       targetId: input.userId,
       targetType: "user",
       targetUserId: actorUserIdOrNull(input.userId),

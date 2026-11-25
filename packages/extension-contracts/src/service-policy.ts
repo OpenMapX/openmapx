@@ -57,17 +57,12 @@ export function checkManifestSandbox(m: ServiceManifest, provenance: ManifestPro
   const communityNetworkAccess = m.communityNetworkAccess;
 
   // Every service answers to `openmapx-<service-id>` on the stack's networks,
-  // and services reach each other only by those names. A service ID, alias or
-  // container name (Docker resolves it too) with that prefix could answer for
-  // another service.
+  // and services reach each other only by those names; its container has the
+  // same name. A service ID or alias with that prefix could answer for another
+  // service.
   if (m.id.toLowerCase().startsWith(RESERVED_NETWORK_NAME_PREFIX)) {
     errors.push(
       `reserved_network_name: service id "${m.id}" may not start with "${RESERVED_NETWORK_NAME_PREFIX}"`,
-    );
-  }
-  if (m.container.containerName?.toLowerCase().startsWith(RESERVED_NETWORK_NAME_PREFIX)) {
-    errors.push(
-      `reserved_network_name: container name "${m.container.containerName}" may not start with "${RESERVED_NETWORK_NAME_PREFIX}"`,
     );
   }
   for (const alias of m.container.networkAliases ?? []) {

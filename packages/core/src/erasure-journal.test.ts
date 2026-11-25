@@ -109,7 +109,7 @@ describe("erasure journal", () => {
     const path = join(directory, "journal.jsonl");
     writeFileSync(
       path,
-      `${JSON.stringify({ version: 1, phase: "coverage", at: "2026-08-01T00:00:00.000Z" })}\n`,
+      `${JSON.stringify({ version: 2, phase: "coverage", at: "2026-08-01T00:00:00.000Z" })}\n`,
       { mode: 0o600 },
     );
 

@@ -8,6 +8,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { COMPONENT_ID_MAX_LENGTH, isComponentId } from "@openmapx/core/component-id";
 import {
   listIntegrations as coreListIntegrations,
   type IntegrationSummary,
@@ -67,9 +68,9 @@ export interface ScaffoldOptions {
 }
 
 export function scaffoldIntegration({ id, domain, integrationsDir }: ScaffoldOptions): string {
-  if (!VALID_ID.test(id)) {
+  if (!VALID_ID.test(id) || !isComponentId(id)) {
     throw new Error(
-      `Invalid integration id "${id}". Must start with a lowercase letter and contain only lowercase letters, digits, and hyphens.`,
+      `Invalid integration id "${id}". Must start with a lowercase letter, contain only lowercase letters, digits, and single hyphens between them, and be at most ${COMPONENT_ID_MAX_LENGTH} characters.`,
     );
   }
 

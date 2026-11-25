@@ -34,7 +34,6 @@
     "urlTemplate": "${endpoint:pelias}/v1/search?text=test&size=1"
   },
   "quality": "built-in",
-  "category": "Geocoding",
   "dataSources": [
     {
       "sourceId": "pelias",

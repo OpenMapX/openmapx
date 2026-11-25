@@ -41,6 +41,7 @@ function manifest(id: string, overrides: Record<string, unknown> = {}) {
     id,
     name: id,
     version: "1.0.0",
+    platform: "1.0",
     quality: "community",
     container: {
       image: `registry.example.test/${id}`,

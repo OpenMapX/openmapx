@@ -27,14 +27,13 @@ export interface AdminSearchMetadata {
   }[];
 }
 const SETTINGS_OWNERS: Record<string, string> = {
-  general: "general",
   auth: "authentication",
   email: "email",
   map: "map",
   policy: "data-use",
 };
 export function adminSettingHref(setting: { group: string; subgroup?: string; key: string }) {
-  if (!/^[a-zA-Z0-9_-]{1,128}$/.test(setting.key)) return null;
+  if (!/^[a-zA-Z0-9_.-]{1,128}$/.test(setting.key)) return null;
   if (setting.group === "legal")
     return `/admin/privacy-setup?field=${encodeURIComponent(setting.key)}#${setting.subgroup === "retention" || setting.subgroup === "sources" ? "retention" : "operator"}`;
   const owner = SETTINGS_OWNERS[setting.group];
@@ -44,7 +43,7 @@ export function adminSettingHref(setting: { group: string; subgroup?: string; ke
 const SHORTCUTS = [
   {
     id: "email-smtp",
-    href: "/admin/settings/email?field=smtpHost",
+    href: "/admin/settings/email?field=smtp.host",
     hostOnly: false,
     titleKey: "emailSmtpTitle",
     descriptionKey: "emailSmtpDescription",

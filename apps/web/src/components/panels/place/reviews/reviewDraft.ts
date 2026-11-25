@@ -1,3 +1,5 @@
+import { STORAGE_KEYS } from "@openmapx/core";
+
 interface DraftStorage {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
@@ -11,7 +13,7 @@ export interface ReviewDraft {
   isAffiliated: boolean;
   license: "CC-BY-4.0" | "CC-BY-SA-4.0";
 }
-const KEY = "openmapx.mangrove.draft";
+const KEY = STORAGE_KEYS.reviewDraft.key;
 /** One per-tab reconnect draft, scoped to the exact account session and subject. */
 export function saveReviewDraft(
   storage: DraftStorage,

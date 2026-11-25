@@ -13,7 +13,11 @@ import { useExploreResults } from "../useExploreResults";
 const bbox = { west: 13.3, south: 52.4, east: 13.5, north: 52.6 };
 const filter = { selectors: [{ tags: [{ key: "amenity", op: "=" as const, value: "cafe" }] }] };
 const success = { results: [], partial: false };
-const areaError = new ApiClientError(422, { error: "area_too_large" }, null);
+const areaError = new ApiClientError(
+  422,
+  { error: "Area too large", code: "AREA_TOO_LARGE" },
+  null,
+);
 
 describe("useExploreResults retry", () => {
   beforeEach(() => {

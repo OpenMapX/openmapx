@@ -4,7 +4,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { AdminActionReauthentication } from "../account/admin-reauthentication";
 import { db } from "../db";
 import { transitCredentialPreview } from "../db/schema";
-import { decrypt, encrypt } from "./secrets";
+import { decrypt, encrypt, secretAad } from "./secrets";
 import { readFeedCredentialPreview, TransitCredentialConflict } from "./transit-credential-preview";
 export interface TransitCredentialRequestBinding {
   actorId: string;
@@ -34,7 +34,7 @@ export async function bindTransitCredentialAuthorization(input: TransitCredentia
     await new AdminActionReauthentication(tx).check(
       {
         challengeId: input.transitProofToken,
-        purpose: "transit.credentials",
+        purpose: "transit.credential.update",
         targetId: stored.private.preview.catalogRevisionId,
         intentFingerprint: input.intentFingerprint,
         sessionId: input.sessionId,
@@ -42,13 +42,17 @@ export async function bindTransitCredentialAuthorization(input: TransitCredentia
       },
       tx,
     );
-    const bytes = encrypt(canonicalJson(input));
+    const bytes = encrypt(
+      canonicalJson(input),
+      secretAad.transitCredentialAuthorization(input.previewId),
+    );
     const marked = await tx
       .update(transitCredentialPreview)
       .set({
         authorizationCiphertext: bytes.ciphertext,
         authorizationIv: bytes.iv,
         authorizationTag: bytes.tag,
+        authorizationKeyVersion: bytes.keyVersion,
       })
       .where(
         and(
@@ -64,13 +68,26 @@ function decode(
   row: typeof transitCredentialPreview.$inferSelect,
 ): TransitCredentialRequestBinding {
   try {
-    if (!row.authorizationCiphertext || !row.authorizationIv || !row.authorizationTag)
+    if (
+      !row.authorizationCiphertext ||
+      !row.authorizationIv ||
+      !row.authorizationTag ||
+      row.authorizationKeyVersion === null
+    )
       throw new Error();
     const input: TransitCredentialRequestBinding = JSON.parse(
-      decrypt(row.authorizationCiphertext, row.authorizationIv, row.authorizationTag),
+      decrypt(
+        {
+          ciphertext: row.authorizationCiphertext,
+          iv: row.authorizationIv,
+          tag: row.authorizationTag,
+          keyVersion: row.authorizationKeyVersion,
+        },
+        secretAad.transitCredentialAuthorization(row.id),
+      ),
     );
     if (
-      input.actorId !== row.actorId ||
+      input.actorId !== row.actorUserId ||
       input.previewId !== row.id ||
       input.intentFingerprint !== row.intentFingerprint ||
       input.operationKey !== row.operationKey ||

@@ -51,7 +51,6 @@ const body = () => ({
   changes: [{ key: "de/A", action: "set" as const, value: "private-input" }],
 });
 beforeEach(async () => {
-  vi.stubEnv("OPENMAPX_DISABLE_LOCALHOST_AUTH", "1");
   vi.clearAllMocks();
   mocks.session = mockAdminSession();
   mocks.inspect.mockResolvedValue({
@@ -143,10 +142,9 @@ it.each([
   expect(mocks.preview).not.toHaveBeenCalled();
   expect(mocks.inspect).not.toHaveBeenCalled();
 });
-it.each(["impersonated", "loopback"])("refuses mutation from %s authority", async (mode) => {
+it("refuses mutation from impersonated authority", async () => {
   const session = mockAdminSession();
-  if (mode === "loopback") session.user.id = "loopback";
-  else session.session.impersonatedBy = "another-admin";
+  session.session.impersonatedBy = "another-admin";
   mocks.session = session;
   expect(
     (

@@ -24,6 +24,7 @@ function manifest(id: string, image = `registry.example.test/${id}`): string {
     id,
     name: id,
     version: "1.0.0",
+    platform: "1.0",
     quality: "community",
     container: { image, tag: "1", digest: `sha256:${"a".repeat(64)}`, memory: "256m" },
   });
@@ -143,7 +144,7 @@ describe("community repository records", () => {
     ],
     ["no manifests", { manifests: [] }],
     ["manifests without a commit", { commit: null }],
-    ["version 1", { version: 1 }],
+    ["another version", { version: 2 }],
   ])("rejects a record with %s", (_label, overrides) => {
     const { record } = fixture();
     expect(() => parseCommunityRepositoryRecord({ ...record(), ...overrides }, REPOSITORY)).toThrow(

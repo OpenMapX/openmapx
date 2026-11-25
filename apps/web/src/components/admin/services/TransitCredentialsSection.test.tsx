@@ -186,18 +186,18 @@ it("discards a late preview response when the actor changes", async () => {
 
 it("restores only a completed actor-scoped matching credential review", () => {
   const preview = reviewedReply().data;
-  const reviewKey = `openmapx-transit-credential-preview:${JSON.stringify([mocks.apiUrl, mocks.actorId])}`;
+  const reviewKey = `openmapx:admin:transit-credential-preview:${JSON.stringify([mocks.apiUrl, mocks.actorId])}`;
   sessionStorage.setItem(
     reviewKey,
     JSON.stringify({ preview, operationKey: "opk1_aaaaaaaaaaaaaaaaaaaa" }),
   );
   sessionStorage.setItem(
-    `openmapx-admin-reauth:${mocks.apiUrl}`,
+    `openmapx:admin:reauthentication:${mocks.apiUrl}`,
     JSON.stringify({
       phase: "completed",
       requests: [
         {
-          purpose: "transit.credentials",
+          purpose: "transit.credential.update",
           targetId: preview.catalogRevisionId,
           intentFingerprint: preview.intentFingerprint,
         },

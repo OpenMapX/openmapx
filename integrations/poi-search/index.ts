@@ -33,11 +33,16 @@ const BRAND_KINDS: readonly BrandKind[] = ["brand", "operator", "network"];
  */
 function sendOverpassFailure(reply: Parameters<RouteHandler>[1], err: unknown): boolean {
   if (err instanceof OverpassTimeoutError) {
-    reply.status(422).send({ error: "area_too_large" });
+    reply
+      .status(422)
+      .send({ error: "The area is too large; zoom in and try again", code: "AREA_TOO_LARGE" });
     return true;
   }
   if (err instanceof OverpassUnavailableError || err instanceof OverpassRateLimitError) {
-    reply.status(503).send({ error: "overpass_unavailable" });
+    reply.status(503).send({
+      error: "Place search is unavailable; try again later",
+      code: "OVERPASS_UNAVAILABLE",
+    });
     return true;
   }
   return false;

@@ -7,7 +7,9 @@
  * call is a safe no-op there. Gated on a user setting and `prefers-reduced-motion`.
  */
 
-const STORAGE_KEY = "openmapx-haptics-enabled";
+import { STORAGE_KEYS } from "@openmapx/core";
+
+const STORAGE_KEY = STORAGE_KEYS.hapticsEnabled.key;
 
 /** Default on; only an explicit opt-out is stored. */
 export function isHapticsEnabled(): boolean {

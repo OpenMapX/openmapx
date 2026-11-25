@@ -80,7 +80,7 @@ export async function runPlatformConfigurationChange(
         if (error instanceof PlatformPreviewConflict)
           throw new AdminJobFailure(
             "The release images were downloaded, but the preview expired during the download. Create a new preview and apply again.",
-            { errorCode: "conflict" },
+            { errorCode: "CONFLICT" },
           );
         throw error;
       }

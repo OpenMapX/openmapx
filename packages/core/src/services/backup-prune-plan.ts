@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { lstatSync } from "node:fs";
 import { AnchoredDirectory, type FileIdentity, identity } from "../build-artifacts/filesystem";
 import { canonicalJson } from "../ops/canonical-json";
+import { BACKUP_FORMAT_VERSION } from "./backup-format";
 import { backupRetentionExpiry } from "./backup-retention";
 import { isBackupStoreLockEntry } from "./backup-retention-store";
 
@@ -68,7 +69,7 @@ export function backupPruneInventory(infraDir: string, retentionDays: number, at
             manifestDigest = createHash("sha256").update(bytes).digest("hex");
             const manifest = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
             if (
-              manifest?.formatVersion !== 2 ||
+              manifest?.formatVersion !== BACKUP_FORMAT_VERSION ||
               manifest.name !== name ||
               typeof manifest.createdAt !== "string" ||
               !Array.isArray(manifest.services) ||

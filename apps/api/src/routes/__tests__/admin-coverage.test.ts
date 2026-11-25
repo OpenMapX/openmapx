@@ -142,11 +142,14 @@ describe("admin coverage routes", () => {
       url: "/admin/coverage?regionId=../secret",
     });
     expect(malformed.statusCode).toBe(400);
-    expect(malformed.json()).toEqual({ error: "regionId_invalid" });
+    expect(malformed.json()).toEqual({ error: "Invalid regionId", code: "INVALID_QUERY" });
 
     const missing = await app.inject({ method: "GET", url: "/admin/coverage?regionId=country:XX" });
     expect(missing.statusCode).toBe(404);
-    expect(missing.json()).toEqual({ error: "region_not_found" });
+    expect(missing.json()).toEqual({
+      error: "Coverage region not found",
+      code: "REGION_NOT_FOUND",
+    });
 
     const overLimit = await app.inject({
       method: "GET",
@@ -173,7 +176,10 @@ describe("admin coverage routes", () => {
       url: `/admin/coverage?regionId=${encodeURIComponent(REGION.key)}&snapshotId=${"a".repeat(32)}`,
     });
     expect(expired.statusCode).toBe(409);
-    expect(expired.json()).toEqual({ error: "snapshot_expired" });
+    expect(expired.json()).toEqual({
+      error: "Coverage snapshot expired",
+      code: "SNAPSHOT_EXPIRED",
+    });
   });
 
   it("maps total evidence loss to 503", async () => {
@@ -191,7 +197,10 @@ describe("admin coverage routes", () => {
     });
     await isolated.close();
     expect(response.statusCode).toBe(503);
-    expect(response.json()).toEqual({ error: "coverage_unavailable" });
+    expect(response.json()).toEqual({
+      error: "Coverage evidence is unavailable",
+      code: "COVERAGE_UNAVAILABLE",
+    });
   });
 
   it("honours the full-admin guard", async () => {

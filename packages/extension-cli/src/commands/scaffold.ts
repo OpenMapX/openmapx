@@ -9,9 +9,16 @@ import {
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isComponentId } from "@openmapx/extension-contracts/identifiers";
 import packageInfo from "../../package.json";
 
-const VALID_ID = /^[a-z][a-z0-9-]*$/;
+const ID_RULE =
+  "Use at most 48 lowercase letters, digits and single hyphens, starting with a letter and ending with a letter or digit.";
+
+/** A component id that also starts with a letter, so the derived schema name is a valid identifier. */
+function isScaffoldId(id: string): boolean {
+  return isComponentId(id) && /^[a-z]/.test(id);
+}
 
 /**
  * Resolve the templates directory relative to the current file.
@@ -54,11 +61,7 @@ function substituteTokensInDir(dir: string, id: string, domain: string): void {
 export function scaffoldIntegration(opts: { id: string; domain?: string; outDir: string }): string {
   const { id, domain, outDir } = opts;
 
-  if (!VALID_ID.test(id)) {
-    throw new Error(
-      `Invalid integration id "${id}". Must start with a lowercase letter and contain only lowercase letters, digits, and hyphens.`,
-    );
-  }
+  if (!isScaffoldId(id)) throw new Error(`Invalid integration id "${id}". ${ID_RULE}`);
 
   const destDir = join(outDir, id);
   if (existsSync(destDir)) {
@@ -89,11 +92,7 @@ export function scaffoldIntegration(opts: { id: string; domain?: string; outDir:
 export function scaffoldService(opts: { id: string; outDir: string }): string {
   const { id, outDir } = opts;
 
-  if (!VALID_ID.test(id)) {
-    throw new Error(
-      `Invalid service id "${id}". Must start with a lowercase letter and contain only lowercase letters, digits, and hyphens.`,
-    );
-  }
+  if (!isScaffoldId(id)) throw new Error(`Invalid service id "${id}". ${ID_RULE}`);
 
   const serviceTemplatePath = join(SERVICE_TEMPLATE_DIR, "service.json");
   if (!existsSync(serviceTemplatePath)) {

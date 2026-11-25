@@ -9,7 +9,7 @@ import { authRoute } from "../routes/auth.js";
 import { corsOptions } from "../server-wiring.js";
 import {
   configuredTrustedWebOrigins,
-  isBetterAuthCsrfPath,
+  isSessionLibraryCsrfPath,
   makeCsrfGuardHook,
   normalizeHttpOrigin,
   parseTrustedWebOrigins,
@@ -26,8 +26,6 @@ const TRUSTED_ORIGIN = "https://web.example.test";
 
 beforeEach(() => {
   vi.stubEnv("NODE_ENV", "test");
-  vi.stubEnv("OPENMAPX_LOCAL_ADMIN_TOKEN", "");
-  vi.stubEnv("OPENMAPX_DISABLE_LOCALHOST_AUTH", "");
   mockGetSession.mockReset();
 });
 
@@ -112,7 +110,7 @@ describe("Better Auth CSRF path boundary", () => {
   it.each(["/api/auth", "/api/auth/", "/api/auth/sign-out", "/api/auth/sign-out?next=1"])(
     "excludes only the real Better Auth pathname %s",
     (url) => {
-      expect(isBetterAuthCsrfPath(url)).toBe(true);
+      expect(isSessionLibraryCsrfPath(url)).toBe(true);
     },
   );
 
@@ -126,7 +124,7 @@ describe("Better Auth CSRF path boundary", () => {
     String.raw`/api/auth\sign-out`,
     "https://web.example.test/api/auth/sign-out",
   ])("does not exempt an encoded or lookalike pathname %s", (url) => {
-    expect(isBetterAuthCsrfPath(url)).toBe(false);
+    expect(isSessionLibraryCsrfPath(url)).toBe(false);
   });
 });
 
@@ -389,8 +387,8 @@ describe("Better Auth exemption integration", () => {
   );
 });
 
-describe("independent local-admin boundary", () => {
-  it("still requires the loopback custom header even when CSRF origin validation passes", async () => {
+describe("independent session boundary", () => {
+  it("still requires an administrator session when CSRF origin validation passes", async () => {
     mockGetSession.mockResolvedValue(null);
     const app = Fastify({ logger: false });
     app.addHook("onRequest", makeCsrfGuardHook([TRUSTED_ORIGIN]));
@@ -399,25 +397,15 @@ describe("independent local-admin boundary", () => {
       return { userId: session.user.id };
     });
 
-    const withoutLocalHeader = await app.inject({
+    // A loopback peer is granted nothing without a valid session.
+    const response = await app.inject({
       method: "POST",
       url: "/api/admin/mutate",
       headers: { cookie: "session=fixture", origin: TRUSTED_ORIGIN },
     });
-    const withLocalHeader = await app.inject({
-      method: "POST",
-      url: "/api/admin/mutate",
-      headers: {
-        cookie: "session=fixture",
-        origin: TRUSTED_ORIGIN,
-        "x-openmapx-local-admin": "",
-      },
-    });
     await app.close();
 
-    expect(withoutLocalHeader.statusCode).toBe(401);
-    expect(withLocalHeader.statusCode).toBe(200);
-    expect(withLocalHeader.json()).toEqual({ userId: "loopback" });
+    expect(response.statusCode).toBe(401);
   });
 });
 

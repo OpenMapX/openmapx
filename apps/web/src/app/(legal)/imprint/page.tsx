@@ -2,6 +2,7 @@ import { sectionSlug } from "@openmapx/core/legal";
 import { fetchLegalConfig } from "@openmapx/core/server-api";
 import type { Metadata } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
+import { LegalConfigUnavailable } from "@/components/legal/LegalConfigUnavailable";
 import { LegalPageShell, type LegalSection } from "@/components/legal/LegalPageShell";
 
 const sectionsEn: LegalSection[] = [
@@ -44,8 +45,8 @@ export default async function ImprintPage() {
   const legal = await fetchLegalConfig();
 
   return (
-    <LegalPageShell sections={sections}>
-      <Content legal={legal} />
+    <LegalPageShell sections={legal ? sections : []}>
+      {legal ? <Content legal={legal} /> : <LegalConfigUnavailable />}
     </LegalPageShell>
   );
 }

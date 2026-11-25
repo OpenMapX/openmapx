@@ -38,7 +38,7 @@ export const registerServiceAdminRoute: typeof register = (app, operation, handl
         if (error instanceof ConfigurationPrerequisiteFailure)
           return reply.code(409).send({ error: error.message });
         if (error instanceof TrustedConfigurationApplyError && error.statusCode === 409) {
-          return reply.code(409).send({ error: error.message });
+          return reply.code(409).send(error.reply());
         }
         return reply.code(500).send({ error: "Service administration failed" });
       }

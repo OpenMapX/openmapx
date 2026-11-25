@@ -33,7 +33,7 @@ describe("describeMapLocation", () => {
 
 describe("mapLocationPlace", () => {
   it("is the basemap place when there is one, else the point", () => {
-    expect(mapLocationPlace({ coordinates: POINT, poi: CAFE }, null).id).toBe("stylePoi:42");
+    expect(mapLocationPlace({ coordinates: POINT, poi: CAFE }, null).id).toBe("style-poi:42");
     expect(mapLocationPlace({ coordinates: POINT, poi: null }, null).coordinates).toEqual(POINT);
   });
 });

@@ -19,11 +19,11 @@
     "digest": "sha256:6238809f9dc3057743d70a20efd3911ec38e458bfa13a0601909b58f68dfd956",
     "expose": [8002],
     "environment": {
-      "serve_tiles": "True",
-      "build_elevation": "True",
-      "build_admins": "True",
-      "build_time_zones": "True",
-      "use_tiles_ignore_pbf": "False"
+      "SERVE_TILES": "True",
+      "BUILD_ELEVATION": "True",
+      "BUILD_ADMINS": "True",
+      "BUILD_TIME_ZONES": "True",
+      "USE_TILES_IGNORE_PBF": "False"
     },
     "memory": "16g",
     "restart": "unless-stopped",
@@ -67,25 +67,25 @@
   "configSchema": {
     "type": "object",
     "properties": {
-      "build_elevation": {
+      "BUILD_ELEVATION": {
         "type": "boolean",
         "default": true,
         "title": "Build elevation data"
       },
-      "build_admins": {
+      "BUILD_ADMINS": {
         "type": "boolean",
         "default": true,
         "title": "Build admin boundaries"
       },
-      "serve_tiles": {
+      "SERVE_TILES": {
         "type": "boolean",
         "title": "Serve tiles"
       },
-      "build_time_zones": {
+      "BUILD_TIME_ZONES": {
         "type": "boolean",
         "title": "Build time zones"
       },
-      "use_tiles_ignore_pbf": {
+      "USE_TILES_IGNORE_PBF": {
         "type": "boolean",
         "title": "Use tiles ignore pbf"
       },

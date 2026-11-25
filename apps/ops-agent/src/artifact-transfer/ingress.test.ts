@@ -60,12 +60,10 @@ it.skipIf(process.env.RUN_ARTIFACT_INGRESS_TESTS !== "1")(
     const prior = {
       OPS_AGENT_URL: process.env.OPS_AGENT_URL,
       OPS_AGENT_TOKEN_FILE: process.env.OPS_AGENT_TOKEN_FILE,
-      OPENMAPX_DISABLE_LOCALHOST_AUTH: process.env.OPENMAPX_DISABLE_LOCALHOST_AUTH,
     };
     try {
       process.env.OPS_AGENT_URL = await agent.listen({ host: "127.0.0.1", port: 0 });
       process.env.OPS_AGENT_TOKEN_FILE = tokenFile;
-      process.env.OPENMAPX_DISABLE_LOCALHOST_AUTH = "1";
       await api.register(adminArtifactTransfersRoute, { prefix: "/api" });
       await api.listen({ host: "0.0.0.0", port: 0 });
       const address = api.server.address();

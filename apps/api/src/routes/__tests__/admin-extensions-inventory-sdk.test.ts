@@ -94,7 +94,10 @@ beforeEach(async () => {
     }
     return 1;
   });
-  ports.fetch.mockResolvedValue([{ id: installed.id, name: "Catalog", version: "2.0" }]);
+  ports.fetch.mockResolvedValue({
+    schemaVersion: 1,
+    extensions: [{ id: installed.id, name: "Catalog", version: "2.0" }],
+  });
   ports.enqueue.mockResolvedValue("synthetic-remove-job");
   extensionPreviewLimit.reset();
   storeInstallLimit.reset();
@@ -193,13 +196,14 @@ describe("authoritative inventory through real store, route and generated SDK", 
     ["1.0", false],
     [undefined, null],
   ] as const)("compares matching version %s truthfully", async (version, expected) => {
-    ports.fetch.mockResolvedValue([
-      { id: installed.id, name: "Catalog", ...(version ? { version } : {}) },
-    ]);
+    ports.fetch.mockResolvedValue({
+      schemaVersion: 1,
+      extensions: [{ id: installed.id, name: "Catalog", ...(version ? { version } : {}) }],
+    });
     await expectInventory(expected, version ?? null);
   });
   it("uses unknown when no matching catalog entry exists", async () => {
-    ports.fetch.mockResolvedValue([]);
+    ports.fetch.mockResolvedValue({ schemaVersion: 1, extensions: [] });
     await expectInventory(null, null);
     expect(JSON.parse(ports.values.get(catalogKey) ?? "null")).toEqual({
       entries: [],

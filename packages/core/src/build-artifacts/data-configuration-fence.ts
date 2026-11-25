@@ -45,7 +45,7 @@ const fenceRowSchema = z.object({
   candidate_id: z.uuid(),
   plan_digest: z.string(),
   input: dataConfigurationFencePrepareSchema,
-  state: z.enum(["prepared", "settled", "refused"]),
+  status: z.enum(["prepared", "settled", "refused"]),
   outcome: dataConfigurationFenceOutcomeSchema.nullable(),
 });
 type FenceRow = z.infer<typeof fenceRowSchema>;
@@ -53,7 +53,7 @@ const FENCE_COLUMNS = "maintenance_id,fence_id,operation_key,candidate_id,plan_d
 const FENCE_VALUES = "$1::uuid,$2::uuid,$3,$4::uuid,$5,$6::text::jsonb";
 /** Data jobs whose publication was not observed keep the data plane fenced. */
 const UNKNOWN_DATA_JOB =
-  "SELECT id FROM data_manager.jobs WHERE execution_state->>'publication'='unknown' LIMIT 1";
+  "SELECT id FROM data_manager.job WHERE execution_state->>'publication'='unknown' LIMIT 1";
 export class DataFenceBusy extends Error {
   readonly statusCode = 409;
   constructor() {
@@ -68,13 +68,13 @@ function forbidden(message: string): Error {
 }
 function receiptOf(row: FenceRow): DataConfigurationFenceReceipt {
   // A refused preparation fenced nothing; it answers as busy.
-  if (row.state === "refused") throw new DataFenceBusy();
+  if (row.status === "refused") throw new DataFenceBusy();
   const { serviceIds: _serviceIds, coordinatorMode: _coordinatorMode, ...binding } = row.input;
   return {
     ...binding,
     fenceId: row.fence_id,
-    sequence: row.state === "prepared" ? 0 : 1,
-    state: row.state,
+    sequence: row.status === "prepared" ? 0 : 1,
+    state: row.status,
   };
 }
 /** What the agent's store shows about the lease a hardlink plan's sender
@@ -113,7 +113,7 @@ export function createDataConfigurationFenceStore(
     ]);
     if (rows[0]?.held !== true) throw new DataFenceBusy();
   }
-  async function row(tx: Tx, where: "maintenance_id" | "state", value: string) {
+  async function row(tx: Tx, where: "maintenance_id" | "status", value: string) {
     // The primary key and the one-prepared index allow at most one row.
     const rows = await tx.unsafe(
       `SELECT * FROM data_manager.configuration_fence WHERE ${where}=$1`,
@@ -156,7 +156,7 @@ export function createDataConfigurationFenceStore(
   }
   async function assertAdmission(tx: Tx) {
     if (!open) throw new DataFenceBusy();
-    if (await row(tx, "state", "prepared")) throw new DataFenceBusy();
+    if (await row(tx, "status", "prepared")) throw new DataFenceBusy();
     if ((await tx.unsafe(UNKNOWN_DATA_JOB)).length) throw new DataFenceBusy();
   }
   /** A generation's hardlink plan sent with the sender's lease id. Outside a
@@ -173,7 +173,7 @@ export function createDataConfigurationFenceStore(
     if (caller !== "ops-agent" && caller !== "host-cli")
       throw forbidden("Only the agent or the host CLI links under its own lease");
     if (!open) throw new DataFenceBusy();
-    const fence = await row(tx, "state", "prepared");
+    const fence = await row(tx, "status", "prepared");
     if (fence) {
       const receipt = receiptOf(fence);
       if (
@@ -243,18 +243,18 @@ export function createDataConfigurationFenceStore(
           if (current) return recorded(current);
           await assertAdmission(tx);
           const active = await tx.unsafe(
-            "SELECT id FROM data_manager.jobs WHERE finished_at IS NULL OR execution_state->>'publication'='unknown' LIMIT 1",
+            "SELECT id FROM data_manager.job WHERE finished_at IS NULL OR execution_state->>'publication'='unknown' LIMIT 1",
           );
           const transfers = await tx.unsafe(
-            "SELECT id FROM data_manager.offline_package_jobs WHERE status='preparing' LIMIT 1",
+            "SELECT id FROM data_manager.offline_package_job WHERE status='preparing' LIMIT 1",
           );
           if (active.length || transfers.length) throw new DataFenceBusy();
           // Rows that ended more than 72 hours ago go with the next preparation.
           await tx.unsafe(
-            "DELETE FROM data_manager.configuration_fence WHERE state<>'prepared' AND settled_at < now() - interval '72 hours'",
+            "DELETE FROM data_manager.configuration_fence WHERE status<>'prepared' AND settled_at < now() - interval '72 hours'",
           );
           const inserted = await tx.unsafe(
-            `INSERT INTO data_manager.configuration_fence(${FENCE_COLUMNS},state) VALUES(${FENCE_VALUES},'prepared') RETURNING *`,
+            `INSERT INTO data_manager.configuration_fence(${FENCE_COLUMNS},status) VALUES(${FENCE_VALUES},'prepared') RETURNING *`,
             values,
           );
           return receiptOf(fenceRowSchema.parse(inserted[0]));
@@ -265,7 +265,7 @@ export function createDataConfigurationFenceStore(
         // request the same answer. A row another copy of the request wrote
         // first answers instead.
         await sql.unsafe(
-          `INSERT INTO data_manager.configuration_fence(${FENCE_COLUMNS},state,settled_at) VALUES(${FENCE_VALUES},'refused',now()) ON CONFLICT DO NOTHING`,
+          `INSERT INTO data_manager.configuration_fence(${FENCE_COLUMNS},status,settled_at) VALUES(${FENCE_VALUES},'refused',now()) ON CONFLICT DO NOTHING`,
           values,
         );
         const after = await row(sql, "maintenance_id", input.maintenanceId);
@@ -283,7 +283,7 @@ export function createDataConfigurationFenceStore(
       if (transportPrincipal !== "ops-agent" && transportPrincipal !== "host-cli")
         throw forbidden("Agent or host CLI transport required");
       const saved = await row(sql, "maintenance_id", maintenanceId);
-      if (!saved || saved.state === "refused") return null;
+      if (!saved || saved.status === "refused") return null;
       if (saved.candidate_id !== expected.candidateId)
         throw Error("Configuration fence owner changed");
       return receiptOf(saved);
@@ -320,7 +320,7 @@ export function createDataConfigurationFenceStore(
       return sql.transaction(async (tx) => {
         const saved = await row(tx, "maintenance_id", input.maintenanceId);
         // A refused preparation fenced nothing, so there is nothing to settle.
-        if (!saved || saved.state === "refused")
+        if (!saved || saved.status === "refused")
           throw Object.assign(Error("Configuration maintenance identity is unknown"), {
             statusCode: 404,
           });
@@ -333,11 +333,11 @@ export function createDataConfigurationFenceStore(
         if (saved.candidate_id !== input.candidateId || saved.plan_digest !== input.planDigest)
           throw conflict("Configuration fence settlement conflict");
         await tx.unsafe(
-          "UPDATE data_manager.configuration_fence SET state='settled',outcome=$2,settled_at=now() WHERE maintenance_id=$1::uuid AND state='prepared'",
+          "UPDATE data_manager.configuration_fence SET status='settled',outcome=$2,settled_at=now() WHERE maintenance_id=$1::uuid AND status='prepared'",
           [input.maintenanceId, input.outcome],
         );
         const settled = await row(tx, "maintenance_id", input.maintenanceId);
-        if (settled?.state !== "settled" || settled.outcome !== input.outcome)
+        if (settled?.status !== "settled" || settled.outcome !== input.outcome)
           throw conflict("Configuration fence was settled with another outcome");
         return receiptOf(settled);
       });

@@ -1,3 +1,12 @@
+import {
+  ACTIVE_JOB_STATUSES,
+  type ActiveJobStatus,
+  ADMIN_JOB_TYPES,
+  type AdminJobType,
+  JOB_STATUSES,
+  type JobStatus,
+  SYSTEM_MAINTENANCE_JOB_TYPES,
+} from "@openmapx/core/jobs";
 import { type SQL, sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
@@ -18,9 +27,12 @@ import { user } from "./auth-schema";
 /** Admission is arbitrated by this index; it must stay in step with the system routes. */
 export const ACTIVE_SYSTEM_MAINTENANCE_INDEX = "admin_job_active_system_maintenance_key";
 
-/** The statuses of a job the runner still owns. */
-export const ACTIVE_ADMIN_JOB_STATUSES = ["queued", "running", "cancel_pending"] as const;
-export type ActiveAdminJobStatus = (typeof ACTIVE_ADMIN_JOB_STATUSES)[number];
+/** `column IN (…)` over registry values written as SQL literals. */
+function literalsIn(column: AnyPgColumn, values: readonly string[]): SQL {
+  if (values.length === 0 || values.some((value) => !/^[a-z][a-z_.]*$/.test(value)))
+    throw Error("Unsafe value literal");
+  return sql`${column} IN (${sql.raw(values.map((value) => `'${value}'`).join(", "))})`;
+}
 
 /**
  * `status IN (…)` with the statuses written as SQL literals. The partial
@@ -28,24 +40,18 @@ export type ActiveAdminJobStatus = (typeof ACTIVE_ADMIN_JOB_STATUSES)[number];
  * it can prove a query's statuses fall inside that predicate, which bound
  * parameters cannot show once a prepared statement runs with a generic plan.
  */
-export function adminJobStatusIn(
-  column: AnyPgColumn,
-  statuses: readonly ActiveAdminJobStatus[],
-): SQL {
-  const literals = statuses
-    .filter((status) => ACTIVE_ADMIN_JOB_STATUSES.includes(status))
-    .map((status) => `'${status}'`);
-  if (literals.length !== statuses.length || literals.length === 0)
+export function adminJobStatusIn(column: AnyPgColumn, statuses: readonly ActiveJobStatus[]): SQL {
+  if (!statuses.every((status) => ACTIVE_JOB_STATUSES.includes(status)))
     throw Error("Unknown active admin job status");
-  return sql`${column} IN (${sql.raw(literals.join(", "))})`;
+  return literalsIn(column, statuses);
 }
 
 export const adminJob = pgTable(
   "admin_job",
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
-    type: text("type").notNull(),
-    status: text("status").notNull().default("queued"),
+    type: text("type").$type<AdminJobType>().notNull(),
+    status: text("status").$type<JobStatus>().notNull().default("queued"),
     payload: jsonb("payload"),
     result: jsonb("result"),
     /** The runner's own state: claim, observation lease, cancel request and agent operations. */
@@ -56,33 +62,31 @@ export const adminJob = pgTable(
     logEvents: integer("log_events").notNull().default(0),
     /** UTF-8 bytes of those lines. */
     logBytes: integer("log_bytes").notNull().default(0),
-    createdBy: text("created_by"),
+    createdByUserId: text("created_by_user_id"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     startedAt: timestamp("started_at", { withTimezone: true }),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
   },
   (table) => [
     foreignKey({
-      name: "admin_job_created_by_fkey",
-      columns: [table.createdBy],
+      name: "admin_job_created_by_user_id_fkey",
+      columns: [table.createdByUserId],
       foreignColumns: [user.id],
     }).onDelete("set null"),
-    check(
-      "admin_job_status_check",
-      sql`${table.status} in ('queued','running','cancel_pending','success','failed','canceled')`,
-    ),
+    check("admin_job_status_check", literalsIn(table.status, JOB_STATUSES)),
+    check("admin_job_type_check", literalsIn(table.type, ADMIN_JOB_TYPES)),
     // The runner looks up active jobs by type; finished jobs are listed by time.
     index("admin_job_type_idx")
       .on(table.type)
-      .where(adminJobStatusIn(table.status, ACTIVE_ADMIN_JOB_STATUSES)),
-    index("admin_job_created_by_idx").on(table.createdBy),
+      .where(adminJobStatusIn(table.status, ACTIVE_JOB_STATUSES)),
+    index("admin_job_created_by_user_id_idx").on(table.createdByUserId),
     index("admin_job_created_at_idx").on(table.createdAt),
     // The update-check, update-apply and diagnostics requests share one host
     // writer slot. The constant key makes the whole active set a single entry.
     uniqueIndex(ACTIVE_SYSTEM_MAINTENANCE_INDEX)
       .on(sql`(true)`)
       .where(
-        sql`${table.type} IN ('system.update', 'system.diagnostics') AND ${adminJobStatusIn(table.status, ACTIVE_ADMIN_JOB_STATUSES)}`,
+        sql`${literalsIn(table.type, SYSTEM_MAINTENANCE_JOB_TYPES)} AND ${adminJobStatusIn(table.status, ACTIVE_JOB_STATUSES)}`,
       ),
   ],
 );

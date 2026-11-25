@@ -36,9 +36,9 @@ it("refuses paired approval as a bearer-only root before reserving a worker", as
     const response = await app.inject({
       method: "POST",
       url: "/v1/operations",
-      headers: { authorization: `Bearer ${"b".repeat(32)}`, "x-ops-protocol-version": "2" },
+      headers: { authorization: `Bearer ${"b".repeat(32)}`, "x-ops-protocol-version": "1" },
       payload: {
-        version: 2,
+        version: 1,
         requestId: `ops1_${randomUUID().replaceAll("-", "")}`,
         operationKey: createControlRootOperationKey({
           notAfter: requestedDeadlineAt,
@@ -160,6 +160,7 @@ it.each(["normal", "wrong-target", "canceled", "cancel-journal-failure"])(
     const journal = await openOpsJobJournal(journalFile);
     const controlledJournal: OpsJobJournal = {
       records: () => journal.records(),
+      foreignRecords: () => journal.foreignRecords(),
       replace: async (records) => {
         if (
           scenario === "cancel-journal-failure" &&
@@ -176,10 +177,10 @@ it.each(["normal", "wrong-target", "canceled", "cancel-journal-failure"])(
         url: "/v1/operations",
         headers: {
           authorization: `Bearer ${token}`,
-          "x-ops-protocol-version": "2",
+          "x-ops-protocol-version": "1",
         },
         payload: {
-          version: 2,
+          version: 1,
           requestId: `ops1_${randomUUID().replaceAll("-", "")}`,
           operationKey: child.operationKey,
           issuedAt: new Date().toISOString(),
@@ -205,7 +206,7 @@ it.each(["normal", "wrong-target", "canceled", "cancel-journal-failure"])(
           url: `/v1/operations/${child.executionId}`,
           headers: {
             authorization: `Bearer ${token}`,
-            "x-ops-protocol-version": "2",
+            "x-ops-protocol-version": "1",
             "x-ops-operation-fingerprint": child.fingerprint,
           },
         });
@@ -223,7 +224,7 @@ it.each(["normal", "wrong-target", "canceled", "cancel-journal-failure"])(
           expect((await cancellation).statusCode).toBe(500);
           const status = await app.inject({
             url: `/v1/operations/${child.executionId}`,
-            headers: { authorization: `Bearer ${token}`, "x-ops-protocol-version": "2" },
+            headers: { authorization: `Bearer ${token}`, "x-ops-protocol-version": "1" },
           });
           expect(status.json().result.state).toBe("termination_pending");
         }
@@ -237,7 +238,7 @@ it.each(["normal", "wrong-target", "canceled", "cancel-journal-failure"])(
             (
               await app.inject({
                 url: `/v1/operations/${child.executionId}`,
-                headers: { authorization: `Bearer ${token}`, "x-ops-protocol-version": "2" },
+                headers: { authorization: `Bearer ${token}`, "x-ops-protocol-version": "1" },
               })
             ).json().result.state,
         )
@@ -268,7 +269,7 @@ it.each(["normal", "wrong-target", "canceled", "cancel-journal-failure"])(
       });
       const status = await releasedRestart.inject({
         url: `/v1/operations/${child.executionId}`,
-        headers: { authorization: `Bearer ${token}`, "x-ops-protocol-version": "2" },
+        headers: { authorization: `Bearer ${token}`, "x-ops-protocol-version": "1" },
       });
       expect(status.json().result.state).toBe("succeeded");
       await releasedRestart.close();

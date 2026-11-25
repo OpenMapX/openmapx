@@ -37,9 +37,9 @@ The host CLI runs the checkout's code and manifests. A host render now reads
 the selected release's service files from its operations-agent image, and
 refuses while the checkout's service manifests or files differ from that
 release's (overrides aside). It names the files and says what to do: wait until
-the release of the checkout's commit is published and run
-`pnpm openmapx compose release` again, or check out the release's source
-revision. With no release selected yet, render uses the checkout's files and
+the release of the checkout's commit is published and apply it through the
+coordinated update, or check out the applied release's source revision. With no
+release selected yet, render uses the checkout's files and
 says so. Under `OPENMAPX_RELEASE=local` the checkout's files are the
 release's, for the host CLI and the operations agent alike.
 
@@ -55,7 +55,9 @@ their commit is published.
 - **Keep changes to service files in `infra/docker/overrides/services`**, not
   in the checkout. Create overrides under `umask 022`: Debian's and Ubuntu's
   default `002` makes them group-writable, and render refuses those.
-- **Select the release before rendering on a host.** The documented host
-  update already does: `git pull`, `pnpm install`, `pnpm openmapx compose
-release`, `pnpm openmapx compose render`. A first installation runs
-  `compose release` before `compose render`.
+- **Update before checking out.** The documented host update applies the
+  release first and moves the checkout after it: back up,
+  `pnpm openmapx compose release --check`, apply through **Admin → System →
+  Updates** or `pnpm openmapx system update`, then check out the applied
+  release's source revision and run `pnpm install --frozen-lockfile`. A first
+  installation runs `compose release` before `compose render`.

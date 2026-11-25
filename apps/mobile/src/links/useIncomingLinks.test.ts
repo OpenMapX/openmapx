@@ -25,7 +25,7 @@ it("keeps the newest event over a delayed initial URL, and allows repeated warm 
   });
   expect(deliver).not.toHaveBeenCalled();
   hook.result.current.bridgeReady();
-  expect(deliver).toHaveBeenLastCalledWith({ kind: "map", query: "?q=new" });
+  expect(deliver).toHaveBeenLastCalledWith({ kind: "map", query: "?query=new" });
   receive({ url: "geo:1,2?q=new" });
   expect(deliver).toHaveBeenCalledTimes(2);
   hook.result.current.documentStarted();
@@ -33,7 +33,7 @@ it("keeps the newest event over a delayed initial URL, and allows repeated warm 
   hook.result.current.documentStarted();
   expect(deliver).toHaveBeenCalledTimes(2);
   hook.result.current.bridgeReady();
-  expect(deliver).toHaveBeenLastCalledWith({ kind: "map", query: "?q=reload" });
+  expect(deliver).toHaveBeenLastCalledWith({ kind: "map", query: "?query=reload" });
   await hook.unmount();
   expect(remove).toHaveBeenCalledTimes(1);
 });

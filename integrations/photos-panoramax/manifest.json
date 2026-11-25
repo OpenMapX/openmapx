@@ -22,7 +22,6 @@
     "url": "https://api.panoramax.xyz/api/"
   },
   "quality": "built-in",
-  "category": "Imagery",
   "dataSources": [
     {
       "sourceId": "panoramax",

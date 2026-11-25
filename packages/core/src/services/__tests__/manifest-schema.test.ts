@@ -5,6 +5,7 @@ const minimalManifest = {
   id: "conditions-ingest",
   name: "Conditions Ingest",
   version: "1.0.0",
+  platform: "1.0",
   quality: "community" as const,
   container: { image: "ghcr.io/openconditions/ingest", tag: "latest", memory: "256m" },
 };
@@ -82,7 +83,7 @@ describe("service manifest secret field names", () => {
       { firstParty: false },
     );
     expect(result.valid).toBe(false);
-    expect(result.errors.some((e) => e.includes("secret field name"))).toBe(true);
+    expect(result.errors.some((e) => e.includes("UPPER_SNAKE"))).toBe(true);
   });
 
   it("rejects a secret key containing a slash", () => {
@@ -101,15 +102,27 @@ describe("service manifest secret field names", () => {
     expect(result.valid).toBe(false);
   });
 
-  it("ignores non-secret fields", () => {
-    const result = validateServiceManifest(
-      {
-        ...minimalManifest,
-        configSchema: { type: "object", properties: { "weird.key": { type: "string" } } },
-      },
-      { firstParty: false },
-    );
-    expect(result.valid).toBe(true);
+  it("refuses a config key that is not UPPER_SNAKE, secret or not", () => {
+    for (const key of ["weird.key", "build_elevation", "memoryLimit"]) {
+      const result = validateServiceManifest(
+        {
+          ...minimalManifest,
+          configSchema: { type: "object", properties: { [key]: { type: "string" } } },
+        },
+        { firstParty: false },
+      );
+      expect(result.valid, key).toBe(false);
+      expect(result.errors.join(" "), key).toMatch(/UPPER_SNAKE/);
+    }
+    expect(
+      validateServiceManifest(
+        {
+          ...minimalManifest,
+          configSchema: { type: "object", properties: { BUILD_ELEVATION: { type: "boolean" } } },
+        },
+        { firstParty: false },
+      ).valid,
+    ).toBe(true);
   });
 
   it("rejects a flat non-JSON-Schema config declaration", () => {

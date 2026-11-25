@@ -207,7 +207,7 @@ describe("search submission lifetime", () => {
     const accept = view.result.current.nlp.acceptConsent;
     view.unmount();
     act(() => accept());
-    expect(localStorage.getItem("openmapx.nlp.cloudConsent")).toBeNull();
+    expect(localStorage.getItem("openmapx:search:nlp-cloud-consent")).toBeNull();
   });
 
   it("clears deadlines and invalidates retained handlers on unmount", () => {
@@ -227,6 +227,6 @@ describe("search submission lifetime", () => {
       retained.nlp.acceptConsent();
     });
     expect(props.executeResolvedSubmit).not.toHaveBeenCalled();
-    expect(localStorage.getItem("openmapx.nlp.cloudConsent")).toBeNull();
+    expect(localStorage.getItem("openmapx:search:nlp-cloud-consent")).toBeNull();
   });
 });

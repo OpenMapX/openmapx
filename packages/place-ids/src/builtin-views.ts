@@ -87,7 +87,7 @@ export function registerBuiltinIdSchemeViews(): void {
   // Cross-reference schemes (populated by knowledge enrichment)
 
   registerIdSchemeView({
-    scheme: "googleMaps",
+    scheme: "google-maps",
     label: "Google Maps",
     displayOrder: 100,
     buildUrl: buildGoogleMapsUrl,
@@ -130,7 +130,7 @@ export function registerBuiltinIdSchemeViews(): void {
 
   // Internal schemes (hidden from user-facing id lists)
 
-  for (const scheme of ["coordinate", "stylePoi", "label", "saved", "streetLevel"]) {
+  for (const scheme of ["style-poi", "saved", "label", "coordinate"]) {
     registerIdSchemeView({ scheme, label: scheme, internal: true });
   }
 }

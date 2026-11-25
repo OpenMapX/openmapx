@@ -138,7 +138,6 @@
     }
   ],
   "quality": "built-in",
-  "category": "Map Overlays",
   "dataSources": [
     {
       "sourceId": "openseamap",

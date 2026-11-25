@@ -104,7 +104,7 @@ describe("JSON acquisition", () => {
       .mockResolvedValueOnce(Response.json({ error: "absent" }, { status: 404 }))
       .mockResolvedValueOnce(
         Response.json(
-          { error: "Another data job is running.", code: "in-flight", existingJobId: "job" },
+          { error: "Another data job is running.", code: "IN_FLIGHT", existingJobId: "job" },
           { status: 409 },
         ),
       );

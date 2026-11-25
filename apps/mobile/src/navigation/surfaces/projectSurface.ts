@@ -1,6 +1,7 @@
 import {
   type MobileNavigationSession,
   measurementDistanceParts,
+  REROUTE_UPDATE_REQUIRED,
   upcomingManeuverIndex,
 } from "@openmapx/core/navigation";
 import { SURFACE_FRESH_MS, type SurfaceModel, surfaceCopy, surfaceText } from "./surfaceModel";
@@ -63,7 +64,14 @@ export function projectSurface(
     ]
       .filter(Boolean)
       .join(" · ");
-    if (s.payload.coasting || fix?.coasted) {
+    if (
+      s.payload.reroute.status === "failed" &&
+      s.payload.reroute.lastFailureCode === REROUTE_UPDATE_REQUIRED
+    ) {
+      instruction = copy.rerouteUpdate;
+      detail = "";
+      compactText = copy.updateCompact;
+    } else if (s.payload.coasting || fix?.coasted) {
       status = "stale";
       instruction = copy.stale;
     } else if (s.payload.offRoute || s.payload.reroute.status === "in-flight") {
@@ -115,6 +123,7 @@ export function projectSurface(
     } else if (s.payload.confidence === "stale") {
       status = "stale";
     }
+    if (s.payload.refresh.updateRequired) detail = copy.liveUpdate;
     compactText = line || copy.transit;
   }
   if (status === "stale") {

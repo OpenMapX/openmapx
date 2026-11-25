@@ -1,6 +1,6 @@
 import type { Database } from "./database";
 import { LATEST_SCHEMA_VERSION, migrateSessionSchema, SESSION_MIGRATIONS } from "./migrations";
-import { SESSION_TABLES } from "./sql";
+import { RELEASE_TABLES } from "./sql";
 import { openTestDatabase } from "./testing/nodeSqliteDatabase";
 
 /**
@@ -24,21 +24,37 @@ describe("migrateSessionSchema", () => {
     );
   });
 
-  it("creates every session table from an empty database", async () => {
+  it("starts the history with one baseline", () => {
+    expect(SESSION_MIGRATIONS.map((migration) => migration.version)).toEqual([1]);
+  });
+
+  it("creates exactly the tables the release uses from an empty database", async () => {
     const database = openTestDatabase();
     const applied = await migrateSessionSchema(database, 1_000);
 
-    expect(applied).toEqual(SESSION_MIGRATIONS.map((migration) => migration.version));
+    expect(applied).toEqual([1]);
     expect(
       await database.getAllAsync(
         "SELECT version, applied_at_ms FROM schema_migrations ORDER BY version",
       ),
-    ).toEqual(applied.map((version) => ({ version, applied_at_ms: 1_000 })));
+    ).toEqual([{ version: 1, applied_at_ms: 1_000 }]);
     const tables = await database.getAllAsync<{ name: string }>(
-      "SELECT name FROM sqlite_schema WHERE type = 'table' ORDER BY name",
+      "SELECT name FROM sqlite_schema WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
     );
-    const names = tables.map((table) => table.name);
-    for (const expected of SESSION_TABLES) expect(names).toContain(expected);
+    expect(tables.map((table) => table.name)).toEqual([...RELEASE_TABLES].sort());
+    await database.closeAsync();
+  });
+
+  it("creates every table only once, so it never runs over an unexpected one", async () => {
+    const database = openTestDatabase();
+    await database.execAsync(
+      "CREATE TABLE car_destinations (id INTEGER PRIMARY KEY, instance TEXT, payload TEXT)",
+    );
+
+    await expect(migrateSessionSchema(database, 1_000)).rejects.toThrow();
+    await expect(
+      database.getFirstAsync("SELECT name FROM sqlite_schema WHERE name = 'active_navigation'"),
+    ).resolves.toBeNull();
     await database.closeAsync();
   });
 
@@ -61,67 +77,6 @@ describe("migrateSessionSchema", () => {
     await database.closeAsync();
   });
 
-  it("upgrades a database that predates the migration ledger", async () => {
-    const database = openTestDatabase();
-    // An installed build created the probe table under the older `user_version`
-    // scheme, so the ledger is absent while the table already exists.
-    await database.execAsync(
-      `CREATE TABLE feasibility_probe (
-         id INTEGER PRIMARY KEY CHECK (id = 1),
-         callback_count INTEGER NOT NULL,
-         accepted_fix_count INTEGER NOT NULL,
-         rejected_fix_count INTEGER NOT NULL,
-         last_timestamp_ms INTEGER,
-         last_accuracy_bucket TEXT,
-         last_callback_gap_ms INTEGER,
-         max_callback_gap_ms INTEGER,
-         last_error_code TEXT,
-         pending_audio_probe INTEGER NOT NULL DEFAULT 0,
-         audio_result_code TEXT,
-         updated_at_ms INTEGER NOT NULL
-       )`,
-    );
-    await database.runAsync(
-      `INSERT INTO feasibility_probe (id, callback_count, accepted_fix_count, rejected_fix_count, pending_audio_probe, updated_at_ms)
-       VALUES (1, 7, 3, 1, 0, 500)`,
-    );
-
-    await migrateSessionSchema(database, 1_000);
-
-    const preserved = await database.getFirstAsync<{ callback_count: number }>(
-      "SELECT callback_count FROM feasibility_probe WHERE id = 1",
-    );
-    expect(preserved?.callback_count).toBe(7);
-    await expect(
-      database.getFirstAsync("SELECT name FROM sqlite_schema WHERE name = 'active_navigation'"),
-    ).resolves.toBeTruthy();
-    await database.closeAsync();
-  });
-
-  it("drops the undelivered event outbox from a database that has one", async () => {
-    const database = openTestDatabase();
-    for (const migration of SESSION_MIGRATIONS.filter((entry) => entry.version <= 2)) {
-      for (const statement of migration.statements) await database.execAsync(statement);
-    }
-    await database.execAsync(
-      "CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at_ms INTEGER NOT NULL)",
-    );
-    await database.runAsync("INSERT INTO schema_migrations VALUES (1, 500), (2, 500)");
-    await database.runAsync(
-      `INSERT INTO navigation_events (event_id, session_id, critical, sequence, created_at_ms, payload_json)
-       VALUES ('e1', 's1', 1, 1, 500, '{"type":"arrived"}')`,
-    );
-
-    expect(await migrateSessionSchema(database, 1_000)).toEqual([3]);
-
-    await expect(
-      database.getFirstAsync(
-        "SELECT name FROM sqlite_schema WHERE name LIKE '%navigation_events%'",
-      ),
-    ).resolves.toBeNull();
-    await database.closeAsync();
-  });
-
   it("leaves no partial migration behind when a statement fails", async () => {
     const database = openTestDatabase();
     await database.execAsync("CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY)");
@@ -129,10 +84,10 @@ describe("migrateSessionSchema", () => {
     // migration 1 fails after its DDL has already run inside the transaction.
     await expect(migrateSessionSchema(database, 1_000)).rejects.toThrow();
 
-    const probe = await database.getFirstAsync(
-      "SELECT name FROM sqlite_schema WHERE name = 'feasibility_probe'",
+    const created = await database.getFirstAsync(
+      "SELECT name FROM sqlite_schema WHERE name = 'active_navigation'",
     );
-    expect(probe).toBeNull();
+    expect(created).toBeNull();
     await database.closeAsync();
   });
 

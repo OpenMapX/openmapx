@@ -106,7 +106,7 @@ describe("gen-motis-config incremental_rt_update override", () => {
     process.env.MOTIS_INCREMENTAL_RT_UPDATE = "true";
     const fx = setupCatalog(TEMPLATE);
     const result = await genMotisConfigRun(ctxFor(fx.dataDir, fx.catalogDir));
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(result.artifacts).toMatchObject({ incrementalRtOverridden: true });
     const updated = readFileSync(fx.configPath, "utf-8");
     expect(updated).toMatch(/incremental_rt_update:\s*true/);
@@ -116,7 +116,7 @@ describe("gen-motis-config incremental_rt_update override", () => {
     delete process.env.MOTIS_INCREMENTAL_RT_UPDATE;
     const fx = setupCatalog(TEMPLATE);
     const result = await genMotisConfigRun(ctxFor(fx.dataDir, fx.catalogDir));
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(result.artifacts).toMatchObject({ incrementalRtOverridden: false });
     expect(readFileSync(fx.configPath, "utf-8")).toMatch(/incremental_rt_update:\s*false/);
   });
@@ -143,7 +143,7 @@ describe("gen-motis-config incremental_rt_update override", () => {
     process.env.MOTIS_INCREMENTAL_RT_UPDATE = "maybe";
     const fx = setupCatalog(TEMPLATE);
     const result = await genMotisConfigRun(ctxFor(fx.dataDir, fx.catalogDir));
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(result.artifacts).toMatchObject({ incrementalRtOverridden: false });
   });
 });
@@ -154,7 +154,7 @@ describe("gen-motis-config elevators override", () => {
     process.env.MOTIS_ELEVATORS_AUTH = "Bearer secret";
     const fx = setupCatalog(TEMPLATE);
     const result = await genMotisConfigRun(ctxFor(fx.dataDir, fx.catalogDir));
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(result.artifacts).toMatchObject({ elevatorsOverridden: true });
     const updated = readFileSync(fx.configPath, "utf-8");
     expect(updated).toMatch(/elevators:\n {2}url: https:\/\/fasta\.example\/api/);
@@ -234,7 +234,7 @@ describe("gen-motis-config osm region override", () => {
     process.env.OPENMAPX_REGION = "europe/germany";
     const fx = setupCatalog(TEMPLATE_WITH_OSM);
     const result = await genMotisConfigRun(ctxFor(fx.dataDir, fx.catalogDir));
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(result.artifacts).toMatchObject({ osmRegionOverridden: true });
     expect(readFileSync(fx.configPath, "utf-8")).toMatch(/^osm: europe-germany\.osm\.pbf$/m);
   });
@@ -267,7 +267,7 @@ describe("gen-motis-config osm region override", () => {
     process.env.OPENMAPX_REGION = "europe/germany";
     const fx = setupCatalog(TEMPLATE); // no `osm:` line
     const result = await genMotisConfigRun(ctxFor(fx.dataDir, fx.catalogDir));
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(result.artifacts).toMatchObject({ osmRegionOverridden: false });
     expect(readFileSync(fx.configPath, "utf-8")).not.toMatch(/^osm:/m);
   });

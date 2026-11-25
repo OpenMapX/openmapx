@@ -44,11 +44,38 @@ another compatible service) and set its endpoint for `api`:
 
 ```bash
 OPENCONDITIONS_CONTRIBUTIONS_URL=http://openmapx-openconditions-contributions-api:4200
+OPENCONDITIONS_RELAY_TOKEN=<the same value as contributions-api's OPENCONDITIONS_RELAY_TOKEN>
 ```
 
 This example uses the contributions service's container hostname. Ensure
 `api` can resolve and reach it on the deployment network. A host-run API
 needs an endpoint reachable from that host.
+
+`api` sends the relay token (at least 32 characters, for example from
+`openssl rand -hex 32`) as a bearer token on every relayed request.
+contributions-api then counts those requests in its relay bucket instead of
+limiting every reporter as the one address of `api`. `api` never forwards the
+reporter's address; it limits each client address itself, in two buckets of
+its own. Both are token buckets that start full and refill continuously: 30
+reports, votes and token exchanges, refilled at 30 a minute, and 10
+enrollments, refilled at 10 a minute. The enrollment bucket works like
+contributions-api's default enrollment limit for one address, so a client can
+enroll a burst of 10 and then one every six seconds either way. Browsing place
+details never uses up the reporting budget. Without the
+token, all reporters share contributions-api's per-address enrollment limit.
+
+If the two token values differ, contributions-api treats every relayed request
+as coming from the one address of `api`, and neither side reports it: reporting
+works, but enrollment for the whole instance stops at contributions-api's
+per-address limit. When enrollments start failing with `429` under ordinary
+use, compare the value in `infra/docker/.env` with the one in the
+contributions-api Credentials.
+
+The reporting identity is a non-extractable P-256 key pair in the browser's
+IndexedDB (database `openmapx:crowd`); its reporting grant is cached in
+`localStorage` under `openmapx:crowd:grant`, together with the key id it was
+issued for. Every signed report and vote carries `"v": 1`, the signed claim
+protocol version.
 
 The development fallback is `http://localhost:4200`, the contributions
 service's default port; without a reachable

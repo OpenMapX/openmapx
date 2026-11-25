@@ -24,6 +24,12 @@ import {
   useUserKeypair,
 } from "./useKeypair";
 
+const signerStorageKeys = {
+  session: "test:signer-session",
+  pendingLogin: "test:pending-login",
+  mode: "test:mode",
+};
+
 vi.mock("@openmapx/mangrove-client", async (original) => ({
   ...(await original<object>()),
   encryptWithPassphrase: vi.fn(async (jwk) => JSON.stringify(jwk)),
@@ -78,7 +84,11 @@ function harness(env: EnvelopeState = { state: "uninitialized" }) {
   function wrapper({ children }: { children: ReactNode }) {
     return (
       <QueryClientProvider client={client}>
-        <MangroveProvider transport={transport} currentUser={owner.current}>
+        <MangroveProvider
+          transport={transport}
+          currentUser={owner.current}
+          signerStorageKeys={signerStorageKeys}
+        >
           {children}
         </MangroveProvider>
       </QueryClientProvider>

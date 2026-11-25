@@ -2286,6 +2286,7 @@
     "deleteAccountWarning": "This cannot be undone. OpenMapX deletes your account, sign-in data, saved places, shares, vehicles, parking state, Timeline connection, settings and review signing key. Delete any Mangrove reviews first while you still control that key. A connected Dawarich account and its location history must be deleted separately.",
     "confirmDeletion": "Confirm deletion",
     "failedDeleteAccount": "Failed to delete account",
+    "deviceCleanupIncomplete": "Your account is deleted, but some data on this device could not be removed. Close every other OpenMapX tab, or clear this site's data in your browser settings.",
     "privacyData": {
       "title": "Your data and access request",
       "description": "Download a copy of the personal data OpenMapX processes about you. The archive includes live OpenMapX data and connected Dawarich data when available. A fresh sign-in is required, and the archive is sent straight to you; nothing is stored on the server.",
@@ -2428,6 +2429,8 @@
     "openSourceLicenses": "Open Source Licenses",
     "imprintDescription": "Legal notice and provider identification for OpenMapX according to German law.",
     "privacyDescription": "Privacy policy for OpenMapX describing how we handle your data in accordance with the GDPR.",
+    "configUnavailableTitle": "This page is temporarily unavailable",
+    "configUnavailable": "The operator's details for this page could not be loaded. Please try again in a few minutes.",
     "termsDescription": "Terms of service and conditions of use for OpenMapX.",
     "openSourceLicensesDescription": "Open source dependency licenses used by OpenMapX.",
     "account": "Account",
@@ -4438,6 +4441,7 @@
       "envOverrideHelp": "This value is controlled by {envVar}. Change the deployment environment to update it.",
       "envSecretValue": "Set by the deployment environment",
       "unreadableSecret": "Stored, but the current secrets key cannot decrypt it. Restore the key file it was saved with (infra/docker/secrets/secrets-key) or enter the value again.",
+      "invalidStoredValue": "The stored value is not valid for this setting, so the features that read it are refused. The default is shown; save a valid value.",
       "showSecret": "Show",
       "hideSecret": "Hide",
       "databaseSource": "Saved in the database",
@@ -4493,109 +4497,139 @@
       }
     },
     "settings": {
-      "legalControllerName": {
-        "label": "Controller name",
-        "description": "Full legal name of the organization or person responsible for this instance."
+      "legal": {
+        "controller": {
+          "name": {
+            "label": "Controller name",
+            "description": "Full legal name of the organization or person responsible for this instance."
+          },
+          "street": {
+            "label": "Street address",
+            "description": "Street and house number of the controller's postal address."
+          },
+          "postalCode": {
+            "label": "Postal code",
+            "description": "Postal code of the controller's address."
+          },
+          "city": {
+            "label": "City",
+            "description": "City of the controller's address."
+          },
+          "country": {
+            "label": "Country",
+            "description": "Country of the controller's address."
+          },
+          "email": {
+            "label": "Controller email",
+            "description": "Published email address for privacy enquiries."
+          },
+          "phone": {
+            "label": "Controller phone",
+            "description": "Optional published telephone number for privacy enquiries."
+          }
+        },
+        "dataRequestEmail": {
+          "label": "Data-request email",
+          "description": "Authoritative mailbox used for data-subject requests."
+        },
+        "hosting": {
+          "provider": {
+            "label": "Hosting provider",
+            "description": "Company that processes data by hosting this instance."
+          },
+          "locations": {
+            "label": "Hosting locations",
+            "description": "Countries or regions where the provider stores instance data."
+          }
+        },
+        "deploymentJurisdiction": {
+          "label": "Deployment jurisdiction",
+          "description": "ISO 3166-1 country code, optionally followed by a subdivision."
+        },
+        "supervisoryAuthority": {
+          "name": {
+            "label": "Supervisory authority",
+            "description": "Name of the competent data-protection authority."
+          },
+          "url": {
+            "label": "Supervisory authority URL",
+            "description": "Official website of the named authority."
+          }
+        },
+        "privacySources": {
+          "label": "Privacy sources",
+          "description": "JSON array of strict source declarations used by access reports."
+        }
       },
-      "legalControllerStreet": {
-        "label": "Street address",
-        "description": "Street and house number of the controller's postal address."
+      "retention": {
+        "serverLogDays": {
+          "label": "Server log retention (days)",
+          "description": "How long persisted API warning and error logs are kept."
+        },
+        "privacyCaseDays": {
+          "label": "Request case retention (days)",
+          "description": "How long completed data-subject request case records are kept."
+        },
+        "auditLogDays": {
+          "label": "Administrator audit-log retention (days)",
+          "description": "How long administrator audit-log entries are kept. Defaults to 365."
+        },
+        "adminJobDays": {
+          "label": "Finished admin job retention (days)",
+          "description": "How long finished administrative jobs are kept. Defaults to 30."
+        },
+        "backupDays": {
+          "label": "Backup retention (days)",
+          "description": "How long local backups are kept. Set by the platform configuration, which the operations agent and the CLI share. Defaults to 30."
+        }
       },
-      "legalControllerPostalCode": {
-        "label": "Postal code",
-        "description": "Postal code of the controller's address."
+      "email": {
+        "fromAddress": {
+          "label": "From address",
+          "description": "Sender address used by every notification provider."
+        }
       },
-      "legalControllerCity": {
-        "label": "City",
-        "description": "City of the controller's address."
+      "emaillabs": {
+        "appKey": {
+          "label": "App key",
+          "description": "EmailLabs application key."
+        },
+        "secretKey": {
+          "label": "Secret key",
+          "description": "EmailLabs secret key; saved values are never returned."
+        },
+        "smtpAccount": {
+          "label": "SMTP account",
+          "description": "EmailLabs SMTP account identifier."
+        }
       },
-      "legalControllerCountry": {
-        "label": "Country",
-        "description": "Country of the controller's address."
+      "lettermint": {
+        "apiToken": {
+          "label": "API token",
+          "description": "Lettermint API token; saved values are never returned."
+        }
       },
-      "legalControllerEmail": {
-        "label": "Controller email",
-        "description": "Published email address for privacy enquiries."
-      },
-      "legalControllerPhone": {
-        "label": "Controller phone",
-        "description": "Optional published telephone number for privacy enquiries."
-      },
-      "legalDataRequestEmail": {
-        "label": "Data-request email",
-        "description": "Authoritative mailbox used for data-subject requests."
-      },
-      "legalHostingProvider": {
-        "label": "Hosting provider",
-        "description": "Company that processes data by hosting this instance."
-      },
-      "legalHostingLocations": {
-        "label": "Hosting locations",
-        "description": "Countries or regions where the provider stores instance data."
-      },
-      "legalDeploymentJurisdiction": {
-        "label": "Deployment jurisdiction",
-        "description": "ISO 3166-1 country code, optionally followed by a subdivision."
-      },
-      "legalSupervisoryAuthority": {
-        "label": "Supervisory authority",
-        "description": "Name of the competent data-protection authority."
-      },
-      "legalSupervisoryAuthorityUrl": {
-        "label": "Supervisory authority URL",
-        "description": "Official website of the named authority."
-      },
-      "legalServerLogRetentionDays": {
-        "label": "Server log retention (days)",
-        "description": "How long persisted API warning and error logs are kept."
-      },
-      "legalDsarCaseRetentionDays": {
-        "label": "Request case retention (days)",
-        "description": "How long completed data-subject request case records are kept."
-      },
-      "legalPrivacySources": {
-        "label": "Privacy sources",
-        "description": "JSON array of strict source declarations used by access reports."
-      },
-      "smtpFromAddress": {
-        "label": "From address",
-        "description": "Sender address used by every notification provider."
-      },
-      "emailLabsAppKey": {
-        "label": "App key",
-        "description": "EmailLabs application key."
-      },
-      "emailLabsSecretKey": {
-        "label": "Secret key",
-        "description": "EmailLabs secret key; saved values are never returned."
-      },
-      "emailLabsSmtpAccount": {
-        "label": "SMTP account",
-        "description": "EmailLabs SMTP account identifier."
-      },
-      "lettermintApiToken": {
-        "label": "API token",
-        "description": "Lettermint API token; saved values are never returned."
-      },
-      "smtpHost": {
-        "label": "SMTP host",
-        "description": "Hostname of the fallback SMTP server."
-      },
-      "smtpPort": {
-        "label": "SMTP port",
-        "description": "Port used by the fallback SMTP server."
-      },
-      "smtpUser": {
-        "label": "SMTP username",
-        "description": "Username for the fallback SMTP server."
-      },
-      "smtpPassword": {
-        "label": "SMTP password",
-        "description": "Password for the fallback SMTP server; saved values are never returned."
-      },
-      "smtpTls": {
-        "label": "Use TLS or STARTTLS",
-        "description": "Require encrypted transport for the SMTP connection."
+      "smtp": {
+        "host": {
+          "label": "SMTP host",
+          "description": "Hostname of the fallback SMTP server."
+        },
+        "port": {
+          "label": "SMTP port",
+          "description": "Port used by the fallback SMTP server."
+        },
+        "user": {
+          "label": "SMTP username",
+          "description": "Username for the fallback SMTP server."
+        },
+        "password": {
+          "label": "SMTP password",
+          "description": "Password for the fallback SMTP server; saved values are never returned."
+        },
+        "security": {
+          "label": "Connection security",
+          "description": "STARTTLS (default, port 587) upgrades the connection and refuses to send without encryption; TLS (port 465) encrypts from the start; None sends unencrypted."
+        }
       }
     },
     "notificationsOwner": "Email delivery is configured in Settings → Email.",
@@ -4822,10 +4856,6 @@
         "label": "Activity",
         "description": "Jobs, audit events and application logs"
       },
-      "general": {
-        "label": "General",
-        "description": "Application identity and public instance URL"
-      },
       "authentication": {
         "label": "Authentication",
         "description": "Sign-in, sessions and effective access policy"
@@ -4891,7 +4921,6 @@
         "description": "Full updates, hardlink sync and destructive cleanup"
       }
     },
-    "applicationUrlHelp": "The public application URL identifies links generated by the application. Deployment manages the host origin and certificates.",
     "privacyPolicyLink": "Operator, legal and retention policy → Privacy setup",
     "drafts": "{count, plural, one {# draft} other {# drafts}}",
     "discardDraftsHelp": "Discard all unsaved ordinary administration drafts, including forms that are no longer available.",
@@ -5085,7 +5114,7 @@
       "actionGroup": "{group, select, integrations {Integrations} credentials {Credentials} services {Services} data {Data} backups {Backups} settings {Settings} extensions {Extensions} transit {Transit} jobs {Jobs} system {System} users {Users} timeline {Timeline} other {{group}}}",
       "targetType": "Target type",
       "allTypes": "All types",
-      "targetTypeOption": "{type, select, integration {Integration} service {Service} data {Data} data_manager_job {Data manager job} job {Job} backup {Backup} settings {Settings} configuration {Configuration} configuration_migration {Configuration migration} credential_transfer {Credential transfer} platform {Platform} auth_policy {Sign-in policy} cache {Cache} release {Release} provider {Provider} extension {Extension} ambient_places {Nearby places on the map} transit {Transit} transit_source {Transit source} transit_credentials {Transit credentials} system {System} user {User} personal_timeline_connection {Timeline connection} other {{type}}}",
+      "targetTypeOption": "{type, select, integration {Integration} service {Service} data_operation {Data operation} data_manager_job {Data manager job} job {Job} backup {Backup} setting {Settings} configuration {Configuration} configuration_migration {Configuration migration} credential_transfer {Credential transfer} platform {Platform} auth_policy {Sign-in policy} cache {Cache} release {Release} provider {Provider} extension {Extension} ambient_places {Nearby places on the map} transit {Transit} transit_source {Transit source} transit_credential {Transit credentials} system {System} user {User} personal_timeline_connection {Timeline connection} other {{type}}}",
       "searchTarget": "Search by target ID…",
       "clearFilters": "Clear filters",
       "events": "{count, plural, one {# event} other {# events}}",
@@ -5115,7 +5144,7 @@
     "job": "Job",
     "status": "Status",
     "actor": "Actor",
-    "actorLabel": "{actor, select, administrator {Administrator} automatic_version_bump {Automatic version bump} bootstrap {Initial setup} scheduled {Scheduled} system {System} other {{actor}}}",
+    "actorLabel": "{actor, select, administrator {Administrator} api {API} bootstrap {Initial setup} host_cli {Host command line} operations_agent {Operations agent} scheduled {Scheduled} system {System} other {{actor}}}",
     "when": "When",
     "failedToLoadJobs": "Failed to load jobs",
     "noJobsFound": "No jobs found",
@@ -5234,6 +5263,7 @@
     "securityStatusStaleRevocationData": "Security status: stale revocation data",
     "delisted": "Delisted: {delisting}",
     "securityAdvisory": "Security advisory: {advisory}",
+    "installedVersionSecurityAdvisory": "The installed version is affected by a security advisory: {advisory}",
     "requiresPlatform": "Requires platform ≥ {minPlatform} (this instance: {platformVersion})",
     "installed": "Installed",
     "installedUpdateAvailable": "Installed · update available",
@@ -5472,7 +5502,6 @@
     "tabHealth": "Health",
     "tabDataSources": "Data Sources",
     "qualityBuiltIn": "Built-in",
-    "qualityVerified": "Verified",
     "qualityCommunity": "Community",
     "domainGeocoding": "Geocoding",
     "domainRouting": "Routing",
@@ -5510,7 +5539,7 @@
     "reload": "Reload",
     "needsAttention": "Needs Attention",
     "attention": "{type, select, health_check_failed {{target} health check failing} service_unhealthy {Docker service \"{target}\" is unhealthy} other {{target}}}",
-    "jobAttention": "{status, select, interrupted {Job \"{jobLabel}\" was interrupted} other {Job \"{jobLabel}\" failed}}",
+    "jobAttention": "Job \"{jobLabel}\" failed",
     "view": "View",
     "failedToLoadCredentialsSummary": "Failed to load credentials summary.",
     "credentialsOverview": "Credentials Overview",
@@ -5902,7 +5931,6 @@
     "allCapabilities": "All capabilities",
     "allQualityTiers": "All quality tiers",
     "builtIn": "Built-in",
-    "communityVerified": "Community (verified)",
     "community": "Community",
     "unknownServices": "{count, plural, one {# service has} other {# services have}} unknown status.",
     "failedToLoadServicesThe": "Failed to load services. The backend may not be running yet.",
@@ -6187,6 +6215,7 @@
       "envOverrideHelp": "Overridden by environment variable {envVar}. Change the env var to update this value.",
       "envSecretValue": "(set by environment variable)",
       "unreadableSecret": "Stored, but the current secrets key cannot decrypt it. Restore the key file it was saved with (infra/docker/secrets/secrets-key) or enter the value again.",
+      "invalidStoredValue": "The stored value is not valid for this setting, so the features that read it are refused. The default is shown; save a valid value.",
       "showSecret": "Show",
       "hideSecret": "Hide",
       "databaseSource": "Source: database",
@@ -6361,141 +6390,165 @@
       "recoveryHelp": "Host recovery: inspect the retained operation in Activity and the host ops-agent journal. Do not delete locks or replay an uncertain update. Bootstrap secrets, Docker installation and offline agent recovery require host access."
     },
     "settings": {
-      "instanceName": {
-        "label": "Instance Name",
-        "description": "Display name shown in the admin UI and page titles."
+      "auth": {
+        "emailVerificationRequired": {
+          "label": "Require Email Verification",
+          "description": "New users must verify their email before accessing the app."
+        },
+        "sessionDurationHours": {
+          "label": "Session Duration (hours)",
+          "description": "Absolute lifetime of new sessions. Existing sessions keep their original expiry."
+        },
+        "twoFaEnabled": {
+          "label": "Enable Two-Factor Authentication",
+          "description": "Allow new TOTP enrollment. Existing second-factor challenges remain required."
+        },
+        "passwordMinLength": {
+          "label": "Minimum Password Length"
+        }
       },
-      "instanceUrl": {
-        "label": "Instance URL",
-        "description": "Public URL of this OpenMapX instance (used in emails and links)."
+      "email": {
+        "fromAddress": {
+          "label": "From Address",
+          "description": "Used as the From header by every provider. e.g. noreply@example.com"
+        }
       },
-      "defaultLocale": {
-        "label": "Default Locale"
+      "emaillabs": {
+        "appKey": {
+          "label": "App Key"
+        },
+        "secretKey": {
+          "label": "Secret Key"
+        },
+        "smtpAccount": {
+          "label": "SMTP Account"
+        }
       },
-      "mapCenter": {
-        "label": "Default Map Center",
-        "description": "Default latitude, longitude and zoom for the map on first load."
+      "lettermint": {
+        "apiToken": {
+          "label": "API Token"
+        }
       },
-      "emailVerificationRequired": {
-        "label": "Require Email Verification",
-        "description": "New users must verify their email before accessing the app."
+      "smtp": {
+        "host": {
+          "label": "Host"
+        },
+        "port": {
+          "label": "Port"
+        },
+        "user": {
+          "label": "Username"
+        },
+        "password": {
+          "label": "Password"
+        },
+        "security": {
+          "label": "Connection security",
+          "description": "STARTTLS (default, port 587) upgrades the connection and refuses to send without encryption; TLS (port 465) encrypts from the start; None sends unencrypted."
+        }
       },
-      "sessionDurationHours": {
-        "label": "Session Duration (hours)",
-        "description": "Absolute lifetime of new sessions. Existing sessions keep their original expiry."
+      "basemap": {
+        "provider": {
+          "label": "Hosted Vector Basemap",
+          "description": "Used only when self-hosted tiles are not configured or enabled. Auto uses MapTiler with a configured key, otherwise OpenFreeMap. Reload the map after saving."
+        }
       },
-      "twoFaEnabled": {
-        "label": "Enable Two-Factor Authentication",
-        "description": "Allow new TOTP enrollment. Existing second-factor challenges remain required."
+      "maptiler": {
+        "apiKey": {
+          "label": "MapTiler API Key",
+          "description": "MapTiler Cloud API key for the built-in MapTiler tile and style proxy."
+        }
       },
-      "passwordMinLength": {
-        "label": "Minimum Password Length"
+      "dataUse": {
+        "allowNonCommercial": {
+          "label": "Allow non-commercial-only sources",
+          "description": "When on (default), data sources whose licence forbids commercial use (e.g. Open-Meteo, RainViewer) are included. Turn off for a commercial deployment unless you hold commercial terms for them."
+        },
+        "allowGreyArea": {
+          "label": "Allow grey-area / undocumented-terms sources",
+          "description": "When on (default), data sources with unclear or undocumented usage terms (e.g. unofficial or scraped APIs) are included — most are public APIs whose terms are merely undocumented. Turn off to exclude them (e.g. DB/HAFAS and the regional-transit registry)."
+        }
       },
-      "smtpFromAddress": {
-        "label": "From Address",
-        "description": "Used as the From header by every provider. e.g. noreply@example.com"
+      "legal": {
+        "controller": {
+          "name": {
+            "label": "Controller name",
+            "description": "Legal name of the person or organization operating this instance."
+          },
+          "street": {
+            "label": "Street and house number"
+          },
+          "postalCode": {
+            "label": "Postal code"
+          },
+          "city": {
+            "label": "City"
+          },
+          "country": {
+            "label": "Country"
+          },
+          "email": {
+            "label": "Legal contact email",
+            "description": "Published contact address for the operator on legal pages."
+          },
+          "phone": {
+            "label": "Legal contact phone",
+            "description": "Optional phone number published on the legal notice."
+          }
+        },
+        "hosting": {
+          "provider": {
+            "label": "Hosting Provider",
+            "description": "Company that hosts this instance's servers. Named in the privacy policy's hosting section as the data processor (Art. 28 GDPR). Leave blank to omit that sentence."
+          },
+          "locations": {
+            "label": "Hosting Data-Center Locations",
+            "description": "Where the hosting data centers are located (e.g. \"Germany, Finland\"). Appended to the hosting sentence on /privacy. Leave blank to omit."
+          }
+        },
+        "supervisoryAuthority": {
+          "name": {
+            "label": "Data-Protection Supervisory Authority",
+            "description": "Name of the competent data-protection supervisory authority, shown in the privacy policy's GDPR-rights section. Leave blank to omit that sentence."
+          },
+          "url": {
+            "label": "Supervisory Authority URL",
+            "description": "Link to the supervisory authority named above. Rendered next to it on /privacy. Leave blank to show just the name."
+          }
+        },
+        "dataRequestEmail": {
+          "label": "Data-subject request email",
+          "description": "Controller contact for access requests. Falls back to the legal contact email when unset."
+        },
+        "deploymentJurisdiction": {
+          "label": "Deployment jurisdiction",
+          "description": "Informational ISO 3166-1 alpha-2 jurisdiction, optionally with a subdivision."
+        },
+        "privacySources": {
+          "label": "Privacy sources",
+          "description": "Strict JSON source declarations used by the access report."
+        }
       },
-      "emailLabsAppKey": {
-        "label": "App Key"
-      },
-      "emailLabsSecretKey": {
-        "label": "Secret Key"
-      },
-      "emailLabsSmtpAccount": {
-        "label": "SMTP Account"
-      },
-      "lettermintApiToken": {
-        "label": "API Token"
-      },
-      "smtpHost": {
-        "label": "Host"
-      },
-      "smtpPort": {
-        "label": "Port"
-      },
-      "smtpUser": {
-        "label": "Username"
-      },
-      "smtpPassword": {
-        "label": "Password"
-      },
-      "smtpTls": {
-        "label": "Use TLS / STARTTLS"
-      },
-      "hostedBasemapProvider": {
-        "label": "Hosted Vector Basemap",
-        "description": "Used only when self-hosted tiles are not configured or enabled. Auto uses MapTiler with a configured key, otherwise OpenFreeMap. Reload the map after saving."
-      },
-      "maptilerApiKey": {
-        "label": "MapTiler API Key",
-        "description": "MapTiler Cloud API key for the built-in MapTiler tile and style proxy."
-      },
-      "allowNonCommercial": {
-        "label": "Allow non-commercial-only sources",
-        "description": "When on (default), data sources whose licence forbids commercial use (e.g. Open-Meteo, RainViewer) are included. Turn off for a commercial deployment unless you hold commercial terms for them."
-      },
-      "allowGreyArea": {
-        "label": "Allow grey-area / undocumented-terms sources",
-        "description": "When on (default), data sources with unclear or undocumented usage terms (e.g. unofficial or scraped APIs) are included — most are public APIs whose terms are merely undocumented. Turn off to exclude them (e.g. DB/HAFAS and the regional-transit registry)."
-      },
-      "legalControllerName": {
-        "label": "Controller name",
-        "description": "Legal name of the person or organization operating this instance."
-      },
-      "legalControllerStreet": {
-        "label": "Street and house number"
-      },
-      "legalControllerPostalCode": {
-        "label": "Postal code"
-      },
-      "legalControllerCity": {
-        "label": "City"
-      },
-      "legalControllerCountry": {
-        "label": "Country"
-      },
-      "legalControllerEmail": {
-        "label": "Legal contact email",
-        "description": "Published contact address for the operator on legal pages."
-      },
-      "legalControllerPhone": {
-        "label": "Legal contact phone",
-        "description": "Optional phone number published on the legal notice."
-      },
-      "legalHostingProvider": {
-        "label": "Hosting Provider",
-        "description": "Company that hosts this instance's servers. Named in the privacy policy's hosting section as the data processor (Art. 28 GDPR). Leave blank to omit that sentence."
-      },
-      "legalHostingLocations": {
-        "label": "Hosting Data-Center Locations",
-        "description": "Where the hosting data centers are located (e.g. \"Germany, Finland\"). Appended to the hosting sentence on /privacy. Leave blank to omit."
-      },
-      "legalSupervisoryAuthority": {
-        "label": "Data-Protection Supervisory Authority",
-        "description": "Name of the competent data-protection supervisory authority, shown in the privacy policy's GDPR-rights section. Leave blank to omit that sentence."
-      },
-      "legalSupervisoryAuthorityUrl": {
-        "label": "Supervisory Authority URL",
-        "description": "Link to the supervisory authority named above. Rendered next to it on /privacy. Leave blank to show just the name."
-      },
-      "legalServerLogRetentionDays": {
-        "label": "Server-Log Retention (days)",
-        "description": "How long persisted API warning/error logs are kept before automatic deletion. Infrastructure logs use the operator's separate policy. Must be a positive whole number; defaults to 30."
-      },
-      "legalDataRequestEmail": {
-        "label": "Data-subject request email",
-        "description": "Controller contact for access requests. Falls back to LEGAL_EMAIL when unset."
-      },
-      "legalDsarCaseRetentionDays": {
-        "label": "DSAR case retention (days)"
-      },
-      "legalDeploymentJurisdiction": {
-        "label": "Deployment jurisdiction",
-        "description": "Informational ISO 3166-1 alpha-2 jurisdiction, optionally with a subdivision."
-      },
-      "legalPrivacySources": {
-        "label": "Privacy sources",
-        "description": "Strict JSON source declarations used by the access report."
+      "retention": {
+        "serverLogDays": {
+          "label": "Server-Log Retention (days)",
+          "description": "How long persisted API warning/error logs are kept before automatic deletion. Infrastructure logs use the operator's separate policy. Defaults to 30."
+        },
+        "privacyCaseDays": {
+          "label": "Privacy request case retention (days)"
+        },
+        "auditLogDays": {
+          "label": "Administrator audit-log retention (days)",
+          "description": "How long administrator audit-log entries are kept. Defaults to 365."
+        },
+        "adminJobDays": {
+          "label": "Finished admin job retention (days)",
+          "description": "How long finished administrative jobs are kept. Defaults to 30."
+        },
+        "backupDays": {
+          "label": "Backup retention (days)",
+          "description": "How long local backups are kept. Set by the platform configuration, which the operations agent and the CLI share. Defaults to 30."
+        }
       }
     }
   },
@@ -6507,6 +6560,7 @@
     "showMore": "Show {count, number} more",
     "savedValuesChangedForConflicts": "Saved values changed for {settingLabels}. Review your edits or discard them before saving.",
     "keepMyEdits": "Keep my edits",
+    "requiredSettingsMissing": "Required settings have no value: {settings}. Set them in the service's settings or credentials, then apply again.",
     "configurationSaved": "Configuration saved.",
     "configurationSavedApplyWhenReady": "Configuration saved. Apply the saved configuration when ready.",
     "configurationSavedRuntimePending": "Configuration saved. Runtime application is still pending.",
@@ -6548,14 +6602,14 @@
     "servicePaused": "Paused",
     "serviceUnknown": "Unknown",
     "jobQueued": "Waiting to start.",
-    "jobStatusLabel": "{status, select, queued {queued} running {running} cancel_pending {cancel pending} success {success} ok {ok} failed {failed} error {error} canceled {canceled} partial {partial} stale {stale} interrupted {interrupted} skipped {skipped} never {never} other {{status}}}",
+    "jobStatusLabel": "{status, select, queued {queued} running {running} cancel_pending {cancel pending} succeeded {succeeded} partially_succeeded {partially succeeded} failed {failed} cancelled {cancelled} stale {stale} interrupted {interrupted} skipped {skipped} never {never} other {{status}}}",
     "jobRunning": "Currently in progress.",
     "jobSucceeded": "Completed successfully.",
     "jobFailed": "Stopped because the job failed.",
     "jobStageFailed": "Stopped because this stage failed.",
-    "jobCanceled": "Canceled before completion.",
-    "jobPartial": "Completed with warnings: one or more stages only partially succeeded. Open the job details to review them.",
-    "jobInterrupted": "Stopped before completion, usually because the data manager restarted.",
+    "jobCancelled": "Cancelled before completion.",
+    "jobPartiallySucceeded": "Completed with warnings: part of the work is missing. Open the job details to review it.",
+    "jobInterrupted": "Ended without a recorded outcome, usually because the data manager restarted. New data jobs wait until recovery settles it.",
     "jobSkipped": "Skipped because this stage was disabled or not required.",
     "invalidArchives": "Invalid archives — {archives}",
     "invalidArchivesMore": "Invalid archives — {archives}; +{hidden, number} more",
@@ -6627,7 +6681,7 @@
       "artifact_export": "Export data artifact",
       "artifact_import": "Import data artifact",
       "artifact_validate": "Validate data artifact",
-      "backup_operation": "Backup operation",
+      "backup_operation_run": "Backup operation",
       "backup_prune": "Prune expired backups",
       "catalog_activate": "Activate transit catalog",
       "catalog_validate": "Validate transit catalog",
@@ -6638,7 +6692,7 @@
       "configuration_migration_preview": "Preview configuration migration",
       "convert_overpass": "Convert Overpass data",
       "credential_import": "Import credentials",
-      "data_operation": "Data operation",
+      "data_operation_run": "Data operation",
       "data_reload": "Reload data",
       "download_fonts": "Download map glyphs",
       "download_osm": "Download OSM data",
@@ -6657,16 +6711,16 @@
       "release_clear": "Clear release pin",
       "search_index_build": "Build search index",
       "service_apply": "Apply service configuration",
-      "service_bulk": "Service action on several services",
+      "service_batch_run": "Service action on several services",
       "service_core_restart": "Restart core service",
-      "service_images_pull": "Pull service images",
+      "service_image_pull": "Pull service images",
       "service_restart": "Restart service",
       "service_start": "Start service",
       "service_stop": "Stop service",
       "standalone_install": "Install standalone integration",
       "standalone_preview": "Preview standalone integration",
       "standalone_remove": "Remove standalone integration",
-      "system_diagnostics": "Run diagnostics",
+      "system_diagnostics_collect": "Run diagnostics",
       "system_update": "Update OpenMapX",
       "traffic_live": "Update live traffic",
       "traffic_maintenance": "Maintain traffic data",
@@ -6678,7 +6732,7 @@
     "auditActions": {
       "ambient_places_build": "Nearby places build started",
       "ambient_places_discard": "Nearby places build discarded",
-      "ambient_places_enabled": "Nearby places switched on or off",
+      "ambient_places_enabled_set": "Nearby places switched on or off",
       "ambient_places_resume": "Nearby places build resumed",
       "ambient_places_rollback": "Nearby places rolled back",
       "auth_policy_apply": "Authentication policy applied",
@@ -6688,38 +6742,27 @@
       "backup_restore": "Backup restored",
       "cache_clear": "Cache cleared",
       "compose_render": "Compose file rendered",
-      "configuration_migration_desired": "Configuration migration applied",
-      "credential_delete": "Credential deleted",
-      "credential_set": "Credential saved",
-      "credentials_export": "Credentials exported",
-      "credentials_import_desired": "Credentials imported",
-      "credentials_import_preview": "Credential import previewed",
-      "data_clean": "Data cleaned",
-      "data_convert_overpass": "Overpass data converted",
-      "data_download_fonts": "Map glyphs downloaded",
-      "data_download_osm": "OSM data downloaded",
-      "data_link": "Data linked",
-      "data_notable_places_build": "Notable places built",
-      "data_overture_conflate": "Overture links resumed",
-      "data_overture_extract": "Overture data extracted",
-      "data_overture_ingest": "Overture data imported",
-      "data_overture_pull": "Overture data downloaded",
-      "data_overture_sync": "Overture synced",
-      "data_search_index_build": "Search index built",
-      "data_update": "Data updated",
+      "configuration_migration_apply": "Configuration migration applied",
+      "credential_export": "Credentials exported",
+      "credential_import": "Credentials imported",
+      "credential_import_preview": "Credential import previewed",
+      "data_manager_job_cancel": "Data manager job canceled",
+      "data_operation_run": "Data operation started",
+      "dawarich_oidc_secret_rotate": "Dawarich OIDC secret rotated",
       "dawarich_provision": "Dawarich provisioned",
-      "dawarich_rotate_oidc_secret": "Dawarich OIDC secret rotated",
-      "extension_add_source": "Extension source added",
+      "extension_catalog_refresh": "Extension catalog refreshed",
       "extension_install": "Extension installed",
-      "extension_refresh_catalog": "Extension catalog refreshed",
       "extension_remove": "Extension removed",
-      "extension_remove_source": "Extension source removed",
+      "extension_source_add": "Extension source added",
+      "extension_source_remove": "Extension source removed",
       "extension_update": "Extension updated",
       "integration_binding_set": "Integration binding set",
       "integration_binding_remove": "Integration binding removed",
       "integration_config_update": "Integration configuration updated",
-      "integration_disabled": "Integration disabled",
-      "integration_enabled": "Integration enabled",
+      "integration_credential_delete": "Credential deleted",
+      "integration_credential_set": "Credential saved",
+      "integration_disable": "Integration disabled",
+      "integration_enable": "Integration enabled",
       "integration_reload": "Integration reloaded",
       "integration_reload_all": "All integrations reloaded",
       "job_cancel": "Job canceled",
@@ -6727,28 +6770,25 @@
       "provider_reset": "Provider health reset",
       "release_clear": "Release selection cleared",
       "service_apply": "Service configuration applied",
-      "service_bulk_build": "Services built",
-      "service_bulk_restart": "Services restarted",
-      "service_bulk_start": "Services started",
-      "service_bulk_stop": "Services stopped",
-      "service_bulk_update": "Services updated",
+      "service_build": "Services built",
       "service_config_update": "Service configuration updated",
       "service_credential_delete": "Service credential deleted",
       "service_credential_set": "Service credential saved",
       "service_health_check": "Service health checked",
-      "service_images_pull": "Service images pulled",
-      "service_logs_read": "Service logs read",
+      "service_image_pull": "Service images pulled",
+      "service_log_read": "Service logs read",
       "service_restart": "Service restarted",
       "service_selection_update": "Service selection updated",
       "service_start": "Service started",
       "service_stop": "Service stopped",
-      "settings_test_email": "Test email sent",
-      "settings_update": "Settings updated",
+      "service_update": "Services updated",
+      "setting_test_email_send": "Test email sent",
+      "setting_update": "Settings updated",
       "standalone_install": "Standalone integration installed",
       "standalone_preview": "Standalone integration previewed",
       "standalone_remove": "Standalone integration removed",
-      "system_diagnostics_run": "Diagnostics run",
-      "system_update_apply": "System update applied",
+      "system_diagnostics_collect": "Diagnostics collected",
+      "system_update": "System update applied",
       "system_update_check": "Checked for system updates",
       "timeline_connect": "Timeline connected",
       "timeline_disconnect": "Timeline disconnected",
@@ -6758,7 +6798,7 @@
       "transit_catalog_cancel": "Transit catalog proposal canceled",
       "transit_catalog_propose": "Transit catalog proposed",
       "transit_catalog_validate": "Transit catalog validated",
-      "transit_credentials_update": "Transit credentials updated",
+      "transit_credential_update": "Transit credentials updated",
       "transit_lock_bump": "Transit lockfile updated",
       "transit_source_add": "Transit source added",
       "transit_source_disable": "Transit source disabled",
@@ -6767,17 +6807,17 @@
       "user_ban": "User banned",
       "user_create": "User created",
       "user_delete": "User deleted",
+      "user_email_verification_send": "Verification email sent",
+      "user_email_verify": "User email address verified",
       "user_impersonate": "User impersonated",
-      "user_invitation": "User invited",
+      "user_invitation_send": "User invited",
       "user_password_reset": "User password reset",
+      "user_password_reset_send": "Password reset email sent",
       "user_password_set": "User password set",
-      "user_reset_password": "Password reset email sent",
       "user_role_change": "User role changed",
       "user_session_revoke": "User session revoked",
-      "user_sessions_revoke_all": "All user sessions revoked",
-      "user_unban": "User unbanned",
-      "user_verification_email": "Verification email sent",
-      "user_verify": "User email address verified"
+      "user_session_revoke_all": "All user sessions revoked",
+      "user_unban": "User unbanned"
     },
     "rowsPerPage": "Rows per page:",
     "displayedRows": "{from, number}–{to, number} of {total, number}",
@@ -6886,6 +6926,7 @@
     "jobDetail": "Job detail",
     "failedToLoadJobDetail": "Failed to load job detail.",
     "triggeredByActor": "triggered by {actor}",
+    "jobTrigger": "{trigger, select, api {API} agent {Operations agent} cli {Host command line} cron {Scheduled} bootstrap {Initial setup} other {{trigger}}}",
     "startedAt": "started {startedAt}",
     "durationValue": "duration {duration}",
     "noStageRecordsYet": "No stage records yet.",

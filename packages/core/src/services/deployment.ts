@@ -41,7 +41,11 @@ export function configurationGenerationBasePath(infraDir: string, revisionId: st
     throw new Error("Unsafe generation Compose base");
   return join(infraDir, `${CONFIGURATION_GENERATION_BASE_PREFIX}${revisionId}`);
 }
-/** A fixed same-depth alias preserves legacy relative paths and pins its own secrets. */
+/**
+ * A generation's Compose base: a link to the generation at the depth of
+ * `current`, so the compose file's relative paths resolve as they do from
+ * `current`, and its secrets stay the generation's own after `current` moves.
+ */
 export function readConfigurationGenerationBase(infraDir: string, revisionId: string): string {
   const base = configurationGenerationBasePath(infraDir, revisionId),
     stat = lstatSync(base);

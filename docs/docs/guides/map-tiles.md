@@ -208,7 +208,7 @@ capacity or availability commitment; high-volume deployments can serve its
 downloadable PMTiles themselves, subject to the same source attributions.
 
 With a MapTiler basemap, Terrain keeps MapTiler Terrain RGB and MapTiler
-Contours through the existing API proxy; `MAPTILER_KEY` is required. MapTiler's
+Contours through the existing API proxy; `MAPTILER_API_KEY` is required. MapTiler's
 terrain datasets have a native maximum zoom of 14. Mapterhorn's worldwide DEM
 supports contours through zoom 12; higher-resolution elevation tiles are
 available in some regions, and closer views overzoom where necessary.

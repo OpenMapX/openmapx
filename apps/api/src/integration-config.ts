@@ -147,9 +147,8 @@ export async function resolveConfigWithSources(
   }
 
   // Env layer — highest priority. Pattern: `INTEGRATION_<ID>_<KEY>` via the
-  // shared `integrationEnvVarName` helper (hyphens in both id and key are
-  // normalized to underscores and upper-cased, so bare camelCase keys still
-  // match `INTEGRATION_X_APIKEY` and region-first hyphenated keys match too).
+  // shared `integrationEnvVarName` helper, which splits the lowerCamel key's
+  // words (`apiKey` → `INTEGRATION_<ID>_API_KEY`).
   for (const key of knownKeys) {
     const envVal = process.env[integrationEnvVarName(manifest.id, key)];
     if (!isEnvValuePresent(envVal)) continue;

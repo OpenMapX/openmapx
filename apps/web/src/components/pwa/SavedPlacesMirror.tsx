@@ -1,13 +1,20 @@
 "use client";
 
 import type { LabeledPlace, SavedList, SavedPlace } from "@openmapx/core";
-import { useSession } from "@openmapx/core";
+import { STORAGE_KEYS, useSession } from "@openmapx/core";
 import { type QueryClient, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import { idbDelete, idbGet, idbSet } from "@/lib/idbStore";
 
-const MIRROR_KEY = "omx-saved-mirror";
+export const SAVED_PLACES_MIRROR_KEY = STORAGE_KEYS.savedPlacesMirror.key;
+/** Version of the stored mirror record; a record of any other version is dropped. */
+export const SAVED_PLACES_MIRROR_VERSION = 1;
+const MIRROR_KEY = SAVED_PLACES_MIRROR_KEY;
 const SAVED_QUERY_ROOTS = ["savedLists", "labeledPlaces", "savedListPlaces", "savedCheck"];
+
+interface StoredSavedMirror extends SavedMirror {
+  version: typeof SAVED_PLACES_MIRROR_VERSION;
+}
 
 interface SavedMirror {
   /** Owner of the mirror — so one user's saved data is never seeded for another. */
@@ -86,7 +93,8 @@ export function SavedPlacesMirror(): null {
       writeTimer = setTimeout(() => {
         writeTimer = null;
         mirror.userId = userId;
-        void idbSet(MIRROR_KEY, mirror);
+        const stored: StoredSavedMirror = { ...mirror, version: SAVED_PLACES_MIRROR_VERSION };
+        void idbSet(MIRROR_KEY, stored);
       }, 1000);
     };
 
@@ -109,8 +117,13 @@ export function SavedPlacesMirror(): null {
         await dropSavedCaches(queryClient);
         return;
       }
-      const stored = await idbGet<SavedMirror>(MIRROR_KEY);
-      if (cancelled || !stored) return;
+      const record = await idbGet<Partial<StoredSavedMirror>>(MIRROR_KEY);
+      if (cancelled || !record) return;
+      if (record.version !== SAVED_PLACES_MIRROR_VERSION) {
+        await idbDelete(MIRROR_KEY);
+        return;
+      }
+      const { version: _version, ...stored } = record;
       // A known user only ever gets a mirror stamped with their own id.
       if (userId && stored.userId !== userId) {
         await dropSavedCaches(queryClient);

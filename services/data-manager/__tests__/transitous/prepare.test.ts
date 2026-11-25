@@ -77,7 +77,7 @@ describe("prepare stage", () => {
     const result = await prepareRun(ctx);
 
     expect(result.stage).toBe("prepare");
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(ctx.state.transitousLock).toEqual(PINNED_LOCK);
     expect(calls.some((c) => c.includes("clone"))).toBe(true);
     expect(ctx.state.catalogDir).toBe(catalogDir);
@@ -110,7 +110,7 @@ describe("prepare stage", () => {
     });
     const result = await prepareRun(ctx);
 
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(calls.some((c) => c.includes("reset --hard HEAD"))).toBe(true);
     expect(calls.some((c) => c.includes("pull --ff-only"))).toBe(true);
     expect(calls.some((c) => c.includes("submodule update --init --checkout --depth 1"))).toBe(
@@ -150,7 +150,7 @@ describe("prepare stage", () => {
 
     // Fail closed: an unpinned or unverifiable catalog must never reach the
     // upstream execution step.
-    expect(result.status).toBe("error");
+    expect(result.status).toBe("failed");
     expect(String(result.message)).toMatch(/pin|lock|agent/i);
     expect(ran).not.toContain("python3");
   });
@@ -165,7 +165,7 @@ describe("prepare stage", () => {
       runner,
     });
     expect(await prepareRun(ctx)).toMatchObject({
-      status: "error",
+      status: "failed",
       message: expect.stringContaining("Paired proposal"),
     });
     expect(runner).not.toHaveBeenCalled();
@@ -193,7 +193,7 @@ describe("prepare stage", () => {
     });
 
     const result = await prepareRun(ctx);
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(calls.some((c) => c.includes(`checkout --force ${ACTIVE}`))).toBe(true);
   });
 
@@ -216,7 +216,7 @@ describe("prepare stage", () => {
     });
 
     const result = await prepareRun(ctx);
-    expect(result.status).toBe("error");
+    expect(result.status).toBe("failed");
     expect(result.message).toContain("network down");
   });
 
@@ -253,7 +253,7 @@ describe("prepare stage", () => {
       now: () => "2026-05-01T00:00:00.000Z",
     });
     const result = await prepareRun(ctx);
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
 
     const remaining = store.getAll().map((d) => d.id);
     expect(remaining).toEqual(["de_bvg"]);

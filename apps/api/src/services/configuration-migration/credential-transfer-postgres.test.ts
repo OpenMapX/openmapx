@@ -113,7 +113,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const stage = await retainMigrationStage({
         actorId: "migration-admin",
         kind: "migration",
-        value: { settings: { instanceName: "synthetic" } },
+        value: { settings: { "legal.hosting.locations": "synthetic" } },
       });
       await expect(
         state.fixture.db.transaction(async (tx) => {
@@ -156,7 +156,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         id: jobId,
         type: "credential.import",
         status: "running",
-        createdBy: "migration-admin",
+        createdByUserId: "migration-admin",
         protocol: {
           candidate: { phase: "candidate_prepared" },
           handler: { _migrationStage: { id: active.previewId } },

@@ -3,6 +3,7 @@ import {
   type ApiRequestOptions,
   fetchVehicleJourney,
 } from "@openmapx/core/navigation/api";
+import { isUpdateRequired } from "../../api/nativeApiClient";
 
 export const MAX_JOURNEY_CONCURRENCY = 4;
 
@@ -27,7 +28,9 @@ export async function fetchJourneyCaptures(
           const envelope = await fetchVehicleJourney({ tripId }, client, options);
           const stops = (envelope as { data?: { stops?: unknown[] } })?.data?.stops;
           return [tripId, Array.isArray(stops) ? stops : undefined] as const;
-        } catch {
+        } catch (error) {
+          // A refused protocol is the caller's to report, not a missing journey.
+          if (isUpdateRequired(error)) throw error;
           return [tripId, undefined] as const;
         }
       }),

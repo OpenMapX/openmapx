@@ -9,6 +9,7 @@ import {
   createOverlayStore,
   createPlace,
   getRegisteredOverlayStore,
+  HISTORY_STATE_KEY,
   idsFromPrimaryOrCoords,
   isOverlayActive,
   type OverlayStoreBase,
@@ -81,16 +82,42 @@ afterEach(() => {
   window.history.replaceState(null, "", "/");
 });
 
-const grotesquePlace = "place=stylePoi%3A1&at=50.78%2C6.08&name=Grotesque";
+const grotesquePlace = "place=style-poi%3A1&placeLocation=50.78%2C6.08&placeName=Grotesque";
 
 describe("DeepLinkManager place shells", () => {
+  it("opens a place by its id", () => {
+    window.history.replaceState(null, "", `/?panel=place&${grotesquePlace}`);
+    render(<DeepLinkManager />);
+
+    expect(usePlaceStore.getState().selectedPlace).toMatchObject({
+      id: "style-poi:1",
+      name: "Grotesque",
+      coordinates: [6.08, 50.78],
+    });
+  });
+
+  it("opens a place whose id does not parse at its coordinates", () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/?panel=place&place=stylePoi%3A1&placeLocation=50.78%2C6.08&placeName=Grotesque",
+    );
+    render(<DeepLinkManager />);
+
+    expect(usePlaceStore.getState().selectedPlace).toMatchObject({
+      id: "coordinate:50.780000,6.080000",
+      name: "Grotesque",
+      coordinates: [6.08, 50.78],
+    });
+  });
+
   it("applies a native incoming location instead of overwriting it from the current stores", () => {
     render(<DeepLinkManager />);
     act(() => {
       window.history.replaceState(
         null,
         "",
-        "/?panel=place&place=geo%3A48.137%2C11.575&at=48.137%2C11.575&name=Marienplatz",
+        "/?panel=place&place=geo%3A48.137%2C11.575&placeLocation=48.137%2C11.575&placeName=Marienplatz",
       );
       window.dispatchEvent(new Event(DEEPLINK_OPEN_EVENT));
     });
@@ -114,7 +141,7 @@ describe("DeepLinkManager place shells", () => {
     window.history.replaceState(
       null,
       "",
-      `/?panel=category&categoryId=restaurants&${grotesquePlace}`,
+      `/?panel=category&category=restaurants&${grotesquePlace}`,
     );
     render(<DeepLinkManager />);
 
@@ -130,7 +157,7 @@ describe("DeepLinkManager place shells", () => {
     window.history.replaceState(
       null,
       "",
-      `/?panel=category&categoryId=restaurants&${grotesquePlace}`,
+      `/?panel=category&category=restaurants&${grotesquePlace}`,
     );
     render(<DeepLinkManager />);
 
@@ -152,7 +179,7 @@ describe("DeepLinkManager overlay application", () => {
     getRegisteredOverlayStore("air-quality")?.getState().openPanel();
     expect(isOverlayActive("air-quality")).toBe(true);
 
-    window.history.replaceState(null, "", "/?ov=weather");
+    window.history.replaceState(null, "", "/?overlay=weather");
     render(<DeepLinkManager />);
 
     expect(isOverlayActive("weather")).toBe(true);
@@ -163,26 +190,26 @@ describe("DeepLinkManager overlay application", () => {
     getRegisteredOverlayStore("weather")?.getState().openPanel();
     expect(isOverlayActive("weather")).toBe(true);
 
-    window.history.replaceState(null, "", "/?ov=air-quality");
+    window.history.replaceState(null, "", "/?overlay=air-quality");
     render(<DeepLinkManager />);
 
     expect(isOverlayActive("air-quality")).toBe(true);
     expect(isOverlayActive("weather")).toBe(false);
-    expect(window.location.search).toContain("ov=air-quality");
+    expect(window.location.search).toContain("overlay=air-quality");
     expect(window.location.search).not.toContain("overlay-air-quality");
   });
 
   it("keeps only the natural-event categories the layer shows", () => {
     useNaturalEventStore.setState({ activeCategories: new Set(NATURAL_EVENT_CATEGORIES) });
 
-    window.history.replaceState(null, "", "/?neCat=snow");
+    window.history.replaceState(null, "", "/?naturalEventCategories=snow");
     render(<DeepLinkManager />);
     expect([...useNaturalEventStore.getState().activeCategories]).toEqual([
       ...NATURAL_EVENT_CATEGORIES,
     ]);
 
     act(() => {
-      window.history.replaceState(null, "", "/?neCat=snow,floods");
+      window.history.replaceState(null, "", "/?naturalEventCategories=snow,floods");
       window.dispatchEvent(new Event(DEEPLINK_OPEN_EVENT));
     });
     expect([...useNaturalEventStore.getState().activeCategories]).toEqual(["floods"]);
@@ -191,18 +218,18 @@ describe("DeepLinkManager overlay application", () => {
   it("reads the hotspot sensor of a wildfire link as an instrument family", () => {
     useWildfireStore.setState({ source: "viirs" });
 
-    window.history.replaceState(null, "", "/?fire=2,modis,0");
+    window.history.replaceState(null, "", "/?wildfires=2,modis,0");
     render(<DeepLinkManager />);
     expect(useWildfireStore.getState()).toMatchObject({ dayRange: 2, source: "modis" });
 
     act(() => {
-      window.history.replaceState(null, "", "/?fire=1,VIIRS_SNPP_NRT,0");
+      window.history.replaceState(null, "", "/?wildfires=1,VIIRS_SNPP_NRT,0");
       window.dispatchEvent(new Event(DEEPLINK_OPEN_EVENT));
     });
     expect(useWildfireStore.getState()).toMatchObject({ dayRange: 1, source: "modis" });
 
     act(() => {
-      window.history.replaceState(null, "", "/?fire=3,slstr,0");
+      window.history.replaceState(null, "", "/?wildfires=3,slstr,0");
       window.dispatchEvent(new Event(DEEPLINK_OPEN_EVENT));
     });
     expect(useWildfireStore.getState()).toMatchObject({ dayRange: 3, source: "slstr" });
@@ -220,7 +247,7 @@ describe("DeepLinkManager overlay application", () => {
 
     expect(isOverlayActive("air-quality")).toBe(true);
     expect(getRegisteredOverlayStore("air-quality")?.getState().userRevision).toBe(0);
-    expect(window.location.search).toContain("ov=air-quality");
+    expect(window.location.search).toContain("overlay=air-quality");
   });
 });
 
@@ -278,7 +305,7 @@ describe("DeepLinkManager and trip overlays", () => {
     render(page());
     act(() => useNavigationStore.setState({ status: "navigating" }));
     writeNow();
-    expect(window.location.search).toContain("ov=traffic-flow");
+    expect(window.location.search).toContain("overlay=traffic-flow");
   });
 
   it("writes a trip overlay once the user chooses it during the trip", () => {
@@ -286,7 +313,7 @@ describe("DeepLinkManager and trip overlays", () => {
     act(() => useNavigationStore.setState({ status: "navigating" }));
     act(() => setOverlayLayerVisible("traffic-flow", true, { kind: "user" }));
     writeNow();
-    expect(window.location.search).toContain("ov=traffic-flow");
+    expect(window.location.search).toContain("overlay=traffic-flow");
   });
 });
 
@@ -302,14 +329,14 @@ describe("DeepLinkManager history entries", () => {
   }
 
   it("gives an opened place card its own entry, which Back closes without rebuilding the list", async () => {
-    window.history.replaceState(null, "", "/?panel=category&categoryId=restaurants");
+    window.history.replaceState(null, "", "/?panel=category&category=restaurants");
     render(<DeepLinkManager />);
     const listRevision = useCategorySearchStore.getState().searchRevision;
 
     act(() => {
       usePlaceStore.getState().setSelectedPlace(
         createPlace({
-          ...idsFromPrimaryOrCoords("stylePoi:1", [6.08, 50.78]),
+          ...idsFromPrimaryOrCoords("style-poi:1", [6.08, 50.78]),
           name: "Grotesque",
           address: "Grotesque",
           coordinates: [6.08, 50.78],
@@ -319,7 +346,7 @@ describe("DeepLinkManager history entries", () => {
     });
     writeNow();
     expect(window.location.search).toContain("place=");
-    expect(window.history.state.omx.depth).toBe(1);
+    expect(window.history.state[HISTORY_STATE_KEY].depth).toBe(1);
 
     window.history.back();
     await settled();
@@ -337,13 +364,13 @@ describe("DeepLinkManager history entries", () => {
 
   it("rewrites the card's entry when its own close control is used, so Back does not reopen it", async () => {
     window.history.pushState(null, "", "/elsewhere");
-    window.history.pushState(null, "", "/?panel=category&categoryId=restaurants");
+    window.history.pushState(null, "", "/?panel=category&category=restaurants");
     resetBackNavigationForTests();
     render(<DeepLinkManager />);
     act(() => {
       usePlaceStore.getState().setSelectedPlace(
         createPlace({
-          ...idsFromPrimaryOrCoords("stylePoi:1", [6.08, 50.78]),
+          ...idsFromPrimaryOrCoords("style-poi:1", [6.08, 50.78]),
           name: "Grotesque",
           address: "Grotesque",
           coordinates: [6.08, 50.78],
@@ -352,14 +379,14 @@ describe("DeepLinkManager history entries", () => {
       useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
     });
     writeNow();
-    expect(window.history.state.omx.depth).toBe(1);
+    expect(window.history.state[HISTORY_STATE_KEY].depth).toBe(1);
 
     act(() => {
       usePlaceStore.getState().setSelectedPlace(null);
       useSidebarStore.getState().closeDetail();
     });
     writeNow();
-    expect(window.history.state.omx.depth).toBe(1);
+    expect(window.history.state[HISTORY_STATE_KEY].depth).toBe(1);
     expect(window.location.search).not.toContain("place=");
 
     // The entry below shows the same list, so Back steps over it and closes
@@ -374,7 +401,7 @@ describe("DeepLinkManager history entries", () => {
     window.history.replaceState(
       null,
       "",
-      "/?panel=category&search=pizza&bbox=6.0%2C50.7%2C6.1%2C50.8",
+      "/?panel=category&search=pizza&bounds=6.0%2C50.7%2C6.1%2C50.8",
     );
     render(<DeepLinkManager />);
 
@@ -411,7 +438,7 @@ describe("DeepLinkManager directions waypoints", () => {
   }
 
   function wp(): string[] {
-    return new URLSearchParams(window.location.search).getAll("wp");
+    return new URLSearchParams(window.location.search).getAll("waypoint");
   }
 
   /** What a reload or an opened shared link does: reset, then read the URL. */
@@ -511,7 +538,7 @@ describe("DeepLinkManager directions waypoints", () => {
     window.history.replaceState(
       null,
       "",
-      "/?panel=directions&wp=50.78%2C6.08%2CAachen&wp=52.52%2C13.405%2CBerlin",
+      "/?panel=directions&waypoint=50.78%2C6.08%2CAachen&waypoint=52.52%2C13.405%2CBerlin",
     );
     render(<DeepLinkManager />);
 
@@ -526,8 +553,8 @@ describe("DeepLinkManager directions waypoints", () => {
     vi.stubGlobal("fetch", async () => Response.json({ error: "unavailable" }, { status: 503 }));
     const link =
       "/?panel=directions&mode=cycling&bikeProfile=road&avoid=ferries" +
-      "&wp=50.78%2C6.08%2CAachen&wp=50.94%2C6.96%2CKoeln&wp=52.52%2C13.405%2CBerlin" +
-      "&sched=1%7C1%2Ca%3D2026-09-02T14%3A00%2Cw%3D30";
+      "&waypoint=50.78%2C6.08%2CAachen&waypoint=50.94%2C6.96%2CKoeln&waypoint=52.52%2C13.405%2CBerlin" +
+      "&schedule=1%7C1%2Ca%3D2026-09-02T14%3A00%2Cw%3D30";
     window.history.replaceState(null, "", link);
 
     render(
@@ -565,17 +592,17 @@ describe("DeepLinkManager directions waypoints", () => {
 
     writeNow();
     const written = new URLSearchParams(window.location.search);
-    expect(written.getAll("wp")).toEqual([
+    expect(written.getAll("waypoint")).toEqual([
       "50.78,6.08,Aachen",
       "50.94,6.96,Koeln",
       "52.52,13.405,Berlin",
     ]);
-    expect(written.get("sched")).toBe("1|1,a=2026-09-02T14:00,w=30");
+    expect(written.get("schedule")).toBe("1|1,a=2026-09-02T14:00,w=30");
     expect(written.get("mode")).toBe("cycling");
   });
 
   it("still reads an existing single-waypoint link as the origin", () => {
-    window.history.replaceState(null, "", "/?panel=directions&wp=50.78%2C6.08%2CAachen");
+    window.history.replaceState(null, "", "/?panel=directions&waypoint=50.78%2C6.08%2CAachen");
     render(<DeepLinkManager />);
 
     expect(slots()[0]).toMatchObject({ coords: aachen, label: "Aachen" });

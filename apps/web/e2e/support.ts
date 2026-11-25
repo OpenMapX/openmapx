@@ -112,4 +112,4 @@ export async function expectRouteDrawn(page: Page, minimum = 400): Promise<void>
 
 /** A driving route between two points in the fixture area, as a deep link. */
 export const DIRECTIONS_URL =
-  "/?panel=directions&mode=driving&wp=52.51,13.38,Start&wp=52.53,13.43,Goal";
+  "/?panel=directions&mode=driving&waypoint=52.51,13.38,Start&waypoint=52.53,13.43,Goal";

@@ -9,7 +9,6 @@
   "infrastructure": {
     "dataRequirements": ["osm-pbf"]
   },
-  "category": "Transit",
   "configSchema": {
     "type": "object",
     "properties": {}

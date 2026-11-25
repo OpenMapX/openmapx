@@ -3,7 +3,7 @@ import { afterAll, assert, beforeAll, beforeEach, describe, expect, it, vi } fro
 import { user } from "../../../db/auth-schema.js";
 import { personalTimelineConnection } from "../../../db/timeline-connection-schema.js";
 import { createMigratedPostgresFixture } from "../../../test/postgres-fixture.js";
-import { encrypt } from "../../secrets.js";
+import { encrypt, secretAad } from "../../secrets.js";
 import { currentUserFixture, settingsFixture } from "../__fixtures__/timeline-day.js";
 import { DawarichClientError } from "../client.js";
 import type {
@@ -46,16 +46,17 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     beforeEach(async () => {
       vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 7).toString("base64url"));
       await state.fixture.db.delete(personalTimelineConnection);
-      const encrypted = encrypt("stored-key");
+      const encrypted = encrypt("stored-key", secretAad.personalTimelineConnection(USER_ID));
       await state.fixture.db.insert(personalTimelineConnection).values({
         id: "0193e4a0-0000-7000-8006-000000000001",
         userId: USER_ID,
         mode: "external",
         publicOrigin: "https://timeline.example.test",
         displayName: "Fixture",
-        encryptedApiKey: encrypted.ciphertext,
-        encryptionIv: encrypted.iv,
-        encryptionTag: encrypted.tag,
+        apiKeyCiphertext: encrypted.ciphertext,
+        apiKeyIv: encrypted.iv,
+        apiKeyTag: encrypted.tag,
+        apiKeyKeyVersion: encrypted.keyVersion,
         upstreamTimeZone: "Etc/UTC",
         status: "connected",
         consecutiveFailures: 0,
@@ -145,7 +146,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     it.each(["success", "credential_invalid"] as const)(
       "does not apply stale manual-test %s after the user switches connections",
       async (result) => {
-        const encrypted = encrypt("new-key");
+        const encrypted = encrypt("new-key", secretAad.personalTimelineConnection(USER_ID));
         let switched: Awaited<ReturnType<typeof store.findByUserId>> = null;
         const client = validClient();
         client.getTimeline.mockImplementationOnce(async () => {
@@ -153,9 +154,10 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             publicOrigin: "https://new.example",
             displayName: "New timeline",
             upstreamEmail: "new@example.invalid",
-            encryptedApiKey: encrypted.ciphertext,
-            encryptionIv: encrypted.iv,
-            encryptionTag: encrypted.tag,
+            apiKeyCiphertext: encrypted.ciphertext,
+            apiKeyIv: encrypted.iv,
+            apiKeyTag: encrypted.tag,
+            apiKeyKeyVersion: encrypted.keyVersion,
             status: "degraded",
             consecutiveFailures: 4,
           });
@@ -185,11 +187,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const service = new ConnectionService({ store, audit: async () => {} });
         const credential = await service.decryptConnectionCredential(USER_ID);
         if (change === "credential") {
-          const encrypted = encrypt("new-read-key");
+          const encrypted = encrypt("new-read-key", secretAad.personalTimelineConnection(USER_ID));
           await store.updateForUser(USER_ID, {
-            encryptedApiKey: encrypted.ciphertext,
-            encryptionIv: encrypted.iv,
-            encryptionTag: encrypted.tag,
+            apiKeyCiphertext: encrypted.ciphertext,
+            apiKeyIv: encrypted.iv,
+            apiKeyTag: encrypted.tag,
+            apiKeyKeyVersion: encrypted.keyVersion,
           });
         } else {
           const previous = await store.findByUserId(USER_ID);

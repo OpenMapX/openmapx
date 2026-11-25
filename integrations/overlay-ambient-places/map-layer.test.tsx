@@ -78,7 +78,7 @@ import { renderedFeature } from "@/test";
 import { AmbientPlacesLayer } from "./map-layer";
 
 const manifest = {
-  version: 2,
+  version: 1,
   policyVersion: 1,
   generation: "11111111-1111-4111-8111-111111111111",
   publishedAt: new Date().toISOString(),

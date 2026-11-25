@@ -2,6 +2,7 @@ import z from "zod/v4";
 import { adminTimestampSchema } from "../admin";
 import {
   adminExtensionComponentKindSchema,
+  adminExtensionCriticalAdvisorySchema,
   adminExtensionSecurityRatingSchema,
   adminExtensionTrustSchema,
 } from "./common";
@@ -25,6 +26,9 @@ export const adminExtensionInstalledSchema = z.strictObject({
   // null means no catalog version is available for comparison.
   hasUpdate: z.boolean().nullable(),
   latestVersion: z.string().nullable(),
+  // The advisory that covers the installed version; null when none does or
+  // the catalog could not be read.
+  critical: adminExtensionCriticalAdvisorySchema.nullable(),
 });
 export const adminExtensionInstalledListSchema = z.strictObject({
   extensions: z.array(adminExtensionInstalledSchema),

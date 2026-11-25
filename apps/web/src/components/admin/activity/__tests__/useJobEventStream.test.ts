@@ -35,13 +35,13 @@ describe("reduceJobEvent", () => {
   it("merges valid status/progress and terminal end while retaining untouched fields", () => {
     const next = reduceJobEvent(job(), "status", {
       type: "status",
-      status: "success",
+      status: "succeeded",
       progress: 100,
       finishedAt: timestamp,
       result: ["complete", { nested: true }],
     });
     expect(next).toMatchObject({
-      status: "success",
+      status: "succeeded",
       progress: 100,
       startedAt: timestamp,
       finishedAt: timestamp,
@@ -51,8 +51,8 @@ describe("reduceJobEvent", () => {
     expect(reduceJobEvent(job(), "progress", { type: "progress", progress: 55 })?.progress).toBe(
       55,
     );
-    expect(reduceJobEvent(job(), "end", { status: "canceled" })).toMatchObject({
-      status: "canceled",
+    expect(reduceJobEvent(job(), "end", { status: "cancelled" })).toMatchObject({
+      status: "cancelled",
       cancelable: false,
     });
   });
@@ -94,10 +94,10 @@ describe("useJobEventStream", () => {
       expect(result.current.connection).toBe("live");
       expect(source.closed).toBe(false);
       expect(result.current.data).toMatchObject({ status: "cancel_pending", cancelable: false });
-      act(() => source.emit("status", { type: "status", status: "canceled" }));
-      act(() => source.emit("end", { status: "canceled" }));
+      act(() => source.emit("status", { type: "status", status: "cancelled" }));
+      act(() => source.emit("end", { status: "cancelled" }));
       expect(result.current.connection).toBe("closed");
-      expect(result.current.data).toMatchObject({ status: "canceled", cancelable: false });
+      expect(result.current.data).toMatchObject({ status: "cancelled", cancelable: false });
     },
   );
 
@@ -112,10 +112,10 @@ describe("useJobEventStream", () => {
     const { jobId: _, ...wire } = log("hello", 0);
     act(() => source.emit("log", { type: "log", ...wire }));
     act(() => source.emit("progress", { type: "progress", progress: 80 }));
-    act(() => source.emit("status", { type: "status", status: "success", progress: 100 }));
+    act(() => source.emit("status", { type: "status", status: "succeeded", progress: 100 }));
     expect(result.current.data?.logs[0]).toMatchObject({ jobId: "job /1", line: "hello" });
-    expect(result.current.data?.status).toBe("success");
-    act(() => source.emit("end", { status: "success" }));
+    expect(result.current.data?.status).toBe("succeeded");
+    act(() => source.emit("end", { status: "succeeded" }));
     expect(result.current.connection).toBe("closed");
     expect(source.closed).toBe(true);
   });
@@ -136,7 +136,7 @@ describe("useJobEventStream", () => {
     expect(result.current.connection).toBe("polling");
     expect(result.current.data).toBeNull();
     expect(source.closed).toBe(true);
-    act(() => source.emit("end", { status: "success" }));
+    act(() => source.emit("end", { status: "succeeded" }));
     act(() => source.open());
     expect(result.current.connection).toBe("polling");
   });

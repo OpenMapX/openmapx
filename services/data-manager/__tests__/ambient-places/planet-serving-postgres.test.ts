@@ -28,15 +28,15 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")("global ambient
           buildSearchIndexIndexesDDL("osm_search") +
           buildSchemaDDL("overture_places"),
       );
-      await pg.sql.unsafe(`INSERT INTO osm_search.index_state(region,source_path,source_fingerprint,current_fingerprint,source_file_identity,epoch,status,place_count,started_at,published_at,updated_at)
-        VALUES('planet','fixture','fixture','fixture','fixture-file','world','ready',4,now(),now(),now());
+      await pg.sql.unsafe(`INSERT INTO osm_search.index_state(schema_version,region,source_path,source_fingerprint,current_fingerprint,source_file_identity,epoch,status,place_count,started_at,published_at,updated_at)
+        VALUES(1,'planet','fixture','fixture','fixture','fixture-file','world','ready',4,now(),now(),now());
         INSERT INTO osm_search.places(osm_type,osm_id,name,geom,category,tags,importance) VALUES
         ('node',1,'病院 East',ST_Point(179.99999,0,4326),'amenity/hospital','{}',0.8),('node',2,'病院 West',ST_Point(-179.99999,0,4326),'amenity/hospital','{}',0.8),
         ('node',3,'Polar hospital',ST_Point(0,86,4326),'amenity/hospital','{}',0.8),('way',9007199254740993,'東京病院',ST_Point(139.7,35.7,4326),'amenity/hospital','{}',0.8);
         INSERT INTO overture_places.places(gers_id,name,basic_category,geom,h3_r8,confidence,operating_status,release) VALUES
         ('g-tokyo','Tokyo Clinic','hospital',ST_SetSRID(ST_MakePoint(139.7,35.7),4326),x'882f5a3247fffff'::BIGINT,0.9,'open','2026-09-23.1');
-        INSERT INTO overture_places.conflation_state(release,region,place_count,places_published_at,status,phase,source_fingerprint,completed_at,sources_catalogue)
-        VALUES('2026-09-23.1','planet',1,now(),'completed','complete','fixture-file',now(),'[{"sourceId":"overture","name":"Overture Maps"}]');
+        INSERT INTO overture_places.conflation_state(schema_version,release,region,place_count,places_published_at,status,phase,source_fingerprint,completed_at,sources_catalogue)
+        VALUES(1,'2026-09-23.1','planet',1,now(),'completed','complete','fixture-file',now(),'[{"sourceId":"overture","name":"Overture Maps"}]');
         INSERT INTO overture_places.poi_conflation_link(osm_type,osm_id,gers_id,match_confidence,distance_m,method,evidence,release)
         VALUES('way',9007199254740993,'g-tokyo',1,0,'fixture','{}','2026-09-23.1')`);
       await expect(
@@ -105,8 +105,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")("global ambient
       await pg.sql.unsafe(
         buildSearchIndexSchemaDDL("osm_search") + buildSearchIndexIndexesDDL("osm_search"),
       );
-      await pg.sql.unsafe(`INSERT INTO osm_search.index_state(region,source_path,source_fingerprint,current_fingerprint,source_file_identity,epoch,status,place_count,started_at,published_at,updated_at)
-        VALUES('planet','fixture','fixture','fixture','fixture-file','world-dense','ready',10001,now(),now(),now());
+      await pg.sql.unsafe(`INSERT INTO osm_search.index_state(schema_version,region,source_path,source_fingerprint,current_fingerprint,source_file_identity,epoch,status,place_count,started_at,published_at,updated_at)
+        VALUES(1,'planet','fixture','fixture','fixture','fixture-file','world-dense','ready',10001,now(),now(),now());
         INSERT INTO osm_search.places(osm_type,osm_id,name,geom,category,tags,importance)
         SELECT 'node',i,'世界 Fixture Hospital '||i,ST_Point(
           CASE i%5 WHEN 0 THEN 139.7 WHEN 1 THEN -74 WHEN 2 THEN 18.42 WHEN 3 THEN 151.2 ELSE -46.63 END,

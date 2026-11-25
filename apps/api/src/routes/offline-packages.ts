@@ -36,7 +36,7 @@ const DEFAULT_DELIVERY_MAX_CONCURRENT_GLOBAL = 16;
 /** Readers treat this code as "offline packages are unavailable right now". */
 const CAPABILITY_UNAVAILABLE = {
   error: "Offline package service unavailable",
-  code: "source-unavailable",
+  code: "SOURCE_UNAVAILABLE",
 } as const;
 
 interface PrepareLimiter {
@@ -202,7 +202,7 @@ export function createOfflinePackagesRoute(
         } catch {
           return reply.code(503).send({
             error: "Offline package preparation quota is temporarily unavailable",
-            code: "prepare-quota-unavailable",
+            code: "PREPARE_QUOTA_UNAVAILABLE",
           });
         }
         const principal = deriveOfflinePackagePrincipal(getUserId(request), principalKey);
@@ -212,14 +212,14 @@ export function createOfflinePackagesRoute(
         } catch {
           return reply.code(503).send({
             error: "Offline package preparation quota is temporarily unavailable",
-            code: "prepare-quota-unavailable",
+            code: "PREPARE_QUOTA_UNAVAILABLE",
           });
         }
         if (!limit.allowed) {
           reply.header("Retry-After", String(limit.retryAfterSeconds));
           return reply.code(429).send({
             error: "Offline package preparation quota exceeded",
-            code: "prepare-rate-limit",
+            code: "PREPARE_RATE_LIMITED",
             retryAfterSeconds: limit.retryAfterSeconds,
           });
         }
@@ -230,7 +230,7 @@ export function createOfflinePackagesRoute(
         } catch (error) {
           return reply.code(400).send({
             error: error instanceof Error ? error.message : String(error),
-            code: "invalid-request",
+            code: "INVALID_REQUEST",
           });
         }
         try {

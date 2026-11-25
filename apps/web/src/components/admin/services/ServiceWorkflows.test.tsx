@@ -414,7 +414,7 @@ async function queueEmbedded(kind: string, confirmPreview = true) {
   );
 }
 describe("embedded operation callers", () => {
-  it.each(["success", "failed", "canceled"] as const)(
+  it.each(["succeeded", "failed", "cancelled"] as const)(
     "replaces a pending initial embedded GET on terminal %s before its old response arrives",
     async (status) => {
       const initial = pending<Response>();
@@ -624,7 +624,7 @@ describe("backup dialog and input ownership", () => {
 });
 
 describe("accepted jobs refresh concrete workflows", () => {
-  it.each(["success", "failed", "canceled"] as const)(
+  it.each(["succeeded", "failed", "cancelled"] as const)(
     "refreshes backup inventory and data independently for concurrent %s jobs after view disposal",
     async (terminal) => {
       const done = new Set<string>();
@@ -710,7 +710,7 @@ describe("accepted jobs refresh concrete workflows", () => {
             job({
               id: mismatch === "wrong-id" ? "unrelated" : "job-1",
               source: mismatch === "wrong-source" ? "data-manager" : "application",
-              status: "success",
+              status: "succeeded",
             }),
           );
         }
@@ -750,7 +750,7 @@ describe("accepted jobs refresh concrete workflows", () => {
     const calls = setup((url) => {
       if (url.pathname.endsWith("/run")) return deferred.promise;
       if (url.pathname.includes("/jobs/"))
-        return Response.json(job({ id: "job-1", status: done ? "canceled" : "cancel_pending" }));
+        return Response.json(job({ id: "job-1", status: done ? "cancelled" : "cancel_pending" }));
       if (url.pathname.endsWith("/services/data"))
         return Response.json({
           ...inventory,
@@ -1131,7 +1131,7 @@ it("refreshes embedded status displayed on the data page after a catalogue opera
   let terminal = false;
   const calls = setup((url) => {
     if (url.pathname.includes("/jobs/"))
-      return Response.json(job({ id: "job-1", status: terminal ? "success" : "cancel_pending" }));
+      return Response.json(job({ id: "job-1", status: terminal ? "succeeded" : "cancel_pending" }));
     if (url.pathname.endsWith("/search-index/status"))
       return Response.json({
         ...indexStatus,

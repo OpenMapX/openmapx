@@ -13,12 +13,14 @@ export {
   extensionManifestSchema,
   validateExtensionManifest,
 } from "./extension";
+export { COMPONENT_ID_MAX_LENGTH, componentIdSchema, isComponentId } from "./identifiers";
 export type {
   IntegrationDataSource,
   IntegrationManifest,
   PlatformEndpointId,
 } from "./integration";
 export {
+  communityIntegrationManifestSchema,
   ENDPOINT_URL_TEMPLATE,
   integrationManifestSchema,
   isPlatformEndpointId,
@@ -27,5 +29,10 @@ export {
   validateManifest,
 } from "./integration";
 export { PLATFORM_VERSION, satisfiesPlatformVersion } from "./platform";
+export { compareSemver, isSemver, semverSchema } from "./semver";
 export type { ManifestProvenance, ServiceManifest } from "./service";
-export { serviceManifestSchema, validateServiceManifest } from "./service";
+export {
+  communityServiceManifestSchema,
+  serviceManifestSchema,
+  validateServiceManifest,
+} from "./service";

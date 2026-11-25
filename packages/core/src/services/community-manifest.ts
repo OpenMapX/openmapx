@@ -1,10 +1,10 @@
+import { PLATFORM_VERSION, satisfiesPlatformVersion } from "@openmapx/extension-contracts/platform";
 import { assertTrustedConfigurationSchema } from "./configuration-schema";
 import { serviceNetworkAlias } from "./core-service-ids";
 import { validateServiceManifest } from "./manifest-schema";
 import { RELEASE_BUILT_IN_SERVICE_IDS } from "./release-authority-inventory";
 import type { ServiceManifest } from "./types";
 
-const COMMUNITY_SERVICE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 /** The host of a URL, after its scheme and any `user:password@`. */
 const URL_HOST =
   /[A-Za-z][A-Za-z0-9+.-]*:\/\/(?:[^@/\s?#]*@)?([A-Za-z0-9][A-Za-z0-9.-]*)(?=[:/?#\s"'`,;)]|$)/g;
@@ -70,9 +70,10 @@ function bareBuiltInHosts(manifest: ServiceManifest): string[] {
 
 /**
  * Why a community service manifest would be rejected, beyond the third-party
- * manifest schema: a plain service id that no built-in service uses, no
- * built-in service reached by its bare ID, a community quality label, an image
- * pinned by digest, and a configuration schema the trusted renderer accepts.
+ * manifest schema: an extension protocol this host supports, a service id that
+ * no built-in service uses, no built-in service reached by its bare ID, an
+ * image pinned by digest, and a configuration schema the trusted renderer
+ * accepts.
  * The operations agent applies these rules before it installs a repository and
  * whenever it reads its community store; the API applies them again to the
  * manifests the agent reports.
@@ -83,8 +84,10 @@ export function communityServiceManifestProblems(raw: unknown): string[] {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return ["Manifest is not an object"];
   const manifest = raw as ServiceManifest;
   const problems: string[] = [];
-  if (!COMMUNITY_SERVICE_ID.test(manifest.id)) {
-    problems.push(`Service id "${manifest.id}" may only use lowercase letters, digits and hyphens`);
+  if (!satisfiesPlatformVersion(manifest.platform ?? "")) {
+    problems.push(
+      `Service "${manifest.id}" requires extension protocol ${manifest.platform}; this host supports ${PLATFORM_VERSION}`,
+    );
   }
   // The registry keeps the built-in service of an ID, so a community service
   // sharing it would never run.
@@ -95,10 +98,6 @@ export function communityServiceManifestProblems(raw: unknown): string[] {
     problems.push(
       `Service "${manifest.id}" reaches built-in service "${host}" by its bare ID; use "${serviceNetworkAlias(host)}"`,
     );
-  }
-  // Both labels get the same sandbox; the schema already refuses "built-in" here.
-  if (manifest.quality !== "community" && manifest.quality !== "community-verified") {
-    problems.push(`Service "${manifest.id}" must declare a community quality`);
   }
   if (!/^sha256:[a-f0-9]{64}$/.test(manifest.container.digest ?? "")) {
     problems.push(`Service "${manifest.id}" must pin its container image by sha256 digest`);

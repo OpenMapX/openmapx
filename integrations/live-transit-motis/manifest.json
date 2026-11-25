@@ -52,7 +52,6 @@
     }
   ],
   "quality": "built-in",
-  "category": "Transit",
   "dataSources": [
     {
       "sourceId": "transitous",

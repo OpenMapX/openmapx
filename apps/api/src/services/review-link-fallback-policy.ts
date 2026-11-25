@@ -70,7 +70,7 @@ const TRIPADVISOR_TOURISM_VALUES = [
 ] as const;
 
 export const REVIEW_LINK_FALLBACK_POLICIES = {
-  googleMaps: {
+  "google-maps": {
     behavior: "always",
   },
   yelp: {

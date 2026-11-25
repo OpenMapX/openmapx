@@ -6,8 +6,13 @@ export {
   useMangroveTransport,
   useMangroveWebauthnKeyName,
 } from "./provider";
-export type { SignerAccount, SignerConfig, SignerTransport } from "./signer";
-export { clearMangroveSignerStorage, MangroveSignerError } from "./signer";
+export type {
+  MangroveSignerStorageKeys,
+  SignerAccount,
+  SignerConfig,
+  SignerTransport,
+} from "./signer";
+export { MangroveSignerError } from "./signer";
 export { useMangroveSigner } from "./signerProvider";
 export type { MangroveCurrentUser, MangroveTransport } from "./transport";
 export type {

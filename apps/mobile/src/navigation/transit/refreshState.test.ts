@@ -135,6 +135,14 @@ describe("refresh transitions", () => {
       expect(onRefreshFailed(inFlight, "rejected").status).toBe("broken");
     });
 
+    it("stops refreshing and records the update when the server refused the protocol", () => {
+      for (const hasToken of [true, false]) {
+        const refused = onRefreshFailed(inFlight, "update-required", NOW, hasToken);
+        expect(refused).toMatchObject({ status: "broken", updateRequired: true });
+        expect(shouldRefresh(context({ runtime: refused, hasToken })).refresh).toBe(false);
+      }
+    });
+
     it("retries a lost reply within the bounded replay window, then stops", () => {
       const first = onRefreshFailed(inFlight, "ambiguous", NOW);
       expect(first.status).toBe("ready");

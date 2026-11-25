@@ -11,7 +11,7 @@ export function privacyDetail(
       id,
       kind: "access_and_portability",
       channel: "email",
-      state: "open",
+      status: "open",
       userId: null,
       locale: "en",
       timeZone: "UTC",

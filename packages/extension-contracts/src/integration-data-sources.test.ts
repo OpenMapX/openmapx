@@ -22,14 +22,18 @@ const manifest = (dataSource: Record<string, unknown>) => ({
 
 describe("manifest data sources", () => {
   it("accepts the credit text under the field the host reads", () => {
-    expect(validateManifest(manifest({ ...source, attribution: "© Example" }))).toEqual({
+    expect(
+      validateManifest(manifest({ ...source, attribution: "© Example" }), { firstParty: true }),
+    ).toEqual({
       valid: true,
       errors: [],
     });
   });
 
   it("refuses a key the host does not read", () => {
-    expect(validateManifest(manifest({ ...source, attributionText: "© Example" }))).toEqual({
+    expect(
+      validateManifest(manifest({ ...source, attributionText: "© Example" }), { firstParty: true }),
+    ).toEqual({
       valid: false,
       errors: ['dataSources.0: Unrecognized key: "attributionText"'],
     });

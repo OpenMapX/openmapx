@@ -31,7 +31,6 @@
     "urlTemplate": "${endpoint:photon}/status"
   },
   "quality": "built-in",
-  "category": "Geocoding",
   "dataSources": [
     {
       "sourceId": "photon",

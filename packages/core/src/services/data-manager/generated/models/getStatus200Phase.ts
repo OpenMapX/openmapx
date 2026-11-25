@@ -4,6 +4,7 @@
 export type GetStatus200Phase = (typeof GetStatus200Phase)[keyof typeof GetStatus200Phase];
 
 export const GetStatus200Phase = {
+  "database-schema": "database-schema",
   "offline-storage": "offline-storage",
   "job-reconciliation": "job-reconciliation",
   "cron-schedulers": "cron-schedulers",

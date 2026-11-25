@@ -8,7 +8,7 @@ import {
   type ConfigurationSourcesInspection,
   configurationSourcesInspectionSchema,
 } from "../ops/configuration-preparation";
-import { serviceConfigEnvPrefix } from "../services/config-resolver";
+import { serviceConfigEnvName } from "../services/config-env-names";
 import {
   currentConfigurationGeneration,
   readAppliedPlatformConfiguration,
@@ -20,7 +20,7 @@ import { installationState, readPrivateRecord, writePrivateRecord } from "./priv
 
 const domain = "openmapx-configuration-source-witness-v1";
 const witnessSchema = z.strictObject({
-  version: z.union([z.literal(1), z.literal(2)]),
+  version: z.literal(1),
   inspection: configurationSourcesInspectionSchema,
   authorityRevision: z.string().max(128),
   observation: z.string().regex(/^[a-f0-9]{64}$/),
@@ -138,7 +138,7 @@ export function configurationHostFields(
       .map(([key]) => key);
     const keys = new Set([...declared, "OPENMAPX_MEMORY_MIB", "OPENMAPX_CPU_LIMIT"]);
     const fields = [...keys].sort().map((key) => {
-      const names = [`${serviceConfigEnvPrefix(manifest.id)}${key.toUpperCase()}`];
+      const names = [serviceConfigEnvName(manifest.id, key)];
       const hostExpression = manifest.container.environment?.[key]?.match(
         /^\$\{([A-Z][A-Z0-9_]*)(?::[-?][^}]*)?\}$/,
       )?.[1];
@@ -207,7 +207,7 @@ export function observeConfigurationSources(options: {
         bytes += directory.read(entry, 128 * 1024).length;
       }
       const record = witnessSchema.parse({
-        version: 2,
+        version: 1,
         inspection,
         authorityRevision: options.authorityRevision,
         observation,
@@ -236,10 +236,7 @@ export function verifyConfigurationSourceWitness(options: {
   const retained = witnessSchema.parse(
     readPrivateRecord(state, "observations", name(options.sourceRevision)),
   );
-  const observed =
-    retained.version === 2
-      ? currentSources(options.infraDir, options.env ?? process.env)
-      : hostEnv(options.infraDir, options.env ?? process.env);
+  const observed = currentSources(options.infraDir, options.env ?? process.env);
   const digest = createHash("sha256")
     .update(`${domain}\0`)
     .update(canonicalJson(observed))
@@ -253,19 +250,4 @@ export function verifyConfigurationSourceWitness(options: {
     digest !== retained.observation
   )
     throw Error("Host sources changed");
-}
-/** New coordinator work requires the release-bound observation. Historical v1
- * witnesses remain readable for their original ordinary work only. */
-export function verifyConfigurationReleaseSourceWitness(
-  options: Parameters<typeof verifyConfigurationSourceWitness>[0],
-): void {
-  const retained = witnessSchema.parse(
-    readPrivateRecord(
-      installationState(options.installation),
-      "observations",
-      name(options.sourceRevision),
-    ),
-  );
-  if (retained.version !== 2) throw Error("Release-bound host source required");
-  verifyConfigurationSourceWitness(options);
 }

@@ -24,7 +24,6 @@ export async function adminStandaloneIntegrationsRoute(app: FastifyInstance): Pr
       await writeAuditLog({
         actorId,
         action: "standalone.remove",
-        targetType: "integration",
         targetId: request.params.id,
         details: { jobId: accepted.jobId },
         request,
@@ -54,7 +53,6 @@ export async function adminStandaloneIntegrationsRoute(app: FastifyInstance): Pr
         await writeAuditLog({
           actorId,
           action: type,
-          targetType: "integration",
           targetId: accepted.operationId,
           details: { jobId: accepted.jobId },
           request,

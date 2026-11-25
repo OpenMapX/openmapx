@@ -111,7 +111,7 @@ describe("deployment secret assertions", () => {
       ),
     ).not.toThrow();
     expect(() =>
-      assertApplicationDeploymentSecret("OPENMAPX_LOCAL_ADMIN_TOKEN", "%20".repeat(11)),
+      assertApplicationDeploymentSecret("BETTER_AUTH_SECRET", "%20".repeat(11)),
     ).not.toThrow();
   });
 
@@ -128,10 +128,10 @@ describe("deployment secret assertions", () => {
     expect.assertions(2);
     const rejected = "private-application-fixture";
     try {
-      assertApplicationDeploymentSecret("OPENMAPX_LOCAL_ADMIN_TOKEN", rejected);
+      assertApplicationDeploymentSecret("BETTER_AUTH_SECRET", rejected);
     } catch (error) {
       expect((error as Error).message).not.toContain(rejected);
-      expect((error as Error).message).toContain("OPENMAPX_LOCAL_ADMIN_TOKEN");
+      expect((error as Error).message).toContain("BETTER_AUTH_SECRET");
     }
   });
 });

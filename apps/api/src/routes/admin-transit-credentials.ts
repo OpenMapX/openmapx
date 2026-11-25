@@ -84,7 +84,7 @@ export async function adminTransitCredentialsRoute(app: FastifyInstance) {
     "previewAdminTransitCredentials",
     async (request, reply) => {
       const actor = getAdminSession(request);
-      if (actor.user.id === "loopback" || actor.session.impersonatedBy)
+      if (actor.session.impersonatedBy)
         return reply.code(403).send({ error: "A real full administrator session is required" });
       try {
         return await previewFeedCredentialChanges({ ...request.body, actorId: actor.user.id });
@@ -101,9 +101,12 @@ export async function adminTransitCredentialsRoute(app: FastifyInstance) {
     async (request, reply) => {
       const actor = getAdminSession(request),
         nonce = adminReauthNonce(request.headers.cookie);
-      if (actor.user.id === "loopback" || actor.session.impersonatedBy)
+      if (actor.session.impersonatedBy)
         return reply.code(403).send({ error: "A real full administrator session is required" });
-      if (!nonce) return reply.code(409).send({ error: "REAUTHENTICATION_FAILED" });
+      if (!nonce)
+        return reply
+          .code(409)
+          .send({ error: "Reauthentication failed", code: "REAUTHENTICATION_FAILED" });
       try {
         await bindTransitCredentialAuthorization({
           ...request.body,

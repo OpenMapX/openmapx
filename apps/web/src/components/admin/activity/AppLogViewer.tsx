@@ -98,7 +98,7 @@ function LogLine({ entry }: { entry: AppLogEntry }) {
         component="span"
         sx={{ color: "grey.100", fontSize: 12, fontFamily: "monospace", flexGrow: 1 }}
       >
-        {entry.msg}
+        {entry.message}
         {entry.metadata && Object.keys(entry.metadata).length > 0 && (
           <Box component="span" sx={{ color: "grey.500", ml: 1 }}>
             {JSON.stringify(entry.metadata)}

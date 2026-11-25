@@ -13,7 +13,7 @@ crashScenario({
     const submitted = await host.submitUpdate();
     if (submitted.status === 200) {
       const job = await host.settledJob(submitted.jobId as string, 120_000);
-      expect(job.status).not.toBe("success");
+      expect(job.status).not.toBe("succeeded");
     } else expect(submitted.status).toBe(409);
     expect(host.dockerEffects({ command: "run", caller: "agent", since: start })).toEqual([]);
     expect(host.dockerEffects({ command: "compose", since: start })).toEqual([]);
@@ -35,10 +35,10 @@ crashScenario({
       expect(host.dockerEffects({ command: "compose", since: start })).toEqual([]);
       return;
     }
-    if (first?.status !== "success") {
+    if (first?.status !== "succeeded") {
       const retry = await host.submitUpdate();
       expect(retry.status).toBe(200);
-      expect((await host.waitForJob(retry.jobId as string)).status).toBe("success");
+      expect((await host.waitForJob(retry.jobId as string)).status).toBe("succeeded");
     }
     expect(host.runningImages()["ops-agent"]).toBe(host.releaseImageId("next", "ops-agent"));
   },

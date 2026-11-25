@@ -149,7 +149,16 @@ async function installSentinelGeneration(paths: ReturnType<typeof fixture>): Pro
     "docker-compose.generated.hardlinks.json",
   ])
     writeFileSync(join(oldGeneration, name), "sentinel", { mode: 0o600 });
-  writeFileSync(join(oldGeneration, "resolved-config.generated.json"), "{}", { mode: 0o600 });
+  writeFileSync(
+    join(oldGeneration, "resolved-config.generated.json"),
+    JSON.stringify({
+      version: 1,
+      domain: "old.example.test",
+      serviceConfigs: [],
+      integrationConfigs: [],
+    }),
+    { mode: 0o600 },
+  );
   pointCurrentAt(paths, oldRevision);
 }
 
@@ -1227,7 +1236,11 @@ describe("ops-agent trusted configuration runtime", () => {
       });
       const problem =
         "infra/docker/overrides/services/alpha/config/alpha.yml can't be used: group or others may write it. Render refuses it rather than use the release's file in its place: make it a regular file of yours that only you may write, or delete it.";
-      await expect(failure(refused)).resolves.toEqual({ attemptedRevisionId: refused, problem });
+      await expect(failure(refused)).resolves.toEqual({
+        attemptedRevisionId: refused,
+        problem,
+        missingSettings: null,
+      });
       expect(stderr.mock.calls.flat().map(String)).toContainEqual(`${problem}\n`);
       expect(stderr.mock.calls.flat().join("")).not.toContain("secret-hash");
       expect(services.currentConfigurationGeneration(paths.infraDir)).toBeNull();
@@ -1239,11 +1252,78 @@ describe("ops-agent trusted configuration runtime", () => {
       await expect(failure(applied)).resolves.toEqual({
         attemptedRevisionId: applied,
         problem: null,
+        missingSettings: null,
       });
       // The override in use is information in the agent's log: no ⚠.
       expect(stderr.mock.calls.flat().map(String)).toContainEqual(
         "Service file overrides in use, in place of the release's files (infra/docker/overrides/services): alpha/config/alpha.yml.\n",
       );
+    } finally {
+      stderr.mockRestore();
+    }
+  });
+
+  it("records a required setting without a value for the admin panel, naming the service and key", async () => {
+    const paths = fixture();
+    const alpha: services.LoadedService = {
+      ...service("alpha"),
+      manifest: {
+        ...service("alpha").manifest,
+        configSchema: {
+          ...service("alpha").manifest.configSchema,
+          required: ["PUBLIC_SETTING", "PRIVATE_SETTING"],
+        },
+      },
+    };
+    const runtime = createUnavailableRuntime();
+    installTrustedConfigurationRuntime(runtime, {
+      services: [alpha],
+      integrationSchemas: new Map([["routing", { enabled: { type: "boolean" } }]]),
+      infraDir: paths.infraDir,
+    });
+    const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+    try {
+      const refused = `cfg1_${"q".repeat(43)}`;
+      const operation = {
+        ...(await configurationSource(runtime, paths.infraDir)),
+        expectedCurrentRevisionId: services.currentConfigurationGeneration(paths.infraDir),
+        kind: "stack.render" as const,
+        revisionId: refused,
+        payloadDigest: "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+      };
+      await expect(
+        dispatchOpsOperation(runtime, operation, {
+          execution: testExecution(),
+          signal: new AbortController().signal,
+          emitLog: vi.fn(),
+          claim: claim(operation),
+        }),
+      ).resolves.toMatchObject({ outcome: "not_committed", reason: "failed" });
+      const inspect = {
+        kind: "configuration.failure.inspect" as const,
+        attemptedRevisionId: refused,
+      };
+      const stored = await dispatchOpsOperation(runtime, inspect, {
+        execution: testExecution(),
+        signal: new AbortController().signal,
+        emitLog: vi.fn(),
+        claim: {
+          fingerprint: opsOperationFingerprint(inspect),
+          operation: inspect,
+          source: "registry",
+          capability: { revisionId: refused, values: {} },
+        },
+      });
+      expect(stored).toEqual({
+        attemptedRevisionId: refused,
+        // The payload supplies PUBLIC_SETTING; the secret has no stored value.
+        problem: expect.stringContaining("no value: alpha (PRIVATE_SETTING)."),
+        missingSettings: [{ serviceId: "alpha", keys: ["PRIVATE_SETTING"] }],
+      });
+      expect(stderr.mock.calls.flat().map(String)).toContainEqual(
+        `${(stored as { problem: string }).problem}\n`,
+      );
+      expect(services.currentConfigurationGeneration(paths.infraDir)).toBeNull();
     } finally {
       stderr.mockRestore();
     }
@@ -1311,7 +1391,11 @@ describe("ops-agent trusted configuration runtime", () => {
           reason: "failed",
         });
         const problem = `infra/docker/.env sets no ${missing}, and the operations agent does not write .env: run \`pnpm openmapx compose render\` on the host, as the checkout's owner, which writes UID and GID from that owner.`;
-        await expect(failure(refused)).resolves.toEqual({ attemptedRevisionId: refused, problem });
+        await expect(failure(refused)).resolves.toEqual({
+          attemptedRevisionId: refused,
+          problem,
+          missingSettings: null,
+        });
         expect(stderr.mock.calls.flat().map(String)).toContainEqual(`${problem}\n`);
         expect(envFileState(env)).toEqual(before);
         expect(services.currentConfigurationGeneration(paths.infraDir)).toBe(committed);

@@ -12,6 +12,8 @@ describe("cycling route links", () => {
       bikePreferSmoothSurfaces: true,
       bikeSpeedKmh: 19.5,
     });
+    expect(new URL(url).searchParams.get("bikePreferQuietRoads")).toBe("1");
+    expect(new URL(url).searchParams.get("bikePreferSmoothSurfaces")).toBe("1");
     expect(parseDeepLinkSearch(new URL(url).search).directions).toMatchObject({
       bikeProfile: "gravel",
       bikeHillPreference: "strongly-avoid",
@@ -20,10 +22,11 @@ describe("cycling route links", () => {
       bikeSpeedKmh: 19.5,
     });
   });
-  it("defaults legacy cycling links and ignores malformed fields", () => {
+  it("defaults cycling links and ignores malformed fields", () => {
     expect(
-      parseDeepLinkSearch("?panel=directions&mode=cycling&bikeProfile=car&bikePreferQuietRoads=yes")
-        .directions,
+      parseDeepLinkSearch(
+        "?panel=directions&mode=cycling&bikeProfile=car&bikePreferQuietRoads=true",
+      ).directions,
     ).toMatchObject({
       bikeProfile: "trekking",
       bikeHillPreference: "default",

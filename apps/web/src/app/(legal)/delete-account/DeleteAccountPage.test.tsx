@@ -9,7 +9,9 @@ const sessionState: { data: unknown; isPending: boolean } = { data: null, isPend
 const deleteCalls: unknown[] = [];
 let deleteResult: { error?: unknown } = {};
 
-vi.mock("@openmapx/core", () => ({
+vi.mock("@openmapx/core", async (importOriginal) => ({
+  INDEXED_DB_DATABASES: (await importOriginal<typeof import("@openmapx/core")>())
+    .INDEXED_DB_DATABASES,
   FRESH_SIGN_IN_REQUIRED: "FRESH_SIGN_IN_REQUIRED",
   IMPERSONATION_NOT_ALLOWED: "IMPERSONATION_NOT_ALLOWED",
   useSession: () => sessionState,

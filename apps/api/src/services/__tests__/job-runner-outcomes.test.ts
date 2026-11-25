@@ -91,10 +91,10 @@ it("merges AdminJobFailure evidence into DB/SSE without publishing the runner's 
   };
   const events: unknown[] = [];
   const unsubscribe = jobEventBus.subscribe(jobId, ({ event }) => events.push(event));
-  jobRunner.register("test.evidence", async () => {
+  jobRunner.register("integration.reload", async () => {
     throw new AdminJobFailure("Build failed", await Promise.resolve(result));
   });
-  await run("test.evidence", { phase: "build" });
+  await run("integration.reload", { phase: "build" });
   unsubscribe();
   expect(store.writes.at(-1)?.values).toMatchObject({
     status: "failed",
@@ -120,14 +120,14 @@ it("publishes unknown observation without a terminal event and retains the origi
     operationKey: "opk1_abcdefghijklmnop",
     operationId: "job1_abcdefghijklmnop",
   };
-  jobRunner.register("test.unknown", async () => {
+  jobRunner.register("integration.reload", async () => {
     throw new OpsObservationPending(identity, "transport");
   });
   const events: Array<{ status?: string }> = [];
   const stop = jobEventBus.subscribe(jobId, ({ event }) => {
     if (event.type === "status") events.push(event);
   });
-  await run("test.unknown", { receipt: identity });
+  await run("integration.reload", { receipt: identity });
   stop();
   const patch = new PgDialect().sqlToQuery(store.writes.at(-1)?.values.result as SQL);
   expect(firstJsonParam(patch)).toMatchObject({
@@ -135,20 +135,20 @@ it("publishes unknown observation without a terminal event and retains the origi
   });
   expect(patch.sql).toContain("coalesce(");
   expect(
-    events.some((event) => ["success", "failed", "canceled"].includes(event.status ?? "")),
+    events.some((event) => ["succeeded", "failed", "cancelled"].includes(event.status ?? "")),
   ).toBe(false);
 });
 
 it("does not announce an old owner's completion when PostgreSQL rejects its CAS", async () => {
   store.accept = false;
-  jobRunner.register("test.stale", async () => ({ completed: true }));
+  jobRunner.register("integration.reload", async () => ({ completed: true }));
   const events: Array<{ status?: string }> = [];
   const stop = jobEventBus.subscribe(jobId, ({ event }) => {
     if (event.type === "status") events.push(event);
   });
-  await run("test.stale");
+  await run("integration.reload");
   stop();
-  expect(events.some((event) => event.status === "success")).toBe(false);
+  expect(events.some((event) => event.status === "succeeded")).toBe(false);
   const patches = store.writes.map((write) =>
     firstJsonParam(new PgDialect().sqlToQuery(write.values.result as SQL)),
   );
@@ -157,7 +157,7 @@ it("does not announce an old owner's completion when PostgreSQL rejects its CAS"
     firstJsonParam(new PgDialect().sqlToQuery(write.values.protocol as SQL)),
   );
   expect(own.find((patch) => patch._settled)).toEqual({
-    _settled: { status: "success", result: { completed: true } },
+    _settled: { status: "succeeded", result: { completed: true } },
   });
   expect(patches.at(-1)).toMatchObject({
     observation: { state: "unknown", reason: "transport" },
@@ -176,12 +176,12 @@ it("does not announce an old owner's completion when PostgreSQL rejects its CAS"
 it("rejects stale checkpoint writes before another child can be admitted", async () => {
   store.accept = false;
   const effect = vi.fn();
-  jobRunner.register("test.checkpoint", async (ctx) => {
+  jobRunner.register("integration.reload", async (ctx) => {
     await ctx.checkpoint({ execution: { owner: "forged", version: 999 }, prepared: true });
     effect();
     return {};
   });
-  await run("test.checkpoint");
+  await run("integration.reload");
   expect(effect).not.toHaveBeenCalled();
   // A handler's checkpoint writes its result and its own state; the claim is the runner's.
   const own = new PgDialect().sqlToQuery(store.writes[0]?.values.protocol as SQL);
@@ -214,7 +214,7 @@ it("changes owner and version together while retaining the complete result in Po
 it("refuses a child reservation that does not carry its operations", async () => {
   const key = "opk1_abcdefghijklmnop";
   const effect = vi.fn();
-  jobRunner.register("test.child-intent", async (ctx) => {
+  jobRunner.register("integration.reload", async (ctx) => {
     await ctx.checkpoint(
       { _parentExecution: { operationKey: "opk1_parentidentity1234" } },
       undefined,
@@ -223,11 +223,11 @@ it("refuses a child reservation that does not carry its operations", async () =>
     effect();
     return {};
   });
-  await run("test.child-intent");
+  await run("integration.reload");
   expect(effect).not.toHaveBeenCalled();
 });
 
-it.each(["release.clear", "service.images.pull", "backup.prune", "compose.render"])(
+it.each(["release.clear", "service.image.pull", "backup.prune", "compose.render"] as const)(
   "resumes %s through its registered checked handler instead of finalizing one retained leaf",
   async (type) => {
     const handler = vi.fn(async (ctx) => {
@@ -252,7 +252,7 @@ it.each(["release.clear", "service.images.pull", "backup.prune", "compose.render
       true,
     );
     expect(handler).toHaveBeenCalledTimes(1);
-    expect(store.writes.at(-1)?.values).toMatchObject({ status: "success" });
+    expect(store.writes.at(-1)?.values).toMatchObject({ status: "succeeded" });
   },
 );
 
@@ -260,7 +260,7 @@ it.each([false, true])(
   "reruns the handler of a reclaimed queued job that carries a configuration candidate (%s)",
   async (carried) => {
     const handler = vi.fn(async () => ({ continued: true }));
-    jobRunner.register("service.bulk", handler);
+    jobRunner.register("service.batch.run", handler);
     const protocol = {
       execution,
       ...(carried
@@ -275,7 +275,7 @@ it.each([false, true])(
     store.rows = [{ id: jobId, status: "running", result: {}, protocol }];
     await (jobRunner as unknown as { executeJob(...args: unknown[]): Promise<void> }).executeJob(
       jobId,
-      "service.bulk",
+      "service.batch.run",
       { action: "start", serviceIds: ["data-manager"] },
       {},
       protocol,

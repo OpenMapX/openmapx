@@ -289,6 +289,34 @@ it("keeps hosted sessions parseable across repeated capture timeouts", () => {
     expect(parseMobileSession(JSON.stringify(current)).ok).toBe(true);
   }
 });
+it("stops capture polling once the server refused this build's protocol", () => {
+  const { parseMobileSession } = require("@openmapx/core/navigation");
+  const p = processor();
+  const current = session();
+  current.payload.refreshToken = null;
+  current.payload.refresh = { status: "stale", generation: 0, attempts: 0 };
+  // The refusal arrives while this process already runs the session.
+  const ticked = p.processFixes(current, [], NOW).session as TransitMobileSession;
+  ticked.payload.refresh = { status: "broken", generation: 0, attempts: 0, updateRequired: true };
+  const mutation = p.processFixes(ticked, [], NOW + 1_000);
+  const next = mutation.session as TransitMobileSession;
+  expect(next.payload.refresh).toMatchObject({ status: "broken", updateRequired: true });
+  expect(mutation.effects?.some((e) => e.kind === "request-transit-refresh")).toBe(false);
+  expect(parseMobileSession(JSON.stringify(next)).ok).toBe(true);
+});
+it("tries live times again once after a restart, since only a restarted app can be updated", () => {
+  const current = session();
+  current.payload.refreshToken = null;
+  current.payload.refresh = { status: "broken", generation: 3, attempts: 2, updateRequired: true };
+
+  const mutation = processor().processFixes(current, [], NOW);
+
+  const next = mutation.session as TransitMobileSession;
+  expect(next.payload.refresh.updateRequired).toBeUndefined();
+  expect(next.payload.refresh.status).toBe("in-flight");
+  expect(mutation.effects?.some((e) => e.kind === "request-transit-refresh")).toBe(true);
+  expect(current.payload.refresh.updateRequired).toBe(true);
+});
 it("does not poll completed captures on the final walking leg", async () => {
   const current = session();
   current.payload.refreshToken = null;

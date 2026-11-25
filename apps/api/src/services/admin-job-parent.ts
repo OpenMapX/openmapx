@@ -68,13 +68,13 @@ function parentJobBudget(ctx: JobContext, kind: OpsOperationKind): number {
       ctx.jobType === "service.apply" ? "service.recreate" : "service.start",
     ].reduce((sum, kind) => sum + opsExecutionBudget(kind).processMs, 60_000);
   }
-  if (ctx.jobType === "service.images.pull") {
+  if (ctx.jobType === "service.image.pull") {
     const ids = ctx.payload.serviceIds;
     if (!Array.isArray(ids) || !ids.length || ids.length > 64)
       throw Error("Invalid image-stage batch");
     return ids.length * opsExecutionBudget("service.image.stage").processMs + 60000;
   }
-  if (ctx.jobType === "service.bulk") return opsExecutionBudget("services.buildAll").processMs;
+  if (ctx.jobType === "service.batch.run") return opsExecutionBudget("services.buildAll").processMs;
   return opsExecutionBudget(kind).processMs;
 }
 export interface ApiPreparedRoot {

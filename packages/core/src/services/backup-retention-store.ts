@@ -1,6 +1,7 @@
 /** Node-only migration of portable expiry ceilings under the backup-store lock. */
 import { join } from "node:path";
 import { AnchoredDirectory, sameInode } from "../build-artifacts/filesystem";
+import { BACKUP_FORMAT_VERSION } from "./backup-format";
 import { backupRetentionExpiry } from "./backup-retention";
 import { withRecoverableLock } from "./recoverable-lock";
 
@@ -67,7 +68,7 @@ export function retainBackupExpiryCeilings(infraDir: string, retentionDays: numb
           typeof manifest !== "object" ||
           Array.isArray(manifest) ||
           manifest.name !== name ||
-          manifest.formatVersion !== 2 ||
+          manifest.formatVersion !== BACKUP_FORMAT_VERSION ||
           typeof manifest.createdAt !== "string" ||
           !Array.isArray(manifest.services)
         )

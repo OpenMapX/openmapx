@@ -1,4 +1,13 @@
-import { REQUEST_STATES, type RequestState } from "@openmapx/core/privacy";
+import {
+  PRIVACY_ACTOR_KINDS,
+  PRIVACY_EVENT_TYPES,
+  type PrivacyActorKind,
+  type PrivacyEventType,
+  REQUEST_STATUSES,
+  type RequestStatus,
+  SUBJECT_DATA_SOURCES,
+  type SubjectDataSource,
+} from "@openmapx/core/privacy";
 import { sql } from "drizzle-orm";
 import {
   check,
@@ -13,8 +22,10 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { session, user } from "./auth-schema";
+import { oneOf } from "./closed-value-check";
 
-export { REQUEST_STATES, type RequestState };
+export { REQUEST_STATUSES, type RequestStatus };
+
 export const REQUEST_KINDS = ["access", "portability", "access_and_portability"] as const;
 export type RequestKind = (typeof REQUEST_KINDS)[number];
 export const REQUEST_CHANNELS = [
@@ -29,8 +40,8 @@ export type RequestChannel = (typeof REQUEST_CHANNELS)[number];
  * session for self-service, or an operator's manual check for assisted cases. */
 export const IDENTITY_METHODS = ["account_session", "manual"] as const;
 export type IdentityMethod = (typeof IDENTITY_METHODS)[number];
-export const TASK_STATES = ["open", "resolved"] as const;
-export type TaskState = (typeof TASK_STATES)[number];
+export const TASK_STATUSES = ["open", "resolved"] as const;
+export type TaskStatus = (typeof TASK_STATUSES)[number];
 export const PRIVACY_SUBJECT_NOTIFICATION_TEMPLATES = [
   "acknowledgement",
   "waiting_on_requester",
@@ -49,7 +60,7 @@ export const PRIVACY_NOTIFICATION_TEMPLATES = [
 export type PrivacyNotificationTemplate = (typeof PRIVACY_NOTIFICATION_TEMPLATES)[number];
 export const PRIVACY_NOTIFICATION_CHANNELS = ["email"] as const;
 export type PrivacyNotificationChannel = (typeof PRIVACY_NOTIFICATION_CHANNELS)[number];
-export const PRIVACY_NOTIFICATION_STATES = [
+export const PRIVACY_NOTIFICATION_STATUSES = [
   "pending",
   "sending",
   "sent",
@@ -57,7 +68,7 @@ export const PRIVACY_NOTIFICATION_STATES = [
   "failed",
   "canceled",
 ] as const;
-export type PrivacyNotificationState = (typeof PRIVACY_NOTIFICATION_STATES)[number];
+export type PrivacyNotificationStatus = (typeof PRIVACY_NOTIFICATION_STATUSES)[number];
 
 /** One open case per account and kind; registering a second raises this index. */
 export const ACTIVE_REQUEST_KIND_KEY = "data_subject_request_user_id_kind_active_key";
@@ -75,12 +86,15 @@ export const dataSubjectRequest = pgTable(
     actorUserId: text("actor_user_id"),
     actorSessionId: text("actor_session_id"),
     /** Assisted requests only: the locator value, encrypted with the API's secrets key. */
-    encryptedLocator: text("encrypted_locator"),
+    locatorCiphertext: text("locator_ciphertext"),
+    locatorIv: text("locator_iv"),
+    locatorTag: text("locator_tag"),
+    locatorKeyVersion: integer("locator_key_version"),
     locatorType: text("locator_type").notNull().default("user_id"),
     accountState: text("account_state").notNull().default("current"),
     locale: text("locale").notNull().default("en"),
     timeZone: text("time_zone").notNull().default("UTC"),
-    state: text("state").$type<RequestState>().notNull().default("open"),
+    status: text("status").$type<RequestStatus>().notNull().default("open"),
     version: integer("version").notNull().default(1),
     receivedAt: timestamp("received_at", { withTimezone: true }).notNull(),
     registeredAt: timestamp("registered_at", { withTimezone: true }).defaultNow().notNull(),
@@ -120,9 +134,10 @@ export const dataSubjectRequest = pgTable(
       "data_subject_request_channel_check",
       sql`${table.channel} in ('self_service', 'email', 'post', 'representative', 'internal')`,
     ),
+    check("data_subject_request_status_check", oneOf(table.status, REQUEST_STATUSES)),
     check(
-      "data_subject_request_state_check",
-      sql`${table.state} in ('open', 'in_progress', 'waiting_on_requester', 'completed', 'refused')`,
+      "data_subject_request_locator_ciphertext_check",
+      sql`(${table.locatorCiphertext} is null and ${table.locatorIv} is null and ${table.locatorTag} is null and ${table.locatorKeyVersion} is null) or (${table.locatorCiphertext} is not null and ${table.locatorIv} is not null and ${table.locatorTag} is not null and ${table.locatorKeyVersion} is not null)`,
     ),
     check("data_subject_request_version_check", sql`${table.version} > 0`),
     check(
@@ -137,14 +152,14 @@ export const dataSubjectRequest = pgTable(
       "data_subject_request_identity_check",
       sql`(${table.identityMethod} is null and ${table.identityVerifiedAt} is null) or (${table.identityMethod} in ('account_session', 'manual') and ${table.identityVerifiedAt} is not null)`,
     ),
-    index("data_subject_request_user_id_state_idx").on(table.userId, table.state),
-    index("data_subject_request_state_due_at_idx").on(table.state, table.dueAt),
+    index("data_subject_request_user_id_status_idx").on(table.userId, table.status),
+    index("data_subject_request_status_due_at_idx").on(table.status, table.dueAt),
     index("data_subject_request_actor_user_id_idx").on(table.actorUserId),
     index("data_subject_request_actor_session_id_idx").on(table.actorSessionId),
     uniqueIndex(ACTIVE_REQUEST_KIND_KEY)
       .on(table.userId, table.kind)
       .where(
-        sql`${table.userId} is not null and ${table.state} in ('open', 'in_progress', 'waiting_on_requester')`,
+        sql`${table.userId} is not null and ${table.status} in ('open', 'in_progress', 'waiting_on_requester')`,
       ),
   ],
 );
@@ -154,9 +169,9 @@ export const dataSubjectRequestEvent = pgTable(
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
     requestId: uuid("request_id").notNull(),
-    eventType: text("event_type").notNull(),
-    actorKind: text("actor_kind").notNull(),
-    /** The acting account; null for system and loopback actors and after the
+    eventType: text("event_type").$type<PrivacyEventType>().notNull(),
+    actorKind: text("actor_kind").$type<PrivacyActorKind>().notNull(),
+    /** The acting account; null for system actors and after the
      * account is deleted. `actor_kind` still says who acted. */
     actorUserId: text("actor_user_id"),
     payloadVersion: integer("payload_version").notNull().default(1),
@@ -177,6 +192,14 @@ export const dataSubjectRequestEvent = pgTable(
       foreignColumns: [user.id],
     }).onDelete("set null"),
     check("data_subject_request_event_payload_version_check", sql`${table.payloadVersion} > 0`),
+    check(
+      "data_subject_request_event_event_type_check",
+      oneOf(table.eventType, PRIVACY_EVENT_TYPES),
+    ),
+    check(
+      "data_subject_request_event_actor_kind_check",
+      oneOf(table.actorKind, PRIVACY_ACTOR_KINDS),
+    ),
     index("data_subject_request_event_request_id_created_at_idx").on(
       table.requestId,
       table.createdAt,
@@ -196,8 +219,8 @@ export const dataSubjectRequestTask = pgTable(
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
     requestId: uuid("request_id").notNull(),
     registrationId: text("registration_id").notNull(),
-    source: text("source").notNull(),
-    status: text("status").$type<TaskState>().notNull().default("open"),
+    source: text("source").$type<SubjectDataSource>().notNull(),
+    status: text("status").$type<TaskStatus>().notNull().default("open"),
     publicCode: text("public_code"),
     resolutionCode: text("resolution_code"),
     resolvedAt: timestamp("resolved_at", { withTimezone: true }),
@@ -216,6 +239,7 @@ export const dataSubjectRequestTask = pgTable(
     ),
     index("data_subject_request_task_status_idx").on(table.status),
     check("data_subject_request_task_status_check", sql`${table.status} in ('open', 'resolved')`),
+    check("data_subject_request_task_source_check", oneOf(table.source, SUBJECT_DATA_SOURCES)),
   ],
 );
 
@@ -266,7 +290,7 @@ export const dataSubjectRequestNotification = pgTable(
     channel: text("channel").$type<PrivacyNotificationChannel>().notNull().default("email"),
     locale: text("locale").notNull().default("en"),
     payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default({}),
-    state: text("state").$type<PrivacyNotificationState>().notNull().default("pending"),
+    status: text("status").$type<PrivacyNotificationStatus>().notNull().default("pending"),
     attempts: integer("attempts").notNull().default(0),
     nextAttemptAt: timestamp("next_attempt_at", { withTimezone: true }),
     sentAt: timestamp("sent_at", { withTimezone: true }),
@@ -300,8 +324,8 @@ export const dataSubjectRequestNotification = pgTable(
       table.recipientUserId,
       table.occurrenceKey,
     ),
-    index("data_subject_request_notification_state_next_attempt_at_idx").on(
-      table.state,
+    index("data_subject_request_notification_status_next_attempt_at_idx").on(
+      table.status,
       table.nextAttemptAt,
     ),
     index("data_subject_request_notification_recipient_created_at_idx").on(
@@ -314,8 +338,8 @@ export const dataSubjectRequestNotification = pgTable(
     ),
     check("data_subject_request_notification_channel_check", sql`${table.channel} in ('email')`),
     check(
-      "data_subject_request_notification_state_check",
-      sql`${table.state} in ('pending', 'sending', 'sent', 'retryable', 'failed', 'canceled')`,
+      "data_subject_request_notification_status_check",
+      oneOf(table.status, PRIVACY_NOTIFICATION_STATUSES),
     ),
     check("data_subject_request_notification_attempts_check", sql`${table.attempts} >= 0`),
   ],

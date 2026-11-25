@@ -43,7 +43,7 @@ export async function adminConfigurationMigrationRoute(app: FastifyInstance) {
     "previewAdminConfigurationMigration",
     async (request, reply) => {
       const actor = getAdminSession(request);
-      if (actor.user.id === "loopback" || actor.session.impersonatedBy)
+      if (actor.session.impersonatedBy)
         return reply.code(403).send({ error: "A real full administrator session is required" });
       try {
         return await jobRunner.runImmediateConfigurationMigrationPreview({
@@ -67,7 +67,7 @@ export async function adminConfigurationMigrationRoute(app: FastifyInstance) {
     "applyAdminConfigurationMigration",
     async (request, reply) => {
       const actor = getAdminSession(request);
-      if (actor.user.id === "loopback" || actor.session.impersonatedBy)
+      if (actor.session.impersonatedBy)
         return reply.code(403).send({ error: "A real full administrator session is required" });
       try {
         return await jobRunner.runImmediateConfigurationMigration({

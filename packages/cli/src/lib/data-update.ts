@@ -125,15 +125,10 @@ export async function runDataUpdate(
         operationKey: status.operationKey,
         fingerprint: status.fingerprint,
         deadlineAt: status.deadlineAt,
-        status:
-          status.status === "ok"
-            ? "succeeded"
-            : status.status === "error" || status.status === "partial"
-              ? "failed"
-              : status.status,
+        status: status.status,
       });
       await save();
-      if (status.status !== "ok" || status.publication !== "committed" || !status.result)
+      if (status.status !== "succeeded" || status.publication !== "committed" || !status.result)
         throw Error(`Prerequisite ${step} did not complete`);
       if (
         input.kind === "download-osm" &&
@@ -143,7 +138,7 @@ export async function runDataUpdate(
       if (
         input.kind === "transit-sync" &&
         (status.result.kind !== "transit-sync" ||
-          status.result.finalStatus !== "ok" ||
+          status.result.finalStatus !== "succeeded" ||
           JSON.stringify([...status.result.countries].sort()) !== JSON.stringify(input.countries))
       )
         throw Error("Transit country selection changed");

@@ -134,13 +134,13 @@ describe("activation", () => {
     window.history.replaceState(
       null,
       "",
-      "/?place=osm%3Anode%3A12&at=13.4%2C52.5#map=16/52.5/13.4",
+      "/?place=osm%3Anode%3A12&placeLocation=13.4%2C52.5#map=16/52.5/13.4",
     );
     session.mockReturnValue({ data: null } as never);
     renderEntry("node/12");
     await userEvent.click(screen.getByTestId("osm-contribution-entry"));
     expect(authCallbackPath).toBe(
-      "/?place=osm%3Anode%3A12&at=13.4%2C52.5&osm-contribute=1#map=16/52.5/13.4",
+      "/?place=osm%3Anode%3A12&placeLocation=13.4%2C52.5&osmContribution=1#map=16/52.5/13.4",
     );
     window.history.replaceState(null, "", "/");
   });

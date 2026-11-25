@@ -7,8 +7,11 @@ export type AddTransitSourceBody = {
   expectedSourceRevision: string;
   /** @maxLength 200 */
   idempotencyKey?: string;
-  /** @maxLength 200 */
-  triggeredBy?: string;
+  /**
+   * @minLength 1
+   * @maxLength 200
+   */
+  triggeredByUserId?: string;
   /** @minLength 1 */
   region: string;
   /** @minLength 1 */

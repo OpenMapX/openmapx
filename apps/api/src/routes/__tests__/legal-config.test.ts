@@ -15,6 +15,7 @@ const mockDbSelect = vi.fn();
 function makeSelectChain() {
   return {
     from: vi.fn().mockReturnThis(),
+    where: vi.fn().mockReturnThis(),
     // biome-ignore lint/suspicious/noThenProperty: drizzle builders are thenable; stub must mirror that.
     then(onFulfilled: (v: unknown) => unknown, onRejected?: (e: unknown) => unknown) {
       return Promise.resolve(selectResolveWith).then(onFulfilled, onRejected);
@@ -23,8 +24,23 @@ function makeSelectChain() {
 }
 mockDbSelect.mockImplementation(() => makeSelectChain());
 vi.mock("../../db/index.js", () => ({ db: { select: (...a: unknown[]) => mockDbSelect(...a) } }));
+vi.mock("../../db", () => ({ db: { select: (...a: unknown[]) => mockDbSelect(...a) } }));
 vi.mock("../../db/schema.js", () => ({
-  systemSettings: { key: "key", value: "value", updatedAt: "updatedAt", updatedBy: "updatedBy" },
+  systemSetting: {
+    key: "key",
+    value: "value",
+    updatedAt: "updatedAt",
+    updatedByUserId: "updatedByUserId",
+  },
+  systemSecret: { key: "key" },
+}));
+vi.mock("../../db/schema", () => ({
+  systemSetting: {
+    key: "key",
+    value: "value",
+    updatedAt: "updatedAt",
+    updatedByUserId: "updatedByUserId",
+  },
   systemSecret: { key: "key" },
 }));
 
@@ -42,23 +58,25 @@ afterAll(() => app?.close());
 beforeEach(() => {
   selectResolveWith = [];
   for (const key of [
-    "LEGAL_NAME",
-    "LEGAL_STREET",
-    "LEGAL_POSTAL_CODE",
-    "LEGAL_CITY",
-    "LEGAL_COUNTRY",
-    "LEGAL_EMAIL",
-    "LEGAL_PHONE",
+    "LEGAL_CONTROLLER_NAME",
+    "LEGAL_CONTROLLER_STREET",
+    "LEGAL_CONTROLLER_POSTAL_CODE",
+    "LEGAL_CONTROLLER_CITY",
+    "LEGAL_CONTROLLER_COUNTRY",
+    "LEGAL_CONTROLLER_EMAIL",
+    "LEGAL_CONTROLLER_PHONE",
     "LEGAL_HOSTING_PROVIDER",
     "LEGAL_HOSTING_LOCATIONS",
-    "LEGAL_SUPERVISORY_AUTHORITY",
+    "LEGAL_SUPERVISORY_AUTHORITY_NAME",
     "LEGAL_SUPERVISORY_AUTHORITY_URL",
-    "LEGAL_SERVER_LOG_RETENTION_DAYS",
     "LEGAL_DATA_REQUEST_EMAIL",
-    "LEGAL_DSAR_CASE_RETENTION_DAYS",
     "LEGAL_DEPLOYMENT_JURISDICTION",
     "LEGAL_PRIVACY_SOURCES",
-    "BACKUP_RETENTION_DAYS",
+    "RETENTION_SERVER_LOG_DAYS",
+    "RETENTION_PRIVACY_CASE_DAYS",
+    "RETENTION_AUDIT_LOG_DAYS",
+    "RETENTION_ADMIN_JOB_DAYS",
+    "RETENTION_BACKUP_DAYS",
   ])
     vi.stubEnv(key, undefined);
 });
@@ -68,7 +86,7 @@ afterEach(() => {
 });
 
 describe("GET /legal-config", () => {
-  it("returns safe defaults when nothing is configured", async () => {
+  it("returns the defaults when nothing is configured", async () => {
     const res = await app.inject({ method: "GET", url: "/legal-config" });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({
@@ -95,18 +113,20 @@ describe("GET /legal-config", () => {
 
   it("returns admin-database values when set and no env override", async () => {
     selectResolveWith = [
-      { key: "legalControllerName", value: "OpenMapX e.V." },
-      { key: "legalControllerStreet", value: "Map Street 1" },
-      { key: "legalControllerPostalCode", value: "10115" },
-      { key: "legalControllerCity", value: "Berlin" },
-      { key: "legalControllerCountry", value: "Germany" },
-      { key: "legalControllerEmail", value: "legal@example.test" },
-      { key: "legalControllerPhone", value: "+49 30 123456" },
-      { key: "legalHostingProvider", value: "Hetzner Online GmbH" },
-      { key: "legalHostingLocations", value: "Germany, Finland" },
-      { key: "legalSupervisoryAuthority", value: "BfDI" },
-      { key: "legalSupervisoryAuthorityUrl", value: "https://www.bfdi.bund.de" },
-      { key: "legalServerLogRetentionDays", value: 14 },
+      { key: "legal.controller.name", value: "OpenMapX e.V." },
+      { key: "legal.controller.street", value: "Map Street 1" },
+      { key: "legal.controller.postalCode", value: "10115" },
+      { key: "legal.controller.city", value: "Berlin" },
+      { key: "legal.controller.country", value: "Germany" },
+      { key: "legal.controller.email", value: "legal@example.test" },
+      { key: "legal.controller.phone", value: "+49 30 123456" },
+      { key: "legal.hosting.provider", value: "Hetzner Online GmbH" },
+      { key: "legal.hosting.locations", value: "Germany, Finland" },
+      { key: "legal.supervisoryAuthority.name", value: "BfDI" },
+      { key: "legal.supervisoryAuthority.url", value: "https://www.bfdi.bund.de" },
+      { key: "retention.serverLogDays", value: 14 },
+      { key: "retention.privacyCaseDays", value: 400 },
+      { key: "retention.auditLogDays", value: 730 },
     ];
     const res = await app.inject({ method: "GET", url: "/legal-config" });
     expect(res.json()).toEqual({
@@ -123,16 +143,16 @@ describe("GET /legal-config", () => {
       supervisoryAuthorityUrl: "https://www.bfdi.bund.de",
       serverLogRetentionDays: 14,
       dataRequestEmail: "legal@example.test",
-      dsarCaseRetentionDays: 1095,
+      dsarCaseRetentionDays: 400,
       deploymentJurisdiction: "",
       privacySources: [],
       backupRetentionDays: 30,
-      auditLogRetentionDays: 365,
+      auditLogRetentionDays: 730,
     });
   });
 
   it("lets the env var take priority over the admin-database value", async () => {
-    selectResolveWith = [{ key: "legalHostingProvider", value: "Hetzner Online GmbH" }];
+    selectResolveWith = [{ key: "legal.hosting.provider", value: "Hetzner Online GmbH" }];
     vi.stubEnv("LEGAL_HOSTING_PROVIDER", "OVHcloud");
     const res = await app.inject({ method: "GET", url: "/legal-config" });
     expect(res.json().hostingProvider).toBe("OVHcloud");
@@ -140,11 +160,11 @@ describe("GET /legal-config", () => {
 
   it("lets controller env values take priority over persisted controller facts", async () => {
     selectResolveWith = [
-      { key: "legalControllerName", value: "Database Controller" },
-      { key: "legalControllerEmail", value: "database@example.test" },
+      { key: "legal.controller.name", value: "Database Controller" },
+      { key: "legal.controller.email", value: "database@example.test" },
     ];
-    vi.stubEnv("LEGAL_NAME", "Environment Controller");
-    vi.stubEnv("LEGAL_EMAIL", "environment@example.test");
+    vi.stubEnv("LEGAL_CONTROLLER_NAME", "Environment Controller");
+    vi.stubEnv("LEGAL_CONTROLLER_EMAIL", "environment@example.test");
 
     const res = await app.inject({ method: "GET", url: "/legal-config" });
 
@@ -157,8 +177,8 @@ describe("GET /legal-config", () => {
 
   it("publishes a dedicated request contact when the general legal email is empty", async () => {
     selectResolveWith = [
-      { key: "legalControllerEmail", value: "" },
-      { key: "legalDataRequestEmail", value: "requests@example.test" },
+      { key: "legal.controller.email", value: "" },
+      { key: "legal.dataRequestEmail", value: "requests@example.test" },
     ];
 
     const res = await app.inject({ method: "GET", url: "/legal-config" });
@@ -169,50 +189,44 @@ describe("GET /legal-config", () => {
     });
   });
 
-  it("does not publish an invalid env or database address line", async () => {
-    vi.stubEnv("LEGAL_STREET", "Env Street\nInjected");
-    selectResolveWith = [{ key: "legalControllerStreet", value: "DB Street\nInjected" }];
-
-    const res = await app.inject({ method: "GET", url: "/legal-config" });
-
-    expect(res.json().street).toBe("");
+  it("states nothing rather than an invalid env or database value", async () => {
+    vi.stubEnv("LEGAL_CONTROLLER_STREET", "Env Street\nInjected");
+    let res = await app.inject({ method: "GET", url: "/legal-config" });
+    expect(res.statusCode).toBe(500);
+    vi.stubEnv("LEGAL_CONTROLLER_STREET", undefined);
+    selectResolveWith = [{ key: "legal.controller.street", value: "DB Street\nInjected" }];
+    res = await app.inject({ method: "GET", url: "/legal-config" });
+    expect(res.statusCode).toBe(500);
+    selectResolveWith = [{ key: "retention.serverLogDays", value: -5 }];
+    res = await app.inject({ method: "GET", url: "/legal-config" });
+    expect(res.statusCode).toBe(500);
   });
 
   it("treats a blank env var as unset and falls back to the database value", async () => {
-    selectResolveWith = [{ key: "legalHostingProvider", value: "Hetzner Online GmbH" }];
+    selectResolveWith = [{ key: "legal.hosting.provider", value: "Hetzner Online GmbH" }];
     vi.stubEnv("LEGAL_HOSTING_PROVIDER", "");
     const res = await app.inject({ method: "GET", url: "/legal-config" });
     expect(res.json().hostingProvider).toBe("Hetzner Online GmbH");
   });
 
   it("lets the supervisory-authority env var win over the database value", async () => {
-    selectResolveWith = [{ key: "legalSupervisoryAuthority", value: "DB Authority" }];
-    vi.stubEnv("LEGAL_SUPERVISORY_AUTHORITY", "Env Authority");
+    selectResolveWith = [{ key: "legal.supervisoryAuthority.name", value: "DB Authority" }];
+    vi.stubEnv("LEGAL_SUPERVISORY_AUTHORITY_NAME", "Env Authority");
     const res = await app.inject({ method: "GET", url: "/legal-config" });
     expect(res.json().supervisoryAuthority).toBe("Env Authority");
   });
 
-  it("clamps an invalid log-retention value to the 30-day default", async () => {
-    selectResolveWith = [{ key: "legalServerLogRetentionDays", value: -5 }];
+  it("publishes the retention periods the environment sets", async () => {
+    vi.stubEnv("RETENTION_SERVER_LOG_DAYS", "7");
+    vi.stubEnv("RETENTION_BACKUP_DAYS", "14");
+    vi.stubEnv("RETENTION_AUDIT_LOG_DAYS", "730");
+    vi.stubEnv("RETENTION_PRIVACY_CASE_DAYS", "60");
     const res = await app.inject({ method: "GET", url: "/legal-config" });
-    expect(res.json().serverLogRetentionDays).toBe(30);
-  });
-
-  it("honours a positive integer log-retention env var", async () => {
-    vi.stubEnv("LEGAL_SERVER_LOG_RETENTION_DAYS", "7");
-    const res = await app.inject({ method: "GET", url: "/legal-config" });
-    expect(res.json().serverLogRetentionDays).toBe(7);
-  });
-
-  it("publishes the configured backup retention for the privacy page", async () => {
-    vi.stubEnv("BACKUP_RETENTION_DAYS", "14");
-    const res = await app.inject({ method: "GET", url: "/legal-config" });
-    expect(res.json().backupRetentionDays).toBe(14);
-  });
-
-  it("publishes the configured audit-log retention for the privacy page", async () => {
-    vi.stubEnv("AUDIT_LOG_RETENTION_DAYS", "730");
-    const res = await app.inject({ method: "GET", url: "/legal-config" });
-    expect(res.json().auditLogRetentionDays).toBe(730);
+    expect(res.json()).toMatchObject({
+      serverLogRetentionDays: 7,
+      backupRetentionDays: 14,
+      auditLogRetentionDays: 730,
+      dsarCaseRetentionDays: 60,
+    });
   });
 });

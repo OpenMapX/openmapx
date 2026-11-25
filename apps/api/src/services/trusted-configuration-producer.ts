@@ -1,9 +1,13 @@
-import type { IntegrationApplyReceipt } from "@openmapx/core/api-contracts";
+import {
+  type IntegrationApplyReceipt,
+  REQUIRED_SETTINGS_MISSING,
+} from "@openmapx/core/api-contracts";
 import {
   type CoordinatorMode,
   canonicalJson,
   configurationApplyResultSchema,
   configurationGenerationRevisionSchema,
+  type MissingServiceSettingsList,
   type OpsResultFor,
   type TrustedConfigurationPayload,
 } from "@openmapx/core/ops";
@@ -209,9 +213,9 @@ export async function applyTrustedConfigurationWithEvidence(
           receipt.application.outcome === "not_committed" &&
           receipt.application.reason === "failed"
         ) {
-          const problem = await readConfigurationFailure(candidate.revisionId, options);
-          if (problem) {
-            receipt.application = { ...receipt.application, problem };
+          const failure = await readConfigurationFailure(candidate.revisionId, options);
+          if (failure) {
+            receipt.application = { ...receipt.application, ...failure };
             await ctx.checkpoint({
               ...ctx.checkpointResult,
               configuration: receipt.application,
@@ -298,10 +302,10 @@ export async function applyTrustedConfigurationWithEvidence(
 async function readConfigurationFailure(
   revisionId: string,
   options: ApplyTrustedConfigurationOptions,
-): Promise<string | null> {
+): Promise<{ problem: string; missingSettings?: MissingServiceSettingsList } | null> {
   if (!configurationGenerationRevisionSchema.safeParse(revisionId).success) return null;
   try {
-    const { problem } = await executeAndWait(
+    const { problem, missingSettings } = await executeAndWait(
       createApiOpsClient(),
       { kind: "configuration.failure.inspect", attemptedRevisionId: revisionId },
       createDurableOpsKey(
@@ -310,7 +314,8 @@ async function readConfigurationFailure(
       ),
       { signal: options.signal },
     );
-    return problem;
+    if (!problem) return null;
+    return { problem, ...(missingSettings ? { missingSettings } : {}) };
   } catch {
     return null;
   }
@@ -340,7 +345,14 @@ export function completeTrustedConfigurationApplication(
     outcome.registryUpdateFailed
   )
     if (options.ctx)
-      throw new AdminJobFailure("Configuration did not complete", { configuration: outcome });
+      throw new AdminJobFailure(
+        (outcome.outcome === "not_committed" && outcome.problem) ||
+          "Configuration did not complete",
+        {
+          configuration: outcome,
+          ...(outcome.missingSettings ? { errorCode: REQUIRED_SETTINGS_MISSING } : {}),
+        },
+      );
     else throw new TrustedConfigurationApplyError(outcome);
   return {
     revisionId: outcome.revisionId,

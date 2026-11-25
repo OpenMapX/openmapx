@@ -1,6 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { SETTING_DEFS, SecretSettingUnreadableError } from "../../services/settings";
+import {
+  SETTING_DEFS,
+  SecretSettingUnreadableError,
+  settingEnvName,
+} from "../../services/settings";
 import { createAdminTestApp, installAdminRouteMocks } from "./admin-test-helpers.js";
 
 const {
@@ -54,7 +58,7 @@ vi.mock("../../utils/rate-limit.js", () => ({
   tilePublicApiLimit: { preHandler: () => vi.fn().mockResolvedValue(undefined) },
 }));
 
-// DB — systemSettings table; chain must satisfy .select().from() and
+// DB — systemSetting table; chain must satisfy .select().from() and
 // .insert().values().onConflictDoUpdate() call shapes
 const mockDbSelect = vi.fn();
 const mockDbInsert = vi.fn();
@@ -96,8 +100,13 @@ vi.mock("../../db/index.js", () => ({
   },
 }));
 vi.mock("../../db/schema.js", () => ({
-  systemSettings: { key: "key", value: "value", updatedAt: "updatedAt", updatedBy: "updatedBy" },
-  systemSecret: { key: "key", updatedAt: "updatedAt", updatedBy: "updatedBy" },
+  systemSetting: {
+    key: "key",
+    value: "value",
+    updatedAt: "updatedAt",
+    updatedByUserId: "updatedByUserId",
+  },
+  systemSecret: { key: "key", updatedAt: "updatedAt", updatedByUserId: "updatedByUserId" },
 }));
 
 let app: FastifyInstance;
@@ -109,7 +118,7 @@ beforeAll(async () => {
 
 afterAll(() => app?.close());
 beforeEach(() => {
-  for (const definition of SETTING_DEFS) if (definition.env) vi.stubEnv(definition.env, undefined);
+  for (const definition of SETTING_DEFS) vi.stubEnv(settingEnvName(definition.key), undefined);
 });
 afterEach(() => {
   selectResolveWith = [];
@@ -125,37 +134,36 @@ describe("GET /admin/settings", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(Array.isArray(body.groups)).toBe(true);
-    const generalGroup = body.groups.find((g: { id: string }) => g.id === "general");
-    expect(generalGroup).toBeDefined();
-    const instanceNameSetting = generalGroup.settings.find(
-      (s: { key: string }) => s.key === "instanceName",
-    );
-    expect(instanceNameSetting).toMatchObject({
-      key: "instanceName",
-      value: "OpenMapX",
+    expect(body.groups.map((g: { id: string }) => g.id)).toEqual([
+      "auth",
+      "email",
+      "map",
+      "policy",
+      "legal",
+    ]);
+    const email = body.groups.find((g: { id: string }) => g.id === "email");
+    expect(email.settings.find((s: { key: string }) => s.key === "smtp.security")).toMatchObject({
+      value: "starttls",
       source: "default",
+      envVar: "SMTP_SECURITY",
+      options: ["starttls", "tls", "none"],
     });
   });
 
   it("reflects database overrides when rows are returned", async () => {
-    // Return a DB row overriding instanceName
-    selectResolveWith = [{ key: "instanceName", value: "My Instance" }];
+    selectResolveWith = [{ key: "smtp.host", value: "mail.example.test" }];
 
     const res = await app.inject({ method: "GET", url: "/admin/settings" });
 
     expect(res.statusCode).toBe(200);
-    const body = res.json();
-    const general = body.groups.find((g: { id: string }) => g.id === "general");
-    const instanceName = general.settings.find((s: { key: string }) => s.key === "instanceName");
-    expect(instanceName).toMatchObject({ value: "My Instance", source: "database" });
-
-    // Reset to empty for subsequent tests
-    selectResolveWith = [];
+    const email = res.json().groups.find((g: { id: string }) => g.id === "email");
+    const host = email.settings.find((s: { key: string }) => s.key === "smtp.host");
+    expect(host).toMatchObject({ value: "mail.example.test", source: "database" });
   });
 
   it("redacts env-sourced secrets but exposes non-secret env values", async () => {
-    vi.stubEnv("MAPTILER_KEY", "super-secret-key");
-    vi.stubEnv("DEFAULT_LOCALE", "de");
+    vi.stubEnv("MAPTILER_API_KEY", "super-secret-key");
+    vi.stubEnv("SMTP_HOST", "mail.env.test");
 
     const res = await app.inject({ method: "GET", url: "/admin/settings" });
     const body = res.json();
@@ -163,14 +171,42 @@ describe("GET /admin/settings", () => {
     // An env-sourced secret is flagged as set + locked, but its raw value
     // must never reach the browser.
     const map = body.groups.find((g: { id: string }) => g.id === "map");
-    const apiKey = map.settings.find((s: { key: string }) => s.key === "maptilerApiKey");
+    const apiKey = map.settings.find((s: { key: string }) => s.key === "maptiler.apiKey");
     expect(apiKey).toMatchObject({ source: "env", envOverride: true, secret: true });
     expect(apiKey.value).not.toBe("super-secret-key");
 
     // A non-secret env override exposes its real value so the UI can show it.
-    const general = body.groups.find((g: { id: string }) => g.id === "general");
-    const locale = general.settings.find((s: { key: string }) => s.key === "defaultLocale");
-    expect(locale).toMatchObject({ value: "de", source: "env", envOverride: true });
+    const email = body.groups.find((g: { id: string }) => g.id === "email");
+    const host = email.settings.find((s: { key: string }) => s.key === "smtp.host");
+    expect(host).toMatchObject({ value: "mail.env.test", source: "env", envOverride: true });
+  });
+
+  it("refuses to show settings while an environment value is invalid", async () => {
+    vi.stubEnv("SMTP_PORT", "five");
+    const res = await app.inject({ method: "GET", url: "/admin/settings" });
+    expect(res.statusCode).toBe(500);
+  });
+
+  it("shows the backup period only the environment sets as locked", async () => {
+    vi.stubEnv("RETENTION_BACKUP_DAYS", "14");
+    const res = await app.inject({ method: "GET", url: "/admin/settings" });
+    const legal = res.json().groups.find((g: { id: string }) => g.id === "legal");
+    expect(
+      legal.settings.find((s: { key: string }) => s.key === "retention.backupDays"),
+    ).toMatchObject({
+      value: 14,
+      source: "env",
+      envOverride: true,
+      envVar: "RETENTION_BACKUP_DAYS",
+    });
+    vi.stubEnv("RETENTION_BACKUP_DAYS", undefined);
+    const fallback = await app.inject({ method: "GET", url: "/admin/settings" });
+    expect(
+      fallback
+        .json()
+        .groups.find((g: { id: string }) => g.id === "legal")
+        .settings.find((s: { key: string }) => s.key === "retention.backupDays"),
+    ).toMatchObject({ value: 30, source: "default", envOverride: true });
   });
 
   it("keeps the live MapTiler key but drops the dead style-provider controls from the map group", async () => {
@@ -182,20 +218,20 @@ describe("GET /admin/settings", () => {
 
     // The base style provider is env-only (NEXT_PUBLIC_STYLE_PROVIDER); the old
     // MAP_STYLE_PROVIDER / CUSTOM_STYLE_URL admin fields drove nothing and are gone.
-    expect(keys).toContain("maptilerApiKey");
+    expect(keys).toContain("maptiler.apiKey");
     expect(keys).not.toContain("styleProvider");
     expect(keys).not.toContain("customStyleUrl");
 
     // With the provider dropdown gone, the key must not be gated behind a
     // (now non-existent) styleProvider value — it always renders.
-    const apiKey = map.settings.find((s: { key: string }) => s.key === "maptilerApiKey");
+    const apiKey = map.settings.find((s: { key: string }) => s.key === "maptiler.apiKey");
     expect(apiKey.showWhen).toBeUndefined();
   });
 
   it("exposes editable operator, contact, governance and retention facts in stable subgroups", async () => {
     selectResolveWith = [
-      { key: "legalControllerName", value: "Persisted Controller" },
-      { key: "legalControllerEmail", value: "legal@example.test" },
+      { key: "legal.controller.name", value: "Persisted Controller" },
+      { key: "legal.controller.email", value: "legal@example.test" },
     ];
 
     const res = await app.inject({ method: "GET", url: "/admin/settings" });
@@ -204,35 +240,42 @@ describe("GET /admin/settings", () => {
       legal.settings.map((setting: { key: string }) => [setting.key, setting]),
     );
 
-    expect(byKey.legalControllerName).toMatchObject({
+    expect(byKey["legal.controller.name"]).toMatchObject({
       subgroup: "operator",
       value: "Persisted Controller",
       source: "database",
-      envVar: "LEGAL_NAME",
+      envVar: "LEGAL_CONTROLLER_NAME",
     });
-    expect(byKey.legalControllerStreet.subgroup).toBe("operator");
-    expect(byKey.legalControllerPostalCode.subgroup).toBe("operator");
-    expect(byKey.legalControllerCity.subgroup).toBe("operator");
-    expect(byKey.legalControllerCountry.subgroup).toBe("operator");
-    expect(byKey.legalControllerEmail).toMatchObject({
+    expect(byKey["legal.controller.street"].subgroup).toBe("operator");
+    expect(byKey["legal.controller.postalCode"].subgroup).toBe("operator");
+    expect(byKey["legal.controller.city"].subgroup).toBe("operator");
+    expect(byKey["legal.controller.country"].subgroup).toBe("operator");
+    expect(byKey["legal.controller.email"]).toMatchObject({
       subgroup: "contact",
       value: "legal@example.test",
     });
-    expect(byKey.legalControllerPhone.subgroup).toBe("contact");
-    expect(byKey.legalDataRequestEmail.subgroup).toBe("contact");
-    expect(byKey.legalSupervisoryAuthority.subgroup).toBe("governance");
-    expect(byKey.legalDeploymentJurisdiction.subgroup).toBe("governance");
-    expect(byKey.legalDsarCaseRetentionDays.subgroup).toBe("retention");
+    expect(byKey["legal.controller.phone"].subgroup).toBe("contact");
+    expect(byKey["legal.dataRequestEmail"].subgroup).toBe("contact");
+    expect(byKey["legal.supervisoryAuthority.name"].subgroup).toBe("governance");
+    expect(byKey["legal.deploymentJurisdiction"].subgroup).toBe("governance");
+    for (const key of [
+      "retention.serverLogDays",
+      "retention.privacyCaseDays",
+      "retention.auditLogDays",
+      "retention.adminJobDays",
+      "retention.backupDays",
+    ])
+      expect(byKey[key].subgroup).toBe("retention");
   });
 
   it("keeps the request-contact field editable when only the controller email is env-managed", async () => {
-    vi.stubEnv("LEGAL_EMAIL", "legal@example.test");
+    vi.stubEnv("LEGAL_CONTROLLER_EMAIL", "legal@example.test");
     vi.stubEnv("LEGAL_DATA_REQUEST_EMAIL", "");
 
     const res = await app.inject({ method: "GET", url: "/admin/settings" });
     const legal = res.json().groups.find((group: { id: string }) => group.id === "legal");
     const requestEmail = legal.settings.find(
-      (setting: { key: string }) => setting.key === "legalDataRequestEmail",
+      (setting: { key: string }) => setting.key === "legal.dataRequestEmail",
     );
 
     expect(requestEmail).toMatchObject({ value: "", source: "default", envOverride: false });
@@ -254,7 +297,7 @@ describe("PATCH /admin/settings", () => {
     const res = await app.inject({
       method: "PATCH",
       url: "/admin/settings",
-      payload: { instanceName: "Updated Name" },
+      payload: { "smtp.host": "mail.example.test" },
     });
 
     expect(res.statusCode).toBe(200);
@@ -265,7 +308,7 @@ describe("PATCH /admin/settings", () => {
     expect(mockInvalidateDataUsePolicy).toHaveBeenCalled();
     expect(mockRefreshDataUsePolicy).toHaveBeenCalled();
     expect(mockWriteAuditLog).toHaveBeenCalledWith(
-      expect.objectContaining({ action: "settings.update", actorId: fakeSession.user.id }),
+      expect.objectContaining({ action: "setting.update", actorId: fakeSession.user.id }),
     );
   });
 
@@ -283,7 +326,7 @@ describe("PATCH /admin/settings", () => {
     const res = await app.inject({
       method: "PATCH",
       url: "/admin/settings",
-      payload: { sessionDurationHours: "abc" },
+      payload: { "auth.sessionDurationHours": "abc" },
     });
 
     expect(res.statusCode).toBe(400);
@@ -291,11 +334,13 @@ describe("PATCH /admin/settings", () => {
   });
 
   it.each([
-    ["legalControllerName", "   "],
-    ["legalControllerStreet", "Street 1\nUnexpected line"],
-    ["legalControllerEmail", "not-an-email"],
-    ["legalDataRequestEmail", "privacy at example.test"],
-    ["legalSupervisoryAuthorityUrl", "javascript:alert(1)"],
+    ["legal.controller.name", "   "],
+    ["legal.controller.street", "Street 1\nUnexpected line"],
+    ["legal.controller.email", "not-an-email"],
+    ["legal.dataRequestEmail", "privacy at example.test"],
+    ["legal.supervisoryAuthority.url", "javascript:alert(1)"],
+    ["retention.privacyCaseDays", 14],
+    ["smtp.security", "true"],
   ])("rejects unsafe legal setting %s", async (key, value) => {
     const res = await app.inject({
       method: "PATCH",
@@ -311,7 +356,7 @@ describe("PATCH /admin/settings", () => {
     const res = await app.inject({
       method: "PATCH",
       url: "/admin/settings",
-      payload: { sessionDurationHours: 24 },
+      payload: { "auth.sessionDurationHours": 24 },
     });
 
     expect(res.statusCode).toBe(200);
@@ -322,20 +367,20 @@ describe("PATCH /admin/settings", () => {
     const res = await app.inject({
       method: "PATCH",
       url: "/admin/settings",
-      payload: { allowNonCommercial: "yes" },
+      payload: { "dataUse.allowNonCommercial": "yes" },
     });
 
     expect(res.statusCode).toBe(400);
   });
 
   it("silently skips keys that are env-overridden", async () => {
-    // INSTANCE_NAME env override should prevent the write
-    vi.stubEnv("INSTANCE_NAME", "env-override");
+    // An SMTP_HOST env override prevents the write; the backup period is never stored.
+    vi.stubEnv("SMTP_HOST", "mail.env.test");
 
     const res = await app.inject({
       method: "PATCH",
       url: "/admin/settings",
-      payload: { instanceName: "Should Not Write" },
+      payload: { "smtp.host": "Should Not Write", "retention.backupDays": 14 },
     });
 
     expect(res.statusCode).toBe(200);
@@ -373,7 +418,7 @@ describe("POST /admin/settings/test-email", () => {
 
   it("says which stored credential the secrets key cannot open, with 400", async () => {
     const error = new SecretSettingUnreadableError(
-      "smtpPassword",
+      "smtp.password",
       new Error("A stored secret cannot be decrypted with the configured secrets key"),
     );
     mockLoadEmailConfig.mockRejectedValueOnce(error);
@@ -381,7 +426,7 @@ describe("POST /admin/settings/test-email", () => {
 
     expect(res.statusCode).toBe(400);
     expect(res.json()).toEqual({ error: error.message });
-    expect(res.json().error).toMatch(/smtpPassword cannot be read: A stored secret cannot be/);
+    expect(res.json().error).toMatch(/smtp\.password cannot be read: A stored secret cannot be/);
     expect(mockSendViaSmtp).not.toHaveBeenCalled();
   });
 
@@ -402,7 +447,14 @@ describe("GET /admin/logs", () => {
   it("returns entries and sources from appLogger", async () => {
     mockGetEntries.mockReturnValueOnce({
       entries: [
-        { id: 1, level: "info", source: "api", msg: "started", time: 1, metadata: { port: 3001 } },
+        {
+          id: 1,
+          level: "info",
+          source: "api",
+          message: "started",
+          time: 1,
+          metadata: { port: 3001 },
+        },
       ],
       total: 1,
     });
@@ -413,7 +465,14 @@ describe("GET /admin/logs", () => {
     expect(res.statusCode).toBe(200);
     const body = res.json();
     expect(body.entries).toEqual([
-      { id: 1, level: "info", source: "api", msg: "started", time: 1, metadata: { port: 3001 } },
+      {
+        id: 1,
+        level: "info",
+        source: "api",
+        message: "started",
+        time: 1,
+        metadata: { port: 3001 },
+      },
     ]);
     expect(body.sources).toEqual(["api", "admin"]);
     expect(body.total).toBe(1);
@@ -423,7 +482,7 @@ describe("GET /admin/logs", () => {
 describe("admin settings authentication", () => {
   it.each([
     ["PATCH", "/admin/settings", null],
-    ["PATCH", "/admin/settings", { hostedBasemapProvider: "unknown" }],
+    ["PATCH", "/admin/settings", { "basemap.provider": "unknown" }],
     ["GET", "/admin/logs?limit=all", undefined],
   ] as const)(
     "answers %s %s with 401 before validating its input",
@@ -445,13 +504,13 @@ describe("hosted basemap admin selection", () => {
     const valid = await app.inject({
       method: "PATCH",
       url: "/admin/settings",
-      payload: { hostedBasemapProvider: "openfreemap" },
+      payload: { "basemap.provider": "openfreemap" },
     });
     expect(valid.statusCode).toBe(200);
     const invalid = await app.inject({
       method: "PATCH",
       url: "/admin/settings",
-      payload: { hostedBasemapProvider: "unknown" },
+      payload: { "basemap.provider": "unknown" },
     });
     expect(invalid.statusCode).toBe(400);
   });
@@ -459,17 +518,17 @@ describe("hosted basemap admin selection", () => {
 
 describe("map settings review regressions", () => {
   it("preserves a redacted secret when saving a hosted provider", async () => {
-    selectResolveWith = [{ key: "maptilerApiKey", value: "existing-key" }];
+    selectResolveWith = [{ key: "maptiler.apiKey", value: "existing-key" }];
     const res = await app.inject({
       method: "PATCH",
       url: "/admin/settings",
-      payload: { hostedBasemapProvider: "openfreemap", maptilerApiKey: "***" },
+      payload: { "basemap.provider": "openfreemap", "maptiler.apiKey": "***" },
     });
     expect(res.statusCode).toBe(200);
     expect(insertChain.values).toHaveBeenCalledTimes(1);
     expect(insertChain.values).toHaveBeenCalledWith(
       expect.objectContaining({
-        key: "hostedBasemapProvider",
+        key: "basemap.provider",
         value: "openfreemap",
       }),
     );
@@ -479,13 +538,13 @@ describe("map settings review regressions", () => {
     const res = await app.inject({
       method: "PATCH",
       url: "/admin/settings",
-      payload: { maptilerApiKey: "replacement-key" },
+      payload: { "maptiler.apiKey": "replacement-key" },
     });
     expect(res.statusCode).toBe(200);
     expect(insertChain.values).toHaveBeenCalledTimes(1);
     const [row] = insertChain.values.mock.calls[0] ?? [];
     expect(row).toMatchObject({
-      key: "maptilerApiKey",
+      key: "maptiler.apiKey",
       ciphertext: expect.any(String),
       iv: expect.any(String),
       tag: expect.any(String),
@@ -498,7 +557,7 @@ describe("map settings review regressions", () => {
     const res = await app.inject({
       method: "PATCH",
       url: "/admin/settings",
-      payload: { maptilerApiKey: "" },
+      payload: { "maptiler.apiKey": "" },
     });
     expect(res.statusCode).toBe(200);
     expect(mockDbDelete).toHaveBeenCalledTimes(1);
@@ -509,29 +568,30 @@ describe("map settings review regressions", () => {
     const res = await app.inject({
       method: "PATCH",
       url: "/admin/settings",
-      payload: { maptilerApiKey: "replacement-key", hostedBasemapProvider: "openfreemap" },
+      payload: { "maptiler.apiKey": "replacement-key", "basemap.provider": "openfreemap" },
     });
     expect(res.statusCode).toBe(400);
     expect(res.json().error).toMatch(/64-character hex format is not accepted/);
     expect(mockDbInsert).not.toHaveBeenCalled();
   });
-  it("allows saving the provider when an invalid environment selection is ignored", async () => {
-    vi.stubEnv("BASEMAP_PROVIDER", "invalid");
+  it("locks the provider while the environment sets it, and saves it otherwise", async () => {
+    vi.stubEnv("BASEMAP_PROVIDER", "maptiler");
     const get = await app.inject("/admin/settings");
     expect(get.statusCode).toBe(200);
     const setting = get
       .json()
       .groups.find((g: { id: string }) => g.id === "map")
-      .settings.find((s: { key: string }) => s.key === "hostedBasemapProvider");
-    expect(setting.envOverride).toBe(false);
+      .settings.find((s: { key: string }) => s.key === "basemap.provider");
+    expect(setting).toMatchObject({ envOverride: true, value: "maptiler" });
+    vi.stubEnv("BASEMAP_PROVIDER", "");
     const res = await app.inject({
       method: "PATCH",
       url: "/admin/settings",
-      payload: { hostedBasemapProvider: "openfreemap" },
+      payload: { "basemap.provider": "openfreemap" },
     });
     expect(res.statusCode).toBe(200);
     expect(insertChain.values).toHaveBeenCalledWith(
-      expect.objectContaining({ key: "hostedBasemapProvider", value: "openfreemap" }),
+      expect.objectContaining({ key: "basemap.provider", value: "openfreemap" }),
     );
   });
 });

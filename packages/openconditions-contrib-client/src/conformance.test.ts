@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { fromBase64Url } from "./base64url.js";
-import { generateDeviceKey, loadOrCreateDeviceKey } from "./device.js";
+import { generateDeviceKey } from "./device.js";
 import { canonicalClaimBytes } from "./jcs.js";
 import { P256_HALF_ORDER, signatureS } from "./lowS.js";
 import { signReport, signSubClaim } from "./sign.js";
@@ -27,6 +27,7 @@ const PINNED_KEY_ID = "GlQczzclqGJy6D0X9dNq8pSYKRfkCqszpEp5g3ZGlwY";
 // non-ASCII text and nested objects and arrays — so the canonical byte pin
 // catches key-ordering and UTF-8 divergence.
 const FIXED_CLAIM: ReportClaim = {
+  v: 1,
   claimClass: "situation",
   kind: "incident",
   type: "obstruction",
@@ -54,7 +55,7 @@ const FIXED_CLAIM: ReportClaim = {
 
 // Pinned hex of canonicalClaimBytes(FIXED_CLAIM).
 const PINNED_CLAIM_HEX =
-  "7b22636c61696d436c617373223a22736974756174696f6e222c2265666665637473223a5b7b226170706c69636162696c697479223a7b226b696e64223a22616c6c227d2c22636f6d706c69616e6365223a226d616e6461746f7279222c226964223a226c616e6573222c226b696e64223a226c616e655f7265737472696374696f6e222c226c616e6573436c6f736564223a312c226c616e6573546f74616c223a322c226e6f726d616c697a6174696f6e223a22636f6d706c657465222c2276223a312c2276656869636c65496d70616374223a22736f6d655f6c616e65735f636c6f736564227d5d2c2266757a7a696e657373223a226578616374222c2267656f6d65747279223a7b22636f6f7264696e61746573223a5b372e303938322c35302e373337345d2c2274797065223a22506f696e74227d2c226b696e64223a22696e636964656e74222c226e6f6e6365223a22636f6e666f726d616e63652d6e6f6e63652d30303031222c227265706f727465644174223a22323032362d30372d31315431323a33343a35362e3738395a222c2273657665726974794c6576656c223a332c2273756274797065223a227370696c6c222c2274657874223a5b7b226c616e67223a226465222c2274657874223a22466168726261686e207665727363686d75747a7420e2809420c3966c227d5d2c2274797065223a226f62737472756374696f6e227d";
+  "7b22636c61696d436c617373223a22736974756174696f6e222c2265666665637473223a5b7b226170706c69636162696c697479223a7b226b696e64223a22616c6c227d2c22636f6d706c69616e6365223a226d616e6461746f7279222c226964223a226c616e6573222c226b696e64223a226c616e655f7265737472696374696f6e222c226c616e6573436c6f736564223a312c226c616e6573546f74616c223a322c226e6f726d616c697a6174696f6e223a22636f6d706c657465222c2276223a312c2276656869636c65496d70616374223a22736f6d655f6c616e65735f636c6f736564227d5d2c2266757a7a696e657373223a226578616374222c2267656f6d65747279223a7b22636f6f7264696e61746573223a5b372e303938322c35302e373337345d2c2274797065223a22506f696e74227d2c226b696e64223a22696e636964656e74222c226e6f6e6365223a22636f6e666f726d616e63652d6e6f6e63652d30303031222c227265706f727465644174223a22323032362d30372d31315431323a33343a35362e3738395a222c2273657665726974794c6576656c223a332c2273756274797065223a227370696c6c222c2274657874223a5b7b226c616e67223a226465222c2274657874223a22466168726261686e207665727363686d75747a7420e2809420c3966c227d5d2c2274797065223a226f62737472756374696f6e222c2276223a317d";
 
 function toHex(bytes: Uint8Array): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
@@ -107,6 +108,7 @@ describe("round-trip signing", () => {
   it("signSubClaim signs the body without the envelope fields and stays low-S", async () => {
     const key = await generateDeviceKey();
     const body = {
+      v: 1 as const,
       subject: { class: "situation" as const, id: "crowd:situation-0001" },
       claimType: "confirm" as const,
       reportedAt: "2026-07-11T12:35:00Z",
@@ -119,6 +121,7 @@ describe("round-trip signing", () => {
 
     // The verifier reconstructs the body by dropping alg/keyId/pubJwk/signature.
     const reconstructed = {
+      v: signed.v,
       subject: signed.subject,
       claimType: signed.claimType,
       reportedAt: signed.reportedAt,
@@ -138,23 +141,5 @@ describe("round-trip signing", () => {
       canonicalClaimBytes(reconstructed),
     );
     expect(ok).toBe(true);
-  });
-});
-
-describe("device key persistence", () => {
-  it("loadOrCreateDeviceKey mints then reloads a stable keyId", async () => {
-    let saved: { privateJwk: JsonWebKey } | null = null;
-    const store = {
-      get: () => saved,
-      set: (value: { privateJwk: JsonWebKey }) => {
-        saved = value;
-      },
-    };
-
-    const first = await loadOrCreateDeviceKey(store);
-    expect(saved).not.toBeNull();
-    const second = await loadOrCreateDeviceKey(store);
-    expect(second.keyId).toBe(first.keyId);
-    expect(second.publicJwk).toEqual(first.publicJwk);
   });
 });

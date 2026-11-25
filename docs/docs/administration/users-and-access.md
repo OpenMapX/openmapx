@@ -91,10 +91,11 @@ when the web app is down — which is exactly when you tend to need them.
 :::note[Why the CLI works without logging in]
 
 These bootstrap user commands run through the host's generated Compose
-configuration and database container. Protect host access. Other CLI operations
-can use the local admin API escape hatch described in
-[Admin panel](./admin-panel.md); that path cannot substitute for the fresh
-account-session confirmation required by assisted recovery.
+configuration and database container. Protect host access. CLI operations that
+call the admin API act as an administrator's session instead (see
+[Host CLI access](./admin-panel.md#host-cli-access)); a session file cannot
+substitute for the fresh account-session confirmation required by assisted
+recovery.
 
 :::
 
@@ -280,7 +281,7 @@ authentication policy** applies all four reviewed values atomically.
 Session lifetime accepts 1–8760 whole hours and password minimum accepts 8–128
 characters. Passwords have a maximum of 128 characters. Turning off new 2FA
 enrollment leaves existing second factors and sign-in challenges in place.
-`AUTH_EMAIL_VERIFICATION`, when active, owns the verification setting and locks
+`AUTH_EMAIL_VERIFICATION_REQUIRED`, when active, owns the verification setting and locks
 that field in the panel. A conflicting or failed apply preserves the active
 policy; reload before retrying a changed revision.
 

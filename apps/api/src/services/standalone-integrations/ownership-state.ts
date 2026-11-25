@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
+import { componentIdSchema } from "@openmapx/core/component-id";
 import { canonicalJson, standaloneOwnershipInspectionSchema } from "@openmapx/core/ops";
 import z from "zod/v4";
 export const ownershipRequestSchema = z.strictObject({
-  integrationId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
+  integrationId: componentIdSchema,
   expectedContentDigest: z
     .string()
     .regex(/^[a-f0-9]{64}$/)

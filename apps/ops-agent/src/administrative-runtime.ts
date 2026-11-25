@@ -1,3 +1,4 @@
+import { COMPONENT_ID_PATTERN } from "@openmapx/core/component-id";
 import { loadConfiguredResourceAuthority } from "./configured-resource-authority";
 import { installDataWorkflowRuntime, resolveDataDefaultRegion } from "./data-workflow-runtime";
 
@@ -68,7 +69,7 @@ const MAX_CLI_DURATION_MS = 30 * 60_000;
 const FIXED_CLI_DATA_MANAGER_URL = "http://openmapx-data-manager:4000";
 const MAX_RELEASE_MANIFEST_BYTES = 32 * 1024;
 const BACKUP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
-const SERVICE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const SERVICE_ID = COMPONENT_ID_PATTERN;
 const _REGION_ID = /^[a-z0-9][a-z0-9_-]*(?:\/[a-z0-9][a-z0-9_-]*)*$/;
 const DATA_TYPE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const DATA_TYPE_ALIASES: Readonly<Record<string, readonly string[]>> = {
@@ -125,8 +126,9 @@ interface ParsedBackupManifest {
   name: string;
   createdAt: string;
   expiresAt?: string;
-  openmapxVersion: string;
-  formatVersion: 2;
+  /** The release the installation had applied, or null when it pinned none. */
+  release: string | null;
+  formatVersion: typeof coreServices.BACKUP_FORMAT_VERSION;
   manifestDigest: string;
   services: Array<{
     id: string;
@@ -139,15 +141,41 @@ interface ParsedBackupManifest {
       sha256: string;
     }>;
   }>;
-  privacySourceProvenance?: {
-    managedDawarich?: {
-      version: string;
-      image: string;
-      imageDigest: string;
-      upstreamCommit: string;
-      schemaContract: string;
-    };
-  };
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+/** The manifest's `release`: the applied release's id, or null when none was pinned. */
+function parseBackupRelease(value: unknown): string | null {
+  if (value === null) return null;
+  if (
+    !isPlainRecord(value) ||
+    Object.keys(value).length !== 2 ||
+    typeof value.release !== "string" ||
+    !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(value.release) ||
+    typeof value.manifestDigest !== "string" ||
+    !/^[a-f0-9]{64}$/.test(value.manifestDigest)
+  )
+    throw new Error("Backup authority rejected");
+  return value.release;
+}
+
+function assertBackupDatabaseMigration(value: unknown): void {
+  if (value === null) return;
+  if (
+    !isPlainRecord(value) ||
+    Object.keys(value).length !== 2 ||
+    !(
+      value.tag === null ||
+      (typeof value.tag === "string" && /^\d{4}_[a-z0-9_]{1,120}$/.test(value.tag))
+    ) ||
+    typeof value.when !== "number" ||
+    !Number.isSafeInteger(value.when) ||
+    value.when <= 0
+  )
+    throw new Error("Backup authority rejected");
 }
 
 interface DataAuthorityService {
@@ -248,15 +276,15 @@ function parseManifest(rootDir: string, backupId: string): ParsedBackupManifest 
     raw.name !== backupId ||
     typeof raw.createdAt !== "string" ||
     !Number.isFinite(Date.parse(raw.createdAt)) ||
-    typeof raw.openmapxVersion !== "string" ||
-    raw.openmapxVersion.length < 1 ||
-    raw.openmapxVersion.length > 64 ||
     !Array.isArray(raw.services) ||
     raw.services.length > MAX_BACKUP_SERVICES
   ) {
     throw new Error("Backup authority rejected");
   }
-  if (raw.formatVersion !== 2) throw new Error("Backup authority rejected");
+  if (raw.formatVersion !== coreServices.BACKUP_FORMAT_VERSION)
+    throw new Error("Backup authority rejected");
+  const release = parseBackupRelease(raw.release);
+  assertBackupDatabaseMigration(raw.databaseMigration);
   if (raw.expiresAt !== undefined)
     coreServices.backupRetentionExpiry(String(raw.createdAt), 36500, raw.expiresAt);
   const seenServices = new Set<string>();
@@ -330,29 +358,14 @@ function parseManifest(rootDir: string, backupId: string): ParsedBackupManifest 
     });
     return { id: service.id, version: service.version, volumes };
   });
-  const provenance = raw.privacySourceProvenance as
-    | ParsedBackupManifest["privacySourceProvenance"]
-    | undefined;
-  const managed = provenance?.managedDawarich;
-  if (
-    managed &&
-    (managed.version !== "1.19.0" ||
-      managed.image !== "freikin/dawarich" ||
-      managed.imageDigest !==
-        "sha256:d9385242202ae385a5d8064f41a59a0b58218399e60e7e499d2a6afb449bc304" ||
-      managed.upstreamCommit !== "752641768f37fdc07d5a23e0559fa7c5ff8fae0f" ||
-      managed.schemaContract !== "dawarich-1.19.0")
-  )
-    throw new Error("Backup authority rejected");
   return {
     name: backupId,
     createdAt: new Date(raw.createdAt).toISOString(),
     ...(raw.expiresAt !== undefined ? { expiresAt: String(raw.expiresAt) } : {}),
-    openmapxVersion: raw.openmapxVersion,
-    formatVersion: 2,
+    release,
+    formatVersion: coreServices.BACKUP_FORMAT_VERSION,
     manifestDigest: createHash("sha256").update(contents).digest("hex"),
     services,
-    ...(managed ? { privacySourceProvenance: { managedDawarich: managed } } : {}),
   };
 }
 
@@ -441,7 +454,7 @@ function inspectBackupInventory(rootDir: string): OpsResultFor<"backup.list"> {
       backupId: entry.name,
       createdAt: manifest.createdAt,
       ...(manifest.expiresAt ? { expiresAt: manifest.expiresAt } : {}),
-      platformVersion: manifest.openmapxVersion,
+      release: manifest.release,
       manifestDigest: manifest.manifestDigest,
       formatVersion: manifest.formatVersion,
       verified,

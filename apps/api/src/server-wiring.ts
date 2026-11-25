@@ -1,4 +1,11 @@
 import { isIP, type Socket } from "node:net";
+import {
+  isSupportedMobileProtocol,
+  MOBILE_PROTOCOL_HEADER,
+  MOBILE_PROTOCOL_MAX,
+  MOBILE_PROTOCOL_MIN,
+  MOBILE_PROTOCOL_UNSUPPORTED,
+} from "@openmapx/core/api-contracts";
 import type {
   FastifyBaseLogger,
   FastifyError,
@@ -427,7 +434,7 @@ function addVaryHeader(reply: FastifyReply, value: string): void {
   reply.header("Vary", values.join(", "));
 }
 
-export function applyMobileAuthPrivacyHeaders(reply: FastifyReply): void {
+export function applyMobileTokenPrivacyHeaders(reply: FastifyReply): void {
   reply.header("Cache-Control", "no-store");
   reply.header("Pragma", "no-cache");
   reply.header("Referrer-Policy", "no-referrer");
@@ -444,6 +451,24 @@ export function applyAdminStatusPrivacyHeaders(reply: FastifyReply): void {
 }
 
 /**
+ * Refuses a native request whose mobile protocol this release no longer
+ * serves, before any route runs. Installed apps name their protocol in every
+ * request; the web app sends no header and is never affected.
+ */
+export function makeMobileProtocolHook() {
+  const header = MOBILE_PROTOCOL_HEADER.toLowerCase();
+  return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const value = request.headers[header];
+    if (value === undefined) return;
+    if (typeof value === "string" && isSupportedMobileProtocol(value)) return;
+    await reply.code(426).send({
+      error: `This server serves mobile protocol ${MOBILE_PROTOCOL_MIN} to ${MOBILE_PROTOCOL_MAX}. Update the OpenMapX app.`,
+      code: MOBILE_PROTOCOL_UNSUPPORTED,
+    });
+  };
+}
+
+/**
  * Installs endpoint-specific response policy before the global rate limiter.
  * Exact matching prevents privacy headers from becoming an accidental route
  * classifier for status-like or mobile-auth-like paths.
@@ -455,7 +480,7 @@ export function makeSecurityResponseHeaderHook() {
       request.method === "POST" &&
       (path === "/api/mobile-auth/issue" || path === "/api/mobile-auth/exchange")
     ) {
-      applyMobileAuthPrivacyHeaders(reply);
+      applyMobileTokenPrivacyHeaders(reply);
     } else if (request.method === "GET" && path === "/api/status") {
       applyPublicStatusCacheHeaders(reply);
     } else if (request.method === "GET" && path === "/api/admin/status") {
@@ -517,6 +542,8 @@ export interface RateLimitTiers {
   expensive: Limit;
   routing: Limit;
   typeahead: Limit;
+  contribution: Limit;
+  enrollment: Limit;
   integrationIngress: Limit;
   status: Limit;
   public: Limit;
@@ -532,11 +559,11 @@ const BODY_CAPABLE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 //
 // Skips:
 //   - `/health` — used by Docker/Traefik healthchecks at high frequency.
-//   - Loopback socket peers — the CLI and admin sweeps run locally; admin
+//   - Loopback socket peers — processes inside the API's own container; admin
 //     endpoints layer their own per-action limiters on top (see `admin.ts`,
 //     `admin-store.ts`, `admin-services.ts`, `admin-settings.ts`). We read
 //     `socket.remoteAddress` here, not `request.ip`, so a public client
-//     cannot forge XFF to bypass the limit (see `require-admin.ts`).
+//     cannot forge XFF to bypass the limit.
 //
 // Tiers, applied in order:
 //   - no matched route           → small dedicated bucket (scanners, typos)

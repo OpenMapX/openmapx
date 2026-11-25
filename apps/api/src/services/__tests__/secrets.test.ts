@@ -44,9 +44,12 @@ import {
   getSecret,
   isSecretsConfigured,
   resolveVaultSecrets,
+  secretAad,
   secretsKeyProblem,
   setSecret,
 } from "../secrets.js"; // NOTE: `.js` extension — this package's TS imports use it (see sibling tests)
+
+const AAD = secretAad.integrationSecret("int", "k");
 
 const KEY_A = Buffer.alloc(32, 1).toString("base64url"); // obviously-fake 32-byte key
 const KEY_B = Buffer.alloc(32, 2).toString("base64url"); // different obviously-fake key
@@ -76,60 +79,90 @@ describe("crypto layer", () => {
       ["unicode", "café ☕ 日本語"],
       ["long value", "x".repeat(10_000)],
     ])("decrypts what encrypt produced (%s)", (_label, plaintext) => {
-      const { ciphertext, iv, tag } = encrypt(plaintext);
-      expect(decrypt(ciphertext, iv, tag)).toBe(plaintext);
+      const sealed = encrypt(plaintext, AAD);
+      expect(sealed.keyVersion).toBe(1);
+      expect(decrypt(sealed, AAD)).toBe(plaintext);
     });
   });
 
   it("uses a fresh IV and ciphertext per encryption of the same plaintext", () => {
     const plaintext = "same-value";
-    const a = encrypt(plaintext);
-    const b = encrypt(plaintext);
+    const a = encrypt(plaintext, AAD);
+    const b = encrypt(plaintext, AAD);
     expect(a.iv).not.toBe(b.iv);
     expect(a.ciphertext).not.toBe(b.ciphertext);
-    expect(decrypt(a.ciphertext, a.iv, a.tag)).toBe(plaintext);
-    expect(decrypt(b.ciphertext, b.iv, b.tag)).toBe(plaintext);
+    expect(decrypt(a, AAD)).toBe(plaintext);
+    expect(decrypt(b, AAD)).toBe(plaintext);
   });
 
   describe("tamper rejection", () => {
     it("throws when the ciphertext is corrupted", () => {
-      const { ciphertext, iv, tag } = encrypt("secret-value");
-      expect(() => decrypt(flipByte(ciphertext), iv, tag)).toThrow();
+      const sealed = encrypt("secret-value", AAD);
+      expect(() => decrypt({ ...sealed, ciphertext: flipByte(sealed.ciphertext) }, AAD)).toThrow();
     });
 
     it("throws when the auth tag is corrupted", () => {
-      const { ciphertext, iv, tag } = encrypt("secret-value");
-      expect(() => decrypt(ciphertext, iv, flipByte(tag))).toThrow();
+      const sealed = encrypt("secret-value", AAD);
+      expect(() => decrypt({ ...sealed, tag: flipByte(sealed.tag) }, AAD)).toThrow();
     });
 
     it("throws when the IV is corrupted", () => {
-      const { ciphertext, iv, tag } = encrypt("secret-value");
-      expect(() => decrypt(ciphertext, flipByte(iv), tag)).toThrow();
+      const sealed = encrypt("secret-value", AAD);
+      expect(() => decrypt({ ...sealed, iv: flipByte(sealed.iv) }, AAD)).toThrow();
     });
   });
 
+  describe("row binding", () => {
+    it("refuses a ciphertext moved to another row of the same table", () => {
+      const sealed = encrypt("smtp-password", secretAad.systemSecret("smtp.password"));
+      expect(() => decrypt(sealed, secretAad.systemSecret("maptiler.apiKey"))).toThrow(
+        /cannot be decrypted with the configured secrets key/,
+      );
+    });
+
+    it("refuses a ciphertext moved into another table", () => {
+      const sealed = encrypt("smtp-password", secretAad.systemSecret("smtp.password"));
+      expect(() => decrypt(sealed, secretAad.integrationSecret("weather", "apiKey"))).toThrow(
+        /cannot be decrypted with the configured secrets key/,
+      );
+      const vault = encrypt("vault", secretAad.integrationSecret("weather", "apiKey"));
+      expect(() => decrypt(vault, secretAad.serviceSecret("weather", "apiKey"))).toThrow();
+      expect(() => decrypt(vault, secretAad.integrationSecret("weather", "token"))).toThrow();
+    });
+  });
+
+  it("refuses an unknown key version", () => {
+    const sealed = encrypt("secret-value", AAD);
+    expect(() => decrypt({ ...sealed, keyVersion: 2 }, AAD)).toThrow(
+      /cannot be decrypted with the configured secrets key/,
+    );
+    expect(() => decrypt({ ...sealed, keyVersion: 0 }, AAD)).toThrow();
+  });
+
   it("throws when decrypting with the wrong key", () => {
-    const { ciphertext, iv, tag } = encrypt("secret-value");
+    const sealed = encrypt("secret-value", AAD);
     vi.stubEnv("OPENMAPX_SECRETS_KEY", KEY_B);
-    expect(() => decrypt(ciphertext, iv, tag)).toThrow();
+    expect(() => decrypt(sealed, AAD)).toThrow();
   });
 
   it("refuses a truncated tag or an IV of another length before decrypting", () => {
-    const { ciphertext, iv, tag } = encrypt("secret-value");
-    const truncated = Buffer.from(tag, "base64").subarray(0, 4).toString("base64");
-    expect(() => decrypt(ciphertext, iv, truncated)).toThrow(
+    const sealed = encrypt("secret-value", AAD);
+    const truncated = Buffer.from(sealed.tag, "base64").subarray(0, 4).toString("base64");
+    expect(() => decrypt({ ...sealed, tag: truncated }, AAD)).toThrow(
       /cannot be decrypted with the configured secrets key/,
     );
-    const longIv = Buffer.concat([Buffer.from(iv, "base64"), Buffer.alloc(4)]).toString("base64");
-    expect(() => decrypt(ciphertext, longIv, tag)).toThrow(
+    const longIv = Buffer.concat([Buffer.from(sealed.iv, "base64"), Buffer.alloc(4)]).toString(
+      "base64",
+    );
+    expect(() => decrypt({ ...sealed, iv: longIv }, AAD)).toThrow(
       /cannot be decrypted with the configured secrets key/,
     );
   });
 
   it("names the key mismatch when decryption fails", () => {
-    const { ciphertext, iv, tag } = encrypt("secret-value");
+    const sealed = encrypt("secret-value", AAD);
     vi.stubEnv("OPENMAPX_SECRETS_KEY", KEY_B);
-    expect(() => decrypt(ciphertext, iv, tag)).toThrow(
+    expect(() => decrypt(sealed, AAD)).toThrow(
       /cannot be decrypted with the configured secrets key/,
     );
   });
@@ -148,13 +181,13 @@ describe("crypto layer", () => {
     it("refuses the former 64-character hex format", () => {
       vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 1).toString("hex"));
       expect(isSecretsConfigured()).toBe(false);
-      expect(() => encrypt("x")).toThrow(/64-character hex format is not accepted/);
+      expect(() => encrypt("x", AAD)).toThrow(/64-character hex format is not accepted/);
     });
 
     it("returns false when the key is unset", () => {
       vi.stubEnv("OPENMAPX_SECRETS_KEY", undefined);
       expect(isSecretsConfigured()).toBe(false);
-      expect(() => encrypt("x")).toThrow(/run `pnpm openmapx compose render`/);
+      expect(() => encrypt("x", AAD)).toThrow(/run `pnpm openmapx compose render`/);
     });
 
     it("reads the key from the file OPENMAPX_SECRETS_KEY_FILE names", () => {
@@ -164,10 +197,10 @@ describe("crypto layer", () => {
         writeFileSync(path, KEY_A, { mode: 0o444 });
         vi.stubEnv("OPENMAPX_SECRETS_KEY", undefined);
         vi.stubEnv("OPENMAPX_SECRETS_KEY_FILE", path);
-        const sealed = encrypt("from-file");
+        const sealed = encrypt("from-file", AAD);
         vi.stubEnv("OPENMAPX_SECRETS_KEY_FILE", undefined);
         vi.stubEnv("OPENMAPX_SECRETS_KEY", KEY_A);
-        expect(decrypt(sealed.ciphertext, sealed.iv, sealed.tag)).toBe("from-file");
+        expect(decrypt(sealed, AAD)).toBe("from-file");
         vi.stubEnv("OPENMAPX_SECRETS_KEY_FILE", path);
         expect(isSecretsConfigured()).toBe(false);
 
@@ -176,11 +209,11 @@ describe("crypto layer", () => {
         const newline = join(directory, "newline-key");
         writeFileSync(newline, `${KEY_B}\n`, { mode: 0o444 });
         vi.stubEnv("OPENMAPX_SECRETS_KEY_FILE", newline);
-        expect(() => encrypt("x")).toThrow(/invalid size/);
+        expect(() => encrypt("x", AAD)).toThrow(/invalid size/);
         const link = join(directory, "link-key");
         symlinkSync(path, link);
         vi.stubEnv("OPENMAPX_SECRETS_KEY_FILE", link);
-        expect(() => encrypt("x")).toThrow(/must be a regular file/);
+        expect(() => encrypt("x", AAD)).toThrow(/must be a regular file/);
       } finally {
         rmSync(directory, { recursive: true, force: true });
       }
@@ -251,26 +284,30 @@ describe("service layer swallow behavior", () => {
 
   describe("getSecret", () => {
     it("returns the decrypted value on the happy path", async () => {
-      const { ciphertext, iv, tag } = encrypt("plaintext-value");
-      h.state.selectRows = [{ ciphertext, iv, tag }];
+      h.state.selectRows = [encrypt("plaintext-value", AAD)];
       await expect(getSecret("int", "k")).resolves.toBe("plaintext-value");
     });
 
     it("swallows a tampered ciphertext and resolves to null", async () => {
-      const { ciphertext, iv, tag } = encrypt("plaintext-value");
-      const bad = flipByte(ciphertext);
+      const sealed = encrypt("plaintext-value", AAD);
+      const bad = { ...sealed, ciphertext: flipByte(sealed.ciphertext) };
       // Crypto layer: the corrupted row throws when decrypted directly.
-      expect(() => decrypt(bad, iv, tag)).toThrow();
+      expect(() => decrypt(bad, AAD)).toThrow();
       // Service layer: the same corruption is swallowed to null, not thrown.
-      h.state.selectRows = [{ ciphertext: bad, iv, tag }];
+      h.state.selectRows = [bad];
+      await expect(getSecret("int", "k")).resolves.toBeNull();
+    });
+
+    it("refuses a value sealed for another integration's row", async () => {
+      h.state.selectRows = [encrypt("plaintext-value", secretAad.integrationSecret("other", "k"))];
       await expect(getSecret("int", "k")).resolves.toBeNull();
     });
 
     it("swallows a wrong-key row and resolves to null", async () => {
       vi.stubEnv("OPENMAPX_SECRETS_KEY", KEY_B);
-      const { ciphertext, iv, tag } = encrypt("plaintext-value");
+      const sealed = encrypt("plaintext-value", AAD);
       vi.stubEnv("OPENMAPX_SECRETS_KEY", KEY_A);
-      h.state.selectRows = [{ ciphertext, iv, tag }];
+      h.state.selectRows = [sealed];
       await expect(getSecret("int", "k")).resolves.toBeNull();
     });
 
@@ -282,11 +319,13 @@ describe("service layer swallow behavior", () => {
 
   describe("resolveVaultSecrets", () => {
     it("omits an undecryptable key but keeps the rest", async () => {
-      const good = encrypt("v1");
-      const bad = encrypt("v2");
+      const good = encrypt("v1", secretAad.integrationSecret("int", "good"));
+      const bad = encrypt("v2", secretAad.integrationSecret("int", "bad"));
+      const moved = encrypt("v3", secretAad.integrationSecret("int", "good"));
       h.state.selectRows = [
-        { key: "good", ciphertext: good.ciphertext, iv: good.iv, tag: good.tag },
-        { key: "bad", ciphertext: flipByte(bad.ciphertext), iv: bad.iv, tag: bad.tag },
+        { key: "good", ...good },
+        { key: "bad", ...bad, ciphertext: flipByte(bad.ciphertext) },
+        { key: "moved", ...moved },
       ];
       await expect(resolveVaultSecrets("int")).resolves.toEqual({ good: "v1" });
     });
@@ -314,9 +353,8 @@ describe("setSecret", () => {
     expect(String(first.iv)).not.toBe(String(second.iv));
     expect(String(first.ciphertext)).not.toBe(String(second.ciphertext));
 
-    expect(decrypt(String(first.ciphertext), String(first.iv), String(first.tag))).toBe("first");
-    expect(decrypt(String(second.ciphertext), String(second.iv), String(second.tag))).toBe(
-      "second",
-    );
+    expect(first.keyVersion).toBe(1);
+    expect(decrypt(first as never, AAD)).toBe("first");
+    expect(decrypt(second as never, AAD)).toBe("second");
   });
 });

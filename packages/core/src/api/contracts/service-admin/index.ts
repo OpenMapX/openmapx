@@ -13,6 +13,7 @@ import { settingsAdminOperations } from "./settings";
 import { systemAdminOperations } from "./system";
 
 export * from "./audit";
+export * from "./audit-actions";
 export * from "./cache";
 export * from "./coverage";
 export * from "./provider-health";

@@ -197,7 +197,7 @@ describe("subject archive assembler", () => {
       expect(manifestEntry?.source).toBeInstanceOf(Buffer);
       const manifest = JSON.parse((manifestEntry?.source as Buffer).toString());
       expect(manifest).toMatchObject({
-        version: 2,
+        version: 1,
         request: { id: "r", kind },
         generatedAt: responseContext.generatedAt,
       });
@@ -205,10 +205,27 @@ describe("subject archive assembler", () => {
       expect(manifest.members.map((member: { logicalId: string }) => member.logicalId)).toEqual(
         logicalIds.filter((logicalId) => logicalId !== "manifest"),
       );
+      const schemaOf = (logicalId: string) =>
+        manifest.members.find((member: { logicalId: string }) => member.logicalId === logicalId)
+          ?.schema;
+      // Each member names the one schema it follows, or none.
+      if (kind !== "portability") {
+        expect(schemaOf("authentication")).toBe("export-record-1");
+        expect(schemaOf("processing-information")).toBe("processing-information-1");
+      }
+      if (kind !== "access") expect(schemaOf("portable-places")).toBe("portable-places-1");
+      expect(schemaOf("dawarich-account") ?? null).toBeNull();
       if (kind === "access_and_portability") {
-        for (const [logicalId, filename] of [
-          ["manifest-schema", "export-manifest.schema.json"],
-          ["processing-information-schema", "processing-information.schema.json"],
+        for (const [logicalId, filename, schemaId] of [
+          ["manifest-schema", "export-manifest.schema.json", "export-manifest-1"],
+          ["export-record-schema", "export-record.schema.json", "export-record-1"],
+          ["portable-profile-schema", "portable-profile.schema.json", "portable-profile-1"],
+          ["portable-places-schema", "portable-places.schema.json", "portable-places-1"],
+          [
+            "processing-information-schema",
+            "processing-information.schema.json",
+            "processing-information-1",
+          ],
         ] as const) {
           const emitted = JSON.parse(
             (written.find((entry) => entry.logicalId === logicalId)?.source as Buffer).toString(),
@@ -217,7 +234,10 @@ describe("subject archive assembler", () => {
             await readFile(new URL(`./schemas/${filename}`, import.meta.url), "utf8"),
           );
           expect(emitted).toEqual(committed);
+          expect(emitted.$id).toBe(`urn:openmapx:privacy:${schemaId.replace(/-1$/, "")}:1`);
+          expect(schemaOf(logicalId)).toBe(schemaId);
         }
+        expect(logicalIds).not.toContain("category-schema");
       }
       if (kind === "portability") {
         const readme = written.find((entry) => entry.logicalId === "readme-text")?.source as Buffer;
