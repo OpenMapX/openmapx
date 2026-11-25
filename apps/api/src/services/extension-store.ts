@@ -32,8 +32,9 @@ type ExtensionTrust = "built-in" | "verified" | "community";
 // source: it comes from immutable content only. The default is pinned to an
 // exact commit so the catalog bytes cannot move under us, and each entry still
 // has to be digest-bound (see `resolveEntryTrust`) to reach the verified tier.
-// The commit that gives the catalog its `schemaVersion`, pinned on 2026-11-24.
-const DEFAULT_EXTENSION_CATALOG_COMMIT = "b9c164a699da6fc860a7dc9b66038a12b9cfd14f";
+// The commit that binds OpenConditions to its 0.8.2 manifest bytes, pinned on
+// 2026-11-25.
+const DEFAULT_EXTENSION_CATALOG_COMMIT = "f74e629527337c810bcf4f6cceb922c55ac756e4";
 const DEFAULT_EXTENSION_CATALOG_URL = envString(
   "EXTENSION_CATALOG_URL",
   `https://raw.githubusercontent.com/openmapx/community-extensions/${DEFAULT_EXTENSION_CATALOG_COMMIT}/catalog.json`,
