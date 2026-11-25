@@ -15,7 +15,7 @@ const opsBehaviour: { fail: boolean } = { fail: false };
 vi.mock("../../src/ops-client.js", () => ({
   runOpsOperation: vi.fn(async (operation: { kind: string }) => {
     opsCalls.push(operation);
-    if (opsBehaviour.fail) throw new Error("No such container: motis-staging");
+    if (opsBehaviour.fail) throw new Error("No such container: openmapx-motis-staging");
     return { changed: true };
   }),
 }));
@@ -122,7 +122,7 @@ describe("motis-import stage", () => {
       },
     });
     const result = await motisImportRun(ctx);
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     // A single, clean import via the container entrypoint — `docker restart`
     // covers running / stopped / waiting-for-config, with no concurrent
     // `docker exec /motis import` and no `docker compose` (no plugin in the image).
@@ -131,7 +131,7 @@ describe("motis-import stage", () => {
     expect(calls).toEqual([]);
     expect(result.artifacts).toMatchObject({
       action: "restarted",
-      container: "motis-staging",
+      container: "openmapx-motis-staging",
       candidateEpoch: "test-epoch",
     });
     // The promote stage relies on this marker as its strong "import done"
@@ -140,7 +140,7 @@ describe("motis-import stage", () => {
     expect(existsSync(markerPath)).toBe(true);
     const marker = JSON.parse(readFileSync(markerPath, "utf-8"));
     expect(marker).toMatchObject({
-      container: "motis-staging",
+      container: "openmapx-motis-staging",
       action: "restarted",
       candidateEpoch: "test-epoch",
     });
@@ -157,7 +157,7 @@ describe("motis-import stage", () => {
     });
     opsBehaviour.fail = true;
     const result = await motisImportRun(ctx);
-    expect(result.status).toBe("error");
-    expect(result.message).toMatch(/failed to \(re\)start motis-staging/);
+    expect(result.status).toBe("failed");
+    expect(result.message).toMatch(/failed to \(re\)start openmapx-motis-staging/);
   });
 });

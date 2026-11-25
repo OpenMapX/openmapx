@@ -188,6 +188,7 @@ const transitPayloadSchema = z
         firstAttemptAtMs: safeInteger.optional(),
         ambiguousAttempts: z.number().int().nonnegative().max(3).optional(),
         attempts: z.number().int().nonnegative().max(64).default(0),
+        updateRequired: z.literal(true).optional(),
       })
       .strict(),
     scheduledAlerts: z

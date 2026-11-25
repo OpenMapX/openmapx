@@ -33,7 +33,7 @@ Default and Terrain add elevation data on top of it: Mapterhorn when you host
 your own tiles or OpenFreeMap, MapTiler Terrain with a MapTiler basemap, or a DEM of your own
 (see [Map tiles](../guides/map-tiles.md)). Default only shades mountains softly
 between zoom 6 and 14; Terrain shows the full relief at every zoom. Satellite imagery comes from MapTiler and
-needs `MAPTILER_KEY`; the cycling base uses Thunderforest when a key is set and
+needs `MAPTILER_API_KEY`; the cycling base uses Thunderforest when a key is set and
 CyclOSM otherwise. The picker always lists all four bases, so a base whose
 source isn't configured on your deployment shows no imagery. While an offline
 package is active, Default and Terrain show the flat street map. The picker also has a
@@ -206,7 +206,7 @@ and layers enabled only by the context switch back off when it ends.
 
 The weather overlay's radar loop uses RainViewer without a key (returning
 HTTP 451 if RainViewer is excluded by policy); its temperature, precipitation, cloud,
-wind, and pressure tiles require an OpenWeather API key (`INTEGRATION_OVERLAY_WEATHER_OWMAPIKEY`).
+wind, and pressure tiles require an OpenWeather API key (`INTEGRATION_OVERLAY_WEATHER_OWM_API_KEY`).
 If an OpenWeather sublayer is selected while unconfigured or unavailable, the UI
 automatically falls back to the RainViewer radar loop. The weather overlay here is
 the map-wide layer. The per-place forecast lives in the [weather](./weather.md)

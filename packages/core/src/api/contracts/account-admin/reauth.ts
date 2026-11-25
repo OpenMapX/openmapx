@@ -1,17 +1,20 @@
 import z from "zod/v4";
 import { type AdminOperation, adminCommonResponses, adminJson, httpErrorSchema } from "../admin";
 import { adminServiceIdempotencyHeadersSchema } from "../service-admin/common";
-export const adminReauthPurposeSchema = z.enum([
-  "account.verify",
-  "account.password.set",
-  "account.reset.send",
-  "account.invite",
-  "credentials.export",
-  "credentials.import",
-  "transit.credentials",
+/** What a reauthentication proves intent for, named like an audit action:
+ * `<area>[.<object>].<verb>`. */
+export const ADMIN_REAUTH_PURPOSES = [
+  "user.email.verify",
+  "user.password.set",
+  "user.password_reset.send",
+  "user.invitation.send",
+  "credential.export",
+  "credential.import",
+  "transit.credential.update",
   "platform.domain.apply",
   "privacy.export",
-]);
+] as const;
+export const adminReauthPurposeSchema = z.enum(ADMIN_REAUTH_PURPOSES);
 export type AdminReauthPurpose = z.infer<typeof adminReauthPurposeSchema>;
 const intentFields = {
   purpose: adminReauthPurposeSchema,
@@ -31,7 +34,10 @@ const validateIntent = (
       (v.intentFingerprint !== undefined && v.intentFingerprint !== v.targetId))
   )
     ctx.addIssue({ code: "custom", message: "Invalid domain preview reference" });
-  if (["transit.credentials", "credentials.import"].includes(v.purpose) && !v.intentFingerprint)
+  if (
+    ["transit.credential.update", "credential.import"].includes(v.purpose) &&
+    !v.intentFingerprint
+  )
     ctx.addIssue({ code: "custom", message: "A checked mutation intent is required" });
 };
 export const adminReauthIntentSchema = z.strictObject(intentFields).superRefine(validateIntent);

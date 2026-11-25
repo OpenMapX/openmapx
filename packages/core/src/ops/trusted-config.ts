@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import z from "zod/v4";
+import { COMPONENT_ID_PATTERN } from "../component-id";
 import { platformConfigurationSchema } from "../services/platform-configuration";
 import { canonicalJson } from "./canonical-json";
 
@@ -15,11 +16,7 @@ const stableId = z
   .min(1)
   .max(128)
   .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/);
-const serviceId = z
-  .string()
-  .min(1)
-  .max(64)
-  .regex(/^[a-z0-9][a-z0-9-]*$/);
+const serviceId = z.string().regex(COMPONENT_ID_PATTERN);
 const configKey = z
   .string()
   .min(1)

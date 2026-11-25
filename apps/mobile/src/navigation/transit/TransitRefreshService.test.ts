@@ -242,3 +242,34 @@ it("refreshes hosted journey captures without an itinerary token or a second own
     journeys: { "trip-1": [{ departurePlatform: { code: "3" } }] },
   });
 });
+
+describe("a refused mobile protocol", () => {
+  const refused = () => new ApiClientError(426, { code: "MOBILE_PROTOCOL_UNSUPPORTED" }, null);
+
+  it("is reported as an update the rider must install", async () => {
+    const { client } = fakeClient({
+      refresh: async () => {
+        throw refused();
+      },
+      journey: async () => ({ data: { stops: [] } }),
+    });
+    expect(await service(client).request(request())).toMatchObject({
+      ok: false,
+      failure: "update-required",
+    });
+  });
+
+  it("is reported from capture polling, too, not read as a missing journey", async () => {
+    const hosted = session();
+    hosted.payload.refreshToken = null;
+    const { client } = fakeClient({
+      journey: async () => {
+        throw refused();
+      },
+    });
+    expect(await service(client).request(request({ session: hosted }))).toMatchObject({
+      ok: false,
+      failure: "update-required",
+    });
+  });
+});

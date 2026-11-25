@@ -68,7 +68,7 @@ it("continues maintenance polling through cancel_pending until terminal completi
       reads += 1;
       return Response.json({
         ...job({ id: "check-job", cancelable: false }),
-        status: reads < 3 ? "cancel_pending" : "success",
+        status: reads < 3 ? "cancel_pending" : "succeeded",
       });
     }
     return Response.json({
@@ -164,7 +164,7 @@ it("keeps host instructions after a raced apply failure and clears them after a 
             id: "apply-job",
             status: "failed",
             error: "Operations request failed",
-            result: { errorCode: "host_update_required" },
+            result: { errorCode: "HOST_UPDATE_REQUIRED" },
             cancelable: false,
           }),
         );
@@ -172,7 +172,7 @@ it("keeps host instructions after a raced apply failure and clears them after a 
         return Response.json(
           job({
             id: "check-job",
-            status: "success",
+            status: "succeeded",
             error: null,
             result: ["checked", { nested: true }],
             cancelable: false,
@@ -266,7 +266,7 @@ function installAdmissionFetch(options: { checked?: boolean; applyResponses: Res
       calls.checkJobReads += 1;
       checked = true;
       return Response.json(
-        job({ id: "check-job", status: "success", error: null, cancelable: false }),
+        job({ id: "check-job", status: "succeeded", error: null, cancelable: false }),
       );
     }
     if (url.includes("/apply-job?source=application")) {
@@ -496,7 +496,7 @@ it("keeps each action's wait and feedback independent when another action is rej
     }
     if (url.includes("/diagnostics-job?source=application")) {
       return Response.json(
-        job({ id: "diagnostics-job", status: "success", error: null, cancelable: false }),
+        job({ id: "diagnostics-job", status: "succeeded", error: null, cancelable: false }),
       );
     }
     return Response.json({ deployment: readyDeployment, release: {}, images: [] });

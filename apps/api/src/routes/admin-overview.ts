@@ -81,7 +81,7 @@ export async function adminOverviewRoute(app: FastifyInstance): Promise<void> {
       severity: "warning" | "error" | "info";
       message: string;
       target?: string;
-      job?: { type: string; status: "failed" | "interrupted" };
+      job?: { type: string; status: "failed" };
     }> = [];
 
     if (inventory?.acquisition.state === "unavailable")
@@ -124,15 +124,16 @@ export async function adminOverviewRoute(app: FastifyInstance): Promise<void> {
       }
     }
 
-    // Failed jobs among the most recent cross-system activity.
+    // Failed jobs among the most recent cross-system activity. An interrupted
+    // job is still recovering, so it is listed among the active jobs instead.
     for (const job of activityJobs.jobs) {
-      if (job.status === "failed" || job.status === "interrupted") {
+      if (job.status === "failed") {
         attention.push({
           type: "job_failed",
           severity: "error",
           message: job.error
             ? `Job "${job.type}" failed: ${job.error}`
-            : `Job "${job.type}" ${job.status === "interrupted" ? "was interrupted" : "failed"}`,
+            : `Job "${job.type}" failed`,
           target: job.id,
           job: { type: job.type, status: job.status },
         });

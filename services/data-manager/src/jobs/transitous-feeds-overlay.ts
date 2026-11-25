@@ -43,7 +43,7 @@ export interface FeedOverlayQuarantine {
 }
 
 export interface FeedOverlay {
-  version: 3;
+  version: 1;
   sources: FeedOverlaySource[];
   patches: FeedOverlayPatch[];
   quarantine: FeedOverlayQuarantine[];
@@ -209,7 +209,7 @@ function parseSource(value: unknown, index: number, path: string): FeedOverlaySo
 
 export function parseFeedOverlay(value: unknown, path = "<memory>"): FeedOverlay {
   const obj = record(value, `Feeds overlay at ${path} is not a JSON object`);
-  if (obj.version !== 3) {
+  if (obj.version !== 1) {
     throw new Error(`Feeds overlay at ${path} has unsupported version ${String(obj.version)}`);
   }
   if (!Array.isArray(obj.sources))
@@ -266,7 +266,7 @@ export function parseFeedOverlay(value: unknown, path = "<memory>"): FeedOverlay
   if (new Set(patches.map((patch) => patch.sourceId)).size !== patches.length) {
     throw new Error("Feeds overlay has duplicate source patches");
   }
-  return { version: 3, sources, patches, quarantine };
+  return { version: 1, sources, patches, quarantine };
 }
 
 export function readFeedOverlay(path: string): FeedOverlay | null {

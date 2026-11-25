@@ -110,7 +110,7 @@ dbDescribe("retained finite maintenance requests", () => {
         role: "ops-agent",
         serviceIds: host.loaded.map((service) => service.manifest.id),
       });
-      let journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs-v1.json"));
+      let journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs.json"));
       const { ArtifactTransferStore } = await import(
           "../../../../ops-agent/src/artifact-transfer/store"
         ),
@@ -252,7 +252,7 @@ dbDescribe("retained finite maintenance requests", () => {
               .from(adminJob)
               .where(eq(adminJob.id, accepted.data.jobId));
             expect(row?.status, JSON.stringify({ error: row?.error, result: row?.result })).toBe(
-              "success",
+              "succeeded",
             );
             expect(row?.result).toMatchObject({
               operation: "validate-artifact",
@@ -347,7 +347,7 @@ dbDescribe("retained finite maintenance requests", () => {
             ownedServices: productionOwnedServices(runtime),
             execFile: host.execFile,
           });
-          journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs-v1.json"));
+          journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs.json"));
           agent = buildOpsAgentServer({
             runtime,
             journal,
@@ -384,7 +384,7 @@ dbDescribe("retained finite maintenance requests", () => {
             expect(
               row?.status,
               JSON.stringify({ error: row?.error, result: row?.result, purposeReads }),
-            ).toBe("success");
+            ).toBe("succeeded");
             expect(row?.result).toMatchObject({
               operation: "import-artifact",
               publication: { outcome: "committed", followUp: "complete" },
@@ -437,7 +437,7 @@ dbDescribe("retained finite maintenance requests", () => {
               .from(adminJob)
               .where(eq(adminJob.id, exporting.data.jobId));
             expect(row?.status, JSON.stringify({ error: row?.error, result: row?.result })).toBe(
-              "success",
+              "succeeded",
             );
             exported = (row?.result as { stage?: typeof exported }).stage;
             expect(exported?.stageId).toBeTruthy();
@@ -512,7 +512,7 @@ dbDescribe("retained finite maintenance requests", () => {
         role: "ops-agent",
         serviceIds: host.loaded.map((service) => service.manifest.id),
       }),
-      journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs-v1.json")),
+      journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs.json")),
       agent = buildOpsAgentServer({
         runtime: host.runtime,
         resourceClaimer: host.claimer,
@@ -548,7 +548,7 @@ dbDescribe("retained finite maintenance requests", () => {
             .from(adminJob)
             .where(eq(adminJob.id, accepted.data.jobId));
           expect(row?.status, JSON.stringify({ error: row?.error, result: row?.result })).toBe(
-            "success",
+            "succeeded",
           );
           expect(row?.result).toMatchObject({
             configuration: { outcome: "committed", followUp: "complete", restartRequired: true },
@@ -590,7 +590,7 @@ dbDescribe("retained finite maintenance requests", () => {
     }
   }, 60000);
   it("retains the actual preview-bound backup prune across lost admission and terminal replay", async () => {
-    vi.stubEnv("BACKUP_RETENTION_DAYS", "30");
+    vi.stubEnv("RETENTION_BACKUP_DAYS", "30");
     const host = await ownedServiceHost(),
       backupRoot = join(host.infraDir, "backups");
     function archive(name: string, age: number) {
@@ -599,10 +599,11 @@ dbDescribe("retained finite maintenance requests", () => {
       writeFileSync(
         join(path, "manifest.json"),
         JSON.stringify({
-          formatVersion: 2,
+          formatVersion: 1,
           name,
           createdAt: new Date(Date.now() - age * 86400000).toISOString(),
-          openmapxVersion: "1.0.0",
+          release: null,
+          databaseMigration: null,
           services: [],
         }),
         { mode: 0o600 },
@@ -618,7 +619,7 @@ dbDescribe("retained finite maintenance requests", () => {
         role: "ops-agent",
         serviceIds: host.loaded.map((service) => service.manifest.id),
       }),
-      journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs-v1.json"));
+      journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs.json"));
     const agent = buildOpsAgentServer({
       runtime: host.runtime,
       resourceClaimer: host.claimer,
@@ -669,7 +670,7 @@ dbDescribe("retained finite maintenance requests", () => {
             .select()
             .from(adminJob)
             .where(eq(adminJob.id, accepted.data.jobId));
-          expect(job?.status).toBe("success");
+          expect(job?.status).toBe("succeeded");
           expect(job?.result).toMatchObject({ deleted: ["expired"], retainedCount: 1 });
         },
         { timeout: 20000, interval: 100 },
@@ -750,10 +751,10 @@ dbDescribe("retained finite maintenance requests", () => {
     "service.start",
     "service.stop",
     "service.restart",
-    "service.core-restart",
+    "service.core.restart",
     "service.apply",
-    "service.bulk",
-    "backup.operation",
+    "service.batch.run",
+    "backup.operation.run",
   ] as const)("serializes %s requests and preserves terminal duplicates", async (type) => {
     const key = `same-retained-intent-${type}`,
       ids = await Promise.all(
@@ -764,11 +765,11 @@ dbDescribe("retained finite maintenance requests", () => {
     acceptedIds.push(id);
     await state.fixture.db
       .update(adminJob)
-      .set({ status: "success", result: { cleared: true }, finishedAt: new Date() })
+      .set({ status: "succeeded", result: { cleared: true }, finishedAt: new Date() })
       .where(eq(adminJob.id, id));
     expect(await retainMaintenanceJob(type, body, actor, key)).toBe(id);
     const [row] = await state.fixture.db.select().from(adminJob).where(eq(adminJob.id, id));
-    expect(row?.status).toBe("success");
+    expect(row?.status).toBe("succeeded");
     expect(row?.result).toEqual({ cleared: true });
     await expect(
       retainMaintenanceJob(type, { ...body, expectedReleaseId: "changed-pin" }, actor, key),
@@ -813,7 +814,7 @@ dbDescribe("retained finite maintenance requests", () => {
       role: "ops-agent",
       serviceIds: host.loaded.map((s) => s.manifest.id),
     });
-    const journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs-v1.json"));
+    const journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs.json"));
     const agent = buildOpsAgentServer({
       tokens: {
         api: host.token,
@@ -872,7 +873,7 @@ dbDescribe("retained finite maintenance requests", () => {
       await vi.waitFor(
         async () => {
           const [row] = await state.fixture.db.select().from(adminJob).where(eq(adminJob.id, id));
-          expect(row?.status).toBe("success");
+          expect(row?.status).toBe("succeeded");
         },
         { timeout: 20000, interval: 100 },
       );
@@ -1035,7 +1036,7 @@ dbDescribe("retained finite maintenance requests", () => {
           role: "ops-agent",
           serviceIds: host.loaded.map((service) => service.manifest.id),
         }),
-        journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs-v1.json"));
+        journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs.json"));
       const agent = buildOpsAgentServer({
         tokens: {
           api: host.token,
@@ -1069,7 +1070,7 @@ dbDescribe("retained finite maintenance requests", () => {
       const { jobRunner } = await import("../job-runner"),
         { handleImageStageJob } = await import("../admin-image-staging"),
         { adminReleaseControlsRoute } = await import("../../routes/admin-release-controls");
-      jobRunner.register("service.images.pull", handleImageStageJob);
+      jobRunner.register("service.image.pull", handleImageStageJob);
       const api = await createAdminTestApp(adminReleaseControlsRoute, { prefix: "/api" }),
         url = await api.listen({ host: "127.0.0.1", port: 0 }),
         options = { client: createApiClient({ baseUrl: url }) },
@@ -1084,7 +1085,7 @@ dbDescribe("retained finite maintenance requests", () => {
         await vi.waitFor(
           async () => {
             const [row] = await state.fixture.db.select().from(adminJob).where(eq(adminJob.id, id));
-            expect(["success", "failed"]).toContain(row?.status);
+            expect(["succeeded", "failed"]).toContain(row?.status);
           },
           { timeout: 20000, interval: 100 },
         );
@@ -1108,7 +1109,7 @@ dbDescribe("retained finite maintenance requests", () => {
               ["manifest", "info", "image"].includes(argv[0] ?? ""),
             ),
           }),
-        ).toBe(invalidMetadata ? "failed" : "success");
+        ).toBe(invalidMetadata ? "failed" : "succeeded");
         expect(services.currentConfigurationGeneration(host.infraDir)).toBe(applied);
         const pulls = stageCalls.filter((argv) => argv[0] === "image" && argv[1] === "pull");
         expect(pulls).toHaveLength(invalidMetadata ? 0 : 3);

@@ -51,7 +51,6 @@ export async function adminBackupMaintenanceRoute(app: FastifyInstance) {
         await writeAuditLog({
           actorId: actor,
           action: "backup.prune",
-          targetType: "backup",
           targetId: null,
           details: { jobId, inventoryDigest: request.body.proof.inventoryDigest },
           request,

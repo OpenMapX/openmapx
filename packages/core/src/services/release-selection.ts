@@ -2,8 +2,9 @@
 export const RELEASE_SELECTOR_ENV = "OPENMAPX_RELEASE";
 export const RELEASE_REPOSITORY_ENV = "OPENMAPX_RELEASE_MANIFEST_REPOSITORY";
 export const DEFAULT_RELEASE_MANIFEST_REPOSITORY = "ghcr.io/openmapx/release-manifest";
+/** A product version: stable semver, or a numbered alpha, beta or release candidate. */
 export const PRODUCT_VERSION_PATTERN =
-  /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)-(alpha|beta|rc)\.(0|[1-9]\d*)$/;
+  /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(alpha|beta|rc)\.(0|[1-9]\d*))?$/;
 export type ReleaseSelection =
   | { kind: "local" }
   | {
@@ -41,7 +42,7 @@ export function normalizeReleaseSelection(
           : undefined;
   if (!kind)
     throw new Error(
-      `Unsupported ${RELEASE_SELECTOR_ENV}: ${selector}. Choose main, preview, an exact prerelease version/digest, or local.`,
+      `Unsupported ${RELEASE_SELECTOR_ENV}: ${selector}. Choose main, preview, an exact version or digest, or local.`,
     );
   return {
     kind,

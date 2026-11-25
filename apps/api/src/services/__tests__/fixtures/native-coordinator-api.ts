@@ -69,7 +69,7 @@ try {
     action: "apply",
     ...(await serviceApply(ctx.payload.service as string, ctx)),
   }));
-  jobRunner.register("service.bulk", handleServiceBulkJob);
+  jobRunner.register("service.batch.run", handleServiceBulkJob);
   jobRunner.register("system.update", handleSystemUpdateJob);
   let id: string;
   if (input.action === "reconcile") {
@@ -139,10 +139,10 @@ try {
           ? await jobRunner.enqueueMaintenance(
               "service.apply",
               { service: "data-manager" },
-              "loopback",
+              "native-coordinator-admin",
               randomUUID(),
             )
-          : await jobRunner.enqueue("service.bulk", {
+          : await jobRunner.enqueue("service.batch.run", {
               action: "update",
               serviceIds: input.serviceIds ?? ["data-manager"],
               ...(input.noDeps ? { noDeps: true } : {}),
@@ -152,7 +152,7 @@ try {
     const until = Date.now() + 240000;
     for (;;) {
       const [row] = await sql`SELECT status FROM admin_job WHERE id=${id}`;
-      if (row && ["success", "failed", "canceled"].includes(row.status)) break;
+      if (row && ["succeeded", "failed", "cancelled"].includes(row.status)) break;
       if (Date.now() >= until) throw Error("Fixture observation expired");
       await new Promise((resolve) => setTimeout(resolve, 25));
     }
@@ -161,7 +161,7 @@ try {
   process.stdout.write(
     JSON.stringify({ event: "result", status: row?.status ?? "missing" }) + "\n",
   );
-  exit = row?.status === "success" ? 0 : 2;
+  exit = row?.status === "succeeded" ? 0 : 2;
   await new Promise((resolve) => setTimeout(resolve, 0));
 } catch (error) {
   process.stdout.write(

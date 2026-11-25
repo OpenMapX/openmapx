@@ -161,7 +161,7 @@ describe("mapStylePoiTarget", () => {
     const map = makeHitMap({ "poi-label": [pointFeature({ name: "Smithsonian" })] });
 
     expect(findStylePoiAtPoint(map, point, ["poi-label"], new Set())).toMatchObject({
-      featureId: "-77.02573-38.88859",
+      featureId: "38.888590,-77.025730",
     });
   });
 });

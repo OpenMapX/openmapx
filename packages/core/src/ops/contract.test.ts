@@ -34,7 +34,7 @@ const maintenanceBinding = {
 
 function request(operation: unknown, extra: Record<string, unknown> = {}) {
   return {
-    version: 2,
+    version: 1,
     requestId: "ops1_0123456789abcdef",
     operationKey: "opk1_0123456789abcdef",
     issuedAt,
@@ -723,9 +723,9 @@ describe("ops contract", () => {
         {
           backupId: "nightly-20260823",
           createdAt: "2026-08-23T18:00:00.000Z",
-          platformVersion: "1.0.0",
+          release: "2026.11.0",
           manifestDigest: "f".repeat(64),
-          formatVersion: 2,
+          formatVersion: 1,
           verified: true,
           volumes: [
             {
@@ -760,8 +760,9 @@ describe("ops contract", () => {
       }),
     ).toThrow();
     for (const invalidEntry of [
-      { ...inventory.backups[0], formatVersion: 1 },
+      { ...inventory.backups[0], formatVersion: 2 },
       { ...inventory.backups[0], formatVersion: undefined },
+      { ...inventory.backups[0], release: undefined },
       { ...inventory.backups[0], verified: undefined },
       { ...inventory.backups[0], manifestDigest: undefined },
       {
@@ -1117,10 +1118,10 @@ describe("ops contract", () => {
   });
 });
 
-it("reads only an exact version 2 admission with its execution identity", async () => {
+it("reads only an exact current-version admission with its execution identity", async () => {
   const { parseOpsAdmission } = await import("./contract");
   const admission = {
-    version: 2,
+    version: 1,
     execution: "async",
     operationId: "job1_0123456789abcdef",
     operationKey: "opk1_0123456789abcdef",
@@ -1134,7 +1135,7 @@ it("reads only an exact version 2 admission with its execution identity", async 
   const { version: _version, admittedAt: _admittedAt, ...withoutIdentity } = admission;
   for (const candidate of [
     withoutIdentity,
-    { ...admission, version: 1 },
+    { ...admission, version: 2 },
     { ...admission, deadlineAt: 1 },
     { ...admission, parent: {} },
     { ...admission, unexpected: true },
@@ -1142,8 +1143,8 @@ it("reads only an exact version 2 admission with its execution identity", async 
     expect(() => parseOpsAdmission(candidate)).toThrow();
 });
 
-it("refuses a version 1 request body", () => {
+it("refuses a request body of another protocol version", () => {
   expect(() =>
-    parseOpsRequest(request({ kind: "docker.status" }, { version: 1 }), { role: "api" }),
+    parseOpsRequest(request({ kind: "docker.status" }, { version: 2 }), { role: "api" }),
   ).toThrow(OpsContractError);
 });

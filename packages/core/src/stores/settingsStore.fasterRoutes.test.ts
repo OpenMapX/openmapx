@@ -20,8 +20,12 @@ afterEach(() => configureStorage(previousStorage));
 
 describe("fasterRoutes setting", () => {
   it.each([
-    ["fasterRoutes", "setFasterRoutes", "openmapx:nav:fasterRoutes"],
-    ["autoSwitchFasterRoutes", "setAutoSwitchFasterRoutes", "openmapx:nav:autoSwitchFasterRoutes"],
+    ["fasterRoutes", "setFasterRoutes", "openmapx:navigation:faster-routes"],
+    [
+      "autoSwitchFasterRoutes",
+      "setAutoSwitchFasterRoutes",
+      "openmapx:navigation:auto-switch-faster-routes",
+    ],
   ] as const)("persists and hydrates %s in both directions", (field, setter, key) => {
     for (const choice of [false, true]) {
       useSettingsStore.getState()[setter](choice);

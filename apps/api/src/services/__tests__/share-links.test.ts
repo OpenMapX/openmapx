@@ -6,7 +6,9 @@ import {
   isExpired,
   listSnapshotFrom,
   parseStoredListSnapshot,
+  parseStoredSnapshot,
   routeShareLabel,
+  SHARE_SNAPSHOT_VERSION,
   SHARE_TOKEN_PATTERN,
   toOwnerShare,
   toPublicListShare,
@@ -196,7 +198,7 @@ describe("toOwnerShare", () => {
 });
 
 describe("validateRouteShare with per-waypoint schedules", () => {
-  it("accepts an aligned schedules array and records the version", () => {
+  it("accepts an aligned schedules array", () => {
     const parsed = validateRouteShare({
       ...ROUTE,
       schedules: [
@@ -204,7 +206,6 @@ describe("validateRouteShare with per-waypoint schedules", () => {
         { arriveBy: "2026-09-01T14:00", dwellSeconds: 1800, timeZone: "Europe/Berlin" },
       ],
     });
-    expect(parsed?.scheduleVersion).toBe(1);
     expect(parsed?.schedules).toEqual([
       null,
       { arriveBy: "2026-09-01T14:00", dwellSeconds: 1800, timeZone: "Europe/Berlin" },
@@ -214,7 +215,6 @@ describe("validateRouteShare with per-waypoint schedules", () => {
   it("omits the schedules entirely when every entry is unconstrained", () => {
     const parsed = validateRouteShare({ ...ROUTE, schedules: [null, null] });
     expect(parsed?.schedules).toBeUndefined();
-    expect(parsed?.scheduleVersion).toBeUndefined();
   });
 
   it("rejects a schedules array that does not align with the waypoints", () => {
@@ -244,11 +244,27 @@ describe("validateRouteShare with per-waypoint schedules", () => {
   it("rejects an unknown schedule field", () => {
     expect(validateRouteShare({ ...ROUTE, schedules: [null, { leaveWhenever: true }] })).toBeNull();
   });
+});
 
-  it("rejects an unknown schedule version", () => {
-    expect(
-      validateRouteShare({ ...ROUTE, scheduleVersion: 2, schedules: [null, null] }),
-    ).toBeNull();
+describe("parseStoredSnapshot", () => {
+  const list = { name: "Trip", icon: null, places: [] };
+
+  it("selects the parser by target type at the current version", () => {
+    expect(parseStoredSnapshot("route", SHARE_SNAPSHOT_VERSION, ROUTE)).toEqual({
+      targetType: "route",
+      route: validateRouteShare(ROUTE),
+    });
+    expect(parseStoredSnapshot("list", SHARE_SNAPSHOT_VERSION, list)).toEqual({
+      targetType: "list",
+      list,
+    });
+  });
+
+  it("reads a snapshot of an unknown version or target type as unavailable", () => {
+    expect(parseStoredSnapshot("route", 2, ROUTE)).toBeNull();
+    expect(parseStoredSnapshot("route", null, ROUTE)).toBeNull();
+    expect(parseStoredSnapshot("list", SHARE_SNAPSHOT_VERSION, ROUTE)).toBeNull();
+    expect(parseStoredSnapshot("place", SHARE_SNAPSHOT_VERSION, list)).toBeNull();
   });
 });
 

@@ -1,9 +1,10 @@
 /** Fixed handoff data. A matching DTO never supplies target authority. */
 import { z } from "zod";
+import { COMPONENT_ID_PATTERN } from "../component-id";
 import { PROTECTED_CONFIGURATION_SERVICE_IDS } from "../services/core-service-ids";
 import { strictlyAscending } from "../utils/strictlyAscending";
 
-const id = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/);
+const id = z.string().regex(COMPONENT_ID_PATTERN);
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const revision = z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/);
 export const protectedConfigurationServiceIdSchema = z.enum(PROTECTED_CONFIGURATION_SERVICE_IDS);

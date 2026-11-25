@@ -26,7 +26,7 @@ import { integrationErrorMessage } from "./integrationErrors";
 export { integrationErrorMessage } from "./integrationErrors";
 
 export const INTEGRATION_READ_TIMEOUT_MS = 30_000;
-const terminal = new Set(["success", "failed", "canceled"]);
+const terminal = new Set(["succeeded", "failed", "cancelled"]);
 
 export async function integrationOrThrow<
   R extends { status: number; headers: Headers; data: unknown },

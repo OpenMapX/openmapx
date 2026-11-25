@@ -49,7 +49,7 @@ export {
   PRIVACY_SERVICE_UNAVAILABLE,
   type PrivacyRequestDetail,
   type PrivacyRequestKind,
-  type PrivacyRequestState,
+  type PrivacyRequestStatus,
   type PrivacyRequestView,
   type PrivacyTaskView,
   requestPrivacyExport,

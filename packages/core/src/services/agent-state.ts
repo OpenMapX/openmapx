@@ -9,6 +9,11 @@ export function writeAgentStateFile(infraDir: string, name: string, contents: st
   atomicWrite(join(directory, name), contents);
 }
 
+/** The agent's job journal file in its state directory. */
+export const OPS_JOB_JOURNAL_FILE = "jobs.json";
+/** The format version of the journal file's envelope. */
+export const OPS_JOB_JOURNAL_VERSION = 1;
+
 /**
  * Where the operations agent keeps its own state: the job journal and the
  * configuration candidates the API hands it.
@@ -34,7 +39,7 @@ export function agentStatePaths(infraDir: string): AgentStatePaths {
   const directory = join(infraDir, "state", "ops-agent");
   return {
     directory,
-    journal: join(directory, "jobs-v1.json"),
+    journal: join(directory, OPS_JOB_JOURNAL_FILE),
     configurationCandidates: join(directory, "configuration-candidates"),
     community: join(directory, "community"),
     customIntegrations: join(directory, "custom-integrations"),

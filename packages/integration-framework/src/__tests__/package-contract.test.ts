@@ -28,8 +28,8 @@ function sourceTree(): string {
       id: "fixture-integration",
       name: "Fixture",
       version: "1.0.0",
+      platform: "1.0",
       description: "Fixture integration used by the packaging contract test.",
-      capabilities: ["poi"],
       domains: ["fixture"],
     }),
   );

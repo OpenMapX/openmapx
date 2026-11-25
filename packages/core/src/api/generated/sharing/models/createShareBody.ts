@@ -12,7 +12,6 @@ import type { SharingCreateShareBodySchema9 } from "./sharingCreateShareBodySche
 import type { SharingCreateShareBodySchema10 } from "./sharingCreateShareBodySchema10";
 import type { SharingCreateShareBodySchema11 } from "./sharingCreateShareBodySchema11";
 import type { SharingCreateShareBodySchema12 } from "./sharingCreateShareBodySchema12";
-import type { SharingCreateShareBodySchema13 } from "./sharingCreateShareBodySchema13";
 
 export type CreateShareBody =
   | {
@@ -35,8 +34,7 @@ export type CreateShareBody =
         bikePreferQuietRoads?: SharingCreateShareBodySchema9;
         bikePreferSmoothSurfaces?: SharingCreateShareBodySchema10;
         bikeSpeedKmh?: SharingCreateShareBodySchema11;
-        scheduleVersion?: SharingCreateShareBodySchema12;
-        schedules?: SharingCreateShareBodySchema13;
+        schedules?: SharingCreateShareBodySchema12;
       };
       expiresInDays?: SharingCreateShareBodySchema0;
     };

@@ -34,15 +34,14 @@ export async function adminReleaseControlsRoute(app: FastifyInstance) {
       if (!known) return reply.code(400).send({ error: "Select installed, enabled services" });
       try {
         const jobId = await jobRunner.enqueueMaintenance(
-          "service.images.pull",
+          "service.image.pull",
           request.body,
           actor,
           parseDirectOpsIdempotency(request.headers["idempotency-key"]),
         );
         await writeAuditLog({
           actorId: actor,
-          action: "service.images.pull",
-          targetType: "service",
+          action: "service.image.pull",
           targetId: null,
           details: { jobId, serviceIds: request.body.serviceIds },
           request,
@@ -73,7 +72,6 @@ export async function adminReleaseControlsRoute(app: FastifyInstance) {
         await writeAuditLog({
           actorId: actor,
           action: "release.clear",
-          targetType: "release",
           targetId: request.body.expectedReleaseId,
           details: { jobId },
           request,

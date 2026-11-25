@@ -191,7 +191,7 @@ export function AdminOverview() {
   /** Known attention codes are worded here; the server's English stays for codes added later. */
   const attentionMessage = (item: AttentionItem) =>
     item.job
-      ? t("jobAttention", { status: item.job.status, jobLabel: jobTypeLabel(item.job.type) })
+      ? t("jobAttention", { jobLabel: jobTypeLabel(item.job.type) })
       : ATTENTION_TYPES.has(item.type)
         ? t("attention", {
             type: item.type,

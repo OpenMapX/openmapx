@@ -110,7 +110,7 @@ describe("motis-health stage", () => {
     }) as unknown as typeof fetch;
 
     const result = await motisHealthRun(ctxFor(dataDir));
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(calls.length).toBe(7);
     expect(calls[0]).toMatch(/\/api\/v1\/health$/);
     expect(calls[1]).toMatch(/\/api\/v1\/health$/);
@@ -139,7 +139,7 @@ describe("motis-health stage", () => {
       lockedBy: "test",
     };
 
-    expect((await motisHealthRun(ctx)).status).toBe("ok");
+    expect((await motisHealthRun(ctx)).status).toBe("succeeded");
     const snapshot = JSON.parse(
       readFileSync(join(dataDir, "motis", "staging", CAPABILITY_SNAPSHOT_FILENAME), "utf-8"),
     ) as { pins: { transitous: string; atlas?: string } };
@@ -156,7 +156,7 @@ describe("motis-health stage", () => {
     }) as unknown as typeof fetch;
 
     const result = await motisHealthRun(ctxFor(dataDir));
-    expect(result.status).toBe("error");
+    expect(result.status).toBe("failed");
     expect(calls.length).toBeGreaterThanOrEqual(1);
     expect(result.message).toMatch(/probe "health" failed: HTTP 503/);
   });
@@ -176,7 +176,7 @@ describe("motis-health stage", () => {
     }) as unknown as typeof fetch;
 
     const result = await motisHealthRun(ctxFor(dataDir));
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     // Two liveness attempts precede the six functional probes.
     expect(n).toBe(8);
   }, 12_000);
@@ -191,7 +191,7 @@ describe("motis-health stage", () => {
     }) as unknown as typeof fetch;
 
     const result = await motisHealthRun(ctxFor(dataDir));
-    expect(result.status).toBe("error");
+    expect(result.status).toBe("failed");
     expect(result.message).toMatch(/unexpected content-type text\/html/);
   });
 });

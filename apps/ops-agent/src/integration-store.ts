@@ -15,6 +15,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { COMPONENT_ID_PATTERN } from "@openmapx/core/component-id";
 import type { OpsOperation, OpsResultFor } from "@openmapx/core/ops";
 import { services as coreServices, safeDownload } from "@openmapx/core/server";
 import {
@@ -39,7 +40,7 @@ import { OpsAgentBusyError, type OpsRuntime } from "./runtime";
  * the API knows whether the rest of the extension change committed.
  */
 
-const INTEGRATION_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const INTEGRATION_ID = COMPONENT_ID_PATTERN;
 const STAGE = /^\.agent-stage-[a-f0-9]{24}$/;
 const BACKUP = /^\.agent-backup-([a-z0-9][a-z0-9-]{0,63})-(itx1_[a-f0-9]{24})$/;
 const MAX_ARTIFACT_BYTES = 200 * 1024 * 1024;

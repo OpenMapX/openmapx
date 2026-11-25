@@ -34,7 +34,7 @@ export async function adminPlatformRoute(app: FastifyInstance) {
   const failure = (error: unknown) =>
     error instanceof PlatformPreviewConflict ||
     error instanceof AdminReauthenticationError ||
-    (error instanceof AdminJobFailure && error.result.errorCode === "conflict")
+    (error instanceof AdminJobFailure && error.result.errorCode === "CONFLICT")
       ? {
           status: 409,
           error: "Platform preview, source or authorization changed; create a new preview",
@@ -57,7 +57,7 @@ export async function adminPlatformRoute(app: FastifyInstance) {
     "previewAdminPlatformConfiguration",
     async (request, reply) => {
       const actor = getAdminSession(request);
-      if (actor.user.id === "loopback" || actor.session.impersonatedBy)
+      if (actor.session.impersonatedBy)
         return reply.code(403).send({ error: "A real full administrator session is required" });
       try {
         return await previewPlatformConfiguration({
@@ -80,7 +80,7 @@ export async function adminPlatformRoute(app: FastifyInstance) {
     "applyAdminPlatformConfiguration",
     async (request, reply) => {
       const actor = getAdminSession(request);
-      if (actor.user.id === "loopback" || actor.session.impersonatedBy)
+      if (actor.session.impersonatedBy)
         return reply.code(403).send({ error: "A real full administrator session is required" });
       const { domainProofToken, ...intent } = request.body;
       const nonce = adminReauthNonce(request.headers.cookie);

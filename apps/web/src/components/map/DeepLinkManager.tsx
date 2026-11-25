@@ -32,7 +32,6 @@ import { useWinterSportsStore } from "@integrations/overlay-winter-sports/store"
 import type { WeatherSubLayer } from "@openmapx/core";
 import {
   type BoundingBox,
-  bicycleQueryParameters,
   CATEGORY_DEFINITIONS,
   type CategoryId,
   createPlace,
@@ -62,6 +61,11 @@ import {
   useSidebarStore,
   useStreetLevelStore,
 } from "@openmapx/core";
+import {
+  formatLinkBoolean,
+  MAP_LINK_PARAMS as P,
+  parseLinkBoolean,
+} from "@openmapx/core/map-link-params";
 import type { TransportMode } from "@openmapx/mobility-core/transit";
 import type * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
@@ -89,6 +93,9 @@ import {
   parseDeepLinkSearch,
   setCsvParam,
   splitCsv,
+  writeAvoidParam,
+  writeBikeParams,
+  writePlaceParams,
 } from "@/lib/deepLink";
 
 type SubscribableStore = {
@@ -270,17 +277,23 @@ function applyOverlayState(parsed: ParsedDeepLink): void {
   const settings = parsed.overlaySettings;
 
   if (settings.weather) requested.add("weather");
-  if (settings.sat || settings.date || settings.opacity) requested.add("satellite");
-  if (settings.eq) requested.add("earthquakes");
-  if (settings.fire) requested.add("wildfires");
-  if (settings.neDays || settings.neCat) requested.add("natural-events");
-  if (settings.alertSev) requested.add("weather-alerts");
-  if (settings.envSensor) requested.add("environment");
-  if (settings.sli) requested.add("street-level-imagery");
-  if (settings.trail) requested.add("hiking");
-  if (settings.winter) requested.add("winter-sports");
-  if (settings.cycleAuto) requested.add("cycling");
-  if (settings.ltProviders || settings.ltModes || settings.ltCodes || settings.ltVehicle) {
+  if (settings.satelliteLayer || settings.satelliteDate || settings.satelliteOpacity)
+    requested.add("satellite");
+  if (settings.earthquakes) requested.add("earthquakes");
+  if (settings.wildfires) requested.add("wildfires");
+  if (settings.naturalEventDays || settings.naturalEventCategories) requested.add("natural-events");
+  if (settings.weatherAlertSeverities) requested.add("weather-alerts");
+  if (settings.environmentSensor) requested.add("environment");
+  if (settings.streetLevelImage) requested.add("street-level-imagery");
+  if (settings.hikingTrail) requested.add("hiking");
+  if (settings.winterSportsFeature) requested.add("winter-sports");
+  if (settings.cyclingAutomatic) requested.add("cycling");
+  if (
+    settings.liveTransitExcludedProviders ||
+    settings.liveTransitExcludedModes ||
+    settings.liveTransitExcludedCodespaces ||
+    settings.liveTransitVehicle
+  ) {
     requested.add("live-transit");
   }
 
@@ -299,15 +312,18 @@ function applyOverlaySettings(parsed: ParsedDeepLink): void {
   const weather = oneOf(settings.weather, WEATHER_SUBLAYERS);
   if (weather) useWeatherStore.getState().setActiveSubLayer(weather);
 
-  const satelliteLayer = oneOf(settings.sat, GIBS_LAYERS.map((layer) => layer.id) as GibsLayerId[]);
+  const satelliteLayer = oneOf(
+    settings.satelliteLayer,
+    GIBS_LAYERS.map((layer) => layer.id) as GibsLayerId[],
+  );
   if (satelliteLayer) useSatelliteStore.getState().setActiveLayer(satelliteLayer);
-  if (/^\d{4}-\d{2}-\d{2}$/.test(settings.date)) {
-    useSatelliteStore.getState().setDate(settings.date);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(settings.satelliteDate)) {
+    useSatelliteStore.getState().setDate(settings.satelliteDate);
   }
-  const opacity = finiteNumber(settings.opacity);
+  const opacity = finiteNumber(settings.satelliteOpacity);
   if (opacity !== undefined) useSatelliteStore.getState().setOpacity(clamp(opacity, 0, 1));
 
-  const [eqRange, eqMagnitude, eqColor, eqHeatmap] = settings.eq.split(",");
+  const [eqRange, eqMagnitude, eqColor, eqHeatmap] = settings.earthquakes.split(",");
   const earthquakeRange = oneOf(eqRange, EARTHQUAKE_TIME_RANGES);
   const earthquakeColor = oneOf(eqColor, EARTHQUAKE_COLOR_MODES);
   const earthquakeMagnitude = finiteNumber(eqMagnitude);
@@ -316,9 +332,10 @@ function applyOverlaySettings(parsed: ParsedDeepLink): void {
   if (earthquakeMagnitude !== undefined)
     earthquakeStore.setMinMagnitude(clamp(earthquakeMagnitude, 0, 10));
   if (earthquakeColor) earthquakeStore.setColorMode(earthquakeColor);
-  if (eqHeatmap) earthquakeStore.setShowHeatmap(eqHeatmap === "1");
+  const earthquakeHeatmap = parseLinkBoolean(eqHeatmap ?? null);
+  if (earthquakeHeatmap !== undefined) earthquakeStore.setShowHeatmap(earthquakeHeatmap);
 
-  const [fireDays, fireSource, fireHeatmap] = settings.fire.split(",");
+  const [fireDays, fireSource, fireHeatmap] = settings.wildfires.split(",");
   const wildfireDays = finiteNumber(fireDays);
   const wildfireSource = oneOf(fireSource, WILDFIRE_SOURCES);
   const wildfireStore = useWildfireStore.getState();
@@ -326,47 +343,50 @@ function applyOverlaySettings(parsed: ParsedDeepLink): void {
     wildfireStore.setDayRange(wildfireDays as 1 | 2 | 3);
   }
   if (wildfireSource) wildfireStore.setSource(wildfireSource);
-  if (fireHeatmap) wildfireStore.setShowHeatmap(fireHeatmap === "1");
+  const wildfireHeatmap = parseLinkBoolean(fireHeatmap ?? null);
+  if (wildfireHeatmap !== undefined) wildfireStore.setShowHeatmap(wildfireHeatmap);
 
-  const naturalDays = finiteNumber(settings.neDays);
+  const naturalDays = finiteNumber(settings.naturalEventDays);
   if (naturalDays !== undefined) useNaturalEventStore.getState().setDays(naturalDays);
-  const naturalCategories = splitCsv(settings.neCat).filter((id) =>
+  const naturalCategories = splitCsv(settings.naturalEventCategories).filter((id) =>
     (NATURAL_EVENT_CATEGORIES as readonly string[]).includes(id),
   );
   if (naturalCategories.length > 0) {
     useNaturalEventStore.setState({ activeCategories: new Set(naturalCategories) });
   }
 
-  const alertSeverities = splitCsv(settings.alertSev).filter((id) =>
+  const alertSeverities = splitCsv(settings.weatherAlertSeverities).filter((id) =>
     (WEATHER_ALERT_SEVERITIES as readonly string[]).includes(id),
   );
   if (alertSeverities.length > 0) {
     useWeatherAlertStore.setState({ activeSeverities: new Set(alertSeverities) });
   }
 
-  const environmentSensor = oneOf(settings.envSensor, ENVIRONMENT_SENSORS);
+  const environmentSensor = oneOf(settings.environmentSensor, ENVIRONMENT_SENSORS);
   if (environmentSensor) useEnvironmentStore.getState().setSensorType(environmentSensor);
 
-  if (settings.sli) {
-    const ref = parseStreetLevelRef(settings.sli);
+  if (settings.streetLevelImage) {
+    const ref = parseStreetLevelRef(settings.streetLevelImage);
     if (ref) useStreetLevelStore.getState().requestImageLoad(ref);
   }
 
-  const trailId = finiteNumber(settings.trail);
+  const trailId = finiteNumber(settings.hikingTrail);
   if (trailId !== undefined) useHikingStore.getState().selectTrail(trailId);
 
-  if (settings.winter) useWinterSportsStore.getState().selectFeature(settings.winter);
+  if (settings.winterSportsFeature)
+    useWinterSportsStore.getState().selectFeature(settings.winterSportsFeature);
 
-  if (settings.cycleAuto) useCyclingStore.getState().setAutoEnabled(settings.cycleAuto === "1");
+  const cyclingAutomatic = parseLinkBoolean(settings.cyclingAutomatic || null);
+  if (cyclingAutomatic !== undefined) useCyclingStore.getState().setAutoEnabled(cyclingAutomatic);
 
-  const liveTransitModes = splitCsv(settings.ltModes).filter((mode) =>
+  const liveTransitModes = splitCsv(settings.liveTransitExcludedModes).filter((mode) =>
     (LIVE_TRANSIT_MODES as readonly string[]).includes(mode),
   ) as TransportMode[];
   useLiveTransitStore.setState({
-    excludedProviders: new Set(splitCsv(settings.ltProviders)),
+    excludedProviders: new Set(splitCsv(settings.liveTransitExcludedProviders)),
     excludedModes: new Set(liveTransitModes),
-    excludedCodespaces: new Set(splitCsv(settings.ltCodes)),
-    selectedVehicleId: settings.ltVehicle || null,
+    excludedCodespaces: new Set(splitCsv(settings.liveTransitExcludedCodespaces)),
+    selectedVehicleId: settings.liveTransitVehicle || null,
   });
 }
 
@@ -546,7 +566,7 @@ function applyDeepLink(
   clearPanelState();
 
   const layer = useLayerStore.getState();
-  layer.setActiveLayer(oneOf(parsed.base, MAP_LAYERS) ?? "default");
+  layer.setActiveLayer(oneOf(parsed.baseLayer, MAP_LAYERS) ?? "default");
   layer.setGlobeView(Boolean(parsed.globe), parsed.map ? "preserve" : "reveal");
 
   // Apply explicit off intent before camera events and before the lazy overlay
@@ -650,35 +670,31 @@ function restoreNavigation(map: maplibregl.Map | null): boolean {
 }
 
 function encodePlace(params: URLSearchParams, place: Place): void {
-  params.set("place", place.id);
-  params.set("at", formatLngLat(place.coordinates));
-  if (place.name) params.set("name", place.name);
-  if (place.category) params.set("cat", place.category);
-  if (place.rawCategory) params.set("raw", place.rawCategory);
-  // The stop it was opened for, so a reloaded or shared board keeps its main stop.
-  if (place.transitStop) params.set("stop", place.transitStop.name);
+  writePlaceParams(params, {
+    id: place.id,
+    coordinates: place.coordinates,
+    name: place.name,
+    category: place.category,
+    rawCategory: place.rawCategory,
+    // The stop it was opened for, so a reloaded or shared board keeps its main stop.
+    transitStopName: place.transitStop?.name,
+  });
 }
 
 function encodeDirections(params: URLSearchParams): void {
   const directions = useDirectionsStore.getState();
   if (!directions.isOpen && useSidebarStore.getState().activeSidebarId !== PANEL.DIRECTIONS) return;
 
-  params.set("panel", PANEL.DIRECTIONS);
-  if (directions.mode !== "driving") params.set("mode", directions.mode);
+  params.set(P.panel, PANEL.DIRECTIONS);
+  if (directions.mode !== "driving") params.set(P.travelMode, directions.mode);
 
-  for (const [key, value] of Object.entries(bicycleQueryParameters(directions.mode, directions)))
-    params.set(key, value);
-  const avoid = [
-    directions.avoidHighways ? "highways" : "",
-    directions.avoidTolls ? "tolls" : "",
-    directions.avoidFerries ? "ferries" : "",
-  ].filter(Boolean);
-  setCsvParam(params, "avoid", avoid);
+  writeBikeParams(params, directions.mode, directions);
+  writeAvoidParam(params, directions);
 
-  for (const value of formatWaypointParams(directions.waypoints)) params.append("wp", value);
+  for (const value of formatWaypointParams(directions.waypoints)) params.append(P.waypoint, value);
 
   const schedule = formatScheduleParam(directions.waypoints);
-  if (schedule) params.set("sched", schedule);
+  if (schedule) params.set(P.schedule, schedule);
 }
 
 function encodePanelState(params: URLSearchParams, map: maplibregl.Map | null): void {
@@ -689,63 +705,63 @@ function encodePanelState(params: URLSearchParams, map: maplibregl.Map | null): 
   const saved = useSavedPlacesStore.getState();
   const fallbackBbox = mapBounds(map);
 
-  if (sidebar.activeSidebarId) params.set("panel", sidebar.activeSidebarId);
-  if (sidebar.activeDetailId === PANEL.PLACE_CARD) params.set("panel", PANEL.PLACE_CARD);
+  if (sidebar.activeSidebarId) params.set(P.panel, sidebar.activeSidebarId);
+  if (sidebar.activeDetailId === PANEL.PLACE_CARD) params.set(P.panel, PANEL.PLACE_CARD);
 
   encodeDirections(params);
 
   if (place) encodePlace(params, place);
 
   if (category.activeCategory) {
-    params.set("panel", PANEL.CATEGORY);
-    params.set("categoryId", category.activeCategory);
+    params.set(P.panel, PANEL.CATEGORY);
+    params.set(P.category, category.activeCategory);
     const bbox = category.searchBbox ?? fallbackBbox;
-    if (bbox) params.set("bbox", formatBboxParam(bbox));
+    if (bbox) params.set(P.bounds, formatBboxParam(bbox));
   } else if (
     sidebar.activeSidebarId === PANEL.CATEGORY &&
     category.mode === "text" &&
     category.textQuery
   ) {
-    params.set("panel", PANEL.CATEGORY);
-    params.set("search", category.textQuery);
+    params.set(P.panel, PANEL.CATEGORY);
+    params.set(P.search, category.textQuery);
     const bbox = category.searchBbox ?? fallbackBbox;
-    if (bbox) params.set("bbox", formatBboxParam(bbox));
+    if (bbox) params.set(P.bounds, formatBboxParam(bbox));
   }
 
   if (dataSource.activeSource) {
-    params.set("panel", PANEL.DATASOURCE);
-    params.set("source", dataSource.activeSource);
+    params.set(P.panel, PANEL.DATASOURCE);
+    params.set(P.dataSource, dataSource.activeSource);
     if (dataSource.selectedItem?.sourceId === dataSource.activeSource) {
-      params.set("item", dataSource.selectedItem.itemId);
+      params.set(P.dataSourceItem, dataSource.selectedItem.itemId);
     }
     const bbox = dataSource.searchBbox ?? fallbackBbox;
-    if (bbox) params.set("bbox", formatBboxParam(bbox));
+    if (bbox) params.set(P.bounds, formatBboxParam(bbox));
   }
 
   if (sidebar.activeSidebarId === PANEL.SAVED) {
-    params.set("panel", PANEL.SAVED);
-    params.set("savedTab", saved.activeTab);
-    if (saved.selectedListId) params.set("list", saved.selectedListId);
+    params.set(P.panel, PANEL.SAVED);
+    params.set(P.savedTab, saved.activeTab);
+    if (saved.selectedListId) params.set(P.savedList, saved.selectedListId);
   }
 }
 
 function encodeToolState(params: URLSearchParams): void {
   const measurement = useMeasurementStore.getState();
   if (measurement.isActive) {
-    params.set("measure", measurement.mode);
-    if (measurement.unitSystem !== "metric") params.set("measureUnit", measurement.unitSystem);
+    params.set(P.measurement, measurement.mode);
+    if (measurement.unitSystem !== "metric") params.set(P.measurementUnits, measurement.unitSystem);
     if (measurement.points.length > 0)
-      params.set("measurePts", formatLngLatList(measurement.points));
-    if (measurement.isFinalized) params.set("measureDone", "1");
+      params.set(P.measurementPoints, formatLngLatList(measurement.points));
+    if (measurement.isFinalized) params.set(P.measurementFinished, formatLinkBoolean(true));
   }
 
   const travelTime = useTravelTimeStore.getState();
   if (travelTime.isActive) {
-    params.set("iso", travelTime.mode);
-    if (travelTime.origin) params.set("isoAt", formatLngLat(travelTime.origin));
+    params.set(P.travelTime, travelTime.mode);
+    if (travelTime.origin) params.set(P.travelTimeOrigin, formatLngLat(travelTime.origin));
     setCsvParam(
       params,
-      "isoMins",
+      P.travelTimeMinutes,
       travelTime.selectedMinutes.map((minutes) => String(minutes)),
     );
   }
@@ -754,28 +770,28 @@ function encodeToolState(params: URLSearchParams): void {
 function encodeOverlaySettings(params: URLSearchParams): void {
   const overlays = new Set(activeOverlayIds());
   if (!overlays.size) return;
-  setCsvParam(params, "ov", [...overlays]);
+  setCsvParam(params, P.overlay, [...overlays]);
 
   if (overlays.has("weather")) {
-    params.set("weather", useWeatherStore.getState().activeSubLayer);
+    params.set(P.weather, useWeatherStore.getState().activeSubLayer);
   }
 
   if (overlays.has("satellite")) {
     const satellite = useSatelliteStore.getState();
-    params.set("sat", satellite.activeLayer);
-    params.set("date", satellite.date);
-    params.set("opacity", String(satellite.opacity));
+    params.set(P.satelliteLayer, satellite.activeLayer);
+    params.set(P.satelliteDate, satellite.date);
+    params.set(P.satelliteOpacity, String(satellite.opacity));
   }
 
   if (overlays.has("earthquakes")) {
     const earthquake = useEarthquakeStore.getState();
     params.set(
-      "eq",
+      P.earthquakes,
       [
         earthquake.timeRange,
         earthquake.minMagnitude,
         earthquake.colorMode,
-        earthquake.showHeatmap ? "1" : "0",
+        formatLinkBoolean(earthquake.showHeatmap),
       ].join(","),
     );
   }
@@ -783,54 +799,56 @@ function encodeOverlaySettings(params: URLSearchParams): void {
   if (overlays.has("wildfires")) {
     const wildfire = useWildfireStore.getState();
     params.set(
-      "fire",
-      [wildfire.dayRange, wildfire.source, wildfire.showHeatmap ? "1" : "0"].join(","),
+      P.wildfires,
+      [wildfire.dayRange, wildfire.source, formatLinkBoolean(wildfire.showHeatmap)].join(","),
     );
   }
 
   if (overlays.has("natural-events")) {
     const naturalEvents = useNaturalEventStore.getState();
-    if (naturalEvents.days !== null) params.set("neDays", String(naturalEvents.days));
+    if (naturalEvents.days !== null) params.set(P.naturalEventDays, String(naturalEvents.days));
     if (naturalEvents.activeCategories.size !== NATURAL_EVENT_CATEGORIES.length) {
-      setCsvParam(params, "neCat", [...naturalEvents.activeCategories]);
+      setCsvParam(params, P.naturalEventCategories, [...naturalEvents.activeCategories]);
     }
   }
 
   if (overlays.has("weather-alerts")) {
     const alerts = useWeatherAlertStore.getState();
     if (alerts.activeSeverities.size !== WEATHER_ALERT_SEVERITIES.length) {
-      setCsvParam(params, "alertSev", [...alerts.activeSeverities]);
+      setCsvParam(params, P.weatherAlertSeverities, [...alerts.activeSeverities]);
     }
   }
 
   if (overlays.has("environment")) {
-    params.set("envSensor", useEnvironmentStore.getState().sensorType);
+    params.set(P.environmentSensor, useEnvironmentStore.getState().sensorType);
   }
 
   const streetLevel = useStreetLevelStore.getState();
   if (overlays.has("street-level-imagery") && streetLevel.activeImage) {
-    params.set("sli", formatStreetLevelRef(streetLevel.activeImage));
+    params.set(P.streetLevelImage, formatStreetLevelRef(streetLevel.activeImage));
   }
 
   const hiking = useHikingStore.getState();
   if (overlays.has("hiking") && hiking.selectedTrailId !== null) {
-    params.set("trail", String(hiking.selectedTrailId));
+    params.set(P.hikingTrail, String(hiking.selectedTrailId));
   }
 
   const winterSports = useWinterSportsStore.getState();
   if (overlays.has("winter-sports") && winterSports.selectedFeatureId) {
-    params.set("winter", winterSports.selectedFeatureId);
+    params.set(P.winterSportsFeature, winterSports.selectedFeatureId);
   }
 
   const cycling = useCyclingStore.getState();
-  if (overlays.has("cycling") && cycling.autoEnabled) params.set("cycleAuto", "1");
+  if (overlays.has("cycling") && cycling.autoEnabled)
+    params.set(P.cyclingAutomatic, formatLinkBoolean(true));
 
   if (overlays.has("live-transit")) {
     const liveTransit = useLiveTransitStore.getState();
-    setCsvParam(params, "ltProviders", [...liveTransit.excludedProviders]);
-    setCsvParam(params, "ltModes", [...liveTransit.excludedModes]);
-    setCsvParam(params, "ltCodes", [...liveTransit.excludedCodespaces]);
-    if (liveTransit.selectedVehicleId) params.set("ltVehicle", liveTransit.selectedVehicleId);
+    setCsvParam(params, P.liveTransitExcludedProviders, [...liveTransit.excludedProviders]);
+    setCsvParam(params, P.liveTransitExcludedModes, [...liveTransit.excludedModes]);
+    setCsvParam(params, P.liveTransitExcludedCodespaces, [...liveTransit.excludedCodespaces]);
+    if (liveTransit.selectedVehicleId)
+      params.set(P.liveTransitVehicle, liveTransit.selectedVehicleId);
   }
 }
 
@@ -844,11 +862,11 @@ function encodeCurrentUrl(map: maplibregl.Map | null): string {
   const pitch = map?.getPitch() ?? mapState.pitch;
   const layer = useLayerStore.getState();
 
-  params.set("map", formatCameraParam({ center, zoom, bearing, pitch }));
-  if (layer.activeLayer !== "default") params.set("base", layer.activeLayer);
-  if (layer.globeView) params.set("globe", "1");
+  params.set(P.camera, formatCameraParam({ center, zoom, bearing, pitch }));
+  if (layer.activeLayer !== "default") params.set(P.baseLayer, layer.activeLayer);
+  if (layer.globeView) params.set(P.globe, formatLinkBoolean(true));
   if (pitch > BUILDING_TILT_THRESHOLD && !useBuildingsStore.getState().layerVisible) {
-    params.set("buildings", "0");
+    params.set(P.buildings, formatLinkBoolean(false));
   }
 
   encodeOverlaySettings(params);

@@ -84,7 +84,7 @@ async function cancellationRequested(ctx: JobContext) {
     .from(adminJob)
     .where(eq(adminJob.id, ctx.jobId));
   if (!row) throw new JobObservationPending("recovery_required");
-  return row.status === "cancel_pending" || row.status === "canceled";
+  return row.status === "cancel_pending" || row.status === "cancelled";
 }
 function provenance(state: State): StandaloneIntegrationProvenance {
   const inspection = state.inspection,
@@ -119,7 +119,7 @@ async function previewForInstall(ctx: JobContext, ownerId: string, inspectionId:
     .where(
       and(
         eq(adminJob.type, "standalone.preview"),
-        eq(adminJob.status, "success"),
+        eq(adminJob.status, "succeeded"),
         sql`${adminJob.payload}->>'ownerId' = ${ownerId}`,
         sql`${adminJob.result}->>'inspectionId' = ${inspectionId}`,
       ),
@@ -230,7 +230,7 @@ async function bookkeeping(
         lastOperationId: state.operationId,
         installedVersion: state.inspection.version,
         manifest: null,
-        installedBy: actorUserIdOrNull(state.ownerId),
+        installedByUserId: actorUserIdOrNull(state.ownerId),
         updatedAt: now,
       })
       .onConflictDoUpdate({
@@ -252,7 +252,7 @@ async function bookkeeping(
         repository,
         sourceType: source.kind,
         installedVersion: state.inspection.version,
-        installedBy: actorUserIdOrNull(state.ownerId),
+        installedByUserId: actorUserIdOrNull(state.ownerId),
         updatedAt: now,
       })
       .onConflictDoUpdate({

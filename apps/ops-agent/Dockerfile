@@ -77,6 +77,9 @@ COPY --parents \
     infra/docker/transitous.lock.json \
     infra/docker/gbfs-catalog.lock.json \
     ./
+# The CLI's backup and restore name and compare the database schema by the API
+# migration journal of the release they were built with.
+COPY apps/api/src/db/migrations/meta/_journal.json apps/api/src/db/migrations/meta/_journal.json
 COPY scripts/build-runtime-bundles.mjs scripts/module-specifiers.mjs scripts/
 ARG EXPECTED_BUNDLE_DIGEST=
 RUN node scripts/build-runtime-bundles.mjs ops-agent --expect "$EXPECTED_BUNDLE_DIGEST"

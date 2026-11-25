@@ -4,7 +4,8 @@ import {
   carDestinationSchema,
   type GroundNavigationStartPackage,
 } from "@openmapx/core/navigation";
-import { createApiClient, fetchDirections } from "@openmapx/core/navigation/api";
+import { fetchDirections } from "@openmapx/core/navigation/api";
+import { createNativeApiClient, isUpdateRequired } from "../api/nativeApiClient";
 import { createLocationDriver } from "../location/createLocationDriver";
 import type { NavigationCoordinator } from "../navigation/NavigationCoordinator";
 import type { NavigationStartContext } from "../navigation/startContext";
@@ -15,9 +16,12 @@ export type CarPlanError =
   | "location-unavailable"
   | "no-route"
   | "network"
+  | "update-required"
   | "unavailable";
 
 export function carPlanError(error: unknown): CarPlanError {
+  // The server no longer serves this build; only a store update helps.
+  if (isUpdateRequired(error)) return "update-required";
   const message = error instanceof Error ? error.message : "";
   if (message === "phone-setup" || message === "location-unavailable" || message === "no-route")
     return message;
@@ -67,7 +71,7 @@ export class CarRoutePlanner {
     const controller = new AbortController();
     this.controller = controller;
     const waypoints: [number, number][] = [start, target.coordinates];
-    const client = createApiClient({ baseUrl: this.apiOrigin, credentials: "omit" });
+    const client = createNativeApiClient(this.apiOrigin);
     const result = await fetchDirections(
       {
         waypoints,

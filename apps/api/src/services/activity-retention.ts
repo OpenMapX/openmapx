@@ -4,7 +4,7 @@ import {
   adminAuditLog,
   adminJob,
   appLog,
-  dataManagerJobs,
+  dataManagerJob,
   platformConfigurationPreview,
   verification,
 } from "../db/schema";
@@ -18,29 +18,6 @@ import { prunePlatformConfigurationPreviews } from "./platform-preview-store";
 import { pruneTransitCredentialPreviews } from "./transit-credential-retention";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
-
-export function parseRequiredRetentionDays(
-  name: string,
-  fallback: number,
-  env: Record<string, string | undefined> = process.env,
-): number {
-  const raw = env[name]?.trim();
-  const days = raw ? Number(raw) : fallback;
-  if (!Number.isSafeInteger(days) || days <= 0 || days > 36_500) {
-    throw new Error(`${name} must be an integer between 1 and 36500`);
-  }
-  return days;
-}
-
-/** How long administrator audit-log entries are kept, `AUDIT_LOG_RETENTION_DAYS` (default 365). */
-export function auditLogRetentionDays(env: Record<string, string | undefined> = process.env) {
-  return parseRequiredRetentionDays("AUDIT_LOG_RETENTION_DAYS", 365, env);
-}
-
-/** How long finished admin jobs are kept, `ADMIN_JOB_RETENTION_DAYS` (default 30). */
-export function adminJobRetentionDays(env: Record<string, string | undefined> = process.env) {
-  return parseRequiredRetentionDays("ADMIN_JOB_RETENTION_DAYS", 30, env);
-}
 
 /**
  * Delete admin audit log entries older than `days`. Returns the number of
@@ -65,7 +42,7 @@ export async function pruneAuditLog(days: number): Promise<number> {
           preservationAllowsDeletion({
             registrationId: "admin-audit-attribution",
             candidateTimestamp: adminAuditLog.createdAt,
-            subjectIds: [adminAuditLog.actorId, adminAuditLog.targetId],
+            subjectIds: [adminAuditLog.actorUserId, adminAuditLog.targetId],
           }),
         ),
       )
@@ -99,11 +76,11 @@ export async function pruneCompletedJobs(days: number): Promise<number> {
           lt(adminJob.finishedAt, cutoff),
           noUnsettledManagedOperation(),
           sql`NOT EXISTS (SELECT 1 FROM ${platformConfigurationPreview} WHERE ${platformConfigurationPreview.consumedByJobId} = ${adminJob.id})`,
-          sql`(coalesce(${adminJob.protocol}->'operations'->>'version','') <> '3' OR ${adminJob.finishedAt} < ${new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString()}::timestamptz)`,
+          sql`(coalesce(${adminJob.protocol}->'operations'->>'version','') <> '1' OR${adminJob.finishedAt} < ${new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString()}::timestamptz)`,
           preservationAllowsDeletion({
             registrationId: "admin-jobs-attribution",
             candidateTimestamp: adminJob.createdAt,
-            subjectIds: [adminJob.createdBy],
+            subjectIds: [adminJob.createdByUserId],
           }),
         ),
       )
@@ -111,12 +88,6 @@ export async function pruneCompletedJobs(days: number): Promise<number> {
   });
   return result.length;
 }
-
-/**
- * The account a data-manager job's `triggered_by` names, in the formats
- * `parseDataManagerActor` reads; NULL for scheduled and other system runs.
- */
-const dataManagerJobSubject = sql`substring(${dataManagerJobs.triggeredBy} from '^(?:api:user:|manual:admin:|manual:user:)(.+)$')`;
 
 /** How long a finished data-manager job, with the account that started it, is kept. */
 export const DATA_MANAGER_JOB_RETENTION_DAYS = 90;
@@ -141,27 +112,33 @@ export async function pruneDataManagerJobs(days: number): Promise<number> {
   const cutoff = new Date(Date.now() - days * MS_PER_DAY);
   const unheld = preservationAllowsDeletion({
     registrationId: "data-manager-trigger-attribution",
-    candidateTimestamp: dataManagerJobs.admittedAt,
-    subjectIds: [dataManagerJobSubject],
+    candidateTimestamp: dataManagerJob.admittedAt,
+    subjectIds: [dataManagerJob.triggeredByUserId],
     // An operator preserves this registration's rows by hand.
     blockingStatuses: ["held", "action_required"],
   });
   const result = await withPreservationRetentionLock(db, async (tx) => {
     const deleted = await tx
-      .delete(dataManagerJobs)
+      .delete(dataManagerJob)
       .where(
         and(
-          lt(dataManagerJobs.finishedAt, cutoff),
-          isNull(dataManagerJobs.executionAdmission),
-          isNotNull(dataManagerJobs.releasedAt),
+          lt(dataManagerJob.finishedAt, cutoff),
+          isNull(dataManagerJob.executionAdmission),
+          isNotNull(dataManagerJob.releasedAt),
           unheld,
         ),
       )
-      .returning({ id: dataManagerJobs.id });
+      .returning({ id: dataManagerJob.id });
     await tx
-      .update(dataManagerJobs)
-      .set({ triggeredBy: null })
-      .where(and(lt(dataManagerJobs.finishedAt, cutoff), isNotNull(dataManagerJobSubject), unheld));
+      .update(dataManagerJob)
+      .set({ triggeredByUserId: null })
+      .where(
+        and(
+          lt(dataManagerJob.finishedAt, cutoff),
+          isNotNull(dataManagerJob.triggeredByUserId),
+          unheld,
+        ),
+      );
     return deleted;
   });
   return result.length;

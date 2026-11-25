@@ -5,6 +5,5 @@
   "license": "AGPL-3.0-or-later",
   "domains": ["search-suggestions"],
   "backend": { "routes": true },
-  "quality": "built-in",
-  "category": "Geocoding"
+  "quality": "built-in"
 }

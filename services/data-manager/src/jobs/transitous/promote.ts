@@ -325,7 +325,7 @@ async function promoteTwoSlot(
     const rollbackError = await rollback();
     return {
       stage: "promote",
-      status: "error",
+      status: "failed",
       startedAt,
       finishedAt: ctx.now(),
       durationMs: Date.now() - start,
@@ -346,7 +346,7 @@ async function promoteTwoSlot(
     const rollbackError = await rollback();
     return {
       stage: "promote",
-      status: "error",
+      status: "failed",
       startedAt,
       finishedAt: ctx.now(),
       durationMs: Date.now() - start,
@@ -366,7 +366,7 @@ async function promoteTwoSlot(
     const rollbackError = await rollback();
     return {
       stage: "promote",
-      status: "error",
+      status: "failed",
       startedAt,
       finishedAt: ctx.now(),
       durationMs: Date.now() - start,
@@ -389,7 +389,7 @@ async function promoteTwoSlot(
   );
   return {
     stage: "promote",
-    status: "ok",
+    status: "succeeded",
     startedAt,
     finishedAt: ctx.now(),
     durationMs: Date.now() - start,
@@ -416,12 +416,12 @@ async function promoteTwoSlot(
  *
  *   1. Pre-flight: staging dir exists and looks import-shaped.
  *   2. Smoke probes against staging MOTIS (`/map/initial`, `/map/stops`, `/plan`).
- *   3. `docker stop motis`, then rename `data/motis/live` →
+ *   3. `docker stop openmapx-motis`, then rename `data/motis/live` →
  *      `data/motis/live.previous` and `data/motis/staging` →
  *      `data/motis/live` (so the rename never happens under a running mount).
  *      Recreate an empty staging dir with the same permissions so the next
  *      pipeline run has a clean, writable target.
- *   4. `docker restart motis` and poll `/api/v1/map/initial` until it responds
+ *   4. `docker restart openmapx-motis` and poll `/api/v1/map/initial` until it responds
  *      (5-minute budget).
  *
  * Rollback paths:
@@ -471,7 +471,7 @@ export const run: StageFn = async (ctx) => {
     if (!smokeReport.ok) {
       return {
         stage: "promote",
-        status: "error",
+        status: "failed",
         startedAt,
         finishedAt: ctx.now(),
         durationMs: Date.now() - start,
@@ -482,7 +482,7 @@ export const run: StageFn = async (ctx) => {
 
     if (ctx.slotLayout) {
       const result = await promoteTwoSlot(ctx, manifest, startedAt, start, smokeTestDurationMs);
-      if (result.status === "ok") {
+      if (result.status === "succeeded") {
         for (const source of sourceManifest.sources) {
           try {
             await publishTransitChange(ctx, () => recordPromotedSource(source));
@@ -523,7 +523,7 @@ export const run: StageFn = async (ctx) => {
       await restartPrimary(ctx, true);
       return {
         stage: "promote",
-        status: "error",
+        status: "failed",
         startedAt,
         finishedAt: ctx.now(),
         durationMs: Date.now() - start,
@@ -561,7 +561,7 @@ export const run: StageFn = async (ctx) => {
       await restartPrimary(ctx, true);
       return {
         stage: "promote",
-        status: "error",
+        status: "failed",
         startedAt,
         finishedAt: ctx.now(),
         durationMs: Date.now() - start,
@@ -610,7 +610,7 @@ export const run: StageFn = async (ctx) => {
         !rb.ok && secondRestartErr ? `; broken previous dir left at ${previousDir}-broken` : "";
       return {
         stage: "promote",
-        status: "error",
+        status: "failed",
         startedAt,
         finishedAt: ctx.now(),
         durationMs: Date.now() - start,
@@ -638,7 +638,7 @@ export const run: StageFn = async (ctx) => {
       const restartMsg = secondRestartErr ? `; second restart failed: ${secondRestartErr}` : "";
       return {
         stage: "promote",
-        status: "error",
+        status: "failed",
         startedAt,
         finishedAt: ctx.now(),
         durationMs: Date.now() - start,
@@ -669,7 +669,7 @@ export const run: StageFn = async (ctx) => {
       const restartMsg = secondRestartErr ? `; rollback restart failed: ${secondRestartErr}` : "";
       return {
         stage: "promote",
-        status: "error",
+        status: "failed",
         startedAt,
         finishedAt: ctx.now(),
         durationMs: Date.now() - start,
@@ -696,7 +696,7 @@ export const run: StageFn = async (ctx) => {
       await restartPrimary(ctx, true);
       return {
         stage: "promote",
-        status: "error",
+        status: "failed",
         startedAt,
         finishedAt: ctx.now(),
         durationMs: Date.now() - start,
@@ -726,7 +726,7 @@ export const run: StageFn = async (ctx) => {
 
     return {
       stage: "promote",
-      status: "ok",
+      status: "succeeded",
       startedAt,
       finishedAt: ctx.now(),
       durationMs: Date.now() - start,
@@ -745,7 +745,7 @@ export const run: StageFn = async (ctx) => {
     const err = error as Error;
     return {
       stage: "promote",
-      status: "error",
+      status: "failed",
       startedAt,
       finishedAt: ctx.now(),
       durationMs: Date.now() - start,

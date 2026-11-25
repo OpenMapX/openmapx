@@ -55,9 +55,40 @@ const MAX_TEXT_LENGTH = 512;
  * app update instead of exchanging messages the other side cannot parse. Raise
  * both whenever a message shape changes; the mobile release gate accepts a
  * raised minimum only when it equals the new maximum.
+ *
+ * The same number versions the native client contract: the API routes the
+ * installed app calls without a WebView (`nativeClientOperations` in the API
+ * contracts). Raise both bounds when a schema there changes, too.
  */
-export const MOBILE_PROTOCOL_MIN = 6;
-export const MOBILE_PROTOCOL_MAX = 6;
+export const MOBILE_PROTOCOL_MIN = 1;
+export const MOBILE_PROTOCOL_MAX = 1;
+
+/**
+ * The SHA-256 of the native client contract each protocol version speaks.
+ * A test recomputes the digest of the current contract and requires it to
+ * equal the entry for `MOBILE_PROTOCOL_MAX`. A contract change therefore
+ * raises the protocol and appends an entry; an existing entry is never edited,
+ * because store binaries built for that version keep calling the API.
+ */
+export const NATIVE_CLIENT_CONTRACT_DIGESTS: Readonly<Record<number, string>> = Object.freeze({
+  1: "e335c56bf02b66c2a4bc86669e05932d63dd2d4ebb78d7c093a42d2bd8a1de96",
+});
+
+/**
+ * Every native API request names the protocol it speaks in this header. The
+ * API refuses a version outside its own range with
+ * `426 { code: MOBILE_PROTOCOL_UNSUPPORTED }`, which the app shows as "update
+ * required". Requests without the header (the web app) are not affected.
+ */
+export const MOBILE_PROTOCOL_HEADER = "X-OpenMapX-Mobile-Protocol";
+export const MOBILE_PROTOCOL_UNSUPPORTED = "MOBILE_PROTOCOL_UNSUPPORTED";
+
+/** Whether a protocol header value names a version this build serves. */
+export function isSupportedMobileProtocol(value: string): boolean {
+  if (!/^[1-9][0-9]{0,8}$/.test(value)) return false;
+  const version = Number(value);
+  return version >= MOBILE_PROTOCOL_MIN && version <= MOBILE_PROTOCOL_MAX;
+}
 
 export interface ProtocolRange {
   min: number;
@@ -195,7 +226,8 @@ const routeLegSchema = z
   })
   .passthrough();
 
-const routeSchema = z
+/** One route as the shell accepts it, from the page or from the directions API. */
+export const navigationRouteSchema = z
   .object({
     contributors: contributorSchema.optional(),
     fieldContributors: fieldContributorSchema.optional(),
@@ -258,8 +290,8 @@ const packageLandmarkReferenceSchema = z
 export const groundStartPackageSchema = z
   .object({
     kind: z.literal("ground"),
-    route: routeSchema,
-    alternatives: z.array(routeSchema).max(8).default([]),
+    route: navigationRouteSchema,
+    alternatives: z.array(navigationRouteSchema).max(8).default([]),
     mode: groundModeSchema,
     destinationWaypoints: z.array(lngLatSchema).min(1).max(64),
     routeProvider: z.string().max(64).optional(),
@@ -519,7 +551,7 @@ export const webToNativeSchema = z.discriminatedUnion("type", [
       .object({
         itineraryFingerprint: boundedId,
         legIndex: z.number().int().min(0).max(511),
-        route: routeSchema,
+        route: navigationRouteSchema,
       })
       .strict(),
   ),

@@ -118,8 +118,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           withCoordinator: true,
           selectedRoots: IDS,
           environment: {
-            "ops-agent": { BACKUP_RETENTION_DAYS: "${BACKUP_RETENTION_DAYS:-30}" },
-            api: { BACKUP_RETENTION_DAYS: "${BACKUP_RETENTION_DAYS:-30}" },
+            "ops-agent": { RETENTION_BACKUP_DAYS: "${RETENTION_BACKUP_DAYS:-30}" },
+            api: { RETENTION_BACKUP_DAYS: "${RETENTION_BACKUP_DAYS:-30}" },
           },
           configurationHelperVersion: "1",
           configurationHelperLaunchResponseLoss: mode === "launch-reply-lost",
@@ -318,9 +318,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           infraDir: host.infraDir,
           serviceIds: IDS,
         });
-        const journal = await openOpsJobJournal(
-          join(host.infraDir, "state/ops-agent/jobs-v1.json"),
-        );
+        const journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs.json"));
         const app = buildOpsAgentServer({
           tokens: { api: host.token, "data-manager": Buffer.alloc(32, 23).toString("base64url") },
           runtime: host.runtime,
@@ -342,7 +340,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           DOMAIN: "example.test",
           DATA_MANAGER_URL: dm.baseUrl,
           DATA_MANAGER_TOKEN_FILE: dataManagerTokenFile(dm.token),
-          OPENMAPX_DISABLE_LOCALHOST_AUTH: "1",
         }))
           vi.stubEnv(key, value);
         let publicApi: FastifyInstance | undefined;
@@ -460,9 +457,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           const readDesiredPlatform = async () => {
             const { PLATFORM_CONFIGURATION_SETTING } = await import("../platform-configuration");
             return state.fixture.db
-              .select({ key: schema.systemSettings.key, rowVersion: sql<string>`xmin::text` })
-              .from(schema.systemSettings)
-              .where(eq(schema.systemSettings.key, PLATFORM_CONFIGURATION_SETTING));
+              .select({ key: schema.systemSetting.key, rowVersion: sql<string>`xmin::text` })
+              .from(schema.systemSetting)
+              .where(eq(schema.systemSetting.key, PLATFORM_CONFIGURATION_SETTING));
           };
           /** The agent's record of the job's maintenance. */
           const maintenanceOf = async (jobId: string) => {
@@ -574,7 +571,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
                 errorClass: value.errorClass,
               })),
             }),
-          ).toBe("success");
+          ).toBe("succeeded");
           expect(job.result).toMatchObject({
             configuration: { outcome: "committed", followUp: "complete" },
           });

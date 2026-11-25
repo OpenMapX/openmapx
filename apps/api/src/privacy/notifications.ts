@@ -4,16 +4,16 @@ import z from "zod/v4";
 import { db as defaultDb } from "../db/index.js";
 import {
   PRIVACY_NOTIFICATION_CHANNELS,
-  type PRIVACY_NOTIFICATION_STATES,
   PRIVACY_NOTIFICATION_TEMPLATES,
   type PrivacyNotificationChannel,
+  type PrivacyNotificationStatus,
   type PrivacyNotificationTemplate,
 } from "../db/privacy-schema.js";
 import { dataSubjectRequestNotification, user } from "../db/schema.js";
 import { sendMail } from "../utils/email.js";
 import { privacyRequestEmail } from "../utils/emailTemplates.js";
+import { errorNameCode } from "./error-name-code.js";
 
-const code = z.string().regex(/^[a-z0-9][a-z0-9._-]{0,127}$/);
 export const privacyNotificationTemplateSchema = z.enum(PRIVACY_NOTIFICATION_TEMPLATES);
 export const privacyNotificationChannelSchema = z.enum(PRIVACY_NOTIFICATION_CHANNELS);
 export const privacyNotificationPayloadSchema = z
@@ -43,7 +43,7 @@ export interface PrivacyNotificationRow {
   channel: PrivacyNotificationChannel;
   locale: string;
   payload: Record<string, unknown>;
-  state: (typeof PRIVACY_NOTIFICATION_STATES)[number];
+  status: PrivacyNotificationStatus;
   attempts: number;
   nextAttemptAt: Date | null;
   sentAt: Date | null;
@@ -70,7 +70,7 @@ export async function enqueuePrivacyNotification(
       channel: value.channel,
       locale: value.locale,
       payload: value.payload,
-      state: "pending",
+      status: "pending",
       attempts: 0,
       nextAttemptAt: new Date(),
       createdAt: new Date(),
@@ -105,7 +105,7 @@ export async function enqueuePrivacyNotificationInTransaction(
       channel: value.channel,
       locale: value.locale,
       payload: value.payload,
-      state: "pending",
+      status: "pending",
       attempts: 0,
       nextAttemptAt: new Date(),
       createdAt: new Date(),
@@ -123,18 +123,7 @@ export async function enqueuePrivacyNotificationInTransaction(
 }
 
 function safeErrorCode(error: unknown): string {
-  const value = error instanceof Error ? error.name : "notification_delivery_failed";
-  return code.safeParse(
-    value
-      .toLowerCase()
-      .replace(/[^a-z0-9._-]+/g, "-")
-      .slice(0, 128),
-  ).success
-    ? value
-        .toLowerCase()
-        .replace(/[^a-z0-9._-]+/g, "-")
-        .slice(0, 128)
-    : "notification_delivery_failed";
+  return errorNameCode(error, "NOTIFICATION_DELIVERY_FAILED");
 }
 
 export interface PrivacyNotificationDispatcherOptions {
@@ -185,20 +174,20 @@ export async function dispatchPrivacyNotifications(
   let canceled = 0;
   // A claim is a durable `sending` row; if the process died or a query threw
   // before the terminal update, nothing else would ever move it on.  The
-  // `state = 'sending'` guard keeps each update atomic against a live
+  // `status = 'sending'` guard keeps each update atomic against a live
   // dispatcher's terminal write and against other instances' sweeps.
   const staleBefore = new Date(now().getTime() - staleSendingMs);
   const exhausted = await database
     .update(dataSubjectRequestNotification)
     .set({
-      state: "failed",
+      status: "failed",
       nextAttemptAt: null,
-      lastErrorCode: "delivery-interrupted",
+      lastErrorCode: "DELIVERY_INTERRUPTED",
       updatedAt: now(),
     })
     .where(
       and(
-        eq(dataSubjectRequestNotification.state, "sending"),
+        eq(dataSubjectRequestNotification.status, "sending"),
         lt(dataSubjectRequestNotification.updatedAt, staleBefore),
         gte(dataSubjectRequestNotification.attempts, maxAttempts),
       ),
@@ -208,14 +197,14 @@ export async function dispatchPrivacyNotifications(
   await database
     .update(dataSubjectRequestNotification)
     .set({
-      state: "retryable",
+      status: "retryable",
       nextAttemptAt: now(),
-      lastErrorCode: "delivery-interrupted",
+      lastErrorCode: "DELIVERY_INTERRUPTED",
       updatedAt: now(),
     })
     .where(
       and(
-        eq(dataSubjectRequestNotification.state, "sending"),
+        eq(dataSubjectRequestNotification.status, "sending"),
         lt(dataSubjectRequestNotification.updatedAt, staleBefore),
         lt(dataSubjectRequestNotification.attempts, maxAttempts),
       ),
@@ -226,8 +215,8 @@ export async function dispatchPrivacyNotifications(
     .where(
       and(
         or(
-          eq(dataSubjectRequestNotification.state, "pending"),
-          eq(dataSubjectRequestNotification.state, "retryable"),
+          eq(dataSubjectRequestNotification.status, "pending"),
+          eq(dataSubjectRequestNotification.status, "retryable"),
         ),
         or(
           sql`${dataSubjectRequestNotification.nextAttemptAt} is null`,
@@ -241,7 +230,7 @@ export async function dispatchPrivacyNotifications(
     const [claimed] = await database
       .update(dataSubjectRequestNotification)
       .set({
-        state: "sending",
+        status: "sending",
         attempts: sql`${dataSubjectRequestNotification.attempts} + 1`,
         updatedAt: now(),
       })
@@ -249,8 +238,8 @@ export async function dispatchPrivacyNotifications(
         and(
           eq(dataSubjectRequestNotification.id, candidate.id),
           or(
-            eq(dataSubjectRequestNotification.state, "pending"),
-            eq(dataSubjectRequestNotification.state, "retryable"),
+            eq(dataSubjectRequestNotification.status, "pending"),
+            eq(dataSubjectRequestNotification.status, "retryable"),
           ),
         ),
       )
@@ -265,11 +254,11 @@ export async function dispatchPrivacyNotifications(
     if (!claimed.recipientUserId || !recipient?.email || claimed.channel !== "email") {
       await database
         .update(dataSubjectRequestNotification)
-        .set({ state: "canceled", lastErrorCode: "recipient-unavailable", updatedAt: now() })
+        .set({ status: "canceled", lastErrorCode: "RECIPIENT_UNAVAILABLE", updatedAt: now() })
         .where(
           and(
             eq(dataSubjectRequestNotification.id, candidate.id),
-            eq(dataSubjectRequestNotification.state, "sending"),
+            eq(dataSubjectRequestNotification.status, "sending"),
           ),
         );
       canceled += 1;
@@ -291,11 +280,11 @@ export async function dispatchPrivacyNotifications(
       });
       await database
         .update(dataSubjectRequestNotification)
-        .set({ state: "sent", sentAt: now(), lastErrorCode: null, updatedAt: now() })
+        .set({ status: "sent", sentAt: now(), lastErrorCode: null, updatedAt: now() })
         .where(
           and(
             eq(dataSubjectRequestNotification.id, candidate.id),
-            eq(dataSubjectRequestNotification.state, "sending"),
+            eq(dataSubjectRequestNotification.status, "sending"),
           ),
         );
       sent += 1;
@@ -305,7 +294,7 @@ export async function dispatchPrivacyNotifications(
       await database
         .update(dataSubjectRequestNotification)
         .set({
-          state: terminal ? "failed" : "retryable",
+          status: terminal ? "failed" : "retryable",
           nextAttemptAt: terminal
             ? null
             : new Date(now().getTime() + retryDelayMs * claimed.attempts),
@@ -315,7 +304,7 @@ export async function dispatchPrivacyNotifications(
         .where(
           and(
             eq(dataSubjectRequestNotification.id, candidate.id),
-            eq(dataSubjectRequestNotification.state, "sending"),
+            eq(dataSubjectRequestNotification.status, "sending"),
           ),
         );
       if (terminal) failed += 1;
@@ -347,16 +336,10 @@ export function createPrivacyNotificationWorker(
     try {
       const result = await dispatchPrivacyNotifications(options);
       lastRunAt = new Date().toISOString();
-      lastErrorCode = result.failed > 0 ? "delivery-failures" : null;
+      lastErrorCode = result.failed > 0 ? "DELIVERY_FAILURES" : null;
       return result;
     } catch (error) {
-      lastErrorCode =
-        error instanceof Error
-          ? error.name
-              .toLowerCase()
-              .replace(/[^a-z0-9._-]+/g, "-")
-              .slice(0, 96) || "dispatch-failed"
-          : "dispatch-failed";
+      lastErrorCode = errorNameCode(error, "DISPATCH_FAILED");
       throw error;
     } finally {
       running = false;

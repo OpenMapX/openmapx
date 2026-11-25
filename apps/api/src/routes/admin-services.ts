@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import type { AuditAction } from "@openmapx/core/api-contracts";
 import { SERVICE_RESOURCE_FIELDS } from "@openmapx/core/configuration-values";
 import { type OpsResultFor, trustedConfigurationPayloadSchema } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
@@ -47,6 +48,15 @@ import { registerServiceAdminRoute } from "./admin-service-contract";
 
 const { serviceConfigEnvPrefix } = coreServices;
 const BULK_SERVICE_ACTIONS = new Set(["start", "stop", "restart", "update", "build"] as const);
+/** The audit action each service action records, for one service or a bulk selection. */
+const SERVICE_ACTION_AUDIT = {
+  start: "service.start",
+  stop: "service.stop",
+  restart: "service.restart",
+  apply: "service.apply",
+  update: "service.update",
+  build: "service.build",
+} as const satisfies Record<string, AuditAction>;
 
 function hasOnlyBodyKeys(body: unknown, allowed: ReadonlySet<string>): boolean {
   return (
@@ -75,7 +85,7 @@ function presentBackupInventory(inventory: BackupInventory) {
       name: backup.backupId,
       createdAt: backup.createdAt,
       ...(backup.expiresAt ? { expiresAt: backup.expiresAt } : {}),
-      ...(backup.platformVersion ? { openmapxVersion: backup.platformVersion } : {}),
+      ...(backup.release !== undefined ? { release: backup.release } : {}),
       serviceCount: backup.serviceCount,
       volumeCount: backup.volumeCount,
       totalBytes: backup.totalBytes,
@@ -166,7 +176,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         coreRestart =
           action === "restart" &&
           (coreServices.CORE_RESTART_SERVICE_IDS as readonly string[]).includes(id),
-        type = coreRestart ? "service.core-restart" : (`service.${action}` as const),
+        type = coreRestart ? "service.core.restart" : (`service.${action}` as const),
         payload = { service: id },
         key = parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
         retained = await lookupMaintenanceJob(type, payload, adminSession.user.id, key);
@@ -207,8 +217,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       await writeAuditLog({
         actorId: adminSession.user.id,
         targetId: id,
-        targetType: "service",
-        action: `service.${action}`,
+        action: SERVICE_ACTION_AUDIT[action],
         request: req,
       });
       return { ok: true, jobId };
@@ -264,7 +273,6 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       const adminSession = getAdminSession(req);
       await writeAuditLog({
         actorId: adminSession.user.id,
-        targetType: "service",
         targetId: "selection",
         action: "service.selection.update",
         details: {
@@ -291,7 +299,12 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   registerServiceAdminRoute(app, "runAdminServicesBulkAction", async (req, reply) => {
     const adminSession = getAdminSession(req),
       key = parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
-      retained = await lookupMaintenanceJob("service.bulk", req.body, adminSession.user.id, key);
+      retained = await lookupMaintenanceJob(
+        "service.batch.run",
+        req.body,
+        adminSession.user.id,
+        key,
+      );
     if (retained) return { ok: true, jobId: retained };
     const action = req.body?.action;
     if (!action || !BULK_SERVICE_ACTIONS.has(action)) {
@@ -342,7 +355,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
 
     const region = "region" in req.body ? req.body.region?.trim() || undefined : undefined;
     const jobId = await jobRunner.enqueueMaintenance(
-      "service.bulk",
+      "service.batch.run",
       {
         action,
         serviceIds,
@@ -358,9 +371,8 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
 
     await writeAuditLog({
       actorId: adminSession.user.id,
-      targetType: "service",
       targetId: serviceIds.join(",") || "all",
-      action: `service.bulk.${action}`,
+      action: SERVICE_ACTION_AUDIT[action],
       details: { serviceIds, all: ("all" in req.body ? req.body.all : undefined) === true, region },
       request: req,
     });
@@ -464,7 +476,6 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       await writeAuditLog({
         actorId: adminSession.user.id,
         targetId: req.params.id,
-        targetType: "service",
         action: "service.config.update",
         details: { keys: [...Object.keys(config), ...unset] },
         request: req,
@@ -594,7 +605,6 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       await writeAuditLog({
         actorId: adminSession.user.id,
         targetId: svc.manifest.id,
-        targetType: "service",
         action: "service.credential.set",
         details: { key: req.params.key },
         request: req,
@@ -689,7 +699,6 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       await writeAuditLog({
         actorId: adminSession.user.id,
         targetId: svc.manifest.id,
-        targetType: "service",
         action: "service.credential.delete",
         details: { key: req.params.key },
         request: req,
@@ -734,8 +743,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       await writeAuditLog({
         actorId: adminSession.user.id,
         targetId: req.params.id,
-        targetType: "service",
-        action: "service.logs.read",
+        action: "service.log.read",
         request: req,
       });
       const tail = Number(req.query.lines ?? 200);
@@ -804,8 +812,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     const inventory = await readServiceInventory();
     await writeAuditLog({
       actorId: adminSession.user.id,
-      targetType: "service",
-      action: "service.health_check",
+      action: "service.health.check",
       request,
     });
     return {
@@ -858,14 +865,13 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
 
     const adminSession = getAdminSession(req);
     const jobId = await jobRunner.enqueueMaintenance(
-      "backup.operation",
+      "backup.operation.run",
       { operation: "create", name: name || undefined },
       adminSession.user.id,
       parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
     );
     await writeAuditLog({
       actorId: adminSession.user.id,
-      targetType: "backup",
       targetId: name || "auto",
       action: "backup.create",
       details: { name: name || null, jobId },
@@ -897,7 +903,12 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         stopRunning: req.body?.stopRunning === true,
       },
       key = parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
-      retained = await lookupMaintenanceJob("backup.operation", payload, adminSession.user.id, key);
+      retained = await lookupMaintenanceJob(
+        "backup.operation.run",
+        payload,
+        adminSession.user.id,
+        key,
+      );
     if (retained) return { ok: true, jobId: retained };
 
     const inventory = await loadBackupInventory(`${getAdminSession(req).user.id}:${req.id}`);
@@ -914,14 +925,13 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     }
 
     const jobId = await jobRunner.enqueueMaintenance(
-      "backup.operation",
+      "backup.operation.run",
       payload,
       adminSession.user.id,
       key,
     );
     await writeAuditLog({
       actorId: adminSession.user.id,
-      targetType: "backup",
       targetId: name,
       action: "backup.restore",
       details: { serviceIds, stopRunning: req.body?.stopRunning === true, jobId },
@@ -947,7 +957,12 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     const adminSession = getAdminSession(req),
       payload = { operation: "delete", name },
       key = parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]),
-      retained = await lookupMaintenanceJob("backup.operation", payload, adminSession.user.id, key);
+      retained = await lookupMaintenanceJob(
+        "backup.operation.run",
+        payload,
+        adminSession.user.id,
+        key,
+      );
     if (retained) return { ok: true, jobId: retained };
 
     const inventory = await loadBackupInventory(`${getAdminSession(req).user.id}:${req.id}`);
@@ -957,14 +972,13 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     }
 
     const jobId = await jobRunner.enqueueMaintenance(
-      "backup.operation",
+      "backup.operation.run",
       payload,
       adminSession.user.id,
       key,
     );
     await writeAuditLog({
       actorId: adminSession.user.id,
-      targetType: "backup",
       targetId: name,
       action: "backup.delete",
       details: { jobId },

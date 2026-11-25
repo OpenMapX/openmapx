@@ -52,7 +52,7 @@ beforeEach(() => {
   service("postgis");
   vi.stubEnv("OPENMAPX_ROOT_DIR", root);
   vi.stubEnv("OPENMAPX_ENABLED_SERVICES", "postgis");
-  vi.stubEnv("BACKUP_RETENTION_DAYS", "30");
+  vi.stubEnv("RETENTION_BACKUP_DAYS", "30");
   events = [];
   failedStops = new Set();
   failedStarts = new Map();

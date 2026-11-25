@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://openmapx.example/privacy/export-manifest-v2",
+  "$id": "urn:openmapx:privacy:export-manifest:1",
   "type": "object",
   "required": [
     "version",
@@ -17,7 +17,7 @@
     "members"
   ],
   "properties": {
-    "version": { "const": 2 },
+    "version": { "const": 1 },
     "generatedAt": { "type": "string", "format": "date-time" },
     "root": { "const": "openmapx-data-export/" },
     "locale": { "enum": ["en", "de"] },

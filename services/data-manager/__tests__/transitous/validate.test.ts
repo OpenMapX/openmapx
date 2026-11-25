@@ -93,7 +93,7 @@ describe("validate stage", () => {
     const result = await validateRun(ctx);
     // feed_info.txt is optional per the GTFS spec: the archive stays valid
     // and promotion is not blocked, but the warning is surfaced as evidence.
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(result.artifacts?.validated).toBe(2);
     expect(result.artifacts?.invalid).toEqual([]);
     const warnings = result.artifacts?.warnings as Array<{ id: string; reason: string }>;
@@ -116,7 +116,7 @@ describe("validate stage", () => {
     ctx.state.gtfsDir = gtfsDir;
 
     const result = await validateRun(ctx);
-    expect(result.status).toBe("error");
+    expect(result.status).toBe("failed");
     const invalid = result.artifacts?.invalid as Array<{ id: string; reason: string }>;
     expect(invalid).toEqual([{ id: "de_corrupt", reason: "archive is not a readable zip" }]);
   });
@@ -136,7 +136,7 @@ describe("validate stage", () => {
     ctx.state.gtfsDir = gtfsDir;
 
     const result = await validateRun(ctx);
-    expect(result.status).toBe("error");
+    expect(result.status).toBe("failed");
     const invalid = result.artifacts?.invalid as Array<{ id: string; reason: string }>;
     expect(invalid).toEqual([{ id: "de_empty", reason: "archive is empty" }]);
   });
@@ -155,7 +155,7 @@ describe("validate stage", () => {
     ctx.state.gtfsDir = gtfsDir;
 
     const result = await validateRun(ctx);
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(result.artifacts).toMatchObject({ validated: 0, invalid: [] });
   });
 });

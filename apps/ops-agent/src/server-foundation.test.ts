@@ -44,12 +44,12 @@ const allowAllResources: OpsResourcePolicy = {
 };
 
 function auth(token = apiToken) {
-  return { authorization: `Bearer ${token}`, "x-ops-protocol-version": "2" };
+  return { authorization: `Bearer ${token}`, "x-ops-protocol-version": "1" };
 }
 
 function request(operation: OpsOperation, requestId: string, operationKey: string) {
   return {
-    version: 2,
+    version: 1,
     requestId,
     operationKey,
     execution: { requestedDeadlineAt: deadlineAt },
@@ -419,6 +419,7 @@ describe("ops-agent async foundation", () => {
       let writes = 0;
       const journal: OpsJobJournal = {
         records: () => persisted,
+        foreignRecords: () => [],
         replace: async (records) => {
           writes += 1;
           if (writes === 3) throw new Error("termination checkpoint unavailable");
@@ -677,7 +678,7 @@ describe("ops-agent async foundation", () => {
         return {
           completedServiceIds: Array.from(
             { length: 256 },
-            (_, index) => `service-${String(index).padStart(3, "0")}-${"x".repeat(52)}`,
+            (_, index) => `service-${String(index).padStart(3, "0")}-${"x".repeat(36)}`,
           ),
           failedServiceIds: [],
         };
@@ -712,10 +713,10 @@ describe("ops-agent async foundation", () => {
         app.inject({ method: "GET", url: `/v1/operations/${operationId}`, headers: auth() }),
       (response) => response.json().result.state === "succeeded",
     );
-    expect(completed.json().result.result.completedServiceIds).toHaveLength(256);
-    expect(Buffer.byteLength(JSON.stringify(completed.json().result.result))).toBeGreaterThan(
-      16 * 1024,
-    );
+    // 256 ids of the maximum length: the largest receipt a build-all can produce.
+    const completedIds = completed.json().result.result.completedServiceIds as string[];
+    expect(completedIds).toHaveLength(256);
+    expect(completedIds.every((id) => id.length === 48)).toBe(true);
     await app.close();
   });
 

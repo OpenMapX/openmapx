@@ -16,6 +16,5 @@
   "backend": {
     "routes": false
   },
-  "quality": "built-in",
-  "category": "Parking"
+  "quality": "built-in"
 }

@@ -165,20 +165,20 @@ describe("credentials", () => {
   });
 
   it("goes live once the named credential is stored", async () => {
-    const { catalog } = catalogWith({ "ca-taxi-montreal-api-key": "secret" }, keyedProbe("secret"));
+    const { catalog } = catalogWith({ caTaxiMontrealApiKey: "secret" }, keyedProbe("secret"));
     const montreal = (await catalog.resolveFeeds()).find((f) => f.id === "taxi-montreal");
     expect(montreal?.status).toBe("live");
     expect(montreal?.auth).toEqual({ kind: "header", name: "X-API-KEY", value: "secret" });
   });
 
   it("stays credential-required when the stored key is rejected", async () => {
-    const { catalog } = catalogWith({ "ca-taxi-montreal-api-key": "wrong" }, keyedProbe("secret"));
+    const { catalog } = catalogWith({ caTaxiMontrealApiKey: "wrong" }, keyedProbe("secret"));
     const montreal = (await catalog.resolveFeeds()).find((f) => f.id === "taxi-montreal");
     expect(montreal?.status).toBe("credential-required");
   });
 
   it("ignores a blank credential", async () => {
-    const { catalog } = catalogWith({ "ca-taxi-montreal-api-key": "   " }, keyedProbe("secret"));
+    const { catalog } = catalogWith({ caTaxiMontrealApiKey: "   " }, keyedProbe("secret"));
     const montreal = (await catalog.resolveFeeds()).find((f) => f.id === "taxi-montreal");
     expect(montreal?.auth).toBeUndefined();
   });
@@ -205,7 +205,7 @@ describe("credentials", () => {
     await createGofsCatalog(ctx, fetchJson).resolveFeeds();
     expect(store.has("gofs:probe:taxi-montreal:anon")).toBe(true);
 
-    ctx.config["ca-taxi-montreal-api-key"] = "secret";
+    ctx.config["caTaxiMontrealApiKey"] = "secret";
     const montreal = (await createGofsCatalog(ctx, fetchJson).resolveFeeds()).find(
       (f) => f.id === "taxi-montreal",
     );
@@ -215,7 +215,7 @@ describe("credentials", () => {
   it("binds an operator feed to a generic credential slot", async () => {
     const { catalog } = catalogWith(
       {
-        "gofs-custom-1-api-key": "mine",
+        gofsCustom1ApiKey: "mine",
         feeds: [
           {
             id: "private",
@@ -250,7 +250,7 @@ describe("credentials", () => {
 
   it("ignores an out-of-range slot number", async () => {
     const { catalog } = catalogWith({
-      "gofs-custom-1-api-key": "mine",
+      gofsCustom1ApiKey: "mine",
       feeds: [
         { id: "private", name: "Private", url: "https://private.example/gofs", credentialSlot: 9 },
       ],

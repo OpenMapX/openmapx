@@ -34,7 +34,7 @@
       "OPS_AGENT_DATA_MANAGER_TOKEN_FILE": "/run/secrets/ops-agent-data-manager-token",
       "DATA_MANAGER_URL": "${DATA_MANAGER_URL:-http://openmapx-data-manager:4000}",
       "DATA_MANAGER_TOKEN_FILE": "/run/secrets/data-manager-ops-agent-token",
-      "BACKUP_RETENTION_DAYS": "${BACKUP_RETENTION_DAYS:-30}",
+      "RETENTION_BACKUP_DAYS": "${RETENTION_BACKUP_DAYS:-30}",
       "OPENMAPX_ARTIFACT_TRANSFER_POLICY_FILE": "/run/openmapx/artifact-transfer-policy.json"
     },
     "capDrop": ["ALL"],

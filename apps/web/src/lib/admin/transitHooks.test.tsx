@@ -43,7 +43,8 @@ const job = {
   status: "running",
   startedAt: "2026-10-19T00:00:00.000Z",
   finishedAt: null,
-  triggeredBy: "operator",
+  trigger: "api",
+  triggeredByUserId: "operator",
   idempotencyKey: null,
   metadata: { scope: ["de"] },
   stages: [],
@@ -168,7 +169,7 @@ describe("transit administration acquisition", () => {
       Response.json(
         {
           error: "Another data job is running. Try again when it finishes.",
-          code: "in-flight",
+          code: "IN_FLIGHT",
           existingJobId: "active-job",
         },
         { status: 409 },

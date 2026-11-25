@@ -223,8 +223,7 @@ export async function adminIntegrationsRoute(app: FastifyInstance): Promise<void
 
     await writeAuditLog({
       actorId: adminSession.user.id,
-      targetType: "integration",
-      action: "integration.reload.all",
+      action: "integration.reload_all",
       request,
     });
 
@@ -266,7 +265,6 @@ export async function adminIntegrationsRoute(app: FastifyInstance): Promise<void
     await writeAuditLog({
       actorId: adminSession.user.id,
       targetId: integration.id,
-      targetType: "integration",
       action: "integration.config.update",
       details: { keys: Object.keys(updates) },
       request,
@@ -296,8 +294,7 @@ export async function adminIntegrationsRoute(app: FastifyInstance): Promise<void
     await writeAuditLog({
       actorId: adminSession.user.id,
       targetId: integration.id,
-      targetType: "integration",
-      action: "integration.enabled",
+      action: "integration.enable",
       request,
     });
 
@@ -324,8 +321,7 @@ export async function adminIntegrationsRoute(app: FastifyInstance): Promise<void
     await writeAuditLog({
       actorId: adminSession.user.id,
       targetId: integration.id,
-      targetType: "integration",
-      action: "integration.disabled",
+      action: "integration.disable",
       request,
     });
 
@@ -347,7 +343,6 @@ export async function adminIntegrationsRoute(app: FastifyInstance): Promise<void
     await writeAuditLog({
       actorId: adminSession.user.id,
       targetId: integration.id,
-      targetType: "integration",
       action: "integration.reload",
       request,
     });

@@ -26,6 +26,7 @@ import {
   type DataExecutionResult,
   type DataExecutionStatus,
   dataExecutionResultSchema,
+  dataExecutionTerminalStatus,
   isDataExecutionTerminal,
   LOCAL_DATA_EXECUTION_KINDS,
 } from "@openmapx/core/data-manager-contracts";
@@ -91,7 +92,8 @@ export interface DataExecutionRuntime {
       id?: string;
       principal?: ExecutionRef["principal"];
       linkSender?: DataExecutionAdmissionOptions["linkSender"];
-      triggeredBy?: string;
+      trigger: DataExecutionAdmissionOptions["trigger"];
+      triggeredByUserId?: string;
       idempotencyKey?: string;
       /** Checks the normalized identity against what the caller named. */
       adopt?: (execution: ExecutionRef) => Promise<undefined>;
@@ -285,7 +287,7 @@ export function createDataExecutionRuntime(deps: {
   }
   /** In-process work of a previous process ended with it. Once every agent
    * operation it attempted has a terminal answer, the execution ends as
-   * interrupted; until then it keeps the data plane fenced and is retried. */
+   * failed; until then it keeps the data plane fenced and is retried. */
   function recoverAbandoned(record: DataExecutionRecord): void {
     if (recovering.has(record.status.id)) return;
     const owner = requireJournal();
@@ -319,7 +321,7 @@ export function createDataExecutionRuntime(deps: {
           const saved = await store.finalize(
             current.status.id,
             current.version,
-            { status: "interrupted", publication },
+            { status: "failed", publication },
             completion,
           );
           if (!saved) throw new DataExecutionOwnershipLost("Recovery terminal CAS lost");
@@ -555,20 +557,10 @@ export function createDataExecutionRuntime(deps: {
               : dataExecutionResultSchema.parse(contained.result);
           if (result && result.kind !== record.input.kind)
             throw Error("Dispatcher result kind mismatch");
-          const canceled = current.status.cancellationRequestedAt !== null;
-          const status = result
-            ? result.kind === "catalog.validate" && result.status === "failed"
-              ? "error"
-              : result.kind === "catalog.activate" && result.outcome !== "activated"
-                ? "error"
-                : result.kind === "transit-sync"
-                  ? result.finalStatus
-                  : contained.partial
-                    ? "partial"
-                    : "ok"
-            : canceled
-              ? "canceled"
-              : "error";
+          const status = dataExecutionTerminalStatus(result, {
+            partial: contained.partial === true,
+            cancelled: current.status.cancellationRequestedAt !== null,
+          });
           const patch: DataExecutionPatch = {
             status,
             publication: contained.publication,
@@ -749,19 +741,10 @@ export function createDataExecutionRuntime(deps: {
             throw Error("Original containment/publication remains unknown");
           const current = await context.record(),
             result = recovered.result,
-            status = result
-              ? result.kind === "catalog.validate" && result.status === "failed"
-                ? "error"
-                : result.kind === "catalog.activate" && result.outcome !== "activated"
-                  ? "error"
-                  : result.kind === "transit-sync"
-                    ? result.finalStatus
-                    : recovered.partial
-                      ? "partial"
-                      : "ok"
-              : current.status.cancellationRequestedAt
-                ? "canceled"
-                : "error";
+            status = dataExecutionTerminalStatus(result, {
+              partial: recovered.partial === true,
+              cancelled: current.status.cancellationRequestedAt !== null,
+            });
           const saved = await store.finalize(
             current.status.id,
             current.version,

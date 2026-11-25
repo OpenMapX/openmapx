@@ -4,7 +4,7 @@ import type { ExportAdminConfigurationMigration200InstallationsItemOwnership } f
 import type { ExportAdminConfigurationMigration200InstallationsItemProvenance } from "./exportAdminConfigurationMigration200InstallationsItemProvenance";
 
 export type ExportAdminConfigurationMigration200InstallationsItem = {
-  /** @pattern ^[a-z0-9][a-z0-9-]{0,63}$ */
+  /** @pattern ^(?=.{1,48}$)[a-z0-9]+(?:-[a-z0-9]+)*$ */
   integrationId: string;
   version: string | null;
   contentDigest: string | null;

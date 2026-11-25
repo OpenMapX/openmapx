@@ -67,6 +67,7 @@ const entry = {
   platformVersion: "1",
   installed: false,
   installedVersion: null,
+  installedCritical: null,
   hasUpdate: false,
   removed: null,
   critical: null,
@@ -148,6 +149,7 @@ describe("complete extension administration contracts", () => {
       platformVersion: "1",
       installed: false,
       installedVersion: null,
+      installedCritical: null,
       hasUpdate: false,
       removed: null,
       critical: null,
@@ -262,6 +264,7 @@ describe("complete extension administration contracts", () => {
       components: [{ kind: "integration", componentId: "example-ui" }],
       hasUpdate: false,
       latestVersion: null,
+      critical: null,
     };
     expect(contracts.adminExtensionInstalledSchema.parse(installed)).toEqual(installed);
     expect(
@@ -276,6 +279,7 @@ describe("complete extension administration contracts", () => {
       { sourceTrust: "other" },
       { installedAt: "yesterday" },
       { latestVersion: 1 },
+      { critical: { reason: "advisory", extra: true } },
       { components: [{ kind: "other", componentId: "x" }] },
       { components: [{ kind: "service", componentId: "x", enabled: null }] },
       { manifest: {} },

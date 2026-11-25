@@ -11,6 +11,12 @@ import type { MangroveTransport } from "./transport";
 import { MANGROVE_KEYPAIR_QUERY_KEY } from "./useKeypair";
 import { useSubmitReview } from "./useSubmitReview";
 
+const signerStorageKeys = {
+  session: "test:signer-session",
+  pendingLogin: "test:pending-login",
+  mode: "test:mode",
+};
+
 beforeEach(() => sessionStorage.clear());
 async function fixture(tamper = false) {
   const kp = await generateKeypair();
@@ -45,7 +51,11 @@ async function fixture(tamper = false) {
   });
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={client}>
-      <MangroveProvider transport={transport} currentUser={{ id: "a" }}>
+      <MangroveProvider
+        transport={transport}
+        currentUser={{ id: "a" }}
+        signerStorageKeys={signerStorageKeys}
+      >
         {children}
       </MangroveProvider>
     </QueryClientProvider>

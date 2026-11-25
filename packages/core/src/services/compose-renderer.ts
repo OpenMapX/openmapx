@@ -2,9 +2,10 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { isAbsolute, relative, resolve } from "node:path";
 import { dump as yamlDump } from "js-yaml";
-import { configSchemaKeys, serviceConfigEnvPrefix } from "./config-resolver";
+import { serviceConfigEnvName } from "./config-env-names";
+import { configSchemaKeys } from "./config-resolver";
 import { resolveConsumesDependencies } from "./consumes-dependencies";
-import { serviceNetworkAlias } from "./core-service-ids";
+import { serviceContainerName, serviceNetworkAlias } from "./core-service-ids";
 import { STACK_PROJECT } from "./deployment";
 import {
   EXTERNAL_PROXY_NETWORK_KEY,
@@ -146,6 +147,8 @@ export interface RenderContext {
   /** The release a generation pins: the image of each pinned built-in service. */
   releasePins?: {
     images: Readonly<Record<string, string>>;
+    /** The release's version, the default of `OPENMAPX_VERSION` in built-in services. */
+    version?: string;
   };
   platform?: import("./platform-configuration").PlatformConfiguration;
   platformValues?: import("./platform-configuration").PlatformValues;
@@ -399,7 +402,7 @@ function resolveBindSource(
 
 export interface ComposeServiceSnippet {
   image: string;
-  container_name?: string;
+  container_name: string;
   expose?: string[];
   ports?: string[];
   command?: string[] | string;
@@ -531,7 +534,6 @@ function writeServiceConfigEnvReferences(
 ): void {
   if (envKeys.length === 0) return;
   const fields = new Set(configSchemaKeys(m.configSchema).map(({ key }) => key));
-  const prefix = serviceConfigEnvPrefix(m.id);
   const env = snippet.environment ?? {};
   for (const key of envKeys) {
     if (isRuntimeResourceKey(key)) throw Error("Resource settings require validated scalar values");
@@ -540,7 +542,7 @@ function writeServiceConfigEnvReferences(
         `Service "${m.id}": env-sourced config key "${key}" is not a non-secret configSchema field`,
       );
     }
-    const name = `${prefix}${key.toUpperCase()}`;
+    const name = serviceConfigEnvName(m.id, key);
     const reference = `\${${name}:-}`;
     env[key] = COMPOSE_VARIABLE.test(name) ? reference : escapeComposeInterpolation(reference);
   }
@@ -578,12 +580,12 @@ export function renderServiceSnippet(
   const pinned = service.isBuiltIn ? ctx.releasePins?.images[m.id] : undefined;
   const snippet: ComposeServiceSnippet = {
     image: pinned ?? serviceContainerImageReference(c),
+    // Every service's container has the same name as its network alias, so
+    // code addresses it through `serviceContainerName` rather than Compose's
+    // `<project>-<service>-<n>`. Service ids are unique, and no id may start
+    // with the alias prefix, so these names cannot collide within the stack.
+    container_name: serviceContainerName(m.id),
   };
-
-  // Pin the container name when the manifest opts in — see ServiceContainer.
-  // containerName. Lets the data-manager address the container by bare name
-  // over the docker CLI instead of the compose-derived `<project>-<svc>-<n>`.
-  if (c.containerName) snippet.container_name = c.containerName;
 
   if (c.expose?.length) snippet.expose = c.expose.map((p) => String(p));
 
@@ -642,17 +644,28 @@ export function renderServiceSnippet(
       ACME_EMAIL: "acmeEmail",
       OPENMAPX_RELEASE: "releaseSelector",
       OPENMAPX_REGION: "defaultRegion",
-      BACKUP_RETENTION_DAYS: "backupRetentionDays",
+      RETENTION_BACKUP_DAYS: "backupRetentionDays",
     } as const;
     for (const [key, value] of Object.entries(snippet.environment)) {
       snippet.environment[key] = value.replace(
-        /\$\{(DOMAIN|ACME_EMAIL|OPENMAPX_RELEASE|OPENMAPX_REGION|BACKUP_RETENTION_DAYS)(?::-[^}]*)?\}/g,
+        /\$\{(DOMAIN|ACME_EMAIL|OPENMAPX_RELEASE|OPENMAPX_REGION|RETENTION_BACKUP_DAYS)(?::-[^}]*)?\}/g,
         (reference, variable: keyof typeof slots) => {
           const field = slots[variable];
           return ctx.platform?.[field]?.source === "database"
             ? escapeComposeInterpolation(String(ctx.platformValues?.[field] ?? ""))
             : reference;
         },
+      );
+    }
+  }
+  // A pinned release names the version a built-in service reports, unless the
+  // operator sets OPENMAPX_VERSION.
+  const releaseVersion = ctx.releasePins?.version;
+  if (service.isBuiltIn && snippet.environment && releaseVersion) {
+    for (const [key, value] of Object.entries(snippet.environment)) {
+      snippet.environment[key] = value.replace(
+        /\$\{OPENMAPX_VERSION(?::-[^}]*)?\}/g,
+        `\${OPENMAPX_VERSION:-${releaseVersion}}`,
       );
     }
   }
@@ -1165,22 +1178,6 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
       warnings,
       bindDirSink,
     });
-  }
-
-  // Pinned container names must be unique across the rendered stack — docker
-  // rejects a duplicate `container_name` at `up` time, so fail closed here at
-  // render rather than letting it blow up on deploy.
-  const containerNameOwner = new Map<string, string>();
-  for (const [serviceId, snippet] of Object.entries(composeServices)) {
-    const name = snippet.container_name;
-    if (!name) continue;
-    const existing = containerNameOwner.get(name);
-    if (existing) {
-      throw new Error(
-        `Duplicate container_name "${name}" on services "${existing}" and "${serviceId}". Pinned container names must be unique across the stack.`,
-      );
-    }
-    containerNameOwner.set(name, serviceId);
   }
 
   const namedVolumes: Record<string, null> = {};

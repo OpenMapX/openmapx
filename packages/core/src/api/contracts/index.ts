@@ -9,6 +9,7 @@ export * from "./extension-admin/index";
 export * from "./garage";
 export * from "./host-maintenance";
 export * from "./integration-admin/index";
+export * from "./native-client/index";
 export * from "./operation";
 export * from "./privacy-admin/index";
 export * from "./public-session";

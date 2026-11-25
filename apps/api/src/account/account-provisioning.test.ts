@@ -11,20 +11,31 @@ it("encrypts mail links and binds them to the exact action and mail kind", () =>
     subject: "Verify email",
     text: "https://example.test/verify?token=synthetic-token",
   };
-  const sealed = sealAccountMail("action-a", "verification", mail);
+  const sealed = sealAccountMail("action-a", "email_verification", mail);
   expect(JSON.stringify(sealed)).not.toContain("synthetic-token");
-  expect(openAccountMail("action-a", "verification", sealed)).toEqual(mail);
-  expect(() => openAccountMail("action-b", "verification", sealed)).toThrow();
+  expect(openAccountMail("action-a", "email_verification", sealed)).toEqual(mail);
+  expect(() => openAccountMail("action-b", "email_verification", sealed)).toThrow();
   expect(() => openAccountMail("action-a", "password_setup", sealed)).toThrow();
 });
+it("records the key version and refuses an unknown one", () => {
+  const sealed = sealAccountMail("action-a", "email_verification", {
+    to: "synthetic@example.test",
+    subject: "Verify",
+    text: "synthetic-link",
+  });
+  expect(sealed.keyVersion).toBe(1);
+  expect(() =>
+    openAccountMail("action-a", "email_verification", { ...sealed, keyVersion: 2 }),
+  ).toThrow(/key version/);
+});
 it("rejects tampered ciphertext instead of sending a partial message", () => {
-  const sealed = sealAccountMail("action-a", "verification", {
+  const sealed = sealAccountMail("action-a", "email_verification", {
     to: "synthetic@example.test",
     subject: "Verify",
     text: "synthetic-link",
   });
   expect(() =>
-    openAccountMail("action-a", "verification", {
+    openAccountMail("action-a", "email_verification", {
       ...sealed,
       tag: Buffer.alloc(16).toString("base64"),
     }),

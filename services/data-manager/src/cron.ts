@@ -7,6 +7,7 @@ import {
   isDataExecutionTerminal,
 } from "@openmapx/core/data-manager-contracts";
 
+import { OVERTURE_PLACES_SCHEMA_VERSION } from "@openmapx/core/published-data";
 import { envString } from "@openmapx/core/server-env";
 import {
   FEED_PROXY_CONFIG_FILENAME,
@@ -144,6 +145,8 @@ export interface CronSetupOptions extends TrafficLiveOptions {
   discoverOvertureRelease?: () => Promise<string>;
   /** Test seam: read the release currently installed in Postgres. */
   getInstalledOvertureRelease?: () => Promise<string | null>;
+  /** Test seam: whether another builder version wrote the installed places. */
+  hasOutdatedOverturePlaces?: () => Promise<boolean>;
   /** Override the traffic-extract guard cron schedule (e.g. for tests). */
   trafficExtractCronExpression?: string;
   /**
@@ -247,6 +250,11 @@ export interface CronHandles extends CronJobs {
   /** Test seam: retry link rebuilding without release discovery or Places ingest. */
   runOvertureConflationRetryNow: () => Promise<void>;
   /**
+   * Run once at startup: re-imports places an older builder wrote, otherwise
+   * retries link rebuilding.
+   */
+  runOvertureStartupNow: () => Promise<void>;
+  /**
    * Run once at data-manager startup (before any job that depends on
    * traffic.tar existing, e.g. the live-speed writer cron below). Callers
    * invoke this explicitly right after `setupCron` returns — it is not fired
@@ -312,17 +320,35 @@ function startJob(job: ScheduledJob, log: CronLogger): Cron | null {
   return cron;
 }
 
+/** The installed Overture release; none when an older builder wrote the places. */
 export async function getInstalledOvertureRelease(): Promise<string | null> {
   try {
     const rows = await db.execute<{ release: string }>(
-      `SELECT release
+      `SELECT places.release
        FROM overture_places.places
-       ORDER BY imported_at DESC
+       JOIN overture_places.conflation_state AS state
+         ON state.singleton = 1 AND state.schema_version = ${OVERTURE_PLACES_SCHEMA_VERSION}
+       ORDER BY places.imported_at DESC
        LIMIT 1`,
     );
     return rows[0]?.release ?? null;
   } catch {
     return null;
+  }
+}
+
+/** Whether published Overture places were written by another builder version. */
+export async function hasOutdatedOverturePlaces(): Promise<boolean> {
+  try {
+    const rows = await db.execute<{ outdated: boolean }>(
+      `SELECT EXISTS (
+         SELECT 1 FROM overture_places.conflation_state
+          WHERE singleton = 1 AND schema_version <> ${OVERTURE_PLACES_SCHEMA_VERSION}
+       ) AS outdated`,
+    );
+    return rows[0]?.outdated === true;
+  } catch {
+    return false;
   }
 }
 
@@ -391,7 +417,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
   };
   const requireSuccessful = async (status: DataExecutionStatus) => {
     const result = await observeOwned(status);
-    if (result.status !== "ok" && result.status !== "partial")
+    if (result.status !== "succeeded" && result.status !== "partially_succeeded")
       throw Error(`Data execution ${result.id} ${result.status}`);
     return result;
   };
@@ -399,16 +425,16 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     try {
       const admitted = await receiver().admitLocal(
         { kind: "transit-sync", countries: options.countries },
-        { triggeredBy: "cron" },
+        { trigger: "cron" },
       );
       log.info("transitous-cron: queued durable sync", { jobId: admitted.id });
       const result = await observeOwned(admitted);
       log.info("transitous-cron: sync settled", { jobId: result.id, status: result.status });
-      if (result.status !== "ok") {
+      if (result.status !== "succeeded") {
         const trusted = receiver().legacyResult(result.id),
           failure = transitFailureSchema.safeParse(trusted),
           failed = failure.success
-            ? failure.data.results.find((stage) => stage.status === "error")
+            ? failure.data.results.find((stage) => stage.status === "failed")
             : undefined;
         await emitPipelineFailureAlert({
           alert: {
@@ -450,6 +476,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     if (!options.catalogReview) throw Error("Installed paired catalog resolver is unavailable");
     const proposal = await options.catalogReview.resolveCatalogProposal({
       branch: envString("TRANSITOUS_AUTO_BUMP_BRANCH", DEFAULT_CATALOG_BRANCH),
+      actor: { trigger: "cron" },
     });
     log.info("transitous-auto-bump: paired proposal retained for administrator review", {
       proposalId: proposal.proposalId,
@@ -476,7 +503,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     }
     try {
       await requireSuccessful(
-        await receiver().admitMaintenance("reload-feed-proxy", { triggeredBy: "cron" }),
+        await receiver().admitMaintenance("reload-feed-proxy", { trigger: "cron" }),
       );
       lastFeedProxyReloadAt = mtimeMs;
       log.info("transitous-cron: feed-proxy reloaded", { mtimeMs });
@@ -495,7 +522,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     try {
       if (!(await (options.getInstalledOvertureRelease ?? getInstalledOvertureRelease)())) return;
       await requireSuccessful(
-        await receiver().admitLocal({ kind: "overture-conflate", region }, { triggeredBy: "cron" }),
+        await receiver().admitLocal({ kind: "overture-conflate", region }, { trigger: "cron" }),
       );
     } catch (err) {
       log.error("overture-conflation: durable retry failed or remains pending", {
@@ -514,9 +541,9 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         return;
       }
       const result = await requireSuccessful(
-        await receiver().admitLocal({ kind: "overture-sync", region }, { triggeredBy: "cron" }),
+        await receiver().admitLocal({ kind: "overture-sync", region }, { trigger: "cron" }),
       );
-      if (result.status === "partial")
+      if (result.status === "partially_succeeded")
         log.warn("overture-cron: Places imported; link rebuild remains incomplete", {
           jobId: result.id,
           diagnostics: result.diagnostics,
@@ -527,6 +554,15 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         err: (err as Error).message,
       });
     }
+  };
+
+  const runOvertureStartup = async (): Promise<void> => {
+    if (await (options.hasOutdatedOverturePlaces ?? hasOutdatedOverturePlaces)()) {
+      log.info("overture: installed places use an outdated layout; re-importing");
+      await runOvertureSync();
+      return;
+    }
+    await runOvertureConflationRetry();
   };
 
   const openConditionsUrl = options.openConditionsUrl ?? envString("OPENCONDITIONS_URL", "");
@@ -564,11 +600,15 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     task: "extract-startup" | "extract-guard" | "ways-to-edges",
     ...steps: Array<() => Promise<void>>
   ): Promise<void> =>
-    runLocalDataExecution({ kind: "traffic-maintenance", task }, async () => {
-      let failure: unknown;
-      for (const step of steps) await step().catch((err: unknown) => (failure ??= err));
-      if (failure) throw failure;
-    }).catch((err: unknown) => {
+    runLocalDataExecution(
+      { kind: "traffic-maintenance", task },
+      async () => {
+        let failure: unknown;
+        for (const step of steps) await step().catch((err: unknown) => (failure ??= err));
+        if (failure) throw failure;
+      },
+      { trigger: "cron" },
+    ).catch((err: unknown) => {
       log.error(`traffic-maintenance: ${task} failed`, { err: (err as Error).message });
     });
 
@@ -681,8 +721,10 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       return;
     }
     try {
-      const result = await runLocalDataExecution({ kind: "traffic-predicted" }, () =>
-        bake({ openConditionsUrl, openConditionsToken, logger: log }),
+      const result = await runLocalDataExecution(
+        { kind: "traffic-predicted" },
+        () => bake({ openConditionsUrl, openConditionsToken, logger: log }),
+        { trigger: "cron" },
       );
       log.info("traffic-predicted: cycle complete", { ...result });
     } catch (err) {
@@ -840,6 +882,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     runStalenessCheckNow: runStalenessCheck,
     runOvertureNow: runOvertureSync,
     runOvertureConflationRetryNow: runOvertureConflationRetry,
+    runOvertureStartupNow: runOvertureStartup,
     runTrafficExtractStartupNow: runTrafficExtractStartup,
     runTrafficExtractGuardNow: runTrafficExtractGuard,
     runWaysToEdgesRefreshNow: runWaysToEdgesRefresh,

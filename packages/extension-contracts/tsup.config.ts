@@ -13,6 +13,7 @@ export default defineConfig({
     "licensing-schema": "src/licensing-schema.ts",
     attribution: "src/attribution.ts",
     identifiers: "src/identifiers.ts",
+    semver: "src/semver.ts",
     "media-hosts": "src/media-hosts.ts",
     capabilities: "src/capabilities.ts",
   },

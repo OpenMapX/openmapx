@@ -408,6 +408,8 @@ jobs:
           if (!head || !/^\d{4}_[a-z0-9_]{1,120}$/.test(head.tag) || !Number.isSafeInteger(head.when) || head.when < 1)
             throw new Error("The migration journal has no valid newest entry");
           manifest.databaseMigrationHead = {tag: head.tag, when: head.when};
+          // RELEASE_STATE_EPOCH in packages/core/src/services/release-manifest.ts.
+          manifest.stateEpoch = 1;
           writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
           NODE
 

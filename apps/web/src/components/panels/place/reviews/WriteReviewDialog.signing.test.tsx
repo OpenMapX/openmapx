@@ -2,6 +2,7 @@ import { encryptWithPassphrase, generateKeypair, keypairToJwk } from "@openmapx/
 import { MangroveProvider, type MangroveTransport } from "@openmapx/mangrove-react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
+import { MANGROVE_SIGNER_STORAGE_KEYS } from "@/lib/signOutStorage";
 import { render, screen, userEvent, waitFor } from "@/test";
 import { WriteReviewDialog } from "./WriteReviewDialog";
 
@@ -59,6 +60,7 @@ describe("composer local signing recovery", () => {
           <MangroveProvider
             transport={transport}
             currentUser={{ id: "owner", authorityId: "session" }}
+            signerStorageKeys={MANGROVE_SIGNER_STORAGE_KEYS}
           >
             <WriteReviewDialog
               open

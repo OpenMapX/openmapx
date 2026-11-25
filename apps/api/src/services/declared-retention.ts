@@ -6,8 +6,8 @@ import {
   adminActionReauthentication,
   authPolicyApplication,
   dataDisclosureEvent,
-  dataManagerOfflinePackageArtifactReferences,
-  dataManagerOfflinePackageJobOwners,
+  dataManagerOfflinePackageArtifactReference,
+  dataManagerOfflinePackageJobOwner,
   integrationApplicationReceipt,
   oauthAccessToken,
   oauthClientAssertion,
@@ -83,7 +83,7 @@ const RULES: readonly RetentionRule[] = [
         preservationAllowsDeletion({
           registrationId: "auth-sessions",
           candidateTimestamp: adminActionReauthentication.createdAt,
-          subjectIds: [adminActionReauthentication.actorId],
+          subjectIds: [adminActionReauthentication.actorUserId],
         }),
       ),
   },
@@ -158,10 +158,10 @@ const RULES: readonly RetentionRule[] = [
       and(
         lt(accountActionReceipt.createdAt, cutoff),
         or(
-          isNull(accountActionReceipt.targetId),
+          isNull(accountActionReceipt.targetUserId),
           sql`exists (
             select 1 from ${accountActionReceipt} as ${newerAccountReceipt}
-            where ${newerAccountReceipt.targetId} = ${accountActionReceipt.targetId}
+            where ${newerAccountReceipt.targetUserId} = ${accountActionReceipt.targetUserId}
               and (${newerAccountReceipt.createdAt}, ${newerAccountReceipt.key})
                 > (${accountActionReceipt.createdAt}, ${accountActionReceipt.key})
           )`,
@@ -169,7 +169,7 @@ const RULES: readonly RetentionRule[] = [
         preservationAllowsDeletion({
           registrationId: "administrative-receipts",
           candidateTimestamp: accountActionReceipt.createdAt,
-          subjectIds: [accountActionReceipt.actorId, accountActionReceipt.targetId],
+          subjectIds: [accountActionReceipt.actorUserId, accountActionReceipt.targetUserId],
         }),
       ),
   },
@@ -193,7 +193,7 @@ const RULES: readonly RetentionRule[] = [
         preservationAllowsDeletion({
           registrationId: "administrative-receipts",
           candidateTimestamp: integrationApplicationReceipt.createdAt,
-          subjectIds: [integrationApplicationReceipt.actorId],
+          subjectIds: [integrationApplicationReceipt.actorUserId],
         }),
       ),
   },
@@ -209,7 +209,7 @@ const RULES: readonly RetentionRule[] = [
         preservationAllowsDeletion({
           registrationId: "administrative-receipts",
           candidateTimestamp: authPolicyApplication.createdAt,
-          subjectIds: [authPolicyApplication.actorId],
+          subjectIds: [authPolicyApplication.actorUserId],
         }),
       ),
   },
@@ -262,12 +262,12 @@ export const DECLARED_RETENTION_PERIODS: readonly {
 }[] = [
   ...RULES.map(({ name, registrationId, days }) => ({ table: name, registrationId, days })),
   {
-    table: "offline_package_job_owners",
+    table: "offline_package_job_owner",
     registrationId: "offline-package-ownership",
     days: ORPHANED_OFFLINE_PACKAGE_DAYS,
   },
   {
-    table: "offline_package_artifact_references",
+    table: "offline_package_artifact_reference",
     registrationId: "offline-package-ownership",
     days: ORPHANED_OFFLINE_PACKAGE_DAYS,
   },
@@ -309,11 +309,11 @@ async function deleteDueRows(rule: RetentionRule, now: number, options: BatchOpt
 async function hasOfflinePackageCandidates(database: Database, cutoff: Date) {
   const [row] = await database.execute<{ due: boolean }>(sql`
     select exists (
-      select 1 from ${dataManagerOfflinePackageJobOwners}
-      where ${lt(dataManagerOfflinePackageJobOwners.createdAt, cutoff)}
+      select 1 from ${dataManagerOfflinePackageJobOwner}
+      where ${lt(dataManagerOfflinePackageJobOwner.createdAt, cutoff)}
     ) or exists (
-      select 1 from ${dataManagerOfflinePackageArtifactReferences}
-      where ${lt(dataManagerOfflinePackageArtifactReferences.retainedAt, cutoff)}
+      select 1 from ${dataManagerOfflinePackageArtifactReference}
+      where ${lt(dataManagerOfflinePackageArtifactReference.retainedAt, cutoff)}
     ) as due`);
   return row?.due === true;
 }
@@ -345,8 +345,8 @@ async function livePrincipals(database: Database, key: Buffer, pageSize: number)
  */
 async function deleteOrphanedOfflinePackageRows(
   table:
-    | typeof dataManagerOfflinePackageJobOwners
-    | typeof dataManagerOfflinePackageArtifactReferences,
+    | typeof dataManagerOfflinePackageJobOwner
+    | typeof dataManagerOfflinePackageArtifactReference,
   recordedAt: AnyPgColumn,
   live: ReadonlySet<string>,
   cutoff: Date,
@@ -393,20 +393,20 @@ async function deleteOrphanedOfflinePackages(
 ): Promise<Record<string, number>> {
   const cutoff = before(now, ORPHANED_OFFLINE_PACKAGE_DAYS);
   if (!(await hasOfflinePackageCandidates(database, cutoff)))
-    return { offline_package_job_owners: 0, offline_package_artifact_references: 0 };
+    return { offline_package_job_owner: 0, offline_package_artifact_reference: 0 };
   const live = await livePrincipals(database, key, pageSize);
   return {
-    offline_package_job_owners: await deleteOrphanedOfflinePackageRows(
-      dataManagerOfflinePackageJobOwners,
-      dataManagerOfflinePackageJobOwners.createdAt,
+    offline_package_job_owner: await deleteOrphanedOfflinePackageRows(
+      dataManagerOfflinePackageJobOwner,
+      dataManagerOfflinePackageJobOwner.createdAt,
       live,
       cutoff,
       database,
       pageSize,
     ),
-    offline_package_artifact_references: await deleteOrphanedOfflinePackageRows(
-      dataManagerOfflinePackageArtifactReferences,
-      dataManagerOfflinePackageArtifactReferences.retainedAt,
+    offline_package_artifact_reference: await deleteOrphanedOfflinePackageRows(
+      dataManagerOfflinePackageArtifactReference,
+      dataManagerOfflinePackageArtifactReference.retainedAt,
       live,
       cutoff,
       database,

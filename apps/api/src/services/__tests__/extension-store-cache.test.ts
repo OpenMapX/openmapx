@@ -46,6 +46,11 @@ const old = JSON.stringify({
   killSwitch: { removed: [], critical: [] },
 });
 const empty = JSON.stringify({ entries: [], killSwitch: { removed: [], critical: [] } });
+/** A catalog document in the format this host reads. */
+const doc = (body: Record<string, unknown>) => ({ schemaVersion: 1, ...body });
+const listing = (extensions: unknown[]) => doc({ extensions });
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
 
 // The storage boundary models atomic CAS schedules, not Lua execution. The
 // separately gated pinned-Valkey suite executes the actual scripts.
@@ -79,7 +84,9 @@ beforeEach(() => {
   ports.values.clear();
   ports.get.mockImplementation(async (key: string) => ports.values.get(key) ?? null);
   ports.eval.mockImplementation(atomic);
-  ports.fetch.mockImplementation(async (url: string) => (url === extraUrl ? [entry] : []));
+  ports.fetch.mockImplementation(async (url: string) =>
+    url === extraUrl ? listing([entry]) : listing([]),
+  );
 });
 
 describe("extension source and catalog coherence", () => {
@@ -133,7 +140,7 @@ describe("extension source and catalog coherence", () => {
       metadata: { retained: "empty" },
     };
     ports.fetch.mockImplementation(async (url: string) => {
-      if (url === extraUrl) return [item, emptyItem];
+      if (url === extraUrl) return listing([item, emptyItem]);
       if (url === canonicalManifest) return { version: "2.0.0" };
       if (url === emptyManifest) return { version: "3.0.0" };
       throw new Error("unexpected fixture URL");
@@ -179,7 +186,7 @@ describe("extension source and catalog coherence", () => {
     ports.fetch.mockImplementationOnce(async () => {
       entered.resolve();
       await release.promise;
-      return [{ id: "obsolete", name: "Obsolete" }];
+      return listing([{ id: "obsolete", name: "Obsolete" }]);
     });
     const pending = getExtensionCatalog(true);
     const outcome = expect(pending).rejects.toMatchObject({ category: "catalog_conflict" });
@@ -199,7 +206,7 @@ describe("extension source and catalog coherence", () => {
     ports.fetch.mockImplementationOnce(async () => {
       entered.resolve();
       await release.promise;
-      return [{ id: "obsolete", name: "Obsolete" }];
+      return listing([{ id: "obsolete", name: "Obsolete" }]);
     });
     const pending = getExtensionCatalog(true);
     const outcome = expect(pending).rejects.toMatchObject({ category: "catalog_conflict" });
@@ -374,12 +381,12 @@ describe("extension source and catalog coherence", () => {
   it("preserves nonempty partial acquisition and default-only reads without configured storage", async () => {
     ports.values.set(sourceKey, JSON.stringify([source]));
     ports.fetch.mockImplementation(async (url: string) => {
-      if (url === extraUrl) return [entry];
+      if (url === extraUrl) return listing([entry]);
       throw new Error("synthetic provider failure");
     });
     expect(await getExtensionCatalog(true)).toEqual([{ ...entry, trust: "community" }]);
     ports.available = false;
-    ports.fetch.mockResolvedValue([entry]);
+    ports.fetch.mockResolvedValue(listing([entry]));
     expect(await listExtensionSources()).toHaveLength(1);
     expect(await getExtensionCatalog()).toHaveLength(1);
   });
@@ -454,11 +461,14 @@ describe("extension source and catalog coherence", () => {
       ["invalid entry name", [{ id: "x", name: false }]],
       ["valid entry followed by invalid entry", [entry, null]],
       ["valid entry with invalid controls", { extensions: [entry], critical: null }],
+      ["non-semantic maxVersion", { critical: [{ id: "old", maxVersion: "1.2" }] }],
+      ["bare entry list", [entry]],
+      ["bare empty list", []],
     ];
     it.each(malformed)(
       "rejects %s without changing warm or cold catalog bytes",
       async (_name, payload) => {
-        ports.fetch.mockResolvedValue(payload);
+        ports.fetch.mockResolvedValue(isRecord(payload) ? doc(payload) : payload);
         for (const cached of [true, false]) {
           if (cached) ports.values.set(catalogKey, denied);
           else ports.values.delete(catalogKey);
@@ -472,7 +482,16 @@ describe("extension source and catalog coherence", () => {
       },
     );
     it.each([
-      [],
+      ["no format version", { extensions: [] }],
+      ["a later format version", { schemaVersion: 2, extensions: [] }],
+      ["a format version given as text", { schemaVersion: "1", extensions: [] }],
+    ])("rejects a catalog with %s", async (_name, payload) => {
+      ports.fetch.mockResolvedValue(payload);
+      await expect(getExtensionCatalog(true)).rejects.toMatchObject({
+        category: "catalog_acquisition_failed",
+      });
+    });
+    it.each([
       {},
       { extensions: [] },
       { removed: [], critical: [] },
@@ -484,20 +503,20 @@ describe("extension source and catalog coherence", () => {
       },
     ])("publishes supported valid empty document %j", async (payload) => {
       ports.values.set(catalogKey, denied);
-      ports.fetch.mockResolvedValue(payload);
+      ports.fetch.mockResolvedValue(doc(payload));
       expect(await getExtensionCatalog(true)).toEqual([]);
       expect(ports.values.get(catalogKey)).toBe(empty);
       expect(await getExtensionCatalog()).toEqual([]);
     });
-    it("publishes a control-only object without losing empty-string reasons or opaque version metadata", async () => {
+    it("publishes a control-only object without losing empty-string reasons or version limits", async () => {
       ports.values.set(catalogKey, denied);
-      const controls = {
+      const controls = doc({
         removed: [{ id: "removed", reason: "" }, { id: "default-reason" }],
         critical: [
-          { id: "critical", reason: "", maxVersion: "arbitrary-version", inert: [null] },
+          { id: "critical", reason: "", maxVersion: "1.2.3-rc.1", inert: [null] },
           { id: "default-critical" },
         ],
-      };
+      });
       ports.fetch.mockResolvedValue(controls);
       expect(await getExtensionCatalog(true)).toEqual([]);
       expect(JSON.parse(ports.values.get(catalogKey) as string)).toEqual({
@@ -508,28 +527,26 @@ describe("extension source and catalog coherence", () => {
             ["default-reason", "delisted"],
           ],
           critical: [
-            ["critical", { reason: "", maxVersion: "arbitrary-version" }],
+            ["critical", { reason: "", maxVersion: "1.2.3-rc.1" }],
             ["default-critical", { reason: "security advisory" }],
           ],
         },
       });
     });
-    it.each(["bare", "object"])("preserves inert entry metadata in %s catalogs", async (form) => {
+    it("preserves inert entry metadata in catalogs", async () => {
       const item = {
         ...entry,
         version: "opaque version",
         inert: { nested: [1, false, null, { arbitrary: "value" }] },
       };
-      ports.fetch.mockResolvedValue(
-        form === "bare" ? [item] : { extensions: [item], editorial: { arbitrary: true } },
-      );
+      ports.fetch.mockResolvedValue(doc({ extensions: [item], editorial: { arbitrary: true } }));
       expect(await getExtensionCatalog(true)).toEqual([{ ...item, trust: "community" }]);
       expect(await getExtensionCatalog()).toEqual([{ ...item, trust: "community" }]);
     });
     it("retains the intentional nonempty partial-source policy when another source is malformed", async () => {
       ports.values.set(sourceKey, JSON.stringify([source]));
       ports.fetch.mockImplementation(async (url: string) =>
-        url === extraUrl ? [entry] : { extensions: "invalid" },
+        url === extraUrl ? listing([entry]) : doc({ extensions: "invalid" }),
       );
       expect(await getExtensionCatalog(true)).toEqual([{ ...entry, trust: "community" }]);
       expect(await getExtensionCatalog()).toEqual([{ ...entry, trust: "community" }]);

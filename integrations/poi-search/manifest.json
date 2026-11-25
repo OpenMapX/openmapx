@@ -8,7 +8,6 @@
     "routes": true
   },
   "quality": "built-in",
-  "category": "Geocoding",
   "requires": [
     {
       "service": "postgis",

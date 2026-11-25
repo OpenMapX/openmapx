@@ -25,7 +25,9 @@ export const adminSettingSchema = z.strictObject({
   envOverride: z.boolean(),
   showWhen: z.strictObject({ key: z.string(), equals: adminJsonValueSchema }).optional(),
   /** Present when a stored secret in effect cannot be decrypted with the
-   * current secrets key, for example after a restore without its key file. */
+   * current secrets key, for example after a restore without its key file, or
+   * when a stored value in effect is not one the setting accepts (then `value`
+   * is the default). */
   unreadable: z.literal(true).optional(),
 });
 export const adminSettingsGroupSchema = z.strictObject({
@@ -60,7 +62,7 @@ export const adminLogEntrySchema = z.strictObject({
   id: z.number().int(),
   level: z.string(),
   source: z.string(),
-  msg: z.string(),
+  message: z.string(),
   time: z.number(),
   metadata: z.record(z.string(), adminJsonValueSchema).optional(),
 });

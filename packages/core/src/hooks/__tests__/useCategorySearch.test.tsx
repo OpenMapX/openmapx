@@ -67,13 +67,13 @@ describe("useCategorySearch", () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it("isAreaTooLarge detects the area_too_large error", () => {
-    expect(isAreaTooLarge(new ApiClientError(422, { error: "area_too_large" }, null))).toBe(true);
-    expect(isAreaTooLarge(new ApiClientError(422, { error: "other" }, null))).toBe(false);
+  it("isAreaTooLarge detects the AREA_TOO_LARGE code", () => {
+    expect(
+      isAreaTooLarge(new ApiClientError(422, { error: "Too large", code: "AREA_TOO_LARGE" }, null)),
+    ).toBe(true);
+    expect(isAreaTooLarge(new ApiClientError(422, { error: "AREA_TOO_LARGE" }, null))).toBe(false);
     expect(isAreaTooLarge(new ApiClientError(500, null, null))).toBe(false);
-    // Legacy message-shaped errors (non-client throwers) still resolve.
-    expect(isAreaTooLarge(new Error("API error 413: area_too_large"))).toBe(true);
-    expect(isAreaTooLarge(new Error("network failure"))).toBe(false);
+    expect(isAreaTooLarge(new Error("AREA_TOO_LARGE"))).toBe(false);
     expect(isAreaTooLarge("not an error")).toBe(false);
   });
 });
@@ -101,7 +101,9 @@ describe("categorySearchQueryOptions", () => {
       },
       expect.objectContaining({ signal }),
     );
-    expect(options.retry(0, new Error("area_too_large"))).toBe(false);
+    expect(
+      options.retry(0, new ApiClientError(422, { error: "x", code: "AREA_TOO_LARGE" }, null)),
+    ).toBe(false);
     expect(options.retry(1, new Error("boom"))).toBe(true);
     expect(options.retry(2, new Error("boom"))).toBe(false);
   });

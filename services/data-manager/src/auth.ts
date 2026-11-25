@@ -3,7 +3,12 @@ import rateLimit, { normalizeIP } from "@fastify/rate-limit";
 import { assertProductionApplicationSecret } from "@openmapx/core/deployment-secret-policy";
 import { readServiceSecretFile } from "@openmapx/core/service-secret-files";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { DATA_MANAGER_PRINCIPALS, type DataManagerPrincipal } from "./principals.js";
+import type { DataJobActor } from "./jobs/execution/api.js";
+import {
+  DATA_MANAGER_PRINCIPALS,
+  type DataManagerPrincipal,
+  PRINCIPAL_TRIGGER,
+} from "./principals.js";
 
 export type DataManagerCallerTokens = Readonly<Record<DataManagerPrincipal, string>>;
 
@@ -64,6 +69,23 @@ const principals = new WeakMap<FastifyRequest, DataManagerPrincipal>();
 /** The caller an authenticated request came from. */
 export function requestPrincipal(req: FastifyRequest): DataManagerPrincipal | undefined {
   return principals.get(req);
+}
+
+/**
+ * Who starts the job a request admits: the trigger follows from the caller's
+ * token. Only the API acts for an administrator, so only it may name one.
+ */
+export function requestActor(req: FastifyRequest, triggeredByUserId?: string): DataJobActor {
+  const caller = principals.get(req);
+  if (!caller) throw Object.assign(Error("Unauthenticated job request"), { statusCode: 401 });
+  if (triggeredByUserId !== undefined && caller !== "api")
+    throw Object.assign(Error("Only the API names the administrator of a job"), {
+      statusCode: 403,
+    });
+  return {
+    trigger: PRINCIPAL_TRIGGER[caller],
+    ...(triggeredByUserId !== undefined ? { triggeredByUserId } : {}),
+  };
 }
 
 /**

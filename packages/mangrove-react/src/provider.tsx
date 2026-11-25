@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, type ReactNode, useContext } from "react";
+import type { MangroveSignerStorageKeys } from "./signer";
 import { MangroveSignerProvider } from "./signerProvider";
 import type { MangroveCurrentUser, MangroveTransport } from "./transport";
 
@@ -24,6 +25,8 @@ export interface MangroveProviderProps {
    * tell which app a credential belongs to.
    */
   webauthnKeyName?: string;
+  /** The host's sessionStorage keys for the signer's tab state. */
+  signerStorageKeys: MangroveSignerStorageKeys;
   children: ReactNode;
 }
 
@@ -36,6 +39,7 @@ export function MangroveProvider({
   transport,
   currentUser,
   webauthnKeyName,
+  signerStorageKeys,
   children,
 }: MangroveProviderProps) {
   return (
@@ -47,6 +51,7 @@ export function MangroveProvider({
             : null
         }
         transport={transport.signer}
+        storageKeys={signerStorageKeys}
       >
         {children}
       </MangroveSignerProvider>

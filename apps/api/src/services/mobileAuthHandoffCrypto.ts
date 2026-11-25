@@ -9,7 +9,7 @@ const KEY_INFO = "better-auth-one-time-token-at-rest";
 const AAD_PREFIX = "openmapx:mobile-auth-handoff:row:v1:";
 
 export interface EncryptedHandoffToken {
-  version: number;
+  keyVersion: number;
   ciphertext: string;
   iv: string;
   tag: string;
@@ -42,7 +42,7 @@ export function encryptHandoffToken(token: string, rowId: string): EncryptedHand
     cipher.setAAD(aad(rowId));
     const ciphertext = Buffer.concat([cipher.update(token, "utf8"), cipher.final()]);
     return {
-      version: 1,
+      keyVersion: 1,
       ciphertext: ciphertext.toString("base64"),
       iv: iv.toString("base64"),
       tag: cipher.getAuthTag().toString("base64"),
@@ -54,7 +54,7 @@ export function encryptHandoffToken(token: string, rowId: string): EncryptedHand
 
 /** Authenticates and decrypts a token only for the row that owns it. */
 export function decryptHandoffToken(envelope: EncryptedHandoffToken, rowId: string): string {
-  if (envelope.version !== 1) throw new Error("unsupported mobile auth handoff key version");
+  if (envelope.keyVersion !== 1) throw new Error("unsupported mobile auth handoff key version");
   const iv = Buffer.from(envelope.iv, "base64");
   const tag = Buffer.from(envelope.tag, "base64");
   if (iv.length !== IV_BYTES || tag.length !== TAG_BYTES) {

@@ -5,6 +5,7 @@ import {
   coverageReportSchema,
   coverageSourceDetailSchema,
 } from "../../../coverage";
+import { errorCodeSchema } from "../../../services/data-manager/contracts/common";
 import { type AdminOperation, adminCommonResponses, adminJson } from "../admin";
 
 const snapshotId = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/);
@@ -41,8 +42,8 @@ export const adminCoverageSourceQuerySchema = z.object({
   snapshotId: snapshotId.optional(),
   assessment: assessment.optional(),
 });
-/** Coverage failures carry a stable code such as `snapshot_expired` in `error`. */
-const coverageErrorSchema = z.strictObject({ error: z.string() });
+/** Coverage failures carry a stable code such as `SNAPSHOT_EXPIRED` in `code`. */
+const coverageErrorSchema = z.strictObject({ error: z.string(), code: errorCodeSchema });
 const noStore = z.object({ "cache-control": z.literal("private, no-store") });
 const coverageResponses = <S extends z.ZodType>(schema: S) => ({
   200: adminJson(schema, noStore),

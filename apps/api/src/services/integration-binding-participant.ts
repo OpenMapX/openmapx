@@ -1,5 +1,6 @@
 /** Sole built-in issuer for binding changes in the existing candidate transaction. */
 import { createHash, randomUUID } from "node:crypto";
+import { COMPONENT_ID_PATTERN } from "@openmapx/core/component-id";
 import { canonicalJson } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import { and, eq, sql } from "drizzle-orm";
@@ -27,7 +28,7 @@ import type {
   ValidatedConfigurationCandidate,
 } from "./prospective-configuration";
 export const integrationBindingInputSchema = z.strictObject({
-  integrationId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
+  integrationId: z.string().regex(COMPONENT_ID_PATTERN),
   capability: z
     .string()
     .min(1)
@@ -262,10 +263,10 @@ export async function prepareIntegrationBindingChange(
         const saved = await readBindingState(input.integrationId, tx);
         if (saved.desiredRevision !== change.desiredRevision)
           throw new IntegrationBindingConflict();
-        const actorId = ["loopback", "internal"].includes(writer.actorId) ? null : writer.actorId;
+        const actorUserId = writer.actorId === "internal" ? null : writer.actorId;
         await tx.insert(integrationApplicationReceipt).values({
           operationId: writer.operationKey,
-          actorId,
+          actorUserId,
           integrationId: input.integrationId,
           capability: input.capability,
           serviceId: input.serviceId,
@@ -283,7 +284,7 @@ export async function prepareIntegrationBindingChange(
           },
         });
         await tx.insert(adminAuditLog).values({
-          actorId,
+          actorUserId,
           targetType: "integration",
           targetId: input.integrationId,
           action: input.serviceId ? "integration.binding.set" : "integration.binding.remove",

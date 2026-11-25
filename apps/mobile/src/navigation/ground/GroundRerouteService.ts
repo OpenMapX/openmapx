@@ -9,11 +9,11 @@ import {
   type ApiRequestOptions,
   type BikeRoutingOptions,
   bicycleOptions,
-  createApiClient,
   fetchDirections,
   isApiRequestAbortedError,
   validBikeRoutingOptions,
 } from "@openmapx/core/navigation/api";
+import { createNativeApiClient, isUpdateRequired } from "../../api/nativeApiClient";
 import { validateGroundStartPackage } from "./groundSession";
 
 /**
@@ -36,7 +36,8 @@ export type RerouteFailureCode =
   | "aborted"
   | "network"
   | "invalid-response"
-  | "no-route";
+  | "no-route"
+  | "update-required";
 
 export type RerouteOutcome =
   | { ok: true; requestId: string; sessionId: string; baseRevision: number; route: unknown }
@@ -92,14 +93,7 @@ export class GroundRerouteService {
   private readonly inFlight = new Map<string, AbortController>();
 
   constructor(deps: RerouteServiceDeps) {
-    this.client =
-      deps.client ??
-      createApiClient({
-        baseUrl: deps.apiOrigin,
-        // No cookie, no bearer token, no WebView session. A road network does
-        // not need to know who is asking.
-        credentials: "omit",
-      });
+    this.client = deps.client ?? createNativeApiClient(deps.apiOrigin);
   }
 
   /** Aborts a request whose session has ended or been replaced. */
@@ -183,6 +177,7 @@ export class GroundRerouteService {
       if (isApiRequestAbortedError(error)) {
         return { ...base, ok: false, code: error.code === "timeout" ? "timeout" : "aborted" };
       }
+      if (isUpdateRequired(error)) return { ...base, ok: false, code: "update-required" };
       // The error is deliberately not inspected further: a message can contain
       // a URL with the user's coordinates in its query.
       return { ...base, ok: false, code: "network" };

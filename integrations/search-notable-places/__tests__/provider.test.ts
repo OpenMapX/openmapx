@@ -1,3 +1,4 @@
+import { NOTABLE_PLACES_SCHEMA_VERSION } from "@openmapx/core/published-data";
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
 import { createNotablePlacesSuggestionProvider } from "../provider.js";
@@ -8,7 +9,9 @@ function readyIndex(rows: unknown[]) {
   return vi
     .fn()
     .mockResolvedValueOnce([{ exists: true }])
-    .mockResolvedValueOnce([{ epoch: "epoch-1", status: "ready" }])
+    .mockResolvedValueOnce([
+      { epoch: "epoch-1", status: "ready", schema_version: NOTABLE_PLACES_SCHEMA_VERSION },
+    ])
     .mockResolvedValueOnce(rows);
 }
 
@@ -253,6 +256,26 @@ describe("notable-places suggestion provider", () => {
 
     expect(result.suggestions).toEqual([]);
     expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  it("answers nothing from a snapshot an older builder wrote", async () => {
+    const execute = vi
+      .fn()
+      .mockResolvedValueOnce([{ exists: true }])
+      .mockResolvedValueOnce([
+        { epoch: "epoch-1", status: "ready", schema_version: NOTABLE_PLACES_SCHEMA_VERSION + 1 },
+      ]);
+    const provider = createNotablePlacesSuggestionProvider(
+      createMockIntegrationContext({ db: { execute } }),
+    );
+
+    const result = await provider.searchSuggestions(
+      { query: "louvre", lang: "en", limit: 8 },
+      options,
+    );
+
+    expect(result.suggestions).toEqual([]);
+    expect(execute).toHaveBeenCalledTimes(2);
   });
 
   it("leaves queries too short to say anything about fame alone", async () => {

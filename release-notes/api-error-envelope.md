@@ -5,7 +5,24 @@ impacts: [breaking]
 ## What changes
 
 Every API error reply now has one shape, `{ error, code? }`: `error` is a short,
-user-safe description and `code` an optional stable reason. Replies that used
+user-safe description and `code` an optional stable reason in UPPER_SNAKE.
+Replies that carried a machine token in `error` now put it in `code` and give
+text in `error`, for example `{ error: "invalid_request" }` becomes
+`{ error: "Invalid handoff request", code: "INVALID_REQUEST" }`. This covers the
+mobile sign-in handoff, attribution, admin coverage, admin account actions,
+sign-in policy, reauthentication and capability binding refusals, POI search
+and search interpretation. Codes in kebab-case or lower_snake are now
+UPPER_SNAKE, among them the offline package codes (`SOURCE_UNAVAILABLE`,
+`PREPARE_RATE_LIMITED`, `PRINCIPAL_QUOTA`), the transit source codes
+(`IN_FLIGHT`, `DUPLICATE_IDEMPOTENCY_KEY`, `SOURCE_ACTION_NOT_ALLOWED`,
+`PREFLIGHT_STALE`), the coverage codes (`SNAPSHOT_EXPIRED`, `INVALID_QUERY`),
+the wildfire layer codes and `TRANSIT_CREDENTIALS_MANAGED`. Stored codes
+follow the same rule: an administrative job's `errorCode` (`CONFLICT`,
+`FORBIDDEN`, `CONFIGURATION_PREREQUISITE`, `CONFIGURATION_PREFLIGHT_FAILED`,
+`HOST_UPDATE_REQUIRED`, `RECOVERY_REQUIRED`, `REQUIRED_SETTINGS_MISSING`), an
+offline package job's `errorCode` (`INVALID_REQUEST`, `CAPACITY`,
+`GENERATION_FAILED`, `EXPIRED`) and a privacy notification's last error code.
+Replies that used
 `message` for that text now use `error`, among them the tile, image, MapTiler,
 Mapterhorn, traffic and winter-sports proxies and the overlay, weather, tide,
 sun-time and street-level imagery integrations.
@@ -25,7 +42,7 @@ failed. These replies drop `ok: false` and keep their other fields:
 - the data-manager search index and notable places 404 before a first build,
   the Overture status 404 and the Overture recovery 503
 - the data-manager transit source reads and changes (400, 404, 409), including
-  `code: "source_action_not_allowed"`, and a source change refused for lack of
+  `code: "SOURCE_ACTION_NOT_ALLOWED"`, and a source change refused for lack of
   a durable receiver (503). An unexpected failure of these routes answers
   HTTP 500 `{ error: "Transit source request failed" }` and data-manager logs
   the cause; before, Fastify's default body carried the exception text
@@ -40,17 +57,18 @@ catalog bump approval no longer documents an HTTP 422, which it never sends.
 
 Offline package preparation errors replace `ok`, `errorCode` and `errorMessage`
 with `error` and `code`, and keep `retryAfterSeconds`. The offline capability's
-HTTP 502 answers `{ error, code: "source-unavailable" }` instead of an
+HTTP 502 answers `{ error, code: "SOURCE_UNAVAILABLE" }` instead of an
 unavailable capability. A transit source change refused because another job
 runs or its idempotency key was used, and a refused transit sync, replace `ok`
 and `reason` with `error` and `code` and keep `existingJobId`. A transit sync
 naming a country outside the operations profile answers HTTP 422
-`{ error, code: "outside-operations-profile" }` with the reason in `error`,
+`{ error, code: "OUTSIDE_OPERATIONS_PROFILE" }` with the reason in `error`,
 instead of the framework's `{ statusCode, error, message }`. A MOTIS restart
 refused for lack of a durable receiver answers
-`{ error, code: "ops-agent-unavailable" }` instead of carrying that code in
+`{ error, code: "OPS_AGENT_UNAVAILABLE" }` instead of carrying that code in
 `error`. Better Auth
-replies under `/api/auth/*` keep their own `{ code, message }` shape.
+replies under `/api/auth/*` keep their own `{ code, message }` shape, and an
+OAuth 2.0 error response keeps its RFC 6749 `error` token.
 
 ## Who is affected
 
@@ -60,6 +78,7 @@ with the API.
 
 ## Required action
 
-Read the error text from `error`, keep branching on `code`, and tell failure
+Read the error text from `error`, branch only on `code` with its UPPER_SNAKE
+spelling, and tell failure
 from the HTTP status rather than from `ok`. Upgrade API and
 application clients together. No migration or configuration change is needed.

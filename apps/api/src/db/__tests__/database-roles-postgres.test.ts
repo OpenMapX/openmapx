@@ -7,6 +7,10 @@ import { migrate } from "drizzle-orm/postgres-js/migrator";
 import type { Sql } from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
+  appliedApiSchemaVersion,
+  waitForApiSchema,
+} from "../../../../../services/data-manager/src/db/api-schema.js";
+import {
   attachFeatureStorage,
   createFeatureStorage,
   dropRetiredFeatureStorage,
@@ -155,7 +159,7 @@ integration("database roles", () => {
       "service_secret",
       "integration_config",
       "integration_secret",
-      "system_settings",
+      "system_setting",
       "system_secret",
       "platform_configuration_preview",
     ]) {
@@ -172,6 +176,17 @@ integration("database roles", () => {
       await permissionDenied(dataManager.unsafe(`DELETE FROM public."${table}" WHERE false`));
     }
     await permissionDenied(dataManager.unsafe("CREATE TABLE public.data_manager_probe (id int)"));
+  });
+
+  it("lets data-manager read the migration history and nothing else in drizzle", async () => {
+    await expect(appliedApiSchemaVersion(dataManager)).resolves.toMatchObject({
+      state: "applied",
+    });
+    await waitForApiSchema(dataManager, { timeoutMs: 1_000 });
+    await permissionDenied(
+      dataManager.unsafe("DELETE FROM drizzle.__drizzle_migrations WHERE false"),
+    );
+    await permissionDenied(dataManager.unsafe("CREATE TABLE drizzle.data_manager_probe (id int)"));
   });
 
   it("stops data-manager from taking a schema name another role trusts", async () => {
@@ -337,23 +352,23 @@ integration("database roles", () => {
   });
 
   it("lets data-manager change its own tables and the API prune its jobs", async () => {
-    await dataManager.unsafe("SELECT count(*) FROM data_manager.jobs");
+    await dataManager.unsafe("SELECT count(*) FROM data_manager.job");
     await dataManager.unsafe(
-      "INSERT INTO data_manager.jobs SELECT * FROM data_manager.jobs WHERE false",
+      "INSERT INTO data_manager.job SELECT * FROM data_manager.job WHERE false",
     );
-    await dataManager.unsafe("UPDATE data_manager.jobs SET status = status WHERE false");
-    await dataManager.unsafe("DELETE FROM data_manager.job_stages WHERE false");
+    await dataManager.unsafe("UPDATE data_manager.job SET status = status WHERE false");
+    await dataManager.unsafe("DELETE FROM data_manager.job_stage WHERE false");
     await dataManager.unsafe(
-      "UPDATE data_manager.offline_package_jobs SET status = status WHERE false",
+      "UPDATE data_manager.offline_package_job SET status = status WHERE false",
     );
     await dataManager.unsafe(
       "INSERT INTO data_manager.configuration_fence SELECT * FROM data_manager.configuration_fence WHERE false",
     );
     await dataManager.unsafe(
-      "UPDATE data_manager.configuration_fence SET state = state WHERE false",
+      "UPDATE data_manager.configuration_fence SET status = status WHERE false",
     );
     await dataManager.unsafe("DELETE FROM data_manager.configuration_fence WHERE false");
-    await api.unsafe("DELETE FROM data_manager.jobs WHERE false");
+    await api.unsafe("DELETE FROM data_manager.job WHERE false");
   });
 
   it("keeps a schema data-manager builds readable by the API across a swap", async () => {

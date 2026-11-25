@@ -108,7 +108,7 @@ export function DataManagerJobStages({
                       )}
                     </TableCell>
                     <TableCell>
-                      <JobStatusChip status={stage.status} />
+                      <JobStatusChip status={stage.status} stage />
                     </TableCell>
                     <TableCell align="right">{durationLabel(stage.durationMs, format)}</TableCell>
                   </TableRow>

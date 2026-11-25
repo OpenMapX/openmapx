@@ -91,7 +91,7 @@ describe("catalog failure logging", () => {
     expect(result.entries[0]).toMatchObject({
       level: "warn",
       source: "extension-store",
-      msg: "Extension catalog fetch failed",
+      message: "Extension catalog fetch failed",
       metadata: {
         catalogSource: {
           host: "catalog.example.test",
@@ -341,6 +341,7 @@ describe("digest-bound manifest resolution", () => {
     id: "ext-one",
     name: "Ext One",
     version: "1.0.0",
+    platform: "1.0",
     integrations: [
       { artifact: "https://example.test/a.tar.gz", sha256: "a".repeat(64), id: "intg-one" },
     ],

@@ -118,7 +118,7 @@ async function commitGeneration(
   payload: TrustedConfigurationPayload,
   claim: OpsTrustedClaim,
   signal: AbortSignal,
-  failures: Map<string, string>,
+  failures: Map<string, OperatorProblem>,
   executionContext?: OpsExecutionContext,
 ): Promise<ConfigurationApplyResult> {
   try {
@@ -292,7 +292,7 @@ async function commitGeneration(
     const problem = operatorProblem(error);
     if (problem) {
       // The agent's log, and the admin panel through configuration.failure.inspect.
-      process.stderr.write(`${problem}\n`);
+      process.stderr.write(`${problem.problem}\n`);
       failures.set(operation.revisionId, problem);
       while (failures.size > MAX_RECORDED_FAILURES) {
         failures.delete(failures.keys().next().value as string);
@@ -303,14 +303,26 @@ async function commitGeneration(
   }
 }
 
+/** A failure the operator can fix, as configuration.failure.inspect reports it. */
+interface OperatorProblem {
+  problem: string;
+  missingSettings: coreServices.MissingServiceSettings[] | null;
+}
+
 /**
- * The message of a failure the operator can fix (a service file or override,
- * or .env without the deployment's user), or null.
+ * A failure the operator can fix (a service file or override, .env without
+ * the deployment's user, or an enabled service's required setting without a
+ * value), or null.
  */
-function operatorProblem(error: unknown): string | null {
+function operatorProblem(error: unknown): OperatorProblem | null {
   for (let cause = error; cause instanceof Error; cause = cause.cause) {
-    if (cause instanceof coreServices.ServiceFileError) return cause.message;
-    if (cause instanceof coreServices.DeploymentUserError) return cause.message;
+    if (cause instanceof coreServices.RequiredServiceSettingsError)
+      return { problem: cause.message, missingSettings: cause.missing };
+    if (
+      cause instanceof coreServices.ServiceFileError ||
+      cause instanceof coreServices.DeploymentUserError
+    )
+      return { problem: cause.message, missingSettings: null };
   }
   return null;
 }
@@ -538,11 +550,15 @@ export function installTrustedConfigurationRuntime(
     removed: await discardConfigurationCandidate(candidates(), operation.operationKey),
   });
   // Why recent applies were not committed, when the operator can act on it.
-  const failures = new Map<string, string>();
-  runtime["configuration.failure.inspect"] = async (operation) => ({
-    attemptedRevisionId: operation.attemptedRevisionId,
-    problem: failures.get(operation.attemptedRevisionId)?.slice(0, 4_096) ?? null,
-  });
+  const failures = new Map<string, OperatorProblem>();
+  runtime["configuration.failure.inspect"] = async (operation) => {
+    const failure = failures.get(operation.attemptedRevisionId);
+    return {
+      attemptedRevisionId: operation.attemptedRevisionId,
+      problem: failure?.problem.slice(0, 4_096) ?? null,
+      missingSettings: failure?.missingSettings ?? null,
+    };
+  };
   runtime["configuration.inspect"] = (_operation, context) =>
     coreServices.withConfigurationGenerationWriter(
       options.infraDir,

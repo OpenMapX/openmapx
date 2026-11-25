@@ -11,13 +11,14 @@ import {
   HOST_MUTATING_JOB_TYPES,
   publicSessionSchema,
 } from "@openmapx/core/api-contracts";
+import type { AdminJobType } from "@openmapx/core/jobs";
 import {
   completeTrustedConfigurationApply,
   parseTrustedConfigurationApplyOutcome,
 } from "@openmapx/core/ops";
 import { services } from "@openmapx/core/server";
 import z from "zod/v4";
-import { adminApiOrigin, readAdminSessionFile } from "./admin-session";
+import { type AdminSessionOptions, adminSessionRequest } from "./admin-session";
 import {
   type SystemUpdateReceipt,
   SystemUpdateReceiptStore,
@@ -37,22 +38,18 @@ const selectionIdentity = (infraDir: string) =>
     .digest("hex");
 /** A release update replaces exactly the pinned services; compared sorted, like the preview's IDs. */
 const targets = [...services.RELEASE_PINNED_SERVICE_IDS].sort();
-export interface SystemUpdateOptions {
+export interface SystemUpdateOptions extends AdminSessionOptions {
   infraDir: string;
-  apiOrigin?: string;
-  sessionFile: string;
   receipt: string;
   releaseId: string;
   manifestDigest: string;
   resume?: boolean;
   createBackup?: boolean;
-  allowLoopbackHttp?: boolean;
   timeoutMs?: number;
   pollMs?: number;
 }
 export async function runSystemUpdate(options: SystemUpdateOptions): Promise<{ jobId: string }> {
-  const origin = adminApiOrigin(options.apiOrigin, process.env.DOMAIN, options.allowLoopbackHttp);
-  const cookie = readAdminSessionFile(options.sessionFile);
+  const { origin, headers: session } = adminSessionRequest(options);
   const store = new SystemUpdateReceiptStore(options.receipt);
   const deadline = Date.now() + Math.min(options.timeoutMs ?? 60 * 60_000, 60 * 60_000);
   const poll = Math.max(1, Math.min(options.pollMs ?? 2000, 5000));
@@ -81,8 +78,7 @@ export async function runSystemUpdate(options: SystemUpdateOptions): Promise<{ j
       redirect: "error",
       signal: AbortSignal.timeout(Math.max(1, Math.min(15000, deadline - Date.now()))),
       headers: {
-        cookie,
-        origin,
+        ...session,
         accept: "application/json",
         ...(body === undefined ? {} : { "content-type": "application/json" }),
         ...(key ? { "idempotency-key": key } : {}),
@@ -234,7 +230,7 @@ export async function runSystemUpdate(options: SystemUpdateOptions): Promise<{ j
       return parsed;
     }
   }
-  async function observe(id: string, type: string) {
+  async function observe(id: string, type: AdminJobType) {
     for (;;) {
       const job = await get(
         `/api/admin/jobs/${encodeURIComponent(id)}?source=application`,
@@ -247,8 +243,8 @@ export async function runSystemUpdate(options: SystemUpdateOptions): Promise<{ j
         job.createdBy !== identity.actorId
       )
         throw Error("Administrative job identity changed");
-      if (job.status === "success") return job;
-      if (["failed", "canceled"].includes(job.status))
+      if (job.status === "succeeded") return job;
+      if (job.status === "failed" || job.status === "cancelled")
         throw Error(
           "Original administrative job failed; inspect Activity before starting another update",
         );
@@ -259,7 +255,7 @@ export async function runSystemUpdate(options: SystemUpdateOptions): Promise<{ j
     if (receipt.steps.backup.body === null) await guard();
     await store.freeze("backup", { name: receipt.backupName });
     const backup = await post("backup", "/api/admin/services/backups", adminServiceAcceptedSchema);
-    const backupJob = await observe(backup.jobId, "backup.operation");
+    const backupJob = await observe(backup.jobId, "backup.operation.run");
     if (
       !backupJob.result ||
       typeof backupJob.result !== "object" ||

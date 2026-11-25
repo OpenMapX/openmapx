@@ -23,9 +23,9 @@ The composed shell reports actual navigation and optional module capabilities.
 
 | Native | Web        | Handshake | Behavior                                                     |
 | ------ | ---------- | --------- | ------------------------------------------------------------ |
-| 6      | 6          | 6         | Navigation plus bounded intake when the module is available. |
-| 6      | No overlap | Refused   | Update required; no browser navigation fallback.             |
-| 6      | Malformed  | Refused   | Channel stays unhandshaken.                                  |
+| 1      | 1          | 1         | Navigation plus bounded intake when the module is available. |
+| 1      | No overlap | Refused   | Update required; no browser navigation fallback.             |
+| 1      | Malformed  | Refused   | Channel stays unhandshaken.                                  |
 
 Ship the web build and the rebuilt native app together. Until an installed app is
 replaced, the page shows the update prompt. Unopened inbox items expire after 24
@@ -37,11 +37,11 @@ Run these when the protocol changes. Use a development identity for alternate
 local origins; the official release identity is bound to the official origin.
 Active-session checks require the normal composed dispatcher.
 
-- [ ] Point the app at a web build advertising a range below v6. Confirm the
-      update-required copy appears and that Start is disabled.
-- [ ] Point it at the current v6 web build. Confirm v6 is selected and the advertised capabilities match actual
+- [ ] Point the app at a web build advertising a range below `MOBILE_PROTOCOL_MIN`
+      (today v1). Confirm the update-required copy appears and that Start is disabled.
+- [ ] Point it at the current web build (today v1). Confirm that version is selected and the advertised capabilities match actual
       composition. Capabilities must reflect the composed runtime.
-- [ ] Point it at a web build advertising a range above v6. Confirm the
+- [ ] Point it at a web build advertising a range above `MOBILE_PROTOCOL_MAX`. Confirm the
       update-required copy appears, that Start is disabled, and that browsing and
       route planning still work.
 - [ ] Reload the WebView during an active session. Confirm a fresh handshake,

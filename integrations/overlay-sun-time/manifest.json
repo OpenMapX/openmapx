@@ -23,7 +23,6 @@
     "routes": true
   },
   "quality": "built-in",
-  "category": "Data Overlays",
   "dataSources": [
     {
       "sourceId": "timezone-boundary-builder",

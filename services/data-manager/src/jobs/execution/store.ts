@@ -22,6 +22,7 @@ import {
 } from "@openmapx/core/data-manager-contracts";
 import { DATA_ADVISORY_LOCKS } from "@openmapx/core/data-manager-sdk";
 import { uuidv7 } from "@openmapx/core/ids/uuidv7";
+import { DATA_JOB_TRIGGERS, type DataJobTrigger } from "@openmapx/core/jobs";
 import {
   canonicalJson,
   type ExecutionRef,
@@ -66,7 +67,8 @@ export class DataConfigurationMaintenanceBusy extends Error {
   }
 }
 export interface DataExecutionRecord {
-  triggeredBy: string | null;
+  trigger: DataJobTrigger;
+  triggeredByUserId: string | null;
   execution: ExecutionRef;
   status: DataExecutionStatus;
   input: DataExecutionInput;
@@ -88,7 +90,9 @@ export interface DataExecutionAdmissionOptions {
   parent?: VerifiedParentExecution;
   id?: string;
   principal?: ExecutionRef["principal"];
-  triggeredBy?: string;
+  /** What started the job, and the administrator the API started it for. */
+  trigger: DataJobTrigger;
+  triggeredByUserId?: string;
   idempotencyKey?: string;
 }
 export type DataExecutionPatch = Partial<
@@ -196,7 +200,8 @@ export interface DataExecutionStore {
   ): Promise<DataExecutionRecord | null>;
 }
 interface Row extends Record<string, unknown> {
-  triggered_by: string | null;
+  trigger: string;
+  triggered_by_user_id: string | null;
   id: string;
   kind: string;
   status: string;
@@ -282,10 +287,11 @@ function decode(row: Row): DataExecutionRecord {
     return parsed;
   });
   return {
-    triggeredBy: z
+    trigger: z.enum(DATA_JOB_TRIGGERS).parse(row.trigger),
+    triggeredByUserId: z
       .string()
       .nullable()
-      .parse(row.triggered_by ?? null),
+      .parse(row.triggered_by_user_id ?? null),
     execution,
     status,
     input,
@@ -322,7 +328,7 @@ export async function withDataAdmissionTransaction<T>(
       await tx`SELECT pg_try_advisory_xact_lock(${DATA_ADMISSION_LOCK[0]},${DATA_ADMISSION_LOCK[1]}) AS held`;
     if (lock[0]?.held !== true) throw new DataConfigurationMaintenanceBusy();
     const guard =
-      await tx`SELECT maintenance_id FROM data_manager.configuration_fence WHERE state='prepared' LIMIT 1`;
+      await tx`SELECT maintenance_id FROM data_manager.configuration_fence WHERE status='prepared' LIMIT 1`;
     if (guard.length) throw new DataConfigurationMaintenanceBusy();
     return { value: await run(tx) };
   });
@@ -339,7 +345,7 @@ export function createPostgresDataExecutionStore(
   const now = options.now ?? Date.now;
   const findByIdempotencyKey = async (tx: postgres.Sql | postgres.TransactionSql, key: string) => {
     const rows = await tx.unsafe<Row[]>(
-      "SELECT * FROM data_manager.jobs WHERE idempotency_key=$1 AND (admitted_at >= $2::text::timestamptz OR finished_at IS NULL) ORDER BY admitted_at DESC,id LIMIT 1",
+      "SELECT * FROM data_manager.job WHERE idempotency_key=$1 AND (admitted_at >= $2::text::timestamptz OR finished_at IS NULL) ORDER BY admitted_at DESC,id LIMIT 1",
       [key, instant(now() - 24 * 3600000)],
     );
     return rows[0];
@@ -351,7 +357,7 @@ export function createPostgresDataExecutionStore(
     lock = false,
   ) => {
     const rows = await tx.unsafe<Row[]>(
-      `SELECT * FROM data_manager.jobs WHERE ${key}=$1${lock ? " FOR UPDATE" : ""}`,
+      `SELECT * FROM data_manager.job WHERE ${key}=$1${lock ? " FOR UPDATE" : ""}`,
       [value],
     );
     return rows[0] ? decode(rows[0]) : null;
@@ -379,7 +385,7 @@ export function createPostgresDataExecutionStore(
       : null;
     const rows = await tx<
       Row[]
-    >`UPDATE data_manager.jobs SET status=${status.status},ownership_version=ownership_version+1,
+    >`UPDATE data_manager.job SET status=${status.status},ownership_version=ownership_version+1,
       execution_state=${canonicalJson({ cancellationRequestedAt, progress, diagnostics, publication, ...(result ? { result } : {}) })}::text::jsonb,
       execution_agent_operations=${canonicalJson(agentOperations)}::text::jsonb,finished_at=${finishedAt === null ? null : new Date(finishedAt).toISOString()}::text::timestamptz
       WHERE id=${status.id} AND ownership_version=${record.version} RETURNING *`;
@@ -397,7 +403,7 @@ export function createPostgresDataExecutionStore(
   ) {
     const [row] = await tx<
       { execution_progress: unknown }[]
-    >`SELECT execution_progress FROM data_manager.jobs WHERE id=${record.status.id}`;
+    >`SELECT execution_progress FROM data_manager.job WHERE id=${record.status.id}`;
     const progress = executionProgressSchema.parse(row?.execution_progress);
     const cell = progress.children.find((entry) => entry.ordinal === child.ordinal);
     if (!cell) throw new DataExecutionConflict("Child is absent from original owned reservations");
@@ -411,7 +417,7 @@ export function createPostgresDataExecutionStore(
     assertExecutionRowCapacity(serialized);
     const rows = await tx<
       Row[]
-    >`UPDATE data_manager.jobs SET ownership_version=ownership_version+1,execution_progress=${serialized}::text::jsonb
+    >`UPDATE data_manager.job SET ownership_version=ownership_version+1,execution_progress=${serialized}::text::jsonb
       WHERE id=${record.status.id} AND ownership_version=${record.version} RETURNING *`;
     return rows[0] ? decode(rows[0]) : null;
   }
@@ -497,7 +503,8 @@ export function createPostgresDataExecutionStore(
         if (
           record.input.kind !== "transit-sync" ||
           record.operationFingerprint !== operationFingerprint ||
-          record.triggeredBy !== (admission.triggeredBy ?? null)
+          record.trigger !== admission.trigger ||
+          record.triggeredByUserId !== (admission.triggeredByUserId ?? null)
         )
           throw new DataExecutionConflict("Idempotency key body or actor conflict");
         return { created: false, record };
@@ -523,7 +530,8 @@ export function createPostgresDataExecutionStore(
           canonicalJson(record.parent) !== canonicalJson(admission.parent ?? null) ||
           record.execution.principal !== (admission.principal ?? "data-manager") ||
           (admission.id !== undefined && admission.id !== record.status.id) ||
-          (admission.triggeredBy !== undefined && record.triggeredBy !== admission.triggeredBy)
+          (admission.triggeredByUserId !== undefined &&
+            record.triggeredByUserId !== admission.triggeredByUserId)
         )
           throw new DataExecutionConflict("Data execution identity conflict");
         return { created: false, record };
@@ -589,7 +597,7 @@ export function createPostgresDataExecutionStore(
         // nor wait.
         if (!short) {
           const active =
-            await tx`SELECT id FROM data_manager.jobs WHERE finished_at IS NULL AND kind <> ALL(${[...SHORT_DATA_EXECUTION_KINDS]}) LIMIT 1`;
+            await tx`SELECT id FROM data_manager.job WHERE finished_at IS NULL AND kind <> ALL(${[...SHORT_DATA_EXECUTION_KINDS]}) LIMIT 1`;
           if (active.length) throw new DataConfigurationMaintenanceBusy();
         }
         const normalized = normalizeExecutionAdmission({
@@ -635,10 +643,10 @@ export function createPostgresDataExecutionStore(
         );
         const rows = await tx<
           Row[]
-        >`INSERT INTO data_manager.jobs(id,kind,status,triggered_by,idempotency_key,operation_key,operation_fingerprint,
+        >`INSERT INTO data_manager.job(id,kind,status,trigger,triggered_by_user_id,idempotency_key,operation_key,operation_fingerprint,
           execution_fingerprint,admitted_at,deadline_at,requested_deadline_at,execution_parent,execution_input,execution_state,execution_ref,execution_agent_operations,
           execution_admission,execution_progress)
-          VALUES(${status.id},${input.kind},'queued',${admission.triggeredBy ?? null},${idempotencyKey ?? null},${status.operationKey},${operationFingerprint},
+          VALUES(${status.id},${input.kind},'queued',${admission.trigger},${admission.triggeredByUserId ?? null},${idempotencyKey ?? null},${status.operationKey},${operationFingerprint},
           ${status.fingerprint},${instant(status.admittedAt)}::text::timestamptz,${instant(status.deadlineAt)}::text::timestamptz,${instant(admission.requestedDeadlineAt)}::text::timestamptz,
           ${admission.parent ? canonicalJson(admission.parent) : null}::text::jsonb,${canonicalJson(input)}::text::jsonb,${canonicalJson({ cancellationRequestedAt: null, progress: null, diagnostics: status.diagnostics, publication: status.publication })}::text::jsonb,${canonicalJson({ execution, childReservations })}::text::jsonb,${canonicalJson(agentOperations)}::text::jsonb,
           ${row.admission}::text::jsonb,${row.progress}::text::jsonb) RETURNING *`;
@@ -753,11 +761,11 @@ export function createPostgresDataExecutionStore(
     async recordReleased(id) {
       // On a row without its execution row `released_at` records that the
       // control prune swept the files named by its key; only that prune sets it.
-      await sql`UPDATE data_manager.jobs SET released_at=now()
+      await sql`UPDATE data_manager.job SET released_at=now()
         WHERE id=${id} AND finished_at IS NOT NULL AND execution_admission IS NOT NULL AND released_at IS NULL`;
     },
     async listUnsettled() {
-      const rows = await sql<Row[]>`SELECT * FROM data_manager.jobs
+      const rows = await sql<Row[]>`SELECT * FROM data_manager.job
         WHERE (finished_at IS NULL OR (execution_admission IS NOT NULL AND released_at IS NULL))
         ORDER BY admitted_at,id`;
       return rows.map(decode);

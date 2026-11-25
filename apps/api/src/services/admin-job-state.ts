@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { DATA_JOB_TERMINAL_STATUSES, type JobStatus } from "@openmapx/core/jobs";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import { adminJob, adminJobLog } from "../db/schema";
@@ -99,7 +100,7 @@ export async function writeAdminJobCandidate(
   id: string,
   execution: JobExecution | undefined,
   candidate: AdminJobCandidate | null,
-  statuses = ["running", "cancel_pending"],
+  statuses: JobStatus[] = ["running", "cancel_pending"],
 ): Promise<AdminJobProtocol> {
   const [row] = await connection
     .update(adminJob)
@@ -153,7 +154,7 @@ export function hasUnsettledManagedOperation(
   const standalone = own as { _standalone?: unknown; _standaloneSettled?: unknown };
   return (
     (standalone?._standalone !== undefined && standalone._standaloneSettled !== true) ||
-    (p?.version === 3 && Object.values(p.operations ?? {}).some((o) => o.terminal !== true)) ||
+    (p?.version === 1 && Object.values(p.operations ?? {}).some((o) => o.terminal !== true)) ||
     (data !== undefined &&
       (!Array.isArray(data) ||
         data.some(
@@ -161,7 +162,7 @@ export function hasUnsettledManagedOperation(
             !child ||
             child.state !== "terminal" ||
             !["not_started", "committed"].includes(child.publication) ||
-            !["ok", "partial", "error", "canceled", "interrupted"].includes(child.status) ||
+            !(DATA_JOB_TERMINAL_STATUSES as readonly string[]).includes(child.status) ||
             typeof child.id !== "string" ||
             typeof child.operationKey !== "string" ||
             typeof child.fingerprint !== "string",
@@ -170,7 +171,7 @@ export function hasUnsettledManagedOperation(
 }
 export function noUnsettledManagedOperation() {
   const own = sql`${adminJob.protocol}->'handler'`;
-  return sql`(${own}->'_standalone' IS NULL OR ${own}->'_standaloneSettled' = 'true'::jsonb) AND NOT (coalesce(${adminJob.protocol}->'operations'->>'version','') = '3' AND EXISTS(SELECT 1 FROM jsonb_each(coalesce(${adminJob.protocol}->'operations'->'operations','{}'::jsonb)) AS active_entry WHERE coalesce(active_entry.value->>'terminal','false') <> 'true')) AND CASE WHEN ${own}->'_dataExecutions' IS NULL THEN true WHEN jsonb_typeof(${own}->'_dataExecutions') <> 'array' THEN false ELSE NOT EXISTS(SELECT 1 FROM jsonb_array_elements(${own}->'_dataExecutions') AS backend_entry WHERE backend_entry->>'state' IS DISTINCT FROM 'terminal' OR coalesce(backend_entry->>'publication','unknown') NOT IN ('not_started','committed') OR coalesce(backend_entry->>'status','') NOT IN ('ok','partial','error','canceled','interrupted') OR coalesce(backend_entry->>'id','') !~ '^[a-f0-9-]{36}$' OR coalesce(backend_entry->>'operationKey','') !~ '^opk1_[A-Za-z0-9_-]{16,64}$' OR coalesce(backend_entry->>'fingerprint','') !~ '^[a-f0-9]{64}$') END`;
+  return sql`(${own}->'_standalone' IS NULL OR ${own}->'_standaloneSettled' = 'true'::jsonb) AND NOT (coalesce(${adminJob.protocol}->'operations'->>'version','') = '1' AND EXISTS(SELECT 1 FROM jsonb_each(coalesce(${adminJob.protocol}->'operations'->'operations','{}'::jsonb)) AS active_entry WHERE coalesce(active_entry.value->>'terminal','false') <> 'true')) AND CASE WHEN ${own}->'_dataExecutions' IS NULL THEN true WHEN jsonb_typeof(${own}->'_dataExecutions') <> 'array' THEN false ELSE NOT EXISTS(SELECT 1 FROM jsonb_array_elements(${own}->'_dataExecutions') AS backend_entry WHERE backend_entry->>'state' IS DISTINCT FROM 'terminal' OR coalesce(backend_entry->>'publication','unknown') NOT IN ('not_started','committed') OR coalesce(backend_entry->>'status','') NOT IN (${sql.raw(DATA_JOB_TERMINAL_STATUSES.map((status) => `'${status}'`).join(","))}) OR coalesce(backend_entry->>'id','') !~ '^[a-f0-9-]{36}$' OR coalesce(backend_entry->>'operationKey','') !~ '^opk1_[A-Za-z0-9_-]{16,64}$' OR coalesce(backend_entry->>'fingerprint','') !~ '^[a-f0-9]{64}$') END`;
 }
 export function readJobExecution(protocol: unknown): JobExecution | undefined {
   const value = readAdminJobProtocol(protocol).execution;
@@ -189,7 +190,7 @@ export function readJobExecution(protocol: unknown): JobExecution | undefined {
 export function jobOwnership(
   id: string,
   execution: JobExecution | undefined,
-  statuses = ["running"],
+  statuses: JobStatus[] = ["running"],
 ) {
   return and(
     eq(adminJob.id, id),
@@ -254,7 +255,7 @@ export async function insertOwnedJobLog(
     ), inserted AS (
       INSERT INTO ${adminJobLog} (job_id, seq, stream, line, source_event_id, created_at)
       SELECT owner.id, owner.log_events, ${entry.stream}, ${entry.line}, ${entry.sourceEventId ?? null}, ${entry.createdAt.toISOString()}::timestamptz
-      FROM owner WHERE coalesce(owner.protocol->'operations'->>'version','') <> '3' OR (
+      FROM owner WHERE coalesce(owner.protocol->'operations'->>'version','') <> '1' OR (
         owner.log_events < ${ADMIN_JOB_LOG_LIMITS.events}
         AND owner.log_bytes + ${bytes} <= ${ADMIN_JOB_LOG_LIMITS.bytes}
       ) ON CONFLICT (job_id, source_event_id) WHERE source_event_id IS NOT NULL DO NOTHING
@@ -272,7 +273,7 @@ export async function insertOwnedJobLog(
 
 /** Both fields change in one PostgreSQL statement; the old claim is the CAS token. */
 export async function claimAdminJob(
-  job: { id: string; protocol: unknown; status: string },
+  job: { id: string; protocol: unknown; status: JobStatus },
   patch: Partial<typeof adminJob.$inferInsert> = {},
   observation = false,
 ) {

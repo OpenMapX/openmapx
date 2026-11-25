@@ -4,10 +4,10 @@ impacts: [breaking, security, operator-action]
 
 ## What changes
 
-Extension preview, install, update and worker execution block every critical
-extension until its advisory is cleared. Advisory `maxVersion` is display data,
-not a version-based exception. A queued job is checked again before installation
-effects. Removal remains available.
+Extension preview, install, update and worker execution block a critically
+flagged extension until its advisory is cleared, for every version up to the
+advisory's `maxVersion` (see `extension-manifest-contract.md`). A queued job is
+checked again before installation effects. Removal remains available.
 
 Direct manifest URLs resolve using the validated manifest identity at community
 trust. Catalog identity, version and digest checks remain enforced. Preview has

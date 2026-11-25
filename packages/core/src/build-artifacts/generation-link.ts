@@ -260,5 +260,5 @@ export async function inspectGenerationLinks(options: {
   const status: DataExecutionStatus = dataExecutionStatusSchema.parse(response.data);
   if (status.kind !== "generation-link") throw Error("Hardlink application identity conflict");
   if (!isDataExecutionTerminal(status)) return "pending";
-  return status.status === "ok" ? "complete" : "failed";
+  return status.status === "succeeded" ? "complete" : "failed";
 }

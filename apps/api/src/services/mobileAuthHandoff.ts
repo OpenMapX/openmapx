@@ -170,7 +170,7 @@ export class MobileAuthHandoffService {
       tokenCiphertext: encryptedToken.ciphertext,
       tokenIv: encryptedToken.iv,
       tokenTag: encryptedToken.tag,
-      tokenKeyVersion: encryptedToken.version,
+      tokenKeyVersion: encryptedToken.keyVersion,
       createdAt: new Date(input.nowMs),
       expiresAt: new Date(expiresAtMs),
     });
@@ -225,7 +225,7 @@ export class MobileAuthHandoffService {
     try {
       oneTimeToken = decryptHandoffToken(
         {
-          version: row.tokenKeyVersion,
+          keyVersion: row.tokenKeyVersion,
           ciphertext: row.tokenCiphertext,
           iv: row.tokenIv,
           tag: row.tokenTag,

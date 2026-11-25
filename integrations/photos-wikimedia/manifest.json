@@ -22,7 +22,6 @@
     "url": "https://commons.wikimedia.org/w/api.php?action=query&meta=siteinfo&siprop=general&format=json"
   },
   "quality": "built-in",
-  "category": "External",
   "dataSources": [
     {
       "sourceId": "wikimedia",

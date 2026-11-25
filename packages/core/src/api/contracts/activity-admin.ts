@@ -1,4 +1,10 @@
 import z from "zod/v4";
+import {
+  DATA_JOB_STATUSES,
+  JOB_STAGE_STATUSES,
+  JOB_STATUSES,
+  TERMINAL_JOB_STATUSES,
+} from "../../jobs/vocabulary";
 import { opsFailureResultSchema, processDiagnosticsSchema } from "../../ops/job-evidence";
 export const adminJobObservationSchema = z.strictObject({
   state: z.literal("unknown"),
@@ -28,21 +34,8 @@ import {
 } from "./admin";
 
 export const adminActivityJobSourceSchema = z.enum(["application", "data-manager"]);
-export const adminApplicationJobStatusSchema = z.enum([
-  "queued",
-  "running",
-  "cancel_pending",
-  "success",
-  "failed",
-  "canceled",
-]);
-export const adminDataManagerActivityJobStatusSchema = z.enum([
-  "running",
-  "success",
-  "partial",
-  "failed",
-  "interrupted",
-]);
+export const adminApplicationJobStatusSchema = z.enum(JOB_STATUSES);
+export const adminDataManagerActivityJobStatusSchema = z.enum(DATA_JOB_STATUSES);
 export const adminActorSummarySchema = z.strictObject({
   id: z.string(),
   name: z.string(),
@@ -87,7 +80,7 @@ export const adminActivityJobStageSchema = z.strictObject({
   id: z.string(),
   jobId: z.string(),
   stage: z.string(),
-  status: z.enum(["ok", "skipped", "error", "partial"]),
+  status: z.enum(JOB_STAGE_STATUSES),
   startedAt: adminTimestampSchema,
   finishedAt: adminTimestampSchema,
   durationMs: adminCountSchema,
@@ -142,7 +135,7 @@ export const adminJobStreamMetricsSchema = z.strictObject({
     maxMs: z.number().nonnegative(),
   }),
 });
-const terminal = z.enum(["success", "failed", "canceled"]);
+const terminal = z.enum(TERMINAL_JOB_STATUSES);
 export const adminJobStreamEventSchemas = {
   snapshot: z.strictObject({ job: adminApplicationActivityJobDetailSchema }),
   status: z.strictObject({

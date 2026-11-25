@@ -1,4 +1,5 @@
 import type { SavedConflictCode } from "@openmapx/core/api-contracts";
+import { coordinateIdPosition, savedRowKey } from "@openmapx/core/place-ids";
 import {
   isSystemSavedList,
   MAX_SAVED_LISTS_PER_USER,
@@ -17,10 +18,10 @@ import {
   placesToGpx,
   placesToKml,
 } from "@openmapx/core/saved-place-export";
-import { and, eq, sql } from "drizzle-orm";
+import { and, between, eq, isNull, sql } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
 import { db } from "../db/index";
-import { SAVED_LIST_NAME_UNIQUE } from "../db/saved-schema";
+import { fieldContributorsColumns, SAVED_LIST_NAME_UNIQUE } from "../db/saved-schema";
 import { labeledPlace, savedList, savedPlace, user } from "../db/schema";
 import { isUniqueViolation } from "../db/unique-violation";
 import { planSavedImport, suffixedListName } from "../services/saved-import-plan";
@@ -28,6 +29,23 @@ import { savedImportLimit } from "../utils/rate-limit";
 import { getUserId, requireAuthHook } from "../utils/require-auth";
 import { declareRouteAuth } from "../utils/route-auth";
 import { registerSavedImportRoute, registerSavedRoute } from "./saved-contract";
+
+/** A saved place as its owner reads it; the storage format stays internal. */
+function savedPlaceColumns() {
+  return {
+    id: savedPlace.id,
+    listId: savedPlace.listId,
+    name: savedPlace.name,
+    address: savedPlace.address,
+    lat: savedPlace.lat,
+    lng: savedPlace.lng,
+    placeId: savedPlace.placeId,
+    fieldContributors: savedPlace.fieldContributors,
+    note: savedPlace.note,
+    sortOrder: savedPlace.sortOrder,
+    createdAt: savedPlace.createdAt,
+  };
+}
 
 // Positions are not unique, and a row can be inserted at an existing one. Ties
 // fall back to creation time and then the primary key, so a listing keeps one
@@ -256,6 +274,7 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
           const rows: (typeof savedPlace.$inferInsert)[] = plan.accepted.map(
             ({ place, sortOrder }) => ({
               ...place,
+              ...fieldContributorsColumns(place.fieldContributors),
               listId,
               placeId: null,
               sortOrder,
@@ -387,7 +406,7 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
     }
 
     const places = await db
-      .select()
+      .select(savedPlaceColumns())
       .from(savedPlace)
       .where(eq(savedPlace.listId, id))
       .orderBy(...PLACE_ORDER);
@@ -481,7 +500,7 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
           lat: body.lat,
           lng: body.lng,
           placeId: body.placeId ?? null,
-          fieldContributors: captured ?? null,
+          ...fieldContributorsColumns(captured),
           note: body.note ?? null,
         })
         .returning({ id: savedPlace.id });
@@ -622,7 +641,7 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
       lat: body.lat,
       lng: body.lng,
       placeId: body.placeId ?? null,
-      fieldContributors: captured ?? null,
+      ...fieldContributorsColumns(captured),
       icon: body.icon ?? null,
     };
 
@@ -680,12 +699,30 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
       return reply.status(400).send({ error: "placeId query parameter is required" });
     }
 
-    const rows = await db
-      .select({ listId: savedPlace.listId })
-      .from(savedPlace)
-      .innerJoin(savedList, eq(savedPlace.listId, savedList.id))
-      .where(and(eq(savedPlace.placeId, placeId), eq(savedList.userId, userId)));
+    // A session-local place stores no id: its rows are those without one at
+    // the same coordinates, compared exactly as the client's coordinate id.
+    const position = coordinateIdPosition(placeId);
+    const rows = position
+      ? (
+          await db
+            .select({ listId: savedPlace.listId, lat: savedPlace.lat, lng: savedPlace.lng })
+            .from(savedPlace)
+            .innerJoin(savedList, eq(savedPlace.listId, savedList.id))
+            .where(
+              and(
+                eq(savedList.userId, userId),
+                isNull(savedPlace.placeId),
+                between(savedPlace.lat, position.lat - 1e-6, position.lat + 1e-6),
+                between(savedPlace.lng, position.lng - 1e-6, position.lng + 1e-6),
+              ),
+            )
+        ).filter((row) => savedRowKey({ placeId: null, lat: row.lat, lng: row.lng }) === placeId)
+      : await db
+          .select({ listId: savedPlace.listId })
+          .from(savedPlace)
+          .innerJoin(savedList, eq(savedPlace.listId, savedList.id))
+          .where(and(eq(savedPlace.placeId, placeId), eq(savedList.userId, userId)));
 
-    return { listIds: rows.map((r) => r.listId) };
+    return { listIds: [...new Set(rows.map((r) => r.listId))] };
   });
 };

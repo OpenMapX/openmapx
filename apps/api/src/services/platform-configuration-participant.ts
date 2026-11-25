@@ -7,7 +7,7 @@ import { services } from "@openmapx/core/server";
 import { eq, sql } from "drizzle-orm";
 import { AdminActionReauthentication } from "../account/admin-reauthentication";
 import { loadAuthPolicy } from "../account/auth-policy";
-import { platformConfigurationPreview, systemSettings } from "../db/schema";
+import { platformConfigurationPreview, systemSetting } from "../db/schema";
 import { readProjection } from "./admin-job-projection";
 import {
   type AdministrativeConfigurationWriter,
@@ -26,7 +26,7 @@ import type {
   ProspectiveConfigurationOverlay,
   ValidatedConfigurationCandidate,
 } from "./prospective-configuration";
-import { encrypt } from "./secrets";
+import { encrypt, secretAad } from "./secrets";
 
 declare const intentBrand: unique symbol;
 export interface PlatformConfigurationIntent {
@@ -233,8 +233,8 @@ export async function preparePlatformConfigurationChange(
   }
   const [desired] = await owner.connection
     .select({ version: sql<string>`xmin::text` })
-    .from(systemSettings)
-    .where(eq(systemSettings.key, PLATFORM_CONFIGURATION_SETTING));
+    .from(systemSetting)
+    .where(eq(systemSetting.key, PLATFORM_CONFIGURATION_SETTING));
   if ((desired?.version ?? null) !== retained.desiredRowVersion)
     throw new PlatformPreviewConflict("Platform desired state changed; create a new preview");
   const { version: _version, ...patch } = preview.configuration;
@@ -253,9 +253,9 @@ export async function preparePlatformConfigurationChange(
     const current = active(writer);
     if (state.committed) {
       const [saved] = await current.connection
-        .select({ value: systemSettings.value, version: sql<string>`xmin::text` })
-        .from(systemSettings)
-        .where(eq(systemSettings.key, PLATFORM_CONFIGURATION_SETTING));
+        .select({ value: systemSetting.value, version: sql<string>`xmin::text` })
+        .from(systemSetting)
+        .where(eq(systemSetting.key, PLATFORM_CONFIGURATION_SETTING));
       const [consumed] = await current.connection
         .select()
         .from(platformConfigurationPreview)
@@ -314,8 +314,8 @@ export async function preparePlatformConfigurationChange(
       throw new PlatformPreviewConflict();
     const [desired] = await current.connection
       .select({ version: sql<string>`xmin::text` })
-      .from(systemSettings)
-      .where(eq(systemSettings.key, PLATFORM_CONFIGURATION_SETTING));
+      .from(systemSetting)
+      .where(eq(systemSetting.key, PLATFORM_CONFIGURATION_SETTING));
     if ((desired?.version ?? null) !== state.expectedDesiredRowVersion)
       throw new PlatformPreviewConflict();
     if (proof && preview.requiredConfirmation.domain)
@@ -418,6 +418,7 @@ export async function preparePlatformConfigurationChange(
               sessionId: proof.sessionId,
               nonce: proof.nonce.toString("base64"),
             }),
+            secretAad.platformConfigurationAuthorization(owner.job.jobId, writer.operationKey),
           ),
         }
       : {}),

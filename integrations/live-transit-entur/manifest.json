@@ -42,7 +42,6 @@
     "urlTemplate": "${journeyPlannerEndpoint}"
   },
   "quality": "built-in",
-  "category": "Transit",
   "dataSources": [
     {
       "sourceId": "entur-live-vehicles",

@@ -33,7 +33,7 @@ crashScenario({
     const job = await host
       .waitForJob(submitted.jobId as string, { timeoutMs: 90_000 })
       .catch(() => host.job(submitted.jobId as string));
-    expect(job.status).not.toBe("success");
+    expect(job.status).not.toBe("succeeded");
     expect(host.dockerEffects({ caller: "helper", since: before })).toEqual([]);
     expect(host.dockerEffects({ command: "compose", since: before })).toEqual([]);
     if (!job.terminal) {

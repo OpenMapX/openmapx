@@ -53,7 +53,7 @@ const POI_SEARCH_DIR = join(
 
 function loadPoiSearchManifest(): IntegrationManifest {
   const raw = JSON.parse(readFileSync(join(POI_SEARCH_DIR, "manifest.json"), "utf-8"));
-  const validation = validateManifest(raw);
+  const validation = validateManifest(raw, { firstParty: true });
   if (!validation.valid) {
     throw new Error(`poi-search manifest failed validation: ${validation.errors.join(", ")}`);
   }

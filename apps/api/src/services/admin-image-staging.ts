@@ -1,3 +1,4 @@
+import { isComponentId } from "@openmapx/core/component-id";
 import {
   createServiceBatchResult,
   type OpsResultFor,
@@ -28,7 +29,7 @@ export async function handleImageStageJob(ctx: JobContext): Promise<Record<strin
     !Array.isArray(ids) ||
     !ids.length ||
     ids.length > 64 ||
-    !ids.every((id) => typeof id === "string" && /^[a-z0-9][a-z0-9-]{0,63}$/.test(id)) ||
+    !ids.every(isComponentId) ||
     new Set(ids).size !== ids.length
   )
     throw Error("Select1–64 installed services");

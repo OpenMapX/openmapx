@@ -41,13 +41,13 @@ The catalog lists discovered built-in and community services, their manifest
 version, quality tier, capabilities and container state. Search by name, ID or
 capability, then open a service to inspect its configuration and logs.
 
-| Column   | What it shows                                                              |
-| -------- | -------------------------------------------------------------------------- |
-| Service  | The display name and its manifest `id`                                     |
-| Version  | The manifest version                                                       |
-| Quality  | A badge: **Built-in**, **Verified** (community-verified), or **Community** |
-| Provides | The capabilities the service offers (`routing-engine`, `geocoder`, …)      |
-| Status   | The container's Docker state — running, exited, restarting, not running    |
+| Column   | What it shows                                                           |
+| -------- | ----------------------------------------------------------------------- |
+| Service  | The display name and its manifest `id`                                  |
+| Version  | The manifest version                                                    |
+| Quality  | A badge: **Built-in** or **Community**                                  |
+| Provides | The capabilities the service offers (`routing-engine`, `geocoder`, …)   |
+| Status   | The container's Docker state — running, exited, restarting, not running |
 
 A summary across the top counts the total, running, and stopped services, and
 you can narrow the list with the search box (by name, id, or capability) and the
@@ -358,7 +358,8 @@ and recovery.
 ### Notable places index
 
 Inspect the Wikidata place/name counts, sitelink threshold, publication time and
-last error. Data Manager builds a missing index on startup and refreshes monthly.
+last error. Data Manager builds a missing index on startup, rebuilds one an
+older release wrote, and refreshes monthly.
 Choose **Rebuild now**, or run:
 
 ```bash
@@ -441,7 +442,7 @@ resources for only the active slot is insufficient.
 | photon                                | `REGION`, `UPDATE_STRATEGY` (PARALLEL/SEQUENTIAL), `UPDATE_INTERVAL` (1h–8760h), `LOG_LEVEL` (DEBUG/INFO/WARN/ERROR)                                                                                                                                                                                                                                                    | Photon image index acquisition, update scheduling and Python logger; TRACE is unsupported                                       |
 | overpass                              | `OVERPASS_SPACE`, `OVERPASS_FASTCGI_PROCESSES`, `OVERPASS_UPDATE_SLEEP`, `OVERPASS_RULES_LOAD`                                                                                                                                                                                                                                                                          | Image query memory, workers, refresh and rules budget                                                                           |
 | postgis                               | `POSTGIS_DIAGNOSTICS`, `POSTGIS_TRACK_IO_TIMING`                                                                                                                                                                                                                                                                                                                        | OpenMapX's PostgreSQL entrypoint diagnostics                                                                                    |
-| valhalla                              | `serve_tiles`, `build_time_zones`, `use_tiles_ignore_pbf`, plus existing `build_elevation` and `build_admins`                                                                                                                                                                                                                                                           | Scripted image environment, serialized as `True`/`False`                                                                        |
+| valhalla                              | `SERVE_TILES`, `BUILD_TIME_ZONES`, `USE_TILES_IGNORE_PBF`, plus existing `BUILD_ELEVATION` and `BUILD_ADMINS`                                                                                                                                                                                                                                                           | Scripted image environment, serialized as `True`/`False`                                                                        |
 | Existing BRouter and Dawarich schemas | Existing routing/import/thread and application/database/credential fields                                                                                                                                                                                                                                                                                               | Existing service consumers and typed credential workflows, preserved alongside resource fields                                  |
 
 The legacy `NEXT_PUBLIC_MAP_STYLE_URL` name denotes the **glyph server base**,

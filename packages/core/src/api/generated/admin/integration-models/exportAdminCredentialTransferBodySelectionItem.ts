@@ -4,7 +4,7 @@ import type { ExportAdminCredentialTransferBodySelectionItemScope } from "./expo
 
 export type ExportAdminCredentialTransferBodySelectionItem = {
   scope: ExportAdminCredentialTransferBodySelectionItemScope;
-  /** @pattern ^[a-z0-9][a-z0-9-]{0,63}$ */
+  /** @pattern ^(?=.{1,48}$)[a-z0-9]+(?:-[a-z0-9]+)*$ */
   id: string;
   /**
    * @minLength 1

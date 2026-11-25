@@ -3,10 +3,11 @@ import { createDataExecutionRuntime } from "./runtime.js";
 import type { DataExecutionStore } from "./store.js";
 
 /** The shape a restore leaves behind for an execution that was in progress. */
-function closedByRestore(status: "error" | "ok") {
+function closedByRestore(status: "failed" | "succeeded") {
   const id = "00000000-0000-4000-8000-000000000008";
   return {
-    triggeredBy: null,
+    trigger: "cron",
+    triggeredByUserId: null,
     execution: { executionId: id, operationKey: `opk1_${"b".repeat(20)}` },
     status: {
       id,
@@ -27,7 +28,7 @@ function closedByRestore(status: "error" | "ok") {
 }
 
 describe("reconciling an execution closed by a restore", () => {
-  it.each(["error", "ok"] as const)(
+  it.each(["failed", "succeeded"] as const)(
     "never moves a terminal %s execution back to interrupted or unknown",
     async (status) => {
       const checkpoint = vi.fn();

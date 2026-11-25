@@ -318,9 +318,9 @@ describe("NativeBridge.receive", () => {
 
       const outcome = await bridge.receive({
         url: `${WEB_ORIGIN}/`,
-        // One below whatever was negotiated: still a real version, still not
-        // the one this channel agreed on.
-        data: command(nonce, { messageId: "m-version", protocolVersion: MOBILE_PROTOCOL_MAX - 1 }),
+        // One above whatever was negotiated: still a well-formed version, still
+        // not the one this channel agreed on.
+        data: command(nonce, { messageId: "m-version", protocolVersion: MOBILE_PROTOCOL_MAX + 1 }),
       });
 
       expect(rejection(outcome)).toBe("protocol-mismatch");

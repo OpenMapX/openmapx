@@ -48,12 +48,14 @@ a data-manager route the API passes through, has one shape:
 { "error": "Invalid coordinates", "code": "INVALID_QUERY" }
 ```
 
-- `error` is a short description that is safe to show to a user. It never
-  carries an upstream body, a URL with a key or a stack trace. Clients read the
-  text from `error` only.
-- `code` is optional: a stable, machine-readable reason for clients that branch
-  on it. A family with closed codes documents them, as the air-quality,
-  OpenStreetMap contribution, saved-places and garage contracts do.
+- `error` is a short description that is safe to show to a user. It is text,
+  never a machine token such as `invalid_request` or `AUTH_POLICY_CONFLICT`. It
+  never carries an upstream body, a URL with a key or a stack trace. Clients
+  read the text from `error` only and never branch on it.
+- `code` is optional: a stable, machine-readable reason in UPPER_SNAKE
+  (`SNAPSHOT_EXPIRED`, `IN_FLIGHT`) for clients that branch on it. A family with
+  closed codes documents them, as the air-quality, OpenStreetMap contribution,
+  saved-places and garage contracts do.
 - A family may add fields beside these, such as `retryAfter`, `details`, an
   `errors` list of validation messages or a `hint`.
 - An error body carries no `ok` flag: the HTTP status says that the request
@@ -68,16 +70,27 @@ for any status of 500 or above. The schema is `apiErrorSchema` in
 `apps/api/src/__tests__/error-envelope.test.ts` scans the API, the built-in
 integrations, the integration framework and data-manager and refuses an error
 reply whose literal body has no `error` or has an `ok` field, including a body
-wrapped in `satisfies` or `as`.
+wrapped in `satisfies` or `as`. It also refuses a token-like `error` literal and
+a `code` literal in another casing, in error replies, in any object literal with
+both `error` and `code`, in a literal passed as the code of an error class whose
+code a route sends (the test lists them), and in the contract schemas under
+`packages/core/src/api/contracts`, data-manager's contracts and the air quality
+package. It judges literals only: a code computed at run time, a helper's
+argument or a constant body sent by name is not seen. On contract routes the
+shared error schema types `code` as UPPER_SNAKE, so the serializer refuses
+another casing at run time.
 Data-manager error replies that the API passes through use the same envelope:
 offline package preparation names its reason in `code` (with
 `retryAfterSeconds` when it limits the caller), and a refused transit source
-change names `in-flight` or `duplicate-idempotency-key` in `code` beside
+change names `IN_FLIGHT` or `DUPLICATE_IDEMPOTENCY_KEY` in `code` beside
 `existingJobId`.
 
-The only exception is Better Auth's handler under `/api/auth/*`. Its errors are
-`{ code, message }`, because that is the shape the Better Auth client library
-reads; OpenMapX does not own or rewrite them.
+Two exceptions keep the shapes their client libraries read; OpenMapX does not
+rewrite them:
+
+- Better Auth's handler under `/api/auth/*` answers `{ code, message }`.
+- An OAuth 2.0 error response (RFC 6749, with `error_description`) keeps its
+  lower-case `error` token, such as `invalid_request`.
 
 ## What gets collected, and how
 
@@ -241,21 +254,34 @@ fallback.
 
 The only path exemption is exactly `/api/auth` and its `/api/auth/` subtree,
 whose unsafe requests remain protected by Better Auth's own global origin
-middleware. Cookie-free bearer, service-token, loopback-CLI, and anonymous
-requests continue to their existing route authentication; that is an
-authentication-mode branch, not a route exemption. In particular, loopback
-admin mutations still require `X-OpenMapX-Local-Admin` independently of this
-guard. `GET`, `HEAD`, and `OPTIONS` are unaffected.
+middleware. Cookie-free bearer, service-token and anonymous requests continue
+to their existing route authentication; that is an authentication-mode branch,
+not a route exemption. The host CLI's admin requests carry a session cookie and
+the API origin as `Origin`, so this guard applies to them like any browser
+request. `GET`, `HEAD`, and `OPTIONS` are unaffected.
 
 `CORS_ORIGIN` is also the normalized web-origin source for CORS, Better Auth,
 and auth UI redirects. CORS responses vary on `Origin` and never reflect an
 untrusted origin. CORS is a browser response policy, not authorization, and it
 does not replace the mutation guard.
 
+### Mobile protocol boundary
+
+The installed app's native requests carry `X-OpenMapX-Mobile-Protocol`, naming
+the protocol it speaks. `makeMobileProtocolHook` in
+`apps/api/src/server-wiring.ts` runs on every request and answers a header
+outside `[MOBILE_PROTOCOL_MIN, MOBILE_PROTOCOL_MAX]` (or a malformed or repeated
+one) with `426 { error, code: "MOBILE_PROTOCOL_UNSUPPORTED" }` before any route
+runs. Requests without the header, as the web app sends them, are not affected.
+The routes the app calls this way are versioned by that number and declared as
+`nativeClientOperations` in `@openmapx/core/api-contracts`; see
+[Mobile architecture](mobile-architecture.md#the-native-client-contract).
+
 ## What this document is not
 
 The inventory is an internal application surface, not a promise of a stable
-versioned public API. Better Auth is mounted as one wildcard handler and appears
+versioned public API. The one exception is the native client family above, which
+installed apps keep calling and which changes only with the mobile protocol. Better Auth is mounted as one wildcard handler and appears
 as `/api/auth/{wildcard}`; its individual endpoints remain Better Auth's contract.
 OpenMapX's auth policy hook adds refusals on Better Auth's credential-changing
 endpoints (`401 FRESH_SIGN_IN_REQUIRED`, `403 IMPERSONATION_NOT_ALLOWED`); the
@@ -576,7 +602,7 @@ producer adds must be declared in the contract before it reaches the browser.
 Configured secret settings always read as `***`. The audit export is a
 `text-download` whose `format` query selects CSV or JSON; the browser downloads
 it by navigating to the generated URL. Coverage failures carry their stable code,
-such as `snapshot_expired`, in `error`. Maintenance admission answers 409 either
+such as `SNAPSHOT_EXPIRED`, in `code`. Maintenance admission answers 409 either
 with the active job's ID or with the deployment state when host maintenance is
 unavailable.
 
@@ -626,9 +652,11 @@ contract changes.
 Direct manifest URLs use the real safe-fetch path and full portable manifest
 validation, then apply revocation and platform policy to the validated identity.
 They always resolve at community trust. Catalog resolution retains ID, declared
-version, digest and immutable verified authorization checks. All critical entries
-block preview/install/update and worker execution until cleared; `maxVersion`
-remains display-only metadata. Removal stays available. Existing stale-feed
+version, digest and immutable verified authorization checks. A critical entry
+blocks preview/install/update and worker execution of every version up to its
+semantic-version `maxVersion` (every version without one) until cleared; the
+`critical` field of a catalog response is present only when the advisory covers
+the offered version. Removal stays available. Existing stale-feed
 reporting and cached denial semantics are preserved.
 
 Preview has its own one-token/30-second network-key bucket. Install and update
@@ -668,12 +696,12 @@ and unrelated API origins are untouched. Synchronous source edits and refresh al
 invalidate catalog/detail/installed snapshots and installed badges.
 
 The private operator CLI uses these same generated operations with one isolated
-`ApiClient` per action. It reads `API_URL` → `OPENMAPX_API_URL` →
-`http://localhost:3001` late, omits credentials and always attaches
-`x-openmapx-local-admin` from the trimmed optional `OPENMAPX_LOCAL_ADMIN_TOKEN`
-(empty when absent). It does not configure the global client or create cookies,
-Origin headers or a new authentication mode. Other operator commands retain
-their existing transport.
+`ApiClient` per action, authenticated like `system update`: it reads the
+operator's Better Auth session cookie from `--session-file` once per action and
+sends it, with the origin as `Origin`, only to the HTTPS API origin
+(`https://DOMAIN` or `--api-origin`), with browser credentials omitted and
+redirects refused. It does not configure the global client, discover browser
+cookies or create a session.
 
 `ext preview <idOrUrl>` displays the complete validated inspected snapshot.
 Install/update preview again with their invocation client and selector before

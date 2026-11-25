@@ -76,7 +76,7 @@ dbDescribe("administrator proof through actual auth HTTP and generated SDK", () 
       old = await signin(actor.email),
       key = randomUUID();
     const started = await sdk.startAdminReauthentication(
-      { purpose: "account.verify", targetId: "synthetic-subject", restart: true },
+      { purpose: "user.email.verify", targetId: "synthetic-subject", restart: true },
       { "idempotency-key": key },
       { client, headers: { cookie: old.cookies } },
     );
@@ -102,7 +102,7 @@ dbDescribe("administrator proof through actual auth HTTP and generated SDK", () 
       .select()
       .from(adminActionReauthentication)
       .where(eq(adminActionReauthentication.id, started.data.challengeId));
-    expect(row?.state).toBe("completed");
+    expect(row?.status).toBe("completed");
     expect(row?.completedMethod).toBe("password");
     const actualSession = await auth.api.getSession({
       headers: new Headers({ cookie: fresh.cookies }),
@@ -168,30 +168,31 @@ dbDescribe("administrator proof through actual auth HTTP and generated SDK", () 
     expect(record?.method).toBe("password_recovery");
     expect(record?.originIndependentPasswordLogin).toBe(true);
   });
-  it("rate-limits by real actor and rejects synthetic loopback administration", async () => {
+  it("rate-limits by real actor and refuses a request without a session", async () => {
     const actor = await account(),
       login = await signin(actor.email);
     for (let i = 0; i < 5; i++) {
       const result = await sdk.startAdminReauthentication(
-        { purpose: "account.verify", targetId: "synthetic-subject", restart: true },
+        { purpose: "user.email.verify", targetId: "synthetic-subject", restart: true },
         { "idempotency-key": randomUUID() },
         { client, headers: { cookie: login.cookies } },
       );
       expect(result.status).toBe(200);
     }
     const limited = await sdk.startAdminReauthentication(
-      { purpose: "account.verify", targetId: "synthetic-subject", restart: true },
+      { purpose: "user.email.verify", targetId: "synthetic-subject", restart: true },
       { "idempotency-key": randomUUID() },
       { client, headers: { cookie: login.cookies } },
     );
     expect(limited.status).toBe(429);
     expect(limited.headers.get("retry-after")).toMatch(/^\d+$/);
+    // A loopback peer without a session is not an administrator.
     const local = await app.inject({
       method: "POST",
       url: "/api/admin/reauth/start",
-      headers: { "x-openmapx-local-admin": "", "idempotency-key": randomUUID() },
-      payload: { purpose: "account.verify", targetId: "synthetic" },
+      headers: { "idempotency-key": randomUUID() },
+      payload: { purpose: "user.email.verify", targetId: "synthetic" },
     });
-    expect(local.statusCode).toBe(403);
+    expect(local.statusCode).toBe(401);
   });
 });

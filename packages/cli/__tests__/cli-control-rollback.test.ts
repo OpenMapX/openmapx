@@ -174,12 +174,6 @@ describe("the database check", () => {
       assertDatabaseAllowsRollback(plan(manifest("release-1", "1", 100)), null),
     ).not.toThrow();
   });
-
-  it("refuses a target that records no migration head", () => {
-    expect(() => assertDatabaseAllowsRollback(plan(manifest("release-1", "1")), 1)).toThrow(
-      /records no database migration head/,
-    );
-  });
 });
 
 describe("openmapx control rollback", () => {

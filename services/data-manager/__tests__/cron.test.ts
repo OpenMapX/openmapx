@@ -86,7 +86,7 @@ function receipt(patch: Partial<DataExecutionStatus> = {}): DataExecutionStatus 
     admittedAt: 1,
     deadlineAt: 4102444800000,
     kind: "transit-sync",
-    status: "ok",
+    status: "succeeded",
     publication: "committed",
     cancellationRequestedAt: null,
     progress: 1,
@@ -442,9 +442,9 @@ describe("setupCron", () => {
     const runPipeline = vi.fn().mockResolvedValue({
       jobId: "job-x",
       results: [
-        { stage: "motis-health", status: "error" as const, error: { message: "rentals empty" } },
+        { stage: "motis-health", status: "failed" as const, error: { message: "rentals empty" } },
       ],
-      finalStatus: "error" as const,
+      finalStatus: "failed" as const,
     });
     const handles = setupCron({
       dataDir,
@@ -458,11 +458,11 @@ describe("setupCron", () => {
       executionReceiver: receiverFixture({
         admitLocal: async () => {
           await runPipeline();
-          return receipt({ status: "error" });
+          return receipt({ status: "failed" });
         },
         legacyResult: () => ({
           results: [
-            { stage: "motis-health", status: "error", error: { message: "rentals empty" } },
+            { stage: "motis-health", status: "failed", error: { message: "rentals empty" } },
           ],
         }),
       }),
@@ -483,7 +483,7 @@ describe("setupCron", () => {
     const inspect = vi
         .fn()
         .mockResolvedValueOnce(receipt({ status: "running", publication: "unknown" }))
-        .mockResolvedValueOnce(receipt({ status: "partial" })),
+        .mockResolvedValueOnce(receipt({ status: "partially_succeeded" })),
       cancel = vi.fn(),
       createIssue = vi.fn(async () => "https://x/issues/2"),
       staleness = vi.fn(async () => {});
@@ -607,7 +607,10 @@ describe("setupCron", () => {
       });
       try {
         await handles.runAutoBumpNow();
-        expect(resolveCatalogProposal).toHaveBeenCalledWith({ branch: expected });
+        expect(resolveCatalogProposal).toHaveBeenCalledWith({
+          branch: expected,
+          actor: { trigger: "cron" },
+        });
       } finally {
         handles.stop();
         vi.unstubAllEnvs();

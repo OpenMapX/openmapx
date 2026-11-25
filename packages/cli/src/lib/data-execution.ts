@@ -222,7 +222,7 @@ export async function runOwnedDataStep(
     checkpointAttempt: async (attempt) => retainCliDataAttempt(context.authority, attempt),
     checkpoint: onProgress,
   });
-  if (phase === "data-step" && result.status !== "ok")
+  if (phase === "data-step" && result.status !== "succeeded")
     throw Error(`Data execution ${result.id} finished ${result.status}`);
   return result;
 }

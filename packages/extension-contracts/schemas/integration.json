@@ -4,13 +4,16 @@
   "properties": {
     "id": {
       "type": "string",
-      "pattern": "^[a-z0-9][a-z0-9-]*$"
+      "maxLength": 48,
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
     },
     "name": {
       "type": "string"
     },
     "version": {
-      "type": "string"
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\\+([0-9a-zA-Z-]+(?:\\.[0-9a-zA-Z-]+)*))?$"
     },
     "description": {
       "type": "string"
@@ -301,7 +304,7 @@
     },
     "quality": {
       "type": "string",
-      "enum": ["built-in", "community-verified", "community"]
+      "const": "community"
     },
     "dataSources": {
       "type": "array",
@@ -487,7 +490,8 @@
       "additionalProperties": false
     }
   },
-  "required": ["id", "domains"],
-  "$id": "https://openmapx.org/schemas/extension-contracts/0.1.0/integration.json",
+  "required": ["id", "version", "platform", "domains"],
+  "additionalProperties": false,
+  "$id": "https://openmapx.org/schemas/extension-contracts/1.0/integration.json",
   "$comment": "Structural authoring schema. Runtime validation additionally checks structured licensing, media hosts, component references, compatibility and community policy. This identifier does not imply hosted schema availability."
 }

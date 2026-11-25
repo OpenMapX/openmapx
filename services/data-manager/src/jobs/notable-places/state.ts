@@ -1,4 +1,5 @@
 import type { NotablePlacesStatus as CanonicalNotablePlacesStatus } from "@openmapx/core/data-manager-contracts";
+import { NOTABLE_PLACES_SCHEMA_VERSION } from "@openmapx/core/published-data";
 import type postgres from "postgres";
 
 export interface NotablePlacesRuntimeState {
@@ -36,6 +37,15 @@ export async function hasPublishedNotablePlaces(sql: postgres.Sql): Promise<bool
     `SELECT to_regclass('notable_places.index_state') IS NOT NULL AS exists`,
   );
   return rows[0]?.exists === true;
+}
+
+/** Whether the published snapshot, if any, was written by the current builder. */
+export async function hasCurrentNotablePlaces(sql: postgres.Sql): Promise<boolean> {
+  if (!(await hasPublishedNotablePlaces(sql))) return false;
+  const rows = await sql.unsafe<{ schema_version: number }[]>(
+    `SELECT schema_version FROM notable_places.index_state WHERE singleton = 1`,
+  );
+  return rows[0]?.schema_version === NOTABLE_PLACES_SCHEMA_VERSION;
 }
 
 export async function getNotablePlacesStatus(opts: {

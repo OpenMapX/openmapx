@@ -1,5 +1,5 @@
 {
-  "name": "@openmapx/integration-__ID__",
+  "name": "openmapx-integration-__ID__",
   "version": "0.1.0",
   "private": true,
   "type": "module",

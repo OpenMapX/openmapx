@@ -89,9 +89,9 @@ describe.skipIf(
     vi.unstubAllEnvs();
   });
   async function seed(
-    type = "backup.operation",
+    type: (typeof adminJob.$inferInsert)["type"] = "backup.operation.run",
     result: Record<string, unknown> = {},
-    status = "running",
+    status: (typeof adminJob.$inferInsert)["status"] = "running",
   ) {
     const id = randomUUID();
     ids.push(id);
@@ -153,7 +153,7 @@ describe.skipIf(
   it("serializes an update against diagnostics but admits it once the active job is terminal", async () => {
     holdPump();
     const admissionMarker = randomUUID();
-    const first = await jobRunner.enqueue("system.diagnostics", { admissionMarker }, null);
+    const first = await jobRunner.enqueue("system.diagnostics.collect", { admissionMarker }, null);
     await expect(
       jobRunner.enqueue("system.update", { operation: "check", admissionMarker }, null),
     ).rejects.toThrow(/already active/);
@@ -161,7 +161,7 @@ describe.skipIf(
     await expect(
       jobRunner.enqueue("system.update", { operation: "check", admissionMarker }, null),
     ).rejects.toThrow(/already active/);
-    for (const terminal of ["success", "failed", "canceled"]) {
+    for (const terminal of ["succeeded", "failed", "cancelled"] as const) {
       await state.db.update(adminJob).set({ status: terminal }).where(eq(adminJob.id, first));
       const next = await jobRunner.enqueue(
         "system.update",
@@ -180,14 +180,14 @@ describe.skipIf(
     const others = await Promise.all([
       jobRunner.enqueue("service.start", { admissionMarker }, null),
       jobRunner.enqueue("service.start", { admissionMarker }, null),
-      jobRunner.enqueue("data.operation", { admissionMarker }, null),
+      jobRunner.enqueue("data.operation.run", { admissionMarker }, null),
     ]);
     expect(new Set(others).size).toBe(3);
     expect(await jobsMarked(admissionMarker)).toHaveLength(4);
   });
 
   it("rejects a resumed old owner's log before insert/publication and stops forward work", async () => {
-    const job = await seed("test.stale-log");
+    const job = await seed("integration.reload");
     const ready = Promise.withResolvers<JobContext>();
     const resume = Promise.withResolvers<void>();
     const after = vi.fn();
@@ -217,7 +217,7 @@ describe.skipIf(
   });
 
   it("publishes a source event once when its atomic insert is deduplicated", async () => {
-    const job = await seed("test.duplicate-log");
+    const job = await seed("integration.reload");
     jobRunner.register(job.type, async (ctx) => {
       await ctx.log("once", "stdout", `${job.id}:event`);
       await ctx.log("once", "stdout", `${job.id}:event`);
@@ -236,7 +236,7 @@ describe.skipIf(
   });
 
   it("keeps the lines of agent operations whose cursors coincide, in the order written", async () => {
-    const job = await seed("test.coinciding-cursors-log");
+    const job = await seed("integration.reload");
     jobRunner.register(job.type, async (ctx) => {
       await ctx.log("first operation", "stdout", "ops:job1_first:1");
       await ctx.log("local");
@@ -263,7 +263,7 @@ describe.skipIf(
   });
 
   it("rechecks ownership after waiting behind a concurrent replacement's row lock", async () => {
-    const job = await seed("test.blocked-log");
+    const job = await seed("integration.reload");
     const ready = Promise.withResolvers<JobContext>();
     const resume = Promise.withResolvers<void>();
     jobRunner.register(job.type, async (ctx) => {
@@ -304,7 +304,7 @@ describe.skipIf(
   });
 
   it("preserves a renewed live lease through checkpoints and rejects a stale due-row claim", async () => {
-    const job = await seed("test.live-lease");
+    const job = await seed("integration.reload");
     const claimed = await claimAdminJob(job);
     const ready = Promise.withResolvers<JobContext>();
     const resume = Promise.withResolvers<void>();
@@ -359,7 +359,7 @@ describe.skipIf(
       const key = "opk1_fixround1recover12";
       const opId = "job1_fixround1recover12";
       const terminal: OpsJobStatus = {
-        version: 2,
+        version: 1,
         admittedAt: Date.now(),
         deadlineAt: Date.now() + 300000,
         fingerprint: "a".repeat(64),
@@ -439,13 +439,13 @@ describe.skipIf(
       offline = false;
       expect((await row(job.id)).status).toBe("running");
       expect(outcomes).not.toContain("failed");
-      expect(outcomes).not.toContain("canceled");
+      expect(outcomes).not.toContain("cancelled");
       status.mockResolvedValue(terminal);
       // The abandoned claim must become due without initialize() or an unknown write.
       vi.useFakeTimers({ toFake: ["Date"] });
       vi.setSystemTime(Date.now() + 65_000);
       await jobRunner.reconcile();
-      expect((await row(job.id)).status).toBe(backendFailed ? "failed" : "success");
+      expect((await row(job.id)).status).toBe(backendFailed ? "failed" : "succeeded");
       if (backendFailed)
         expect((await row(job.id)).result).toHaveProperty(
           "diagnostics.tail.0.message",
@@ -456,7 +456,7 @@ describe.skipIf(
       ).toHaveLength(1);
       expect(state.client.cancel).not.toHaveBeenCalled();
       if (!backendFailed) expect(outcomes).not.toContain("failed");
-      expect(outcomes).not.toContain("canceled");
+      expect(outcomes).not.toContain("cancelled");
       stop();
       errors.mockRestore();
     },
@@ -491,7 +491,7 @@ describe.skipIf(
     const diagnostics = { truncated: false, tail: [{ stream: "stderr", message: "retained" }] };
     async function seedObserved(status: "running" | "cancel_pending") {
       const job = await seed(
-        "system.diagnostics",
+        "system.diagnostics.collect",
         {
           observation: {
             state: "unknown",
@@ -499,7 +499,7 @@ describe.skipIf(
             nextCheckAt: new Date(0).toISOString(),
           },
           operations: {
-            version: 3,
+            version: 1,
             steps: {},
             eventTotal: 0,
             byteTotal: 0,
@@ -552,13 +552,13 @@ describe.skipIf(
         } as unknown as ApiOpsClient;
         const events: unknown[] = [];
         const stop = jobEventBus.subscribe(job.id, ({ event }) => {
-          if (event.type === "status" && event.status === "canceled") events.push(event.result);
+          if (event.type === "status" && event.status === "cancelled") events.push(event.result);
         });
         if (reconcile) await jobRunner.reconcile();
         else expect(await jobRunner.cancel(job.id)).toBe(true);
         stop();
         const finished = await row(job.id);
-        expect(finished.status).toBe("canceled");
+        expect(finished.status).toBe("cancelled");
         expect(finished.finishedAt).not.toBeNull();
         expect(finished.result).not.toHaveProperty("observation");
         expect(finished.result).toHaveProperty("diagnostics", diagnostics);
@@ -625,7 +625,7 @@ describe.skipIf(
         const id = `job1_${randomUUID().replaceAll("-", "")}`,
           at = Date.now();
         const status: OpsJobStatus = {
-          version: 2,
+          version: 1,
           kind: operation.kind,
           operationId: id,
           operationKey: options.operationKey,
@@ -674,7 +674,7 @@ describe.skipIf(
     };
   }
   async function seedCapacity(count: number, mixed = false) {
-    const job = await seed(`test.renewal.capacity.${randomUUID()}`),
+    const job = await seed("integration.reload"),
       execution = required(readJobExecution(job.protocol));
     const parent = retainedParent(job.id),
       operations: ReturnType<typeof readProjection>["operations"] = {},
@@ -711,7 +711,7 @@ describe.skipIf(
               attemptId: randomUUID(),
             };
       const status = {
-        version: 2 as const,
+        version: 1 as const,
         operationId: `job1_fixture${String(n).padStart(16, "0")}`,
         operationKey: key,
         kind: operation.kind,
@@ -760,7 +760,7 @@ describe.skipIf(
     const protocol = {
       ...(job.protocol as Record<string, unknown>),
       operations: {
-        version: 3,
+        version: 1,
         eventTotal: 7,
         byteTotal: 17,
         truncated: false,
@@ -779,7 +779,7 @@ describe.skipIf(
     return { ...job, result, protocol: stored };
   }
   it("renewal: same-owner same-address different deadlines has one CAS winner and at most one mutation POST", async () => {
-    const job = await seed("test.renewal.same-address"),
+    const job = await seed("integration.reload"),
       holders = await checkpointContexts(job),
       remote = successfulClient();
     const lockReady = Promise.withResolvers<void>(),
@@ -932,7 +932,7 @@ describe.skipIf(
     expect((await row(job.id)).logEvents).toBe(count);
   });
   it("raises instead of dropping a line when the log counter fell behind the log", async () => {
-    const job = await seed("test.drifted-log-counter"),
+    const job = await seed("integration.reload"),
       execution = required(readJobExecution(job.protocol));
     const { insertOwnedJobLog } = await import("../admin-job-state");
     const line = { jobId: job.id, stream: "stdout" as const, line: "first", createdAt: new Date() };
@@ -949,7 +949,7 @@ describe.skipIf(
     ).toHaveLength(1);
   });
   it("keeps logging a job without agent operations past the operations log capacity", async () => {
-    const job = await seed("test.uncapped-log"),
+    const job = await seed("integration.reload"),
       execution = required(readJobExecution(job.protocol));
     await state.db
       .update(adminJob)
@@ -966,7 +966,7 @@ describe.skipIf(
     ).toEqual({ seq: 2000 });
   });
   it("renewal: ambiguous committed allocation sends no POST and recovery remains lookup-only", async () => {
-    const job = await seed("test.renewal.ambiguous"),
+    const job = await seed("integration.reload"),
       holders = await checkpointContexts(job),
       remote = successfulClient();
     const transaction = state.db.transaction.bind(state.db);

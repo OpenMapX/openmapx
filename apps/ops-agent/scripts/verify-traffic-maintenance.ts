@@ -3,6 +3,7 @@ import { execFile } from "node:child_process";
 import { access, readFile, realpath } from "node:fs/promises";
 import { promisify } from "node:util";
 import { executionRefSchema, opsOperationFingerprint } from "@openmapx/core/ops";
+import { services } from "@openmapx/core/server";
 import { createDockerRuntime } from "../src/docker-runtime";
 import { dispatchOpsOperation } from "../src/runtime";
 import { withPrivateFixture } from "./traffic-maintenance-fixture";
@@ -68,7 +69,7 @@ const runtime = createDockerRuntime({
   execFile: async (file, args, options) => {
     assert.equal(file, "docker");
     const syntheticArgs = args.map((arg) =>
-      arg === "openmapx-valhalla-1" ? SYNTHETIC_CONTAINER : arg,
+      arg === services.serviceContainerName("valhalla") ? SYNTHETIC_CONTAINER : arg,
     );
     return execute(file, syntheticArgs, options);
   },

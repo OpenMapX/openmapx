@@ -30,13 +30,13 @@ it("keeps the real runner's durable pending outcome observable through Fastify a
   const at = "2026-10-19 10:00:00+00"; // PostgreSQL timestamptz driver value in a UTC session.
   const row = {
     id: "0193e4a0-0000-7000-8001-000000000005",
-    type: "data.operation",
+    type: "data.operation.run",
     status: "running",
     payload: { operation: "link" },
     result: {},
     protocol: {
       operations: {
-        version: 3,
+        version: 1,
         steps: {},
         eventTotal: 0,
         byteTotal: 0,
@@ -46,7 +46,7 @@ it("keeps the real runner's durable pending outcome observable through Fastify a
     },
     error: null,
     progress: 10,
-    createdBy: null,
+    createdByUserId: null,
     createdAt: at,
     startedAt: at,
     finishedAt: null,
@@ -55,7 +55,7 @@ it("keeps the real runner's durable pending outcome observable through Fastify a
   // runner, event bus, routes, serializers and generated SDK all execute.
   const database = drizzle(async (sql, params) => {
     if (sql.startsWith('update "admin_job"')) {
-      if (params[0] === "canceled") return { rows: [] }; // The row is running, not queued.
+      if (params[0] === "cancelled") return { rows: [] }; // The row is running, not queued.
       if (params[0] !== "cancel_pending") throw new Error(`Unexpected update: ${sql}`);
       row.status = "cancel_pending";
       return {
@@ -76,7 +76,8 @@ it("keeps the real runner's durable pending outcome observable through Fastify a
                 row.payload,
                 row.error,
                 row.progress,
-                row.createdBy,
+                row.createdByUserId,
+                null,
                 null,
                 row.createdAt,
                 row.startedAt,
@@ -123,7 +124,7 @@ it("keeps the real runner's durable pending outcome observable through Fastify a
         data: { total: 1, jobs: [{ id: row.id, status: "cancel_pending" }] },
       });
     }
-    const { protocol: _protocol, ...publicRow } = row;
+    const { protocol: _protocol, createdByUserId: createdBy, ...publicRow } = row;
     const detail = await getAdminActivityJob(row.id, { source: "application" }, { client });
     // The runner's protocol state is never public Activity data.
     expect(JSON.stringify(detail)).not.toContain('"protocol"');
@@ -131,6 +132,7 @@ it("keeps the real runner's durable pending outcome observable through Fastify a
       status: 200,
       data: {
         ...publicRow,
+        createdBy,
         result: {},
         createdAt: "2026-10-19T10:00:00.000Z",
         startedAt: "2026-10-19T10:00:00.000Z",

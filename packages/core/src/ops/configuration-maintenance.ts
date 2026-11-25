@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { COMPONENT_ID_PATTERN } from "../component-id";
 import { strictlyAscending } from "../utils/strictlyAscending";
 import { canonicalJson } from "./canonical-json";
 import { configurationMaintenanceEffectOperationSchema } from "./configuration-operation-records";
@@ -8,10 +9,7 @@ import { coordinatorModeSchema } from "./configuration-preparation-records";
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const key = z.string().regex(/^opk1_[A-Za-z0-9_-]{16,64}$/);
 const revision = z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/);
-const ids = z
-  .array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/))
-  .max(256)
-  .refine(strictlyAscending);
+const ids = z.array(z.string().regex(COMPONENT_ID_PATTERN)).max(256).refine(strictlyAscending);
 
 export {
   type ProtectedConfigurationServiceId,

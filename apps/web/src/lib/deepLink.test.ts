@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildDirectionsDeepLinkUrl,
   buildLocationShareUrl,
+  DEEPLINK_PARAMS,
   DEEPLINK_UPDATE_EVENT,
   formatCameraParam,
   formatLabeledPoint,
@@ -31,9 +32,27 @@ describe("deepLink helpers", () => {
     expect(paramsWithoutDeepLink("?buildings=0&token=keep").toString()).toBe("token=keep");
   });
 
+  it("reads every boolean as 1 or 0 and nothing else", () => {
+    expect(parseDeepLinkSearch("?globe=1").globe).toBe(true);
+    expect(parseDeepLinkSearch("?globe=0").globe).toBe(false);
+    expect(parseDeepLinkSearch("?globe=true").globe).toBeUndefined();
+    expect(
+      parseDeepLinkSearch("?measurement=line&measurementFinished=1").measurement?.finalized,
+    ).toBe(true);
+    expect(
+      parseDeepLinkSearch("?measurement=line&measurementFinished=true").measurement?.finalized,
+    ).toBe(false);
+  });
+
+  it("names every parameter as a full lowerCamel word", () => {
+    for (const name of DEEPLINK_PARAMS) expect(name).toMatch(/^[a-z]+(?:[A-Z][a-z0-9]*)*$/);
+    for (const removed of ["ov", "wp", "at", "cat", "raw", "sched", "sli", "bbox", "categoryId"])
+      expect(DEEPLINK_PARAMS.has(removed as never)).toBe(false);
+  });
+
   it("parses place links using the current schema", () => {
     const parsed = parseDeepLinkSearch(
-      "?place=osm:node:123&at=52.517036,13.38886&name=Berlin&cat=city&raw=place/city",
+      "?place=osm:node:123&placeLocation=52.517036,13.38886&placeName=Berlin&placeCategory=city&placeRawCategory=place/city",
     );
 
     expect(parsed.place).toEqual({
@@ -47,7 +66,7 @@ describe("deepLink helpers", () => {
 
   it("parses the transit stop a place was opened for", () => {
     const parsed = parseDeepLinkSearch(
-      "?place=osm:node:9&at=50.94111,6.975984&name=Bf%20Deutz%2F%20Messe&raw=transit_stop&stop=K%C3%B6ln%20Messe%2FDeutz%20Bf",
+      "?place=osm:node:9&placeLocation=50.94111,6.975984&placeName=Bf%20Deutz%2F%20Messe&placeRawCategory=transit_stop&placeTransitStop=K%C3%B6ln%20Messe%2FDeutz%20Bf",
     );
 
     expect(parsed.place).toMatchObject({
@@ -55,15 +74,11 @@ describe("deepLink helpers", () => {
       rawCategory: "transit_stop",
       stopName: "Köln Messe/Deutz Bf",
     });
-    expect(paramsWithoutDeepLink("?stop=x&token=t").toString()).toBe("token=t");
+    expect(paramsWithoutDeepLink("?placeTransitStop=x&token=t").toString()).toBe("token=t");
   });
 
-  it("does not parse removed place coordinate aliases", () => {
-    const parsed = parseDeepLinkSearch(
-      "?place=osm:node:123&lat=52.517036&lng=13.38886&name=Berlin",
-    );
-
-    expect(parsed.place).toBe(undefined);
+  it("does not read a place without its location parameter", () => {
+    expect(parseDeepLinkSearch("?place=osm:node:123&at=52.517036,13.38886").place).toBe(undefined);
   });
 
   it("keeps unrelated query params when stripping deeplink state", () => {
@@ -96,9 +111,9 @@ describe("deepLink helpers", () => {
 
   it("builds a clean location-only link on the current locale path", () => {
     const href = buildLocationShareUrl(
-      "https://maps.example/de?panel=directions&wp=50.1,6.1&ov=weather#old",
+      "https://maps.example/de?panel=directions&waypoint=50.1,6.1&overlay=weather#old",
       {
-        id: "stylePoi:42",
+        id: "style-poi:42",
         coordinates: [-77.02573, 38.88859],
         name: "Smithsonian Institution Building",
         category: "museum",
@@ -111,25 +126,25 @@ describe("deepLink helpers", () => {
     expect(url.hash).toBe("");
     expect(url.searchParams.get("map")).toBe("38.88859,-77.02573,16,0,0");
     expect(url.searchParams.get("panel")).toBe("place");
-    expect(url.searchParams.get("place")).toBe("stylePoi:42");
-    expect(url.searchParams.get("at")).toBe("38.88859,-77.02573");
-    expect(url.searchParams.get("name")).toBe("Smithsonian Institution Building");
-    expect(url.searchParams.get("cat")).toBe("museum");
-    expect(url.searchParams.get("raw")).toBe("culture/museum");
-    expect(url.searchParams.has("wp")).toBe(false);
-    expect(url.searchParams.has("ov")).toBe(false);
+    expect(url.searchParams.get("place")).toBe("style-poi:42");
+    expect(url.searchParams.get("placeLocation")).toBe("38.88859,-77.02573");
+    expect(url.searchParams.get("placeName")).toBe("Smithsonian Institution Building");
+    expect(url.searchParams.get("placeCategory")).toBe("museum");
+    expect(url.searchParams.get("placeRawCategory")).toBe("culture/museum");
+    expect(url.searchParams.has("waypoint")).toBe(false);
+    expect(url.searchParams.has("overlay")).toBe(false);
   });
 
   it("omits absent optional place metadata", () => {
     const url = new URL(
       buildLocationShareUrl("https://maps.example/", {
-        id: "coordinate:38.888590--77.025730",
+        id: "coordinate:38.888590,-77.025730",
         coordinates: [-77.02573, 38.88859],
         name: "38.888590, -77.025730",
       }),
     );
-    expect(url.searchParams.has("cat")).toBe(false);
-    expect(url.searchParams.has("raw")).toBe(false);
+    expect(url.searchParams.has("placeCategory")).toBe(false);
+    expect(url.searchParams.has("placeRawCategory")).toBe(false);
   });
 
   it("shares the supplied URL without serializing current state", async () => {
@@ -137,14 +152,14 @@ describe("deepLink helpers", () => {
     const writeText = vi.fn();
     vi.stubGlobal("navigator", { share, canShare: () => true, clipboard: { writeText } });
 
-    expect(await shareUrl({ url: "https://maps.example/?at=38.8,-77.0", title: "Museum" })).toBe(
-      "shared",
-    );
+    expect(
+      await shareUrl({ url: "https://maps.example/?placeLocation=38.8,-77.0", title: "Museum" }),
+    ).toBe("shared");
     expect(share).toHaveBeenCalledWith({
       sourceId: undefined,
       title: "Museum",
       name: undefined,
-      url: "https://maps.example/?at=38.8,-77.0",
+      url: "https://maps.example/?placeLocation=38.8,-77.0",
     });
     expect(writeText).not.toHaveBeenCalled();
   });
@@ -232,7 +247,12 @@ describe("buildDirectionsDeepLinkUrl", () => {
     expect(parsed.searchParams.get("panel")).toBe("directions");
     expect(parsed.searchParams.get("mode")).toBe("cycling");
     expect(parsed.searchParams.get("avoid")).toBe("ferries");
-    expect(parsed.searchParams.getAll("wp")).toEqual(["52.52,13.405,Berlin", "53.55,9.99,Hamburg"]);
+    expect(parsed.searchParams.getAll("waypoint")).toEqual([
+      "52.52,13.405,Berlin",
+      "53.55,9.99,Hamburg",
+    ]);
+    expect(parsed.searchParams.get("bikePreferQuietRoads")).toBe("0");
+    expect(parsed.searchParams.get("bikePreferSmoothSurfaces")).toBe("0");
     const roundTrip = parseDeepLinkSearch(parsed.search);
     expect(roundTrip.directions?.waypoints).toHaveLength(2);
     expect(roundTrip.directions?.waypoints[0]?.coords).toEqual([13.405, 52.52]);
@@ -301,9 +321,9 @@ describe("schedule deep-link param", () => {
     expect(parseScheduleParam("nonsense")).toEqual({});
   });
 
-  it("parses the sched param into the directions deep link", () => {
+  it("parses the schedule param into the directions deep link", () => {
     const parsed = parseDeepLinkSearch(
-      "?panel=directions&wp=0,0&wp=1,1&sched=1%7C0%2Ca%3D2026-09-02T14%3A00",
+      "?panel=directions&waypoint=0,0&waypoint=1,1&schedule=1%7C0%2Ca%3D2026-09-02T14%3A00",
     );
     expect(parsed.directions?.schedules).toEqual({ 0: { arriveBy: "2026-09-02T14:00" } });
   });
@@ -331,15 +351,15 @@ describe("directions waypoint slots", () => {
 
   function roundTrip(waypoints: Waypoint[]) {
     const params = new URLSearchParams({ panel: "directions" });
-    for (const value of formatWaypointParams(waypoints)) params.append("wp", value);
+    for (const value of formatWaypointParams(waypoints)) params.append("waypoint", value);
     const schedule = formatScheduleParam(waypoints);
-    if (schedule) params.set("sched", schedule);
+    if (schedule) params.set("schedule", schedule);
     return { params, parsed: parseDeepLinkSearch(`?${params}`).directions };
   }
 
   it("keeps a blank origin in front of the destination", () => {
     const { params, parsed } = roundTrip([slot("o", "origin"), slot("d", "destination", berlin)]);
-    expect(params.getAll("wp")).toEqual(["", "52.52,13.405,Berlin"]);
+    expect(params.getAll("waypoint")).toEqual(["", "52.52,13.405,Berlin"]);
     expect(parsed?.waypoints).toEqual([null, berlin]);
   });
 
@@ -349,7 +369,7 @@ describe("directions waypoint slots", () => {
       slot("w", "waypoint"),
       slot("d", "destination", berlin),
     ]);
-    expect(params.getAll("wp")).toEqual(["50.78,6.08,Aachen", "", "52.52,13.405,Berlin"]);
+    expect(params.getAll("waypoint")).toEqual(["50.78,6.08,Aachen", "", "52.52,13.405,Berlin"]);
     expect(parsed?.waypoints).toEqual([aachen, null, berlin]);
   });
 
@@ -376,25 +396,27 @@ describe("directions waypoint slots", () => {
 
   it("writes a fully specified route without empty values", () => {
     const { params } = roundTrip([slot("o", "origin", aachen), slot("d", "destination", berlin)]);
-    expect(params.getAll("wp")).toEqual(["50.78,6.08,Aachen", "52.52,13.405,Berlin"]);
+    expect(params.getAll("waypoint")).toEqual(["50.78,6.08,Aachen", "52.52,13.405,Berlin"]);
   });
 
   it("writes nothing when no slot has a place", () => {
     expect(formatWaypointParams([slot("o", "origin"), slot("d", "destination")])).toEqual([]);
   });
 
-  it("parses existing links as before", () => {
+  it("parses a compact list and drops unreadable values", () => {
     expect(
-      parseDeepLinkSearch("?panel=directions&wp=50.78,6.08,Aachen").directions?.waypoints,
+      parseDeepLinkSearch("?panel=directions&waypoint=50.78,6.08,Aachen").directions?.waypoints,
     ).toEqual([aachen]);
     expect(
-      parseDeepLinkSearch("?panel=directions&wp=garbage&wp=52.52,13.405").directions?.waypoints,
+      parseDeepLinkSearch("?panel=directions&waypoint=garbage&waypoint=52.52,13.405").directions
+        ?.waypoints,
     ).toEqual([{ coords: [13.405, 52.52], label: "" }]);
   });
 
   it("parses an empty value as a blank slot", () => {
     expect(
-      parseDeepLinkSearch("?panel=directions&wp=&wp=52.52,13.405,Berlin").directions?.waypoints,
+      parseDeepLinkSearch("?panel=directions&waypoint=&waypoint=52.52,13.405,Berlin").directions
+        ?.waypoints,
     ).toEqual([null, berlin]);
   });
 });
@@ -402,34 +424,38 @@ describe("directions waypoint slots", () => {
 describe("navigationPath", () => {
   it.each<[string, string, string[]]>([
     ["the bare map", "?map=50,6,12", []],
-    ["a standalone place", "?map=50,6,12&panel=place&place=n1&at=50,6&name=A", ["place:n1"]],
+    [
+      "a standalone place",
+      "?map=50,6,12&panel=place&place=n1&placeLocation=50,6&placeName=A",
+      ["place:n1"],
+    ],
     [
       "a place card over a category",
-      "?panel=category&categoryId=food&bbox=1,2,3,4&place=n1&at=50,6",
+      "?panel=category&category=food&bounds=1,2,3,4&place=n1&placeLocation=50,6",
       ["category:food", "place:n1"],
     ],
-    ["a text search", "?panel=category&search=pizza&bbox=1,2,3,4", ["search:pizza"]],
-    ["a saved list", "?panel=saved&savedTab=lists&list=l1", ["saved", "list:l1"]],
+    ["a text search", "?panel=category&search=pizza&bounds=1,2,3,4", ["search:pizza"]],
+    ["a saved list", "?panel=saved&savedTab=lists&savedList=l1", ["saved", "list:l1"]],
     [
       "a data-source item",
-      "?panel=datasource&source=s&item=i&bbox=1,2,3,4",
+      "?panel=datasource&dataSource=s&dataSourceItem=i&bounds=1,2,3,4",
       ["datasource:s", "item:i"],
     ],
-    ["directions with waypoints", "?panel=directions&wp=50,6&wp=51,7", ["directions"]],
+    ["directions with waypoints", "?panel=directions&waypoint=50,6&waypoint=51,7", ["directions"]],
     ["a parking panel", "?panel=parking", ["parking"]],
     [
       "the measuring tool over a place",
-      "?place=n1&at=50,6&measure=line",
+      "?place=n1&placeLocation=50,6&measurement=line",
       ["place:n1", "tool:measure"],
     ],
-    ["travel time alone", "?iso=walking&isoAt=50,6", ["tool:iso"]],
+    ["travel time alone", "?travelTime=walking&travelTimeOrigin=50,6", ["tool:iso"]],
   ])("%s", (_name, search, expected) => {
     expect(navigationPath(search)).toEqual(expected);
   });
 
   it("ignores camera, base layer and overlays", () => {
-    expect(navigationPath("?map=1,2,3&base=satellite&ov=weather&weather=radar&globe=1")).toEqual(
-      [],
-    );
+    expect(
+      navigationPath("?map=1,2,3&baseLayer=satellite&overlay=weather&weather=radar&globe=1"),
+    ).toEqual([]);
   });
 });

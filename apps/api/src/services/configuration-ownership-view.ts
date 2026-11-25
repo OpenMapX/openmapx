@@ -140,8 +140,7 @@ export async function serviceOwnershipSnapshot(
       source: resolved[key]?.source ?? "default",
       secret,
       readOnly: definition.readOnly,
-      envVar:
-        host?.envVar ?? `${coreServices.serviceConfigEnvPrefix(serviceId)}${key.toUpperCase()}`,
+      envVar: host?.envVar ?? coreServices.serviceConfigEnvName(serviceId, key),
       managedBy: managedServiceCredential(serviceId, key),
     });
   }

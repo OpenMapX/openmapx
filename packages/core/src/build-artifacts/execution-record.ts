@@ -21,6 +21,7 @@ import {
 import { canonicalJson, opsOperationFingerprint } from "../ops/fingerprint";
 import { dataWorkflowReceiptSchema } from "../ops/job-evidence";
 import { verifiedParentOrigins, verifiedParents } from "../ops/verified-parent-internal";
+import { OPS_JOB_JOURNAL_FILE, OPS_JOB_JOURNAL_VERSION } from "../services/agent-state";
 import {
   type OriginalConfigurationGenerationNonCommit,
   originalConfigurationGenerationNonCommitSource,
@@ -790,7 +791,7 @@ function receiptSettlement(
     case "fixed-cli-exit":
       return { outcome: "committed", publication: "committed" };
     case "data-command":
-      return receipt.status.status === "ok"
+      return receipt.status.status === "succeeded"
         ? { outcome: "committed", publication: "committed" }
         : { outcome: "unknown", publication: "unknown" };
     case "service-lifecycle-contained-failure":
@@ -1432,8 +1433,8 @@ export function verifyControlPreparedTerminal(
     stateDir = infra.directory("state");
     jobs = stateDir.directory("ops-agent");
     const journal = z
-      .object({ version: z.literal(2), jobs: z.array(z.unknown()).max(512) })
-      .parse(JSON.parse(jobs.read("jobs-v1.json", 24 * 1024 * 1024).toString("utf8")));
+      .object({ version: z.literal(OPS_JOB_JOURNAL_VERSION), jobs: z.array(z.unknown()).max(512) })
+      .parse(JSON.parse(jobs.read(OPS_JOB_JOURNAL_FILE, 24 * 1024 * 1024).toString("utf8")));
     const matches = journal.jobs.filter(
       (j) =>
         j &&

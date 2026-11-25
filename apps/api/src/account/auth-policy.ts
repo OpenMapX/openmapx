@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
   type AuthPolicySettings,
   type AuthPolicySnapshot,
+  auditEntry,
   authPolicyApplySchema,
   authPolicySettingsSchema,
 } from "@openmapx/core/api-contracts";
@@ -10,9 +11,10 @@ import {
   adminAuditLog,
   authPolicyApplication,
   authPolicyState,
-  systemSettings,
+  systemSetting,
   user,
 } from "../db/schema";
+import { settingDefinition, settingFromEnvironment } from "../services/settings";
 import { actorUserIdOrNull } from "../utils/actor";
 import { type AuthDatabase, currentAuthDatabase } from "./auth-database";
 export const defaultAuthPolicySettings: Readonly<AuthPolicySettings> = Object.freeze({
@@ -21,7 +23,35 @@ export const defaultAuthPolicySettings: Readonly<AuthPolicySettings> = Object.fr
   twoFaEnabled: true,
   passwordMinLength: 8,
 });
-export const authPolicyKeys = Object.freeze(Object.keys(defaultAuthPolicySettings));
+/** The system setting that holds the pending draft of each policy field. */
+export const AUTH_POLICY_SETTINGS = Object.freeze({
+  emailVerificationRequired: "auth.emailVerificationRequired",
+  sessionDurationHours: "auth.sessionDurationHours",
+  twoFaEnabled: "auth.twoFaEnabled",
+  passwordMinLength: "auth.passwordMinLength",
+} as const satisfies Record<keyof AuthPolicySettings, string>);
+/** The setting keys of the pending authentication policy draft. */
+export const authPolicyKeys: readonly string[] = Object.freeze(Object.values(AUTH_POLICY_SETTINGS));
+/** Policy fields from values keyed by their system setting. */
+export function authPolicyDraft(
+  values: Readonly<Record<string, unknown>>,
+): Partial<Record<keyof AuthPolicySettings, unknown>> {
+  return Object.fromEntries(
+    (Object.entries(AUTH_POLICY_SETTINGS) as [keyof AuthPolicySettings, string][])
+      .filter(([, key]) => Object.hasOwn(values, key))
+      .map(([field, key]) => [field, values[key]]),
+  );
+}
+/** The environment's value of email verification, if it sets one. */
+function emailVerificationFromEnvironment(): boolean | undefined {
+  try {
+    return settingFromEnvironment(
+      settingDefinition(AUTH_POLICY_SETTINGS.emailVerificationRequired),
+    ) as boolean | undefined;
+  } catch {
+    throw new AuthPolicyError("AUTH_POLICY_INVALID");
+  }
+}
 export class AuthPolicyError extends Error {
   constructor(
     readonly code:
@@ -36,12 +66,8 @@ export class AuthPolicyError extends Error {
 const digest = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
 function snapshot(settings: AuthPolicySettings, activationVersion: 0 | 1): AuthPolicySnapshot {
   const effective = { ...settings };
-  if (activationVersion === 1 && process.env.AUTH_EMAIL_VERIFICATION !== undefined) {
-    const raw = process.env.AUTH_EMAIL_VERIFICATION;
-    if (!["true", "false", "1", "0"].includes(raw))
-      throw new AuthPolicyError("AUTH_POLICY_INVALID");
-    effective.emailVerificationRequired = raw === "true" || raw === "1";
-  }
+  const fromEnvironment = activationVersion === 1 ? emailVerificationFromEnvironment() : undefined;
+  if (fromEnvironment !== undefined) effective.emailVerificationRequired = fromEnvironment;
   return Object.freeze({
     ...effective,
     activationVersion,
@@ -88,15 +114,13 @@ function snapshotWithoutEnv(s: AuthPolicySettings): AuthPolicySnapshot {
 }
 export async function authPolicyView(database: AuthDatabase = currentAuthDatabase()) {
   const active = await loadAuthPolicy(database),
-    rows = await database.select().from(systemSettings);
+    rows = await database.select().from(systemSetting);
   return {
     active,
-    pending: Object.fromEntries(
-      rows.filter((r) => authPolicyKeys.includes(r.key)).map((r) => [r.key, r.value]),
-    ),
+    pending: authPolicyDraft(Object.fromEntries(rows.map((r) => [r.key, r.value]))),
     ownership: {
       emailVerificationRequired:
-        active.activationVersion === 1 && process.env.AUTH_EMAIL_VERIFICATION !== undefined
+        active.activationVersion === 1 && emailVerificationFromEnvironment() !== undefined
           ? ("env" as const)
           : active.activationVersion === 1
             ? ("database" as const)
@@ -132,7 +156,7 @@ export async function applyAuthPolicy(
       .from(authPolicyApplication)
       .where(eq(authPolicyApplication.key, applicationKey));
     if (prior) {
-      if (prior.actorId !== actorId || prior.intentDigest !== intentDigest)
+      if (prior.actorUserId !== actorId || prior.intentDigest !== intentDigest)
         throw new AuthPolicyError("AUTH_POLICY_CONFLICT");
       return Object.freeze(prior.snapshot);
     }
@@ -149,35 +173,41 @@ export async function applyAuthPolicy(
         id: 1,
         settings: request.settings,
         revision: stored.revision,
-        activatedBy: actorId,
+        activatedByUserId: actorId,
       })
       .onConflictDoUpdate({
         target: authPolicyState.id,
         set: {
           settings: request.settings,
           revision: stored.revision,
-          activatedBy: actorId,
+          activatedByUserId: actorId,
           activatedAt: new Date(),
         },
       });
-    for (const [key, value] of Object.entries(request.settings))
+    for (const [field, value] of Object.entries(request.settings) as [
+      keyof AuthPolicySettings,
+      unknown,
+    ][])
       await tx
-        .insert(systemSettings)
-        .values({ key, value, updatedBy: actorUserIdOrNull(actorId) })
+        .insert(systemSetting)
+        .values({
+          key: AUTH_POLICY_SETTINGS[field],
+          value,
+          updatedByUserId: actorUserIdOrNull(actorId),
+        })
         .onConflictDoUpdate({
-          target: systemSettings.key,
-          set: { value, updatedBy: actorUserIdOrNull(actorId), updatedAt: new Date() },
+          target: systemSetting.key,
+          set: { value, updatedByUserId: actorUserIdOrNull(actorId), updatedAt: new Date() },
         });
     await tx.insert(adminAuditLog).values({
-      actorId,
-      targetType: "auth-policy",
+      actorUserId: actorId,
+      ...auditEntry("auth.policy.apply"),
       targetId: result.revision,
-      action: "auth.policy.apply",
       details: { revision: result.revision, activationVersion: 1 },
     });
     await tx
       .insert(authPolicyApplication)
-      .values({ key: applicationKey, actorId, intentDigest, snapshot: result });
+      .values({ key: applicationKey, actorUserId: actorId, intentDigest, snapshot: result });
     return result;
   });
 }

@@ -1,3 +1,4 @@
+import { DATA_JOB_TERMINAL_STATUSES } from "../jobs/vocabulary";
 import type { ExecutionRef } from "../ops/execution-ref";
 import {
   type DataExecutionStatus,
@@ -9,7 +10,7 @@ import {
   unwrapDataManagerResponse,
 } from "../services/data-manager/transport";
 
-const TERMINAL = new Set(["ok", "partial", "error", "canceled", "interrupted"]);
+const TERMINAL = new Set<string>(DATA_JOB_TERMINAL_STATUSES);
 
 /**
  * Checks that `status` is the terminal of exactly `execution` with a known

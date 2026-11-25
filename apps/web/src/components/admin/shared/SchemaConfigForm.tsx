@@ -20,9 +20,10 @@ import type { ConfigurationOwnership } from "@openmapx/core/api-contracts";
 import { OPERATOR_STRING_FORMATS, validOperatorString } from "@openmapx/core/configuration-values";
 import { type CredentialSetup, readCredentialSetup } from "@openmapx/integration-framework";
 import { useCallback, useId, useMemo, useState } from "react";
-import { AdminDisplayError, adminErrorText } from "@/lib/admin/adminRequestError";
+import { AdminDisplayError } from "@/lib/admin/adminRequestError";
 import { type AdminTranslator, useAdminTranslations } from "@/lib/admin/adminTranslator";
 import { useAdminDraft } from "@/lib/admin/useAdminDraft";
+import { useAdminErrorText } from "@/lib/admin/useAdminErrorText";
 import { CredentialSetupGuide } from "../integrations/CredentialSetupGuide";
 import { useConfigSourceLabel } from "./configSourceLabel";
 
@@ -226,6 +227,7 @@ export function SchemaConfigForm({
   emptyMessage: emptyMessageProp,
 }: SchemaConfigFormProps) {
   const t = useAdminTranslations("adminShared");
+  const adminErrorText = useAdminErrorText();
   const sourceLabel = useConfigSourceLabel();
   const applySavedLabel = applySavedLabelProp ?? t("applySavedConfiguration");
   const applyLabel = applyLabelProp ?? t("saveAndApply");

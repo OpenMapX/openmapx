@@ -362,14 +362,14 @@ export function setup(ctx: IntegrationContext): void {
       }
 
       if (query.length > MAX_QUERY_CHARACTERS && [...query].length > MAX_QUERY_CHARACTERS) {
-        reply.status(400).send({ error: "query_too_long" });
+        reply.status(400).send({ error: "The query is too long", code: "QUERY_TOO_LONG" });
         return;
       }
 
       const quota = await consumeParseQuota(ctx, req.clientKey, rateLimit);
       if (quota === "denied") {
         reply.header("Retry-After", "3600");
-        reply.status(429).send({ error: "rate_limited" });
+        reply.status(429).send({ error: "Too many search interpretations", code: "RATE_LIMITED" });
         return;
       }
 
@@ -467,7 +467,9 @@ export function setup(ctx: IntegrationContext): void {
         });
       } catch (err) {
         ctx.log.error("[search-nlp] parse failed", (err as Error).message);
-        reply.status(502).send({ error: "nlp_unavailable" });
+        reply
+          .status(502)
+          .send({ error: "Search interpretation is unavailable", code: "NLP_UNAVAILABLE" });
       }
     },
     { rateLimitTier: "expensive", optionalAuth: true },

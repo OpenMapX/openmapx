@@ -26,7 +26,7 @@ function makeBackups(count: number) {
     return {
       name: `backup-${String(i).padStart(3, "0")}`,
       createdAt: `2026-01-01T00:${minutes}:00.000Z`,
-      openmapxVersion: "1.0.0",
+      release: "1.0.0",
       serviceCount: 1,
       volumeCount: 1,
       totalBytes: 1024,

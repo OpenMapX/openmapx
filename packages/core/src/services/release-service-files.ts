@@ -307,7 +307,7 @@ export function releaseServiceFiles(
 }
 
 /** The `compose release-files` index version this CLI reads and writes. */
-const INDEX_VERSION = 2;
+const INDEX_VERSION = 1;
 
 const indexSchema = z.strictObject({
   version: z.literal(INDEX_VERSION),
@@ -349,19 +349,9 @@ export function serializeReleaseServiceFiles(set: ReleaseServiceFiles): string {
   })}\n`;
 }
 
-/**
- * Parses a release's index, checking each file's bytes against its hash. A
- * version 1 index comes from an image built before this checkout, whose CLI
- * reads only the current version.
- */
+/** Parses a release's index, checking each file's bytes against its hash. */
 export function parseReleaseServiceFiles(raw: string): ReleaseServiceFiles {
-  const json: unknown = JSON.parse(raw);
-  if (z.object({ version: z.literal(1) }).safeParse(json).success) {
-    throw new Error(
-      `its service file index is version 1, which this checkout no longer reads (it reads version ${INDEX_VERSION}): the selected release's image predates this checkout. Rebuild the image from this checkout, or select a newer release`,
-    );
-  }
-  const parsed = indexSchema.parse(json);
+  const parsed = indexSchema.parse(JSON.parse(raw));
   const files = new Map<string, ReleaseServiceFile>();
   for (const file of parsed.files) {
     const bytes = Buffer.from(file.bytes, "base64");

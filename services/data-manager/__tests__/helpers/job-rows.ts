@@ -12,7 +12,7 @@ export async function dataJobsSince(
 ): Promise<DataExecutionRecord[]> {
   const rows = await sql<
     { id: string }[]
-  >`SELECT id FROM data_manager.jobs WHERE admitted_at >= ${new Date(since).toISOString()}::text::timestamptz ORDER BY admitted_at,id`;
+  >`SELECT id FROM data_manager.job WHERE admitted_at >= ${new Date(since).toISOString()}::text::timestamptz ORDER BY admitted_at,id`;
   const records = await Promise.all(rows.map((row) => store.inspect(row.id)));
   return records.filter((record): record is DataExecutionRecord => record !== null);
 }

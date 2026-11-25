@@ -168,7 +168,7 @@ describe("POST /mobile-auth/issue", () => {
     const response = await issue(validIssue);
 
     expect(response.statusCode).toBe(403);
-    expect(response.json()).toEqual({ error: "invalid_request" });
+    expect(response.json()).toEqual({ error: "Invalid handoff request", code: "INVALID_REQUEST" });
     expectMobilePrivacy(response);
     expect(authState.generated).toBe(0);
     expect(handoff.issued).toEqual([]);
@@ -212,7 +212,7 @@ describe("POST /mobile-auth/issue", () => {
 
     const response = await issue(validIssue);
     expect(response.statusCode).toBe(400);
-    expect(response.json()).toEqual({ error: "invalid_request" });
+    expect(response.json()).toEqual({ error: "Invalid handoff request", code: "INVALID_REQUEST" });
     expect(handoff.issued).toHaveLength(1);
   });
 
@@ -343,7 +343,7 @@ describe("POST /mobile-auth/exchange", () => {
     // The difference between "no such code" and "wrong verifier" is exactly
     // what an attacker is probing for.
     expect(response.statusCode).toBe(400);
-    expect(response.json()).toEqual({ error: "invalid_request" });
+    expect(response.json()).toEqual({ error: "Invalid handoff request", code: "INVALID_REQUEST" });
   });
 
   it("rejects a 4097-byte fixed-length body before exchange", async () => {

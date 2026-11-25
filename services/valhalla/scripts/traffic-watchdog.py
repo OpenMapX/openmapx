@@ -35,6 +35,28 @@ MAX_PROOF_MS = 120_000
 # shape reports which of its edges carried a live speed; its proof lets the
 # router tie that report to the write the route itself was served from.
 PROVABLE_PATHS = ("/route", "/optimized_route", "/trace_attributes")
+# Settings of the valhalla-scripted entrypoint that the service manifest
+# configures as SERVE_TILES and so on.
+IMAGE_SETTINGS = (
+    "serve_tiles",
+    "build_elevation",
+    "build_admins",
+    "build_time_zones",
+    "use_tiles_ignore_pbf",
+)
+
+
+def image_environment(environ):
+    """The engine's environment: each upper-case setting copied to the
+    lower-case name the image's entrypoint reads."""
+    child_env = dict(environ)
+    for name in IMAGE_SETTINGS:
+        value = environ.get(name.upper())
+        if value is not None:
+            child_env[name] = value
+    return child_env
+
+
 DEFAULT_BACKEND_TIMEOUT = 45
 DEFAULT_CLIENT_TIMEOUT = 10
 DEFAULT_MAX_CONCURRENCY = 32
@@ -826,7 +848,7 @@ def supervise(
                 "startedAt": int(time.time() * 1000),
             },
         )
-    child_env = dict(os.environ)
+    child_env = image_environment(os.environ)
     if coordinated:
         # Offline authority just attested these tiles. Startup may not rebuild them.
         child_env["use_tiles_ignore_pbf"] = "True"

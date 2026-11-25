@@ -143,6 +143,7 @@ describe("buildReportClaim", () => {
       nonce: "fixednonce_1234567890",
     });
     expect(claim).toEqual({
+      v: 1,
       claimClass: "situation",
       kind: "incident",
       type: "accident",
@@ -164,6 +165,7 @@ describe("buildReportClaim", () => {
       nonce: "fixednonce_1234567890",
     });
     expect(claim).toEqual({
+      v: 1,
       claimClass: "situation",
       kind: "congestion",
       type: "congestion",

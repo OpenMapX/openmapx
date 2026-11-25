@@ -172,7 +172,7 @@ describe("managed Dawarich subject export", () => {
         "container",
         "--format",
         "{{json .}}",
-        "dawarich-app",
+        "openmapx-dawarich-app",
       ]);
       return {
         stdout: JSON.stringify({

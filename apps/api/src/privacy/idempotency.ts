@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { PrivacyActorKind, PrivacyEventType } from "@openmapx/core/privacy";
 import { and, eq, isNull } from "drizzle-orm";
 import type { db as defaultDb } from "../db/index.js";
 import { REQUEST_EVENT_IDEMPOTENCY_KEY } from "../db/privacy-schema.js";
@@ -9,7 +10,6 @@ import { PrivacyRequestError } from "./errors.js";
 import { eventPayloadSchema } from "./request-contracts.js";
 
 const IDEMPOTENCY_KEY = /^[A-Za-z0-9][A-Za-z0-9._~-]{15,127}$/;
-const EVENT_TYPE = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 
 export class PrivacyIdempotencyError extends PrivacyRequestError {
   constructor() {
@@ -39,10 +39,14 @@ function payloadFingerprint(payload: unknown): string | undefined {
 
 export async function findIdempotentEvent(
   database: typeof defaultDb,
-  input: { requestId: string; idempotencyKey: string; eventType: string; operationDigest?: string },
+  input: {
+    requestId: string;
+    idempotencyKey: string;
+    eventType: PrivacyEventType;
+    operationDigest?: string;
+  },
 ) {
-  if (!IDEMPOTENCY_KEY.test(input.idempotencyKey) || !EVENT_TYPE.test(input.eventType))
-    throw new PrivacyIdempotencyError();
+  if (!IDEMPOTENCY_KEY.test(input.idempotencyKey)) throw new PrivacyIdempotencyError();
   const rows = await database
     .select()
     .from(dataSubjectRequestEvent)
@@ -99,15 +103,14 @@ export async function recordIdempotentEvent(
   input: {
     requestId: string;
     idempotencyKey: string;
-    eventType: string;
-    actorKind: string;
+    eventType: PrivacyEventType;
+    actorKind: PrivacyActorKind;
     actorUserId?: string | null;
     payload?: Record<string, unknown>;
     operationDigest?: string;
   },
 ): Promise<void> {
-  if (!IDEMPOTENCY_KEY.test(input.idempotencyKey) || !EVENT_TYPE.test(input.eventType))
-    throw new PrivacyIdempotencyError();
+  if (!IDEMPOTENCY_KEY.test(input.idempotencyKey)) throw new PrivacyIdempotencyError();
   const payload = eventPayloadSchema.parse({
     ...(input.payload ?? {}),
     ...(input.operationDigest ? { operationDigest: input.operationDigest } : {}),
@@ -116,7 +119,7 @@ export async function recordIdempotentEvent(
     await database.insert(dataSubjectRequestEvent).values({
       requestId: input.requestId,
       eventType: input.eventType,
-      actorKind: input.actorKind.slice(0, 32),
+      actorKind: input.actorKind,
       actorUserId: actorUserIdOrNull(input.actorUserId),
       payloadVersion: 1,
       payload,

@@ -124,7 +124,7 @@ describe("the ops-agent's fixed CLI", () => {
       manifests: Record<string, string>;
       files: Array<{ serviceId: string; path: string; executable: boolean }>;
     };
-    expect(index.version).toBe(2);
+    expect(index.version).toBe(1);
     expect(Object.keys(index).sort()).toEqual(["files", "manifests", "version"]);
     // The release's manifests, brouter included, not the tampered valhalla.
     expect(index.manifests.valhalla).toBe(

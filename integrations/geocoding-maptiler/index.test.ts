@@ -27,7 +27,7 @@ function geocoder(config: Record<string, unknown>) {
 }
 
 beforeEach(() => {
-  vi.stubEnv("MAPTILER_KEY", "shared-key");
+  vi.stubEnv("MAPTILER_API_KEY", "shared-key");
   vi.stubEnv("MAPTILER_DAILY_REQUEST_LIMIT", "100");
   admitSharedRequest.mockClear();
   requestedKeys.length = 0;
@@ -35,7 +35,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe("MapTiler geocoding setup", () => {
-  it("spends the deployment's MapTiler budget when it searches with MAPTILER_KEY", async () => {
+  it("spends the deployment's MapTiler budget when it searches with MAPTILER_API_KEY", async () => {
     await geocoder({}).geocode("Aachen");
 
     expect(requestedKeys).toEqual(["shared-key"]);
@@ -52,7 +52,7 @@ describe("MapTiler geocoding setup", () => {
     expect(admitSharedRequest).not.toHaveBeenCalled();
   });
 
-  it("treats an own key equal to MAPTILER_KEY as the shared key", async () => {
+  it("treats an own key equal to MAPTILER_API_KEY as the shared key", async () => {
     await geocoder({ apiKey: "shared-key" }).geocode("Aachen");
 
     expect(admitSharedRequest).toHaveBeenCalledOnce();

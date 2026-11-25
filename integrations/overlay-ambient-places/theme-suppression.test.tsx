@@ -34,8 +34,8 @@ afterEach(() => {
 describe("ambient suppression with the real group hook", () => {
   it("keeps suppression through a paint-only theme change and restores it after recreation", async () => {
     const manifest = {
-      version: 2,
-      policyVersion: 2,
+      version: 1,
+      policyVersion: 1,
       generation: "11111111-1111-4111-8111-111111111111",
       publishedAt: new Date().toISOString(),
       enabled: true,

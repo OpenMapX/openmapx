@@ -5,5 +5,5 @@ export type GetApiAdminAmbientPlacesStatus200ActiveVersion =
   (typeof GetApiAdminAmbientPlacesStatus200ActiveVersion)[keyof typeof GetApiAdminAmbientPlacesStatus200ActiveVersion];
 
 export const GetApiAdminAmbientPlacesStatus200ActiveVersion = {
-  NUMBER_2: 2,
+  NUMBER_1: 1,
 } as const;

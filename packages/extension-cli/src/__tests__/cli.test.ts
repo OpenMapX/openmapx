@@ -34,14 +34,19 @@ describe("scaffold integration", () => {
     const manifest = JSON.parse(readFileSync(join(destDir, "manifest.json"), "utf-8")) as {
       id: string;
       domains: string[];
+      platform: string;
+      version: string;
     };
     expect(manifest.id).toBe("demo");
     expect(manifest.domains).toContain("map-overlay");
+    expect(manifest.platform).toBe("1.0");
+    expect(manifest.version).toBe("1.0.0");
+    expect(manifest).not.toHaveProperty("category");
 
     const pkg = JSON.parse(readFileSync(join(destDir, "package.json"), "utf-8")) as {
       name: string;
     };
-    expect(pkg.name).toBe("@openmapx/integration-demo");
+    expect(pkg.name).toBe("openmapx-integration-demo");
     expect(JSON.stringify(pkg)).not.toContain("workspace:");
   });
 
@@ -113,10 +118,14 @@ describe("scaffold service", () => {
     const service = JSON.parse(readFileSync(destPath, "utf-8")) as {
       id: string;
       quality: string;
+      platform: string;
+      version: string;
       ownsSchema: string;
     };
     expect(service.id).toBe("my-service");
     expect(service.quality).toBe("community");
+    expect(service.platform).toBe("1.0");
+    expect(service.version).toBe("1.0.0");
     expect(service.ownsSchema).toBe("my_service");
   });
 

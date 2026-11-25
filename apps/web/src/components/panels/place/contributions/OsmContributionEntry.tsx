@@ -5,6 +5,7 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Tooltip from "@mui/material/Tooltip";
 import { parseOsmElementId, useCapabilities, useSession } from "@openmapx/core";
+import { MAP_LINK_PARAMS } from "@openmapx/core/map-link-params";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AuthDialog } from "@/components/auth/AuthDialog";
@@ -56,7 +57,7 @@ export function OsmContributionEntry({ osmId }: Props) {
     if (!session?.user) {
       setPendingRef(refKey);
       const callback = new URL(callbackUrlFor(window.location.href));
-      callback.searchParams.set("place", `osm:${ref.type}:${ref.id}`);
+      callback.searchParams.set(MAP_LINK_PARAMS.place, `osm:${ref.type}:${ref.id}`);
       setCallbackPath(`${callback.pathname}${callback.search}${callback.hash}`);
       setAuthOpen(true);
       return;

@@ -17,7 +17,6 @@
     }
   },
   "quality": "built-in",
-  "category": "Knowledge",
   "dataSources": [
     {
       "sourceId": "openstreetmap",

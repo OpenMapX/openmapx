@@ -9,7 +9,7 @@ import {
 const revisionId = `cfg1_${"a".repeat(43)}`;
 it("refuses a pull status whose result carries no exact pull evidence", () => {
   const status = {
-    version: 2,
+    version: 1,
     admittedAt: 100,
     deadlineAt: 1000,
     fingerprint: "a".repeat(64),

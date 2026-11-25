@@ -31,7 +31,6 @@ import {
   discoverBackupableServices,
   filterManifestServices,
   formatBackupsTable,
-  isCompatiblePlatformVersion,
   isValidBackupName,
   listBackups,
   listRunningServices,
@@ -97,8 +96,9 @@ function writeBackup(name: string, manifest: unknown): string {
       })
     : raw.services;
   const normalized = {
-    formatVersion: 2,
-    openmapxVersion: "1.0.0",
+    formatVersion: 1,
+    release: null,
+    databaseMigration: null,
     ...raw,
     ...(Array.isArray(raw.services) ? { services } : {}),
   };
@@ -130,7 +130,7 @@ const baseService = {
 
 beforeEach(() => {
   delete process.env.OPENMAPX_ENABLED_SERVICES;
-  process.env.BACKUP_RETENTION_DAYS = "3650";
+  process.env.RETENTION_BACKUP_DAYS = "3650";
   tmp = mkdtempSync(join(tmpdir(), "openmapx-cli-backup-"));
   setupRepo();
   const journalPath = join(tmp, "infra", "docker", "data", "erasure", "journal.jsonl");
@@ -148,7 +148,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  delete process.env.BACKUP_RETENTION_DAYS;
+  delete process.env.RETENTION_BACKUP_DAYS;
   vi.mocked(execa).mockReset();
   vi.mocked(pgDumpToFile).mockReset();
   vi.mocked(tarVolumeToFile).mockReset();
@@ -227,7 +227,7 @@ describe("backup retention", () => {
     async (mode) => {
       const { services } = await import("@openmapx/core/server"),
         infraDir = join(tmp, "infra", "docker");
-      process.env.BACKUP_RETENTION_DAYS = "30";
+      process.env.RETENTION_BACKUP_DAYS = "30";
       const dir = writeBackup("legacy", {
           name: "legacy",
           createdAt: "2026-08-01T00:00:00.000Z",
@@ -257,7 +257,7 @@ describe("backup retention", () => {
   it("freezes legacy expiry before a policy increase and never reverses a later shortening", async () => {
     const { services } = await import("@openmapx/core/server"),
       infraDir = join(tmp, "infra", "docker");
-    process.env.BACKUP_RETENTION_DAYS = "30";
+    process.env.RETENTION_BACKUP_DAYS = "30";
     const dir = writeBackup("legacy", {
       name: "legacy",
       createdAt: "2026-08-01T00:00:00.000Z",
@@ -368,30 +368,6 @@ describe("backup retention", () => {
   });
 });
 
-// ─── Version compat ───────────────────────────────────────────────────────
-
-describe("isCompatiblePlatformVersion", () => {
-  it("treats matching major.minor as fully compatible", () => {
-    const r = isCompatiblePlatformVersion("1.0", "1.0");
-    expect(r.compatible).toBe(true);
-    expect(r.majorMismatch).toBe(false);
-    expect(r.minorMismatch).toBe(false);
-  });
-
-  it("flags major mismatch as incompatible", () => {
-    const r = isCompatiblePlatformVersion("2.0", "1.0");
-    expect(r.compatible).toBe(false);
-    expect(r.majorMismatch).toBe(true);
-  });
-
-  it("flags minor mismatch as a warning, not an error", () => {
-    const r = isCompatiblePlatformVersion("1.5", "1.0");
-    expect(r.compatible).toBe(true);
-    expect(r.majorMismatch).toBe(false);
-    expect(r.minorMismatch).toBe(true);
-  });
-});
-
 // ─── Manifest reading + filtering ─────────────────────────────────────────
 
 describe("readBackupManifest", () => {
@@ -403,7 +379,7 @@ describe("readBackupManifest", () => {
       services: [],
     });
     const obsolete = writeBackup("obsolete-format", {
-      formatVersion: 1,
+      formatVersion: 2,
       name: "obsolete-format",
       createdAt: "2026-04-19T00:00:00Z",
       services: [],
@@ -549,10 +525,11 @@ describe("readBackupManifest", () => {
     const dir = join(tmp, "infra", "docker", "backups", "atomic");
     mkdirSync(dir, { recursive: true });
     const manifest: BackupManifest = {
-      formatVersion: 2,
+      formatVersion: 1,
       name: "atomic",
       createdAt: "2026-04-19T00:00:00.000Z",
-      openmapxVersion: "1.0.0",
+      release: null,
+      databaseMigration: null,
       services: [],
     };
     writeBackupManifestAtomically(join(dir, "manifest.json"), manifest);
@@ -785,10 +762,11 @@ describe("readBackupManifest", () => {
 
   it("accepts a complete portable manifest unchanged", () => {
     const manifest: BackupManifest = {
-      formatVersion: 2,
+      formatVersion: 1,
       name: "complete",
       createdAt: "2026-04-19T00:00:00Z",
-      openmapxVersion: "1.0.0",
+      release: null,
+      databaseMigration: null,
       services: [
         {
           id: "tileserver",
@@ -829,15 +807,48 @@ describe("readBackupManifest", () => {
     expect(() => readBackupManifest(path)).toThrow(/Malformed/);
   });
 
+  it("accepts the applied release and database migration, and rejects malformed ones", () => {
+    const named = writeBackup("named", {
+      name: "named",
+      createdAt: "2026-04-19T00:00:00Z",
+      release: { release: "2026.11.0", manifestDigest: "a".repeat(64) },
+      databaseMigration: { tag: "0001_database_objects", when: 1795494877369 },
+      services: [],
+    });
+    expect(readBackupManifest(join(named, "manifest.json"))).toMatchObject({
+      release: { release: "2026.11.0", manifestDigest: "a".repeat(64) },
+      databaseMigration: { tag: "0001_database_objects", when: 1795494877369 },
+    });
+    const missingRelease = writeBackup("missing-release", {
+      name: "missing-release",
+      createdAt: "2026-04-19T00:00:00Z",
+      release: undefined,
+      services: [],
+    });
+    expect(() => readBackupManifest(join(missingRelease, "manifest.json"))).toThrow(
+      /backup release/,
+    );
+    const badMigration = writeBackup("bad-migration", {
+      name: "bad-migration",
+      createdAt: "2026-04-19T00:00:00Z",
+      databaseMigration: { tag: "baseline", when: 1 },
+      services: [],
+    });
+    expect(() => readBackupManifest(join(badMigration, "manifest.json"))).toThrow(
+      /database migration/,
+    );
+  });
+
   it("rejects manifests with malformed service entries", () => {
     const path = join(tmp, "bad.json");
     writeFileSync(
       path,
       JSON.stringify({
-        formatVersion: 2,
+        formatVersion: 1,
         name: "x",
         createdAt: "now",
-        openmapxVersion: "1.0.0",
+        release: null,
+        databaseMigration: null,
         services: [{ id: "no-volumes", version: "1.0.0" }],
       }),
       "utf-8",
@@ -848,10 +859,11 @@ describe("readBackupManifest", () => {
 
 describe("filterManifestServices", () => {
   const m: BackupManifest = {
-    formatVersion: 2,
+    formatVersion: 1,
     name: "t",
     createdAt: "now",
-    openmapxVersion: "1.0.0",
+    release: null,
+    databaseMigration: null,
     services: [
       { id: "postgis", version: "1.0.0", volumes: [] },
       { id: "tileserver", version: "1.0.0", volumes: [] },
@@ -1163,6 +1175,55 @@ describe("backup volume modes", () => {
     expect(result.manifest.services[0]?.volumes[0]).toMatchObject({
       postgresUser: "timeline_2026$archive",
       postgresDb: "timeline_2026$archive",
+    });
+  });
+
+  it("records the API database's newest migration, named from the checkout journal", async () => {
+    writeManifest("postgis", {
+      ...baseService,
+      id: "postgis",
+      container: {
+        ...baseService.container,
+        environment: { POSTGRES_USER: "postgres", POSTGRES_DB: "openmapx" },
+      },
+      volumes: [
+        {
+          name: "openmapx-pgdata",
+          mountAt: "/var/lib/postgresql",
+          backup: true,
+          backupMode: "pg_dump",
+        },
+      ],
+    });
+    const meta = join(tmp, "apps", "api", "src", "db", "migrations", "meta");
+    mkdirSync(meta, { recursive: true });
+    writeFileSync(
+      join(meta, "_journal.json"),
+      JSON.stringify({
+        entries: [
+          { tag: "0000_baseline", when: 1000 },
+          { tag: "0001_database_objects", when: 2000 },
+        ],
+      }),
+    );
+    process.env.OPENMAPX_ENABLED_SERVICES = "postgis";
+    mockSuccessfulDocker();
+    const docker = vi.mocked(execa).getMockImplementation();
+    vi.mocked(execa).mockImplementation(((command: string, args: string[], options: unknown) =>
+      command === "docker" && args.some((arg) => arg.includes("drizzle.__drizzle_migrations"))
+        ? Promise.resolve({ exitCode: 0, stdout: "2000\n", stderr: "" })
+        : (docker as (...values: unknown[]) => unknown)(command, args, options)) as never);
+
+    const result = await createBackup({ rootDir: tmp, name: "with-schema" });
+
+    expect(result.manifest.release).toBeNull();
+    expect(result.manifest.databaseMigration).toEqual({
+      tag: "0001_database_objects",
+      when: 2000,
+    });
+    expect(readBackupManifest(join(result.directory, "manifest.json")).databaseMigration).toEqual({
+      tag: "0001_database_objects",
+      when: 2000,
     });
   });
 
@@ -1796,34 +1857,63 @@ describe("preflightRestore", () => {
     expect(pre.versionError).toBeUndefined();
   });
 
-  it("flags major-version mismatch as an error", () => {
+  function writeCheckoutJournal(entries: Array<{ tag: string; when: number }>): void {
+    const meta = join(tmp, "apps", "api", "src", "db", "migrations", "meta");
+    mkdirSync(meta, { recursive: true });
+    writeFileSync(join(meta, "_journal.json"), JSON.stringify({ entries }), "utf-8");
+  }
+
+  it("refuses a database with migrations newer than the running schema", () => {
+    writeCheckoutJournal([{ tag: "0000_baseline", when: 1000 }]);
     writeBackup("snap2", {
       name: "snap2",
       createdAt: "now",
-      openmapxVersion: "9.0",
-      services: [],
+      databaseMigration: { tag: "0001_next", when: 2000 },
+      services: [{ id: "postgis", volumes: [] }],
     });
     const pre = preflightRestore({ rootDir: tmp, name: "snap2" });
-    expect(pre.versionError).toMatch(/major-version mismatch/);
+    expect(pre.versionError).toMatch(/newer than the running checkout.*0001_next.*0000_baseline/);
   });
 
-  it("warns (does not error) on minor-version mismatch", () => {
+  it("accepts a database at or behind the running schema", () => {
+    writeCheckoutJournal([
+      { tag: "0000_baseline", when: 1000 },
+      { tag: "0001_next", when: 2000 },
+    ]);
     writeBackup("snap3", {
       name: "snap3",
       createdAt: "now",
-      openmapxVersion: "1.99",
-      services: [],
+      databaseMigration: { tag: "0000_baseline", when: 1000 },
+      services: [{ id: "postgis", volumes: [] }],
     });
-    const pre = preflightRestore({ rootDir: tmp, name: "snap3" });
-    expect(pre.versionError).toBeUndefined();
-    expect(pre.versionWarning).toMatch(/minor mismatch/);
+    expect(preflightRestore({ rootDir: tmp, name: "snap3" }).versionError).toBeUndefined();
   });
 
-  it("accepts the current platform version", () => {
-    writeBackup("snap4", { name: "snap4", createdAt: "now", services: [] });
-    const pre = preflightRestore({ rootDir: tmp, name: "snap4" });
+  it("does not compare schemas when the restore leaves the API database alone", () => {
+    writeBackup("snap4", {
+      name: "snap4",
+      createdAt: "now",
+      databaseMigration: { tag: "0001_next", when: 2000 },
+      services: [
+        { id: "postgis", volumes: [] },
+        { id: "tileserver", volumes: [] },
+      ],
+    });
+    const pre = preflightRestore({ rootDir: tmp, name: "snap4", serviceIds: ["tileserver"] });
     expect(pre.versionError).toBeUndefined();
-    expect(pre.versionWarning).toBeUndefined();
+  });
+
+  it("compares with the journal the CLI was built with where there is no checkout", () => {
+    // The operations agent mounts no API source; this CLI's own journal stands in.
+    writeBackup("snap6", {
+      name: "snap6",
+      createdAt: "now",
+      databaseMigration: { tag: null, when: Number.MAX_SAFE_INTEGER },
+      services: [{ id: "postgis", volumes: [] }],
+    });
+    expect(preflightRestore({ rootDir: tmp, name: "snap6" }).versionError).toMatch(
+      new RegExp(`created_at ${Number.MAX_SAFE_INTEGER}`),
+    );
   });
 
   it("rejects an unknown service id in --services", () => {
@@ -1850,10 +1940,11 @@ describe("preflightRestore", () => {
 describe("restore data-protection preflight", () => {
   function protectedManifest(createdAt: string): BackupManifest {
     return {
-      formatVersion: 2,
+      formatVersion: 1,
       name: "protected",
       createdAt,
-      openmapxVersion: "1.0.0",
+      release: null,
+      databaseMigration: null,
       services: [
         {
           id: "postgis",
@@ -1884,7 +1975,7 @@ describe("restore data-protection preflight", () => {
       integrationConfigs: [],
       serviceSecrets: [],
     };
-    process.env.BACKUP_RETENTION_DAYS = "30";
+    process.env.RETENTION_BACKUP_DAYS = "30";
     await services.commitConfigurationGeneration({
       infraDir,
       services: [],

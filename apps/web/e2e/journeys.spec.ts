@@ -76,7 +76,7 @@ test("a three-stop driving trip starts from the planner, announces and passes th
 
   // Two ~300 m eastbound legs in the fixture area, with the nav simulator enabled.
   const multiStopUrl =
-    "/?panel=directions&mode=driving&navsim=1&wp=52.5100,13.3800,Origin&wp=52.5100,13.3845,Midstop&wp=52.5100,13.3890,Goal";
+    "/?panel=directions&mode=driving&navsim=1&waypoint=52.5100,13.3800,Origin&waypoint=52.5100,13.3845,Midstop&waypoint=52.5100,13.3890,Goal";
   await page.goto(multiStopUrl);
 
   await expect(page.getByText(/Origin→ Midstop/)).toBeVisible();

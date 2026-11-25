@@ -8,6 +8,27 @@ export const accountMailOutcomeSchema = z.enum([
   "unknown",
 ]);
 export type AccountMailOutcome = z.infer<typeof accountMailOutcomeSchema>;
+/** The kinds of account mail: the mail outbox and the account action receipts use these names. */
+export const ACCOUNT_MAIL_KINDS = [
+  "email_verification",
+  "password_reset",
+  "password_setup",
+] as const;
+export type AccountMailKind = (typeof ACCOUNT_MAIL_KINDS)[number];
+/** The account mail an administrator sends on its own, named by its mail kind. */
+const SENT_ACCOUNT_MAIL_KINDS = [
+  "email_verification",
+  "password_reset",
+] as const satisfies readonly AccountMailKind[];
+/** The actions an account action receipt records whose latest delivery is reported. */
+export const ACCOUNT_DELIVERY_ACTIONS = [
+  "create",
+  "invitation",
+  ...SENT_ACCOUNT_MAIL_KINDS,
+] as const;
+/** Every action an account action receipt records. */
+export const ACCOUNT_ACTIONS = [...ACCOUNT_DELIVERY_ACTIONS, "verify", "password", "role"] as const;
+export type AccountAction = (typeof ACCOUNT_ACTIONS)[number];
 export const provisionAccountSchema = z.strictObject({
   name: z.string().trim().min(1).max(256),
   email: z.email().max(320),
@@ -45,7 +66,7 @@ export type AccountProvisioningResult = z.infer<typeof accountProvisioningResult
 export const accountDeliverySchema = z.strictObject({
   latest: z
     .strictObject({
-      action: z.enum(["create", "invitation", "verification-email", "reset-password"]),
+      action: z.enum(ACCOUNT_DELIVERY_ACTIONS),
       requestedAt: z.iso.datetime(),
       verificationDelivery: accountMailOutcomeSchema,
       passwordSetupDelivery: accountMailOutcomeSchema,

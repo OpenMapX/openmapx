@@ -26,7 +26,6 @@ export const ARCHIVE_PATHS = Object.freeze({
   "portable-parking": "openmapx-data-export/portable/parking.geojson",
   preferences: "openmapx-data-export/portable/preferences.json",
   "manifest-schema": "openmapx-data-export/schemas/export-manifest.schema.json",
-  "category-schema": "openmapx-data-export/schemas/category-manifest.schema.json",
   "export-record-schema": "openmapx-data-export/schemas/export-record.schema.json",
   "portable-profile-schema": "openmapx-data-export/schemas/portable-profile.schema.json",
   "portable-places-schema": "openmapx-data-export/schemas/portable-places.schema.json",

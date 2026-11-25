@@ -4,7 +4,7 @@ import { JobObservationPending } from "./admin-job-failure";
 import type { JobContext } from "./job-runner";
 export const MAINTENANCE_JOB_TYPES = [
   "release.clear",
-  "service.images.pull",
+  "service.image.pull",
   "backup.prune",
   "compose.render",
   "artifact.validate",

@@ -9,7 +9,6 @@
     "dataRequirements": ["osm-pbf", "gtfs-feeds"],
     "planetScale": false
   },
-  "category": "Transit",
   "configSchema": {
     "type": "object",
     "properties": {

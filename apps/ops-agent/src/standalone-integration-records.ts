@@ -1,3 +1,4 @@
+import { COMPONENT_ID_PATTERN } from "@openmapx/core/component-id";
 import {
   artifactStageClaimSchema,
   executionRefSchema,
@@ -39,7 +40,7 @@ export type StandaloneTransactionRecord = z.infer<typeof standaloneTransactionRe
 export const standaloneOwnershipRecordSchema = z.strictObject({
   version: z.literal(1),
   transactionId: z.uuid(),
-  integrationId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
+  integrationId: z.string().regex(COMPONENT_ID_PATTERN),
   ownerId: z.string().min(1).max(128),
   inspectionExecution: executionRefSchema,
   removeExecution: executionRefSchema.nullable(),

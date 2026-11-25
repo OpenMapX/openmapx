@@ -28,7 +28,7 @@ describe("globe lighting preference", () => {
   });
 
   it("restores a stored choice to turn it off", async () => {
-    values.set("openmapx:globeLighting", "false");
+    values.set("openmapx:map:globe-lighting", "false");
     expect((await loadStore()).getState().globeLighting).toBe(false);
   });
 
@@ -36,9 +36,9 @@ describe("globe lighting preference", () => {
     const store = await loadStore();
     store.getState().setGlobeLighting(false);
     expect(store.getState().globeLighting).toBe(false);
-    expect(values.get("openmapx:globeLighting")).toBe("false");
+    expect(values.get("openmapx:map:globe-lighting")).toBe("false");
     store.getState().setGlobeLighting(true);
     expect(store.getState().globeLighting).toBe(true);
-    expect(values.get("openmapx:globeLighting")).toBe("true");
+    expect(values.get("openmapx:map:globe-lighting")).toBe("true");
   });
 });

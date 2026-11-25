@@ -287,7 +287,7 @@ export function createMaintenanceRuntime(deps: MaintenanceRuntimeDeps) {
         if (
           error instanceof DataManagerHttpError &&
           error.status === 409 &&
-          error.message.includes("configuration_maintenance_busy")
+          error.code === "CONFIGURATION_MAINTENANCE_BUSY"
         ) {
           await settleIssuedLeaseChild(lease, child.execution, {
             outcome: "failed_without_effect",

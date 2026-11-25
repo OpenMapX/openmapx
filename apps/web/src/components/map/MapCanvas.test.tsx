@@ -736,7 +736,7 @@ describe("MapCanvas", () => {
         zoom: 12,
       });
 
-      expect(JSON.parse(values.get("openmapx:lastMapView") ?? "null")).toEqual({
+      expect(JSON.parse(values.get("openmapx:map:last-view") ?? "null")).toEqual({
         center: [1.5, 2.5],
         zoom: 12,
       });
@@ -744,7 +744,7 @@ describe("MapCanvas", () => {
 
     it("opens on the saved view and keeps it when a location fix arrives", async () => {
       maplibreTest.reset();
-      useMemoryStorage({ "openmapx:lastMapView": saved });
+      useMemoryStorage({ "openmapx:map:last-view": saved });
       useMapStore.setState({ center: [0, 20], userLocation: null, zoom: 2 });
       let positionSuccess: PositionCallback | undefined;
       vi.stubGlobal("navigator", {
@@ -772,7 +772,7 @@ describe("MapCanvas", () => {
 
     it("lets a linked view win over the saved one", async () => {
       maplibreTest.reset();
-      useMemoryStorage({ "openmapx:lastMapView": saved });
+      useMemoryStorage({ "openmapx:map:last-view": saved });
       window.history.replaceState(null, "", "/?map=48.137,11.575,12,0,0");
       useMapStore.setState({ center: [11.575, 48.137], userLocation: null, zoom: 12 });
       vi.stubGlobal("navigator", { ...navigator, geolocation: undefined, permissions: undefined });
@@ -784,15 +784,15 @@ describe("MapCanvas", () => {
 
     it("neither restores nor saves a view when remembering is switched off", async () => {
       const values = useMemoryStorage({
-        "openmapx:lastMapView": saved,
-        "openmapx:rememberMapView": "false",
+        "openmapx:map:last-view": saved,
+        "openmapx:map:remember-view": "false",
       });
       const { moveEnd } = await renderWithMoveEnd();
       expect(maplibreTest.options[0]).toMatchObject({ center: [0, 20], zoom: 2 });
 
       act(() => moveEnd({}));
 
-      expect(values.get("openmapx:lastMapView")).toBe(saved);
+      expect(values.get("openmapx:map:last-view")).toBe(saved);
     });
   });
 });

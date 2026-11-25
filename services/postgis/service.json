@@ -6,7 +6,11 @@
   "license": "PostgreSQL",
   "quality": "built-in",
   "homepage": "https://postgis.net/",
-  "communityNetworkAccess": ["openconditions-ingest", "openconditions-contributions-api"],
+  "communityNetworkAccess": [
+    "openconditions-ingest",
+    "openconditions-ingest-heavy",
+    "openconditions-contributions-api"
+  ],
   "subjectData": {
     "storesPersonalData": false,
     "strategy": "not_personal",
@@ -17,7 +21,6 @@
     "image": "ghcr.io/baosystems/postgis",
     "tag": "18-3.6",
     "digest": "sha256:dd7515b7d8b8b8bac3516a9c3e12584df5890b0864c29295c1b934ecd1db81a7",
-    "containerName": "postgis",
     "expose": [5432],
     "environment": {
       "POSTGIS_DIAGNOSTICS": "${POSTGIS_DIAGNOSTICS:-false}",

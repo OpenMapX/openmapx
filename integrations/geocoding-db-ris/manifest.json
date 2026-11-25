@@ -60,7 +60,6 @@
     "requiredConfigKeys": ["clientId", "apiKey"]
   },
   "quality": "built-in",
-  "category": "Geocoding",
   "dataSources": [
     {
       "sourceId": "db-ris-stations",

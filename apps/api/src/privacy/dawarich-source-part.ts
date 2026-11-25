@@ -202,20 +202,17 @@ export async function spoolDawarichTar(
         spool ??= await EncryptedSourceSpool.create({
           parentDirectory: options.spoolParentDirectory,
         });
+        // Dawarich's files keep Dawarich's own format; the archive carries no
+        // schema for them, so the manifest names none.
         const stored = await spool.write({
           logicalId: `${prefix}-${entry.id}`,
           content: entry.content,
           mediaType: mediaTypeForPath(entry.path),
           bytes: entry.bytes,
-          schemaId: "dawarich-v1",
         });
         entries.push(stored);
         if (isDawarichPortableEntryId(entry.id)) {
-          entries.push({
-            ...stored,
-            logicalId: `${prefix}-portable-${entry.id}`,
-            schemaId: "dawarich-portable-v1",
-          });
+          entries.push({ ...stored, logicalId: `${prefix}-portable-${entry.id}` });
         }
       },
       { expected: options.expected },

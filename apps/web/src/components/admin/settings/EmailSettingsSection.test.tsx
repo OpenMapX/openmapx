@@ -12,12 +12,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 const fields = [
-  ["smtpFromAddress", "common", "From Address", "sender@example.test", false],
-  ["emailLabsAppKey", "emaillabs", "App Key", "***", true],
-  ["emailLabsSecretKey", "emaillabs", "Secret Key", "***", true],
-  ["emailLabsSmtpAccount", "emaillabs", "SMTP Account", "account", false],
-  ["lettermintApiToken", "lettermint", "API Token", "***", true],
-  ["smtpHost", "smtp", "Host", "smtp.example.test", false],
+  ["email.fromAddress", "common", "From Address", "sender@example.test", false],
+  ["emaillabs.appKey", "emaillabs", "App Key", "***", true],
+  ["emaillabs.secretKey", "emaillabs", "Secret Key", "***", true],
+  ["emaillabs.smtpAccount", "emaillabs", "SMTP Account", "account", false],
+  ["lettermint.apiToken", "lettermint", "API Token", "***", true],
+  ["smtp.host", "smtp", "Host", "smtp.example.test", false],
 ].map(([key, subgroup, label, value, secret]) => ({
   group: "email",
   key,
@@ -51,23 +51,23 @@ function mount(focusKey?: string) {
 it("keeps the existing provider priority without an exclusive provider setting", () => {
   expect(
     savedEmailProvider({
-      emailLabsAppKey: "***",
-      emailLabsSecretKey: "***",
-      emailLabsSmtpAccount: "account",
-      lettermintApiToken: "***",
+      "emaillabs.appKey": "***",
+      "emaillabs.secretKey": "***",
+      "emaillabs.smtpAccount": "account",
+      "lettermint.apiToken": "***",
     }),
   ).toBe("emaillabs");
   expect(
     savedEmailProvider({
-      emailLabsAppKey: "***",
-      emailLabsSecretKey: "***",
-      lettermintApiToken: "***",
+      "emaillabs.appKey": "***",
+      "emaillabs.secretKey": "***",
+      "lettermint.apiToken": "***",
     }),
   ).toBe("lettermint");
   expect(savedEmailProvider({})).toBe("smtp");
 });
 it("opens a collapsed SMTP provider and focuses its search result", async () => {
-  mount("smtpHost");
+  mount("smtp.host");
   await waitFor(() => expect(screen.getByLabelText("Host")).toHaveFocus());
   expect(screen.getByText(/Saved provider: EmailLabs/)).toBeInTheDocument();
 });
@@ -85,6 +85,6 @@ it("preserves explicit edits when a provider closes and skips unchanged masked c
     (call) => (call[1] as RequestInit | undefined)?.method === "PATCH",
   );
   expect(JSON.parse(String((request?.[1] as RequestInit).body))).toEqual({
-    emailLabsAppKey: "typed-key",
+    "emaillabs.appKey": "typed-key",
   });
 });

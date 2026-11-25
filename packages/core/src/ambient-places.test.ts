@@ -172,7 +172,7 @@ describe("ambient place policy", () => {
       ambientPlaceContributors(
         accepted(
           ambientPlaceFromTile(
-            { ...p, format_version: 2, _mapAttributions: "[]", field_contributors: '{"name":[]}' },
+            { ...p, format_version: 1, _mapAttributions: "[]", field_contributors: '{"name":[]}' },
             [6, 50],
           ),
         ),
@@ -270,7 +270,7 @@ describe("ambient place policy", () => {
     expect(ambientPlaceFromOverture({ ...overture, confidence: 0.5 })).not.toBeNull();
   });
   it("ranks Overture gaps monotonically by confidence within 0..49, strictly below OSM in every tier", () => {
-    expect(AMBIENT_POLICY_VERSION).toBe(3);
+    expect(AMBIENT_POLICY_VERSION).toBe(1);
     expect(overtureRankImportance(0.5)).toBe(0);
     expect(overtureRankImportance(1.0)).toBeCloseTo(0.49, 6);
     expect(overtureRankImportance(Number.NaN)).toBe(0);

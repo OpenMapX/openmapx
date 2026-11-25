@@ -1,8 +1,8 @@
-import type { NavStatus } from "@openmapx/core";
+import { type NavStatus, STORAGE_KEYS } from "@openmapx/core";
 import { hasActiveOfflinePackageDownload } from "@/lib/offlineAreas/packageDownload";
 
 export const AUTO_RELOAD_COOLDOWN_MS = 2 * 60 * 1000;
-const LAST_AUTO_RELOAD_KEY = "omx:sw-last-auto-reload";
+const LAST_AUTO_RELOAD_KEY = STORAGE_KEYS.serviceWorkerLastAutoReload.key;
 
 export interface AutoUpdateSafetyInputs {
   online: boolean;

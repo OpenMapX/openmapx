@@ -109,7 +109,6 @@ export interface BakePredictedDeps {
   preparedGeneration?: string;
   /** Same directory as seen INSIDE the Valhalla container. Defaults to the `osm-pbf` shared mount point. */
   containerCsvDir?: string;
-  container?: string;
   configPath?: string;
   /** Test seam: invoked instead of a real `fetch()` against `${openConditionsUrl}/segments/profiles.json`. */
   fetchProfiles?: () => Promise<ProfileSegment[]>;

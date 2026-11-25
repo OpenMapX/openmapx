@@ -50,7 +50,6 @@ export const sharingRouteSchema = z
     bikePreferQuietRoads: z.boolean().optional(),
     bikePreferSmoothSurfaces: z.boolean().optional(),
     bikeSpeedKmh: z.number().min(5).max(60).optional(),
-    scheduleVersion: z.literal(1).optional(),
     schedules: z.array(sharingScheduleSchema.nullable()).min(2).max(MAX_SHARE_WAYPOINTS).optional(),
   })
   .refine(

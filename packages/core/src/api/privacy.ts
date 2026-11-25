@@ -1,15 +1,15 @@
-import type { RequestState } from "../privacy/request-states";
+import type { RequestStatus } from "../privacy/request-statuses";
 import { apiClient, apiUrl } from "./client";
 import { API_ENDPOINTS } from "./endpoints";
 
 export type PrivacyRequestKind = "access" | "portability" | "access_and_portability";
-export type PrivacyRequestState = RequestState;
+export type PrivacyRequestStatus = RequestStatus;
 
 export interface PrivacyRequestView {
   id: string;
   kind: PrivacyRequestKind;
   channel: string;
-  state: PrivacyRequestState;
+  status: PrivacyRequestStatus;
   locale: string;
   timeZone: string;
   receivedAt: string;

@@ -41,7 +41,6 @@
     }
   },
   "quality": "built-in",
-  "category": "Data Overlays",
   "dataSources": [
     {
       "sourceId": "openaq",

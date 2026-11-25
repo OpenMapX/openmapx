@@ -33,8 +33,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         buildSearchIndexSchemaDDL("osm_search") + buildSearchIndexIndexesDDL("osm_search"),
       );
       await pg.sql.unsafe(
-        `INSERT INTO osm_search.index_state(region,source_path,source_fingerprint,current_fingerprint,source_file_identity,epoch,status,place_count,started_at,published_at,updated_at)
-   VALUES('planet','fixture','fixture','fixture','fixture-file','world-one','ready',$1,now(),now(),now());
+        `INSERT INTO osm_search.index_state(schema_version,region,source_path,source_fingerprint,current_fingerprint,source_file_identity,epoch,status,place_count,started_at,published_at,updated_at)
+   VALUES(1,'planet','fixture','fixture','fixture','fixture-file','world-one','ready',$1,now(),now(),now());
    `,
         [count],
       );
@@ -54,8 +54,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
    ('g-tokyo','Tokyo Clinic','{"common":{"en":"Tokyo Clinic"}}','hospital',ST_SetSRID(ST_MakePoint(139.7,35.7),4326),x'882f5a3247fffff'::BIGINT,0.9,'open','2026-09-23.1'),
    ('g-closed','Closed partner',NULL,'hospital',ST_SetSRID(ST_MakePoint(151.2,-33.86),4326),x'88be0e222bfffff'::BIGINT,0.9,'open','2026-09-23.1'),
    ('g-brazil','Café São Paulo',NULL,'cafe',ST_SetSRID(ST_MakePoint(-46.63,-23.55),4326),x'88a8100c39fffff'::BIGINT,0.9,'open','2026-09-23.1');
-   INSERT INTO overture_places.conflation_state(release,region,place_count,places_published_at,status,phase,source_fingerprint,completed_at,sources_catalogue)
-   VALUES('2026-09-23.1','planet',3,now(),'completed','complete','fixture-file',now(),'[{"sourceId":"overture","name":"Overture Maps"}]');
+   INSERT INTO overture_places.conflation_state(schema_version,release,region,place_count,places_published_at,status,phase,source_fingerprint,completed_at,sources_catalogue)
+   VALUES(1,'2026-09-23.1','planet',3,now(),'completed','complete','fixture-file',now(),'[{"sourceId":"overture","name":"Overture Maps"}]');
    INSERT INTO overture_places.poi_conflation_link(osm_type,osm_id,gers_id,match_confidence,distance_m,method,evidence,release)
    VALUES('node',1,'g-tokyo',1,0,'fixture','{}','2026-09-23.1'),('node',4,'g-closed',1,0,'fixture','{}','2026-09-23.1')`);
       const result = await publisher.buildAmbientPlaces(pg.sql, AMBIENT_PLANET_REGION, undefined, {
@@ -98,8 +98,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         VALUES('g-excluded','Excluded partner','{"common":{"en":"Do not import"}}','hospital',ST_SetSRID(ST_MakePoint(139.7,35.7),4326),x'882f5a3247fffff'::BIGINT,$1,$2,'[{"property":"/names/primary","dataset":"meta"}]','2026-09-23.1')`,
           [confidence, status],
         );
-        await pg.sql.unsafe(`INSERT INTO overture_places.conflation_state(release,region,place_count,places_published_at,status,phase,source_fingerprint,completed_at,sources_catalogue)
-        VALUES('2026-09-23.1','planet',1,now(),'completed','complete','fixture-file',now(),'[{"sourceId":"overture","name":"Captured GERS identity"},{"sourceId":"meta-places","name":"Excluded name supplier"}]');
+        await pg.sql.unsafe(`INSERT INTO overture_places.conflation_state(schema_version,release,region,place_count,places_published_at,status,phase,source_fingerprint,completed_at,sources_catalogue)
+        VALUES(1,'2026-09-23.1','planet',1,now(),'completed','complete','fixture-file',now(),'[{"sourceId":"overture","name":"Captured GERS identity"},{"sourceId":"meta-places","name":"Excluded name supplier"}]');
         INSERT INTO overture_places.poi_conflation_link(osm_type,osm_id,gers_id,match_confidence,distance_m,method,evidence,release)
         VALUES('node',1,'g-excluded',1,0,'fixture','{}','2026-09-23.1')`);
         const result = await publisher.buildAmbientPlaces(
@@ -152,7 +152,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(stage.status).toBe("failed");
       expect(stage.checkpoint.placeCount).toBe(1999);
       await pg.sql.unsafe(
-        `UPDATE ambient_places.generations SET manifest=jsonb_set(manifest,'{version}','1') WHERE id=$1`,
+        `UPDATE ambient_places.generations SET manifest=jsonb_set(manifest,'{version}','2') WHERE id=$1`,
         [stage.generation],
       );
       await expect(
@@ -161,7 +161,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         }),
       ).rejects.toThrow("attribution format changed");
       await pg.sql.unsafe(
-        `UPDATE ambient_places.generations SET manifest=jsonb_set(manifest,'{version}','2') WHERE id=$1`,
+        `UPDATE ambient_places.generations SET manifest=jsonb_set(manifest,'{version}','1') WHERE id=$1`,
         [stage.generation],
       );
       const result = await publisher.resumePlanetPlaces(pg.sql, stage.generation, undefined, {
@@ -259,7 +259,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       await seed();
       await pg.sql.unsafe(buildSchemaDDL("overture_places"));
       await pg.sql.unsafe(`INSERT INTO overture_places.places(gers_id,name,basic_category,geom,h3_r8,release) VALUES('g','Tokyo','hospital',ST_SetSRID(ST_MakePoint(139.7,35.7),4326),x'882f5a3247fffff'::BIGINT,'2026-09-23.1');
-   INSERT INTO overture_places.conflation_state(release,region,place_count,places_published_at,status,phase,source_fingerprint,completed_at,sources_catalogue) VALUES('2026-09-23.1','planet',1,now(),'completed','complete','fixture-file',now(),'[{"sourceId":"overture","name":"Overture Maps"}]')`);
+   INSERT INTO overture_places.conflation_state(schema_version,release,region,place_count,places_published_at,status,phase,source_fingerprint,completed_at,sources_catalogue) VALUES(1,'2026-09-23.1','planet',1,now(),'completed','complete','fixture-file',now(),'[{"sourceId":"overture","name":"Overture Maps"}]')`);
       await expect(
         publisher.buildAmbientPlaces(pg.sql, AMBIENT_PLANET_REGION, undefined, {
           availableBytes: ample,
@@ -412,14 +412,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const active = await publisher.buildAmbientPlaces(pg.sql, AMBIENT_PLANET_REGION, undefined, {
         availableBytes: ample,
       });
-      await pg.sql.unsafe(`UPDATE osm_search.index_state SET ambient_source_version=1`);
+      await pg.sql.unsafe(`UPDATE osm_search.index_state SET schema_version=schema_version+1`);
       await expect(
         publisher.buildAmbientPlaces(pg.sql, AMBIENT_PLANET_REGION, undefined, {
           availableBytes: ample,
         }),
-      ).rejects.toThrow(/format|rebuild/i);
+      ).rejects.toThrow(/current builder/i);
       await pg.sql.unsafe(
-        `UPDATE osm_search.index_state SET ambient_source_version=2,region='europe/germany'`,
+        `UPDATE osm_search.index_state SET schema_version=schema_version-1,region='europe/germany'`,
       );
       await expect(
         publisher.buildAmbientPlaces(pg.sql, AMBIENT_PLANET_REGION, undefined, {

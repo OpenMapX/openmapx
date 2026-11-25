@@ -60,9 +60,9 @@ describe("callbackUrlFor", () => {
   it("adds only a boolean marker to the same-origin URL", () => {
     const url = new URL(callbackUrlFor("https://maps.example/place/node%2F12?tab=overview"));
     expect(url.origin).toBe("https://maps.example");
-    expect(url.searchParams.get("osm-contribute")).toBe("1");
+    expect(url.searchParams.get("osmContribution")).toBe("1");
     expect(url.searchParams.get("tab")).toBe("overview");
-    expect([...url.searchParams.keys()].sort()).toEqual(["osm-contribute", "tab"]);
+    expect([...url.searchParams.keys()].sort()).toEqual(["osmContribution", "tab"]);
   });
 });
 

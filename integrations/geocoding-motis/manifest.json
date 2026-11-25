@@ -49,7 +49,6 @@
     }
   ],
   "quality": "built-in",
-  "category": "Geocoding",
   "dataSources": [
     {
       "sourceId": "transitous",

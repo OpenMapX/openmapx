@@ -42,7 +42,6 @@
     "url": "https://tiles.opensnowmap.org/pistes/0/0/0.png"
   },
   "quality": "built-in",
-  "category": "Map Overlays",
   "dataSources": [
     {
       "sourceId": "opensnowmap",

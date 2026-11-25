@@ -1,11 +1,12 @@
 /** Fixed service input/result data. Decoding confers no execution authority. */
 import { serviceImageReferenceSchema } from "@openmapx/extension-contracts/service";
 import { z } from "zod";
+import { COMPONENT_ID_PATTERN } from "../component-id";
 
 const revision = z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/);
 export const servicePullOperationSchema = z.strictObject({
   kind: z.literal("service.pull"),
-  serviceId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
+  serviceId: z.string().regex(COMPONENT_ID_PATTERN),
   expectedConfigurationRevisionId: revision,
   candidateId: z.uuid().optional(),
 });

@@ -8,7 +8,7 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import type { Disclosure, IntegrationMetadata } from "@openmapx/core/api-contracts";
-import { legalConfig, sectionSlug } from "@openmapx/core/legal";
+import { sectionSlug } from "@openmapx/core/legal";
 import type { PublicLegalConfig } from "@openmapx/core/server-api";
 import { emailCountryName, emailTransferNote } from "../emailDisclosure";
 import { generatePrivacySectionsFromManifests } from "../generateLegalSections";
@@ -21,41 +21,25 @@ export default function PrivacyContentDe({
 }: {
   integrations?: IntegrationMetadata[];
   disclosures?: Disclosure[];
-  legal?: PublicLegalConfig | null;
+  legal: PublicLegalConfig;
 }) {
+  // Every published fact comes from the API, which resolves environment,
+  // administration settings and defaults in one place.
   const {
-    name: nameEnv,
-    street: streetEnv,
-    postalCode: postalCodeEnv,
-    city: cityEnv,
-    country: countryEnv,
-    email: emailEnv,
-    supervisoryAuthority: supervisoryAuthorityEnv,
-    supervisoryAuthorityUrl: supervisoryAuthorityUrlEnv,
-    hostingProvider: hostingProviderEnv,
-    hostingLocations: hostingLocationsEnv,
-    serverLogRetentionDays: serverLogRetentionDaysEnv,
-  } = legalConfig;
-  // Hosting-Anbieter/Standorte, Aufsichtsbehörde und Log-Aufbewahrung werden in
-  // der API als env > Admin-Datenbank > Default aufgelöst und kommen über
-  // `legal`. Fallback auf die Web-Prozess-Env (legalConfig) nur, wenn die API
-  // beim SSR nicht erreichbar ist.
-  const name = legal ? legal.name : nameEnv;
-  const street = legal ? legal.street : streetEnv;
-  const postalCode = legal ? legal.postalCode : postalCodeEnv;
-  const city = legal ? legal.city : cityEnv;
-  const country = legal ? legal.country : countryEnv;
-  const email = legal ? legal.dataRequestEmail : emailEnv;
-  const hostingProvider = legal ? legal.hostingProvider : hostingProviderEnv;
-  const hostingLocations = legal ? legal.hostingLocations : hostingLocationsEnv;
-  const supervisoryAuthority = legal ? legal.supervisoryAuthority : supervisoryAuthorityEnv;
-  const supervisoryAuthorityUrl = legal
-    ? legal.supervisoryAuthorityUrl
-    : supervisoryAuthorityUrlEnv;
-  const serverLogRetentionDays = legal ? legal.serverLogRetentionDays : serverLogRetentionDaysEnv;
-  // Backup retention is a platform setting only the API reports.
-  const backupRetentionDays = legal ? legal.backupRetentionDays : null;
-  const auditLogRetentionDays = legal ? legal.auditLogRetentionDays : null;
+    name,
+    street,
+    postalCode,
+    city,
+    country,
+    dataRequestEmail: email,
+    hostingProvider,
+    hostingLocations,
+    supervisoryAuthority,
+    supervisoryAuthorityUrl,
+    serverLogRetentionDays,
+    backupRetentionDays,
+    auditLogRetentionDays,
+  } = legal;
   const T = privacyTitles("de");
 
   return (
@@ -70,7 +54,7 @@ export default function PrivacyContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: 25. November 2026
+        Zuletzt aktualisiert: 26. November 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -723,11 +707,15 @@ export default function PrivacyContentDe({
                 Eine Meldeidentität auf diesem Gerät, nicht mit Ihrem Konto verknüpft.
               </strong>{" "}
               Wenn Sie zum ersten Mal eine Meldung oder Rückmeldung senden, erzeugt Ihr Browser ein
-              Schlüsselpaar und bewahrt es im lokalen Speicher dieses Browsers auf, zusammen mit
-              einer Meldeberechtigung, die etwa einen Tag gilt und danach mit Ihrer nächsten Meldung
-              oder Rückmeldung erneuert wird. Jede Meldung und jede Rückmeldung wird mit dem
-              privaten Schlüssel signiert, der den Browser nie verlässt. Der Schlüssel wird nie mit
-              Ihrem OpenMapX-Konto verbunden, und OpenMapX speichert Meldungen nicht in seiner
+              Schlüsselpaar und bewahrt es im IndexedDB-Speicher dieses Browsers auf (Datenbank{" "}
+              <code>openmapx:crowd</code>). Der private Schlüssel wird als nicht exportierbar
+              erzeugt: Der Browser kann damit signieren, aber kein Skript, auch nicht das von
+              OpenMapX, kann ihn auslesen oder kopieren. Eine Meldeberechtigung, die etwa einen Tag
+              gilt und danach mit Ihrer nächsten Meldung oder Rückmeldung erneuert wird, liegt im
+              localStorage (<code>openmapx:crowd:grant</code>), zusammen mit der Kennung des
+              Schlüssels, für den sie ausgestellt wurde. Jede Meldung und jede Rückmeldung wird mit
+              dem privaten Schlüssel signiert, der den Browser nie verlässt. Der Schlüssel wird nie
+              mit Ihrem OpenMapX-Konto verbunden, und OpenMapX speichert Meldungen nicht in seiner
               eigenen Datenbank. Er wirkt als Pseudonym: OpenConditions kann erkennen, dass
               Meldungen vom selben Gerät stammen, aber nicht, von wem.
             </Typography>
@@ -741,7 +729,10 @@ export default function PrivacyContentDe({
               Schlüssel mit Signatur; da Sie nur gefragt werden, wenn Sie sich einer Meldung nähern,
               zeigt eine Rückmeldung auch, dass das Gerät zu dieser Zeit in der Nähe dieses Orts
               war. Der Server von OpenMapX leitet sie ohne Ihre IP-Adresse und ohne Browserangaben
-              weiter; OpenConditions sieht nur den Server.
+              weiter; OpenConditions sieht nur den Server. Um Missbrauch zu begrenzen, zählt der
+              Server von OpenMapX die Meldungen, Rückmeldungen und Anmeldungen je Adresse, nur im
+              Arbeitsspeicher, und vergisst die Adresse spätestens etwa drei Minuten nach ihrer
+              letzten Anfrage.
             </Typography>
           </li>
           <li>
@@ -1061,18 +1052,21 @@ export default function PrivacyContentDe({
               <strong>Ansichtseinstellungen</strong> &mdash; Eine kleine Anzahl von
               Anzeigeeinstellungen (z.&nbsp;B. Globus- vs. Flachkartenprojektion) wird im
               localStorage gespeichert, damit die Oberfläche Ihre zuletzt genutzte Ansicht
-              wiederherstellt. Es sind keine personenbezogenen Daten betroffen.
+              wiederherstellt. Es sind keine personenbezogenen Daten betroffen. Jeder Schlüssel im
+              localStorage und sessionStorage und jede IndexedDB-Datenbank, die OpenMapX in diesem
+              Browser anlegt, beginnt mit <code>openmapx:</code> (zum Beispiel{" "}
+              <code>openmapx:map:globe-view</code>), und der Download der Gerätedaten in Ihren
+              Kontoeinstellungen enthält diese Einstellungen.
             </Typography>
           </li>
           <li>
             <Typography>
-              <strong>Schlüssel für Verkehrsmeldungen</strong> (
-              <code>openconditions.contrib.deviceKey</code>,{" "}
-              <code>openconditions.contrib.grant</code>) &mdash; Wenn Sie eine Verkehrs- oder
-              Gefahrenmeldung oder eine Rückmeldung senden, werden das Schlüsselpaar und die
-              aktuelle Meldeberechtigung im localStorage gespeichert (siehe Abschnitt&nbsp;8). Sie
-              bleiben, bis Sie die Websitedaten dieses Browsers löschen oder Ihr Konto in diesem
-              Browser löschen.
+              <strong>Schlüssel für Verkehrsmeldungen</strong> (IndexedDB-Datenbank{" "}
+              <code>openmapx:crowd</code>, localStorage <code>openmapx:crowd:grant</code>) &mdash;
+              Wenn Sie eine Verkehrs- oder Gefahrenmeldung oder eine Rückmeldung senden, werden das
+              nicht exportierbare Schlüsselpaar in IndexedDB und die aktuelle Meldeberechtigung im
+              localStorage gespeichert (siehe Abschnitt&nbsp;8). Sie bleiben, bis Sie die
+              Websitedaten dieses Browsers löschen oder Ihr Konto in diesem Browser löschen.
             </Typography>
           </li>
           <li>
@@ -1101,7 +1095,7 @@ export default function PrivacyContentDe({
               <strong>Optionaler Cache für kürzliche Kartendaten</strong> &mdash; Wenn Sie in den
               Einstellungen &quot;Kürzliche Kartendaten auf diesem Gerät merken&quot; aktivieren,
               speichert OpenMapX eine kuratierte Auswahl kürzlicher kartenbezogener API-Antworten in
-              localStorage und Cache Storage. Dies kann eingegebene Suchtexte, Routen-Wegpunkte,
+              IndexedDB und Cache Storage. Dies kann eingegebene Suchtexte, Routen-Wegpunkte,
               Ortsdetails, Wetter-Lookups, Foto-Lookup-Ergebnisse, Ergebnisse in der Nähe und genaue
               Kartenkoordinaten umfassen. Einträge laufen je nach Cache-Typ automatisch ab (meist
               innerhalb von Minuten bis 24&nbsp;Stunden; Foto-Lookup-Caches können bis zu
@@ -1330,10 +1324,7 @@ export default function PrivacyContentDe({
               <strong>Protokoll administrativer Tätigkeiten</strong> — Aufzeichnungen darüber, was
               Administratorinnen und Administratoren getan haben, etwa die Rolle eines Kontos
               geändert, ein Konto gesperrt oder gelöscht oder Einstellungen geändert, mit IP-Adresse
-              und Browser der handelnden Person, werden nach{" "}
-              {auditLogRetentionDays !== null
-                ? `${auditLogRetentionDays} Tagen`
-                : "der vom Betreiber eingestellten Frist (standardmäßig 365 Tage)"}{" "}
+              und Browser der handelnden Person, werden nach {`${auditLogRetentionDays} Tagen`}{" "}
               gelöscht. Das Löschen eines Kontos entfernt es aus den Einträgen, die es nennen,
               zusammen mit IP-Adresse und Browser, die zu seinen eigenen Handlungen erfasst wurden.
             </Typography>
@@ -1427,9 +1418,7 @@ export default function PrivacyContentDe({
           <li>
             <Typography>
               <strong>Sicherungskopien</strong> &mdash;{" "}
-              {backupRetentionDays !== null
-                ? `Sicherungen werden gemäß der eingestellten Aufbewahrung bis zu ${backupRetentionDays} Tage aufbewahrt`
-                : "Sicherungen werden für die vom Betreiber eingestellte Aufbewahrungsfrist (standardmäßig 30 Tage) aufbewahrt"}{" "}
+              {`Sicherungen werden gemäß der eingestellten Aufbewahrung bis zu ${backupRetentionDays} Tage aufbewahrt`}{" "}
               und ausschließlich zur Wiederherstellung nach einem Ausfall verwendet, nicht für
               andere Verarbeitungen. Kürzlich gelöschte oder geänderte Daten können bis zum Ablauf
               der Sicherungen darin verbleiben: Das Löschen von Live-Daten schreibt eine Sicherung

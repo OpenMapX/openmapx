@@ -1,4 +1,5 @@
 import { closeSync, constants, fstatSync, lstatSync, openSync, readSync } from "node:fs";
+import type { Command } from "commander";
 
 /** Operator-owned credentials and receipts; never discovers browser stores. */
 export function readPrivateOperatorFile(path: string, maximum: number): string {
@@ -39,6 +40,9 @@ export function readPrivateOperatorFile(path: string, maximum: number): string {
     closeSync(fd);
   }
 }
+/** A refused session file or API origin; its message is fixed text, safe to print. */
+export class AdminSessionError extends Error {}
+
 export function readAdminSessionFile(path: string): string {
   try {
     const cookie = readPrivateOperatorFile(path, 16 * 1024).trim();
@@ -46,13 +50,52 @@ export function readAdminSessionFile(path: string): string {
       throw Error("Invalid cookie");
     return cookie;
   } catch {
-    throw Error(
+    throw new AdminSessionError(
       "Admin session file must contain only a Better Auth session cookie, owned by this user, mode 0600 and one link",
     );
   }
 }
+/** How a host command reaches the API as the operator's administrator session. */
+export interface AdminSessionOptions {
+  /** HTTPS origin; defaults to `https://DOMAIN`. */
+  apiOrigin?: string;
+  sessionFile: string;
+  allowLoopbackHttp?: boolean;
+}
+
+/**
+ * The API origin and the headers that authenticate a request there as the
+ * operator's administrator session. The session cookie is meant for that exact
+ * origin only, so every caller refuses redirects.
+ */
+export function adminSessionRequest(options: AdminSessionOptions): {
+  origin: string;
+  headers: { cookie: string; origin: string };
+} {
+  const origin = adminApiOrigin(options.apiOrigin, process.env.DOMAIN, options.allowLoopbackHttp);
+  return { origin, headers: { cookie: readAdminSessionFile(options.sessionFile), origin } };
+}
+
+/** The options of every command that acts as the administrator session. */
+export function withAdminSessionOptions(command: Command): Command {
+  return command
+    .requiredOption(
+      "--session-file <path>",
+      "Operator-provided mode-0600 Better Auth session-cookie file",
+    )
+    .option("--api-origin <origin>", "HTTPS API origin (default: https://DOMAIN)")
+    .option("--allow-loopback-http", "Allow HTTP only to a loopback origin for development");
+}
+
 export function adminApiOrigin(input?: string, domain?: string, allowLoopbackHttp = false): string {
-  const url = new URL(input ?? `https://${domain ?? ""}`);
+  if (input === undefined && !domain)
+    throw new AdminSessionError("Set DOMAIN in infra/docker/.env or pass --api-origin");
+  let url: URL;
+  try {
+    url = new URL(input ?? `https://${domain}`);
+  } catch {
+    throw new AdminSessionError("Use an HTTPS API origin without credentials, path or query");
+  }
   if (
     url.username ||
     url.password ||
@@ -66,6 +109,6 @@ export function adminApiOrigin(input?: string, domain?: string, allowLoopbackHtt
         ["127.0.0.1", "[::1]", "localhost"].includes(url.hostname)
       ))
   )
-    throw Error("Use an HTTPS API origin without credentials, path or query");
+    throw new AdminSessionError("Use an HTTPS API origin without credentials, path or query");
   return url.origin;
 }

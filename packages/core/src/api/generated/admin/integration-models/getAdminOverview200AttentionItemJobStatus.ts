@@ -6,5 +6,4 @@ export type GetAdminOverview200AttentionItemJobStatus =
 
 export const GetAdminOverview200AttentionItemJobStatus = {
   failed: "failed",
-  interrupted: "interrupted",
 } as const;

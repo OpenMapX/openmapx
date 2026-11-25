@@ -24,7 +24,7 @@ vi.mock("@/hooks/useServices", () => ({
         id: serviceId,
         name: serviceId === "dawarich-app" ? "Dawarich" : "Redis",
         version: "1.0.0",
-        quality: "community-verified",
+        quality: "community",
         container: { image: "example.invalid/image", tag: "1.0.0" },
       },
       directory: "/services/example",

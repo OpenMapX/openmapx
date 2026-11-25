@@ -6,6 +6,5 @@ export type GetAdminService200ManifestQuality =
 
 export const GetAdminService200ManifestQuality = {
   "built-in": "built-in",
-  "community-verified": "community-verified",
   community: "community",
 } as const;

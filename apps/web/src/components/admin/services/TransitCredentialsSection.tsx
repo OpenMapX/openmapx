@@ -16,7 +16,7 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import { createApiClient } from "@openmapx/core";
+import { createApiClient, prefixedStorageKey, STORAGE_KEY_PREFIXES } from "@openmapx/core";
 import * as sdk from "@openmapx/core/api-admin-sdk";
 import {
   type FeedCredentialPreviewInput,
@@ -64,11 +64,11 @@ export function readTransitCredentialContinuation(
   const stored = readStoredAdminReauthentication(apiUrl);
   const intent =
     stored?.phase === "completed"
-      ? stored.requests.find((r) => r.purpose === "transit.credentials")
+      ? stored.requests.find((r) => r.purpose === "transit.credential.update")
       : null;
   if (!intent || !actorId) return null;
   try {
-    const prefix = "openmapx-transit-credential-preview:";
+    const prefix = STORAGE_KEY_PREFIXES.adminTransitCredentialPreview.key;
     for (let i = 0; i < sessionStorage.length; i++) {
       const key = sessionStorage.key(i);
       if (!key?.startsWith(prefix)) continue;
@@ -142,7 +142,10 @@ function TransitCredentialView({
       gcTime: 0,
       enabled: Boolean(actorId),
     });
-  const storageKey = `openmapx-transit-credential-preview:${JSON.stringify(proposalId ? [apiUrl, actorId, proposalId] : [apiUrl, actorId])}`;
+  const storageKey = prefixedStorageKey(
+    "adminTransitCredentialPreview",
+    JSON.stringify(proposalId ? [apiUrl, actorId, proposalId] : [apiUrl, actorId]),
+  );
   const [drafts, setDrafts] = useState<Record<string, string>>({}),
     [deletions, setDeletions] = useState<string[]>([]),
     [deleting, setDeleting] = useState<string | null>(null),
@@ -485,7 +488,7 @@ function TransitCredentialView({
         )}
         {proving && reviewed && (
           <AdminReauthenticationDialog
-            purpose="transit.credentials"
+            purpose="transit.credential.update"
             targetId={reviewed.preview.catalogRevisionId}
             intentFingerprint={reviewed.preview.intentFingerprint}
             onClose={() => setProving(false)}

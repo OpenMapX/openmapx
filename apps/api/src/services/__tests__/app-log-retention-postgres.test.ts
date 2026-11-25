@@ -30,7 +30,7 @@ async function insertLog(subjectId: string | null, daysAgo: number): Promise<num
     .values({
       level: "info",
       source: "retention-fixture",
-      msg: "fixture",
+      message: "fixture",
       metadata: subjectId ? { subjectId } : null,
       createdAt: new Date(Date.now() - daysAgo * DAY),
     })

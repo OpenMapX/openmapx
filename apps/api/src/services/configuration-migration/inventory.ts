@@ -8,7 +8,7 @@ import type {
 } from "../../../../../packages/core/src/api/contracts/integration-admin/configuration-migration";
 import { configurationMigrationInventorySchema } from "../../../../../packages/core/src/api/contracts/integration-admin/configuration-migration";
 import { db } from "../../db";
-import { systemSettings } from "../../db/schema";
+import { systemSetting } from "../../db/schema";
 import {
   type AdministrativeConfigurationReadContext,
   withAdministrativeConfigurationRead,
@@ -18,7 +18,12 @@ import {
   projectFieldOwnership,
   serviceOwnershipSnapshot,
 } from "../configuration-ownership-view";
-import { matchesDeclaredType, SETTING_DEFS, storedSecretSettingKeys } from "../settings";
+import {
+  isSetInEnvironment,
+  matchesDeclaredType,
+  SETTING_DEFS,
+  storedSecretSettingKeys,
+} from "../settings";
 import { standaloneInventory } from "../standalone-integrations/ownership";
 
 export { migrationSources } from "./sources";
@@ -124,13 +129,13 @@ export async function configurationMigrationInventory() {
         service.manifest.id,
         (await serviceOwnershipSnapshot(service.manifest.id, read, source)).ownership,
       );
-    const rows = await db.select().from(systemSettings);
+    const rows = await db.select().from(systemSetting);
     const storedSecrets = await storedSecretSettingKeys();
     for (const def of SETTING_DEFS) {
       // A secret setting's value lives only in `system_secret` and is never read here.
       const row = def.secret ? undefined : rows.find((r) => r.key === def.key);
       const stored = def.secret ? storedSecrets.has(def.key) : row !== undefined;
-      const host = def.env && read.env[def.env] !== undefined;
+      const host = def.envOnly || isSetInEnvironment(def, read.env);
       const ownership = projectFieldOwnership({
         source: host ? "env" : stored ? "database" : "default",
         secret: !!def.secret,

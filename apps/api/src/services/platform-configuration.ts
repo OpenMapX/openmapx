@@ -15,13 +15,14 @@ import {
   adminAuditLog,
   adminJob,
   platformConfigurationPreview,
-  systemSettings,
+  systemSetting,
   user,
 } from "../db/schema";
 import { actorUserIdOrNull } from "../utils/actor";
 import { jobOwnership } from "./admin-job-state";
 import { platformJobMatchesPreview } from "./platform-configuration-job";
 import { PlatformPreviewConflict, readPlatformPreview } from "./platform-preview-store";
+import { PLATFORM_CONFIGURATION_SETTING } from "./setting-defs";
 
 /** Called in the SAME desired-row transaction as purpose-proof consumption
  * and its saved continue checkpoint; it does not itself consume a proof. */
@@ -41,7 +42,7 @@ export async function assertDomainRecoveryPreview(
     .from(platformConfigurationPreview)
     .where(
       and(
-        eq(platformConfigurationPreview.actorId, input.actorId),
+        eq(platformConfigurationPreview.actorUserId, input.actorId),
         eq(platformConfigurationPreview.previewFingerprint, input.previewFingerprint),
       ),
     )
@@ -82,7 +83,7 @@ export interface PlatformConfigurationCommitInput {
 }
 /** Desired state is deliberately separate from the applied generation. An
  * unrelated renderer must never adopt an uncompleted domain intent. */
-export const PLATFORM_CONFIGURATION_SETTING = "platformConfiguration";
+export { PLATFORM_CONFIGURATION_SETTING };
 
 /** SQL-only part of the closed platform participant. The caller supplies its
  * ORIGINAL writer transaction after actual remote preparation. This routine
@@ -111,7 +112,7 @@ export async function commitPlatformConfigurationIntent(
       "configuration.migration.apply",
       "credential.import",
     ].includes(job.type) ||
-    job.createdBy !== input.actorId ||
+    job.createdByUserId !== input.actorId ||
     actor?.role !== "admin" ||
     actor.banned === true
   )
@@ -123,7 +124,7 @@ export async function commitPlatformConfigurationIntent(
     .from(platformConfigurationPreview)
     .where(
       and(
-        eq(platformConfigurationPreview.actorId, input.actorId),
+        eq(platformConfigurationPreview.actorUserId, input.actorId),
         eq(platformConfigurationPreview.previewFingerprint, input.previewFingerprint),
       ),
     )
@@ -148,9 +149,9 @@ export async function commitPlatformConfigurationIntent(
     sql`select pg_advisory_xact_lock(hashtextextended('openmapx.platform.desired',71956))`,
   );
   const [prior] = await tx
-    .select({ value: systemSettings.value, version: sql<string>`xmin::text` })
-    .from(systemSettings)
-    .where(eq(systemSettings.key, PLATFORM_CONFIGURATION_SETTING))
+    .select({ value: systemSetting.value, version: sql<string>`xmin::text` })
+    .from(systemSetting)
+    .where(eq(systemSetting.key, PLATFORM_CONFIGURATION_SETTING))
     .for("update");
   if ((prior?.version ?? null) !== input.expectedDesiredRowVersion)
     throw new PlatformPreviewConflict("Platform desired state changed; create a new preview");
@@ -177,21 +178,21 @@ export async function commitPlatformConfigurationIntent(
   };
   const written = prior
     ? await tx
-        .update(systemSettings)
-        .set({ value, updatedAt: new Date(), updatedBy: actorUserIdOrNull(input.actorId) })
+        .update(systemSetting)
+        .set({ value, updatedAt: new Date(), updatedByUserId: actorUserIdOrNull(input.actorId) })
         .where(
           and(
-            eq(systemSettings.key, PLATFORM_CONFIGURATION_SETTING),
+            eq(systemSetting.key, PLATFORM_CONFIGURATION_SETTING),
             sql`xmin::text=${prior.version}`,
           ),
         )
         .returning({ rowVersion: sql<string>`xmin::text` })
     : await tx
-        .insert(systemSettings)
+        .insert(systemSetting)
         .values({
           key: PLATFORM_CONFIGURATION_SETTING,
           value,
-          updatedBy: actorUserIdOrNull(input.actorId),
+          updatedByUserId: actorUserIdOrNull(input.actorId),
         })
         .onConflictDoNothing()
         .returning({ rowVersion: sql<string>`xmin::text` });
@@ -209,7 +210,7 @@ export async function commitPlatformConfigurationIntent(
     .returning({ id: platformConfigurationPreview.id });
   if (consumed.length !== 1) throw new PlatformPreviewConflict();
   await tx.insert(adminAuditLog).values({
-    actorId: input.actorId,
+    actorUserId: input.actorId,
     targetType: "platform",
     targetId: preview.previewId,
     action: "platform.configuration.save",

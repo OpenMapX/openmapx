@@ -2,7 +2,17 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { MailDeliveryRefusedError } from "../mail-outcome";
 
 const mocks = vi.hoisted(() => ({ fetch: vi.fn(), smtp: vi.fn() }));
-vi.mock("../../db", () => ({ db: { select: () => ({ from: async () => [] }) } }));
+vi.mock("../../db", () => ({
+  db: {
+    select: () => ({
+      from: () => ({
+        where: async () => [],
+        // biome-ignore lint/suspicious/noThenProperty: drizzle builders are thenable; the stub mirrors that.
+        then: (resolve: (rows: unknown[]) => unknown) => Promise.resolve([]).then(resolve),
+      }),
+    }),
+  },
+}));
 vi.mock("nodemailer", () => ({ createTransport: () => ({ sendMail: mocks.smtp }) }));
 
 import { sendMail } from "../email";

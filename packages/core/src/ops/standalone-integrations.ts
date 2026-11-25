@@ -1,9 +1,10 @@
 import z from "zod/v4";
+import { COMPONENT_ID_PATTERN } from "../component-id";
 import { assertAllowedGitUrl } from "../git-url";
 
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const owner = z.string().min(1).max(128);
-const component = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/);
+const component = z.string().regex(COMPONENT_ID_PATTERN);
 const remote = z
   .url()
   .max(2048)

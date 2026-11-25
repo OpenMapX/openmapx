@@ -1,4 +1,4 @@
-import { ACTIVE_REQUEST_STATES } from "@openmapx/core/privacy";
+import { ACTIVE_REQUEST_STATUSES } from "@openmapx/core/privacy";
 import { defaultLocale } from "@openmapx/i18n";
 import { and, inArray, lte } from "drizzle-orm";
 import { db as defaultDb } from "../db/index.js";
@@ -26,7 +26,7 @@ export async function schedulePrivacyDeadlineReminders(
     .from(dataSubjectRequest)
     .where(
       and(
-        inArray(dataSubjectRequest.state, [...ACTIVE_REQUEST_STATES]),
+        inArray(dataSubjectRequest.status, [...ACTIVE_REQUEST_STATUSES]),
         lte(dataSubjectRequest.dueAt, new Date(now.getTime() + DEADLINE_REMINDER_WINDOW_MS)),
       ),
     )
@@ -44,7 +44,7 @@ export async function schedulePrivacyDeadlineReminders(
           channel: "email" as const,
           locale: defaultLocale,
           payload: {},
-          state: "pending" as const,
+          status: "pending" as const,
           attempts: 0,
           nextAttemptAt: now,
           occurrenceKey: `deadline:${request.dueAt.toISOString()}`,

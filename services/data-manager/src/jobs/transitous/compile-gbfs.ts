@@ -418,12 +418,12 @@ export const run: StageFn = async (ctx) => {
       failed: failed.length,
       registrySha256: lock.sha256,
     };
-    return finish("ok", `compiled ${healthy.length} healthy pinned GBFS addition(s)`, {
+    return finish("succeeded", `compiled ${healthy.length} healthy pinned GBFS addition(s)`, {
       sourceIndexPath: output,
       registrySha256: lock.sha256,
       summary: index.summary,
     });
   } catch (error) {
-    return finish("error", (error as Error).message, { failure: (error as Error).message });
+    return finish("failed", (error as Error).message, { failure: (error as Error).message });
   }
 };

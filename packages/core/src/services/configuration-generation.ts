@@ -19,6 +19,7 @@ import {
 import { open } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { JSON_SCHEMA, load as loadYaml } from "js-yaml";
+import { isComponentId } from "../component-id";
 import { canonicalJson, configurationProjectionFingerprint, type OpsResultFor } from "../ops";
 import type { ConfigurationApplyResult } from "../ops/contract";
 import {
@@ -33,17 +34,20 @@ import {
   renderCompose,
   resolveProxyHost,
 } from "./compose-renderer";
+import { integrationConfigEnvName, serviceConfigEnvName } from "./config-env-names";
 import {
   configSchemaKeys,
   flattenResolvedConfig,
   resolveServiceConfigFromEnv,
-  serviceConfigEnvPrefix,
 } from "./config-resolver";
 import {
   acquireConfigurationOwnership,
   ConfigurationWriterBusyError,
 } from "./configuration-ownership";
-import { validateTrustedConfigurationValues } from "./configuration-schema";
+import {
+  missingRequiredConfiguration,
+  validateTrustedConfigurationValues,
+} from "./configuration-schema";
 import type { ContainerBindMounts } from "./container-mounts";
 import { CORE_SERVICE_ID } from "./core-service-ids";
 import {
@@ -98,6 +102,8 @@ import { seedMissingWritableCopies, seedWritableCopies } from "./writable-copies
 const MAX_GENERATIONS = 16;
 const MAX_GENERATION_BYTES = 2 * 1024 * 1024;
 const RESOLVED_CONFIG_FILE = "resolved-config.generated.json";
+/** The format version of a generation's resolved configuration. */
+const RESOLVED_CONFIG_VERSION = 1;
 /** The release whose images the generation pins, as its canonical manifest. */
 const RELEASE_MANIFEST_FILE = "release-manifest.json";
 const GENERATION_IMAGES_FILE = "images.json";
@@ -184,6 +190,29 @@ export class ConfigurationGenerationError extends Error {
   ) {
     super(cause instanceof Error ? cause.message : "Configuration generation failed", { cause });
     this.name = "ConfigurationGenerationError";
+  }
+}
+
+/** An enabled service's required setting that has no value, by service. */
+export interface MissingServiceSettings {
+  serviceId: string;
+  keys: string[];
+}
+
+/**
+ * Enabled services lack a value for a setting their `configSchema` requires.
+ * The operator fixes it, so the agent records it for the admin panel.
+ */
+export class RequiredServiceSettingsError extends Error {
+  constructor(readonly missing: MissingServiceSettings[]) {
+    super(
+      `Required service settings have no value: ${missing
+        .map(({ serviceId, keys }) => `${serviceId} (${keys.join(", ")})`)
+        .join(
+          "; ",
+        )}. Set them in the service's settings or credentials, then apply again. A setting that is not a secret can also come from its SERVICE_<ID>_<KEY> environment variable.`,
+    );
+    this.name = "RequiredServiceSettingsError";
   }
 }
 
@@ -472,15 +501,13 @@ function resolveInput(
   if (enabled.some((service) => service.manifest.id === CORE_SERVICE_ID.api)) {
     const passthroughKeys: string[] = [];
     for (const service of allServices) {
-      const prefix = serviceConfigEnvPrefix(service.manifest.id);
       for (const { key } of configSchemaKeys(service.manifest.configSchema)) {
-        passthroughKeys.push(`${prefix}${key.toUpperCase()}`);
+        passthroughKeys.push(serviceConfigEnvName(service.manifest.id, key));
       }
     }
     for (const [integrationId, schema] of integrationSchemas ?? []) {
-      const id = integrationId.replaceAll("-", "_").toUpperCase();
       for (const { key } of configSchemaKeys(schema)) {
-        passthroughKeys.push(`INTEGRATION_${id}_${key.replaceAll("-", "_").toUpperCase()}`);
+        passthroughKeys.push(integrationConfigEnvName(integrationId, key));
       }
     }
     serviceConfigs.set(
@@ -498,6 +525,18 @@ function resolveInput(
     }
     serviceSecrets.set(entry.serviceId, entry.values);
   }
+  // A service that declares a setting required runs only once the operator
+  // supplied it. Services that are not enabled are not held to it.
+  const missingRequired = enabled.flatMap((service) => {
+    const serviceId = service.manifest.id;
+    const missing = missingRequiredConfiguration(service.manifest.configSchema, {
+      values: serviceConfigs.get(serviceId) ?? {},
+      secretKeys: Object.keys(serviceSecrets.get(serviceId) ?? {}),
+      envKeys: serviceConfigEnvKeys.get(serviceId) ?? [],
+    });
+    return missing.length > 0 ? [{ serviceId, keys: missing }] : [];
+  });
+  if (missingRequired.length > 0) throw new RequiredServiceSettingsError(missingRequired);
   return {
     appliedRoots: input.selectedRoots.filter((id) => serviceById.has(id)),
     allServices,
@@ -801,7 +840,7 @@ export function readAppliedComposeServiceIds(
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw Error("Generated service closure unavailable");
   const ids = Object.keys(value);
-  if (ids.length > 256 || ids.some((id) => !/^[a-z0-9][a-z0-9-]{0,63}$/.test(id)))
+  if (ids.length > 256 || !ids.every(isComponentId))
     throw Error("Invalid generated service closure");
   return ids;
 }
@@ -827,19 +866,41 @@ export function readAppliedConfiguration(
   return readGenerationInputs(generation);
 }
 
+/** The non-secret configuration a generation was rendered from, as it stores it. */
+interface ResolvedConfiguration {
+  domain: string;
+  serviceConfigs: ConfigurationInput["serviceConfigs"];
+  integrationConfigs: ConfigurationInput["integrationConfigs"];
+  platform?: PlatformConfiguration;
+  transitCredentialsRevision?: string;
+}
+
+/** Reads a generation's resolved configuration, refusing any other format version. */
+function parseResolvedConfiguration(text: string): ResolvedConfiguration {
+  const value = JSON.parse(text) as Record<string, unknown> | null;
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    value.version !== RESOLVED_CONFIG_VERSION ||
+    typeof value.domain !== "string" ||
+    !Array.isArray(value.serviceConfigs) ||
+    !Array.isArray(value.integrationConfigs)
+  )
+    throw new Error(
+      `${RESOLVED_CONFIG_FILE} is not a version ${RESOLVED_CONFIG_VERSION} resolved configuration`,
+    );
+  return value as unknown as ResolvedConfiguration;
+}
+
 function readGenerationInputs(
   generation: string,
 ): Omit<ConfigurationInput, "domain" | "selectedRoots"> {
   // Each file is opened without following links and must be this user's
   // own, as the generation's tree was checked.
-  const resolved = JSON.parse(
+  const resolved = parseResolvedConfiguration(
     readOwnGenerationFile(join(generation, RESOLVED_CONFIG_FILE), [0o400n, 0o600n]),
-  ) as {
-    serviceConfigs?: ConfigurationInput["serviceConfigs"];
-    integrationConfigs?: ConfigurationInput["integrationConfigs"];
-    platform?: PlatformConfiguration;
-    transitCredentialsRevision?: string;
-  };
+  );
   const serviceSecrets: ConfigurationInput["serviceSecrets"] = [];
   const secretsRoot = join(generation, GENERATED_SECRETS_DIRNAME);
   if (existsSync(secretsRoot)) {
@@ -852,8 +913,8 @@ function readGenerationInputs(
     }
   }
   return {
-    serviceConfigs: resolved.serviceConfigs ?? [],
-    integrationConfigs: resolved.integrationConfigs ?? [],
+    serviceConfigs: resolved.serviceConfigs,
+    integrationConfigs: resolved.integrationConfigs,
     serviceSecrets,
     ...(resolved.transitCredentialsRevision
       ? { transitCredentialsRevision: resolved.transitCredentialsRevision }
@@ -868,7 +929,7 @@ function readGenerationInputs(
 export function readAppliedTransitCredentialsRevision(infraDir: string): string | null {
   const active = currentConfigurationGeneration(infraDir);
   if (!active) return null;
-  const resolved = JSON.parse(
+  const resolved = parseResolvedConfiguration(
     readFileSync(join(infraDir, CONFIGURATION_GENERATIONS, active, RESOLVED_CONFIG_FILE), "utf8"),
   );
   return resolved.transitCredentialsRevision === undefined
@@ -884,7 +945,7 @@ export function readAppliedPlatformConfiguration(
 ): PlatformConfiguration | undefined {
   const active = currentConfigurationGeneration(infraDir);
   if (!active) return undefined;
-  const resolved = JSON.parse(
+  const resolved = parseResolvedConfiguration(
     readFileSync(join(infraDir, CONFIGURATION_GENERATIONS, active, RESOLVED_CONFIG_FILE), "utf8"),
   );
   return resolved.platform === undefined
@@ -1037,10 +1098,9 @@ export function readGenerationConfiguration(
   revisionId: string,
 ): ConfigurationInput & { release: ReleaseManifest | null } {
   const directory = dirname(configurationGenerationComposeFile(infraDir, revisionId));
-  const { domain } = JSON.parse(
+  const { domain } = parseResolvedConfiguration(
     readOwnGenerationFile(join(directory, RESOLVED_CONFIG_FILE), [0o400n, 0o600n]),
-  ) as { domain?: unknown };
-  if (typeof domain !== "string") throw new Error(UNSAFE);
+  );
   const selection = JSON.parse(
     readOwnGenerationFile(join(directory, SERVICE_SELECTION_FILE), [0o400n, 0o600n]),
   ) as { selected?: unknown };
@@ -1062,7 +1122,7 @@ export function inspectAppliedConfiguration(
 ): OpsResultFor<"configuration.inspect"> {
   const revisionId = currentConfigurationGeneration(infraDir);
   if (revisionId === null) return { revisionId, integrationConfigDigests: [] };
-  const resolved = JSON.parse(
+  const resolved = parseResolvedConfiguration(
     readOwnGenerationFile(
       join(infraDir, CONFIGURATION_GENERATIONS, revisionId, RESOLVED_CONFIG_FILE),
       [0o400n, 0o600n],
@@ -1437,6 +1497,16 @@ export type RenderConfigurationOptions = Pick<
 >;
 
 /**
+ * The version a release reports, for example in the `created_by` tag of an
+ * OSM changeset: its product version, or else its release id. A value
+ * `OPENMAPX_VERSION` would refuse is not used.
+ */
+function releaseReportedVersion(release: ReleaseManifest): string | undefined {
+  const version = release.product?.version ?? release.release;
+  return /^[A-Za-z0-9._+-]{1,64}$/.test(version) ? version : undefined;
+}
+
+/**
  * What a generation would hold, without writing it: the compose preview and
  * every apply render through here. The release's service files, with the
  * operator's overrides in their place.
@@ -1459,7 +1529,10 @@ export function renderConfiguration(options: RenderConfigurationOptions) {
   const context: RenderContext = {
     ...(release
       ? {
-          releasePins: { images: releaseServiceImages(release) },
+          releasePins: {
+            images: releaseServiceImages(release),
+            version: releaseReportedVersion(release),
+          },
         }
       : {}),
     domain: input.domain,
@@ -1531,7 +1604,7 @@ async function commitOwnedConfigurationGeneration(
   // This store lock concerns retention only. An invocation-level domain
   // override has already been validated by renderConfiguration above; parsing
   // unrelated host fields again would incorrectly discard that override.
-  const retentionEnv = { BACKUP_RETENTION_DAYS: process.env.BACKUP_RETENTION_DAYS };
+  const retentionEnv = { RETENTION_BACKUP_DAYS: process.env.RETENTION_BACKUP_DAYS };
   const oldDays = resolvePlatformConfiguration({
     saved: readAppliedPlatformConfiguration(options.infraDir),
     env: retentionEnv,
@@ -1590,6 +1663,7 @@ async function commitOwnedConfigurationFiles(
     await writeDurable(
       join(temporary, RESOLVED_CONFIG_FILE),
       `${JSON.stringify({
+        version: RESOLVED_CONFIG_VERSION,
         domain: input.domain,
         serviceConfigs: input.serviceConfigs,
         integrationConfigs: input.integrationConfigs,

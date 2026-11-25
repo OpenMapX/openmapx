@@ -2,7 +2,7 @@
   "id": "dawarich-postgis",
   "name": "Dawarich PostGIS",
   "version": "18-3.6",
-  "description": "Dedicated PostgreSQL 17 and PostGIS 3.5 database for the managed Dawarich timeline.",
+  "description": "Dedicated PostgreSQL 18 and PostGIS 3.6 database for the managed Dawarich timeline.",
   "license": "PostgreSQL",
   "quality": "built-in",
   "platformNetwork": false,
@@ -73,7 +73,7 @@
   "volumes": [
     {
       "name": "openmapx-dawarich-db-data",
-      "mountAt": "/var/lib/postgresql/data",
+      "mountAt": "/var/lib/postgresql",
       "backup": true,
       "backupMode": "pg_dump"
     }

@@ -1,5 +1,6 @@
 import type { CatalogPinSet } from "@openmapx/core/catalog-pins/types";
-import type { JOB_STAGE_NAMES, JOB_STAGE_STATUSES } from "@openmapx/db-schema";
+import type { JobStageStatus } from "@openmapx/core/jobs";
+import type { JOB_STAGE_NAMES } from "@openmapx/db-schema";
 import type { TransitousLock, TransitSource } from "@openmapx/transitous-core";
 
 import type { DatasetMetadata, StateStore } from "../../state.js";
@@ -18,7 +19,7 @@ export interface FeedDownloadFailure {
 }
 
 /** The database refuses a stage row outside these sets. */
-export type StageStatus = (typeof JOB_STAGE_STATUSES)[number];
+export type StageStatus = JobStageStatus;
 
 export type StageName = (typeof JOB_STAGE_NAMES)[number];
 

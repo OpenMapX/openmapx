@@ -1,7 +1,8 @@
 /** Portable observations only; parsing confers no ownership authority. */
 import { z } from "zod";
+import { COMPONENT_ID_PATTERN } from "../component-id";
 export const ownedServiceSnapshotSchema = z.strictObject({
-  serviceId: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
+  serviceId: z.string().regex(COMPONENT_ID_PATTERN),
   containerId: z.string().regex(/^[a-f0-9]{64}$/),
   state: z.enum(["running", "stopped", "created", "restarting", "paused", "unknown"]),
   provenance: z.strictObject({

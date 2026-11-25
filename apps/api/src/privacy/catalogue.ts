@@ -53,7 +53,7 @@ const registrationDefinitions: SubjectDataRegistration[] = [
   },
   {
     id: "auth-sessions",
-    version: 3,
+    version: 1,
     category: "authentication",
     source: "openmapx-db",
     strategy: "collector",
@@ -62,7 +62,7 @@ const registrationDefinitions: SubjectDataRegistration[] = [
       { type: "user_id", field: "session.user_id" },
       // How the session was signed in to; deleted with its session.
       { type: "user_id", field: "session_auth_assurance.user_id" },
-      { type: "actor_id", field: "admin_action_reauthentication.actor_id" },
+      { type: "actor_id", field: "admin_action_reauthentication.actor_user_id" },
     ],
     purposes: ["authentication", "security-and-abuse-prevention"],
     legalBases: ["contract", "legitimate-interest"],
@@ -144,7 +144,7 @@ const registrationDefinitions: SubjectDataRegistration[] = [
   },
   {
     id: "auth-oauth-resources",
-    version: 2,
+    version: 1,
     category: "authentication",
     source: "openmapx-db",
     strategy: "collector",
@@ -264,7 +264,7 @@ const registrationDefinitions: SubjectDataRegistration[] = [
   },
   {
     id: "parked-locations",
-    version: 2,
+    version: 1,
     category: "vehicles",
     source: "openmapx-db",
     strategy: "collector",
@@ -284,7 +284,7 @@ const registrationDefinitions: SubjectDataRegistration[] = [
   },
   {
     id: "share-links",
-    version: 2,
+    version: 1,
     category: "sharing",
     source: "openmapx-db",
     strategy: "collector",
@@ -371,20 +371,20 @@ const registrationDefinitions: SubjectDataRegistration[] = [
   },
   {
     id: "admin-audit-attribution",
-    version: 5,
+    version: 1,
     category: "administrative-accountability",
     source: "openmapx-db",
     strategy: "collector",
     collectorId: "openmapx-administration",
     locators: [
-      { type: "actor_id", field: "admin_audit_log.actor_id" },
+      { type: "actor_id", field: "admin_audit_log.actor_user_id" },
       { type: "target_id", field: "admin_audit_log.target_user_id" },
-      { type: "actor_id", field: "auth_policy_state.activated_by" },
+      { type: "actor_id", field: "auth_policy_state.activated_by_user_id" },
     ],
     purposes: ["legal-accountability", "security-and-abuse-prevention"],
     legalBases: ["legal-obligation", "legitimate-interest"],
     origin: { kind: "controller", descriptionCode: "administrative-record" },
-    // The API's daily retention deletes entries after AUDIT_LOG_RETENTION_DAYS
+    // The API's daily retention deletes entries after retention.auditLogDays
     // (365 by default); the response report states the configured period.
     retention: {
       kind: "fixed-days",
@@ -408,10 +408,10 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     strategy: "collector",
     collectorId: "openmapx-administration",
     locators: [
-      { type: "actor_id", field: "auth_policy_application.actor_id" },
-      { type: "actor_id", field: "integration_application_receipt.actor_id" },
-      { type: "actor_id", field: "account_action_receipt.actor_id" },
-      { type: "target_id", field: "account_action_receipt.target_id" },
+      { type: "actor_id", field: "auth_policy_application.actor_user_id" },
+      { type: "actor_id", field: "integration_application_receipt.actor_user_id" },
+      { type: "actor_id", field: "account_action_receipt.actor_user_id" },
+      { type: "target_id", field: "account_action_receipt.target_user_id" },
     ],
     purposes: ["legal-accountability", "security-and-abuse-prevention"],
     legalBases: ["legal-obligation", "legitimate-interest"],
@@ -433,17 +433,17 @@ const registrationDefinitions: SubjectDataRegistration[] = [
   },
   {
     id: "admin-jobs-attribution",
-    version: 2,
+    version: 1,
     category: "administrative-accountability",
     source: "openmapx-db",
     strategy: "collector",
     collectorId: "openmapx-administration",
-    locators: [{ type: "creator_id", field: "admin_job.created_by" }],
+    locators: [{ type: "creator_id", field: "admin_job.created_by_user_id" }],
     purposes: ["legal-accountability", "support-and-operations"],
     legalBases: ["legal-obligation", "legitimate-interest"],
     origin: { kind: "controller", descriptionCode: "administrative-record" },
     // The API's daily retention deletes finished jobs after
-    // ADMIN_JOB_RETENTION_DAYS (30 by default); the response report states the
+    // retention.adminJobDays (30 by default); the response report states the
     // configured period.
     retention: {
       kind: "fixed-days",
@@ -459,14 +459,14 @@ const registrationDefinitions: SubjectDataRegistration[] = [
   },
   {
     id: "installed-component-attribution",
-    version: 2,
+    version: 1,
     category: "administrative-accountability",
     source: "openmapx-db",
     strategy: "collector",
     collectorId: "openmapx-administration",
     locators: [
-      { type: "creator_id", field: "installed_extension.installed_by" },
-      { type: "creator_id", field: "installed_integration.installed_by" },
+      { type: "creator_id", field: "installed_extension.installed_by_user_id" },
+      { type: "creator_id", field: "installed_integration.installed_by_user_id" },
     ],
     purposes: ["service-provisioning", "legal-accountability"],
     legalBases: ["contract", "legal-obligation"],
@@ -487,7 +487,7 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     source: "openmapx-db",
     strategy: "collector",
     collectorId: "openmapx-administration",
-    locators: [{ type: "actor_id", field: "platform_configuration_preview.actor_id" }],
+    locators: [{ type: "actor_id", field: "platform_configuration_preview.actor_user_id" }],
     purposes: ["service-provisioning", "security-and-abuse-prevention"],
     legalBases: ["contract", "legitimate-interest"],
     origin: { kind: "controller", descriptionCode: "administrative-record" },
@@ -510,11 +510,11 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     strategy: "collector",
     collectorId: "openmapx-administration",
     locators: [
-      { type: "updater_id", field: "integration_secret.updated_by" },
-      { type: "updater_id", field: "service_secret.updated_by" },
-      { type: "updater_id", field: "system_secret.updated_by" },
-      { type: "actor_id", field: "transit_credential_preview.actor_id" },
-      { type: "actor_id", field: "configuration_migration_preview.actor_id" },
+      { type: "updater_id", field: "integration_secret.updated_by_user_id" },
+      { type: "updater_id", field: "service_secret.updated_by_user_id" },
+      { type: "updater_id", field: "system_secret.updated_by_user_id" },
+      { type: "actor_id", field: "transit_credential_preview.actor_user_id" },
+      { type: "actor_id", field: "configuration_migration_preview.actor_user_id" },
     ],
     purposes: ["service-provisioning", "security-and-abuse-prevention"],
     legalBases: ["contract", "legitimate-interest"],
@@ -528,12 +528,12 @@ const registrationDefinitions: SubjectDataRegistration[] = [
   },
   {
     id: "system-setting-attribution",
-    version: 2,
+    version: 1,
     category: "administrative-accountability",
     source: "openmapx-db",
     strategy: "collector",
     collectorId: "openmapx-administration",
-    locators: [{ type: "updater_id", field: "system_settings.updated_by" }],
+    locators: [{ type: "updater_id", field: "system_setting.updated_by_user_id" }],
     purposes: ["service-provisioning", "legal-accountability"],
     legalBases: ["contract", "legal-obligation"],
     origin: { kind: "controller", descriptionCode: "administrative-record" },
@@ -548,17 +548,18 @@ const registrationDefinitions: SubjectDataRegistration[] = [
   },
   {
     id: "data-manager-trigger-attribution",
-    version: 2,
+    version: 1,
     category: "administrative-accountability",
     source: "openmapx-db",
     strategy: "operator_task",
-    locators: [{ type: "triggered_by", field: "data_manager.jobs.triggered_by" }],
+    locators: [{ type: "actor_id", field: "data_manager.job.triggered_by_user_id" }],
     purposes: ["support-and-operations", "legal-accountability"],
     legalBases: ["legitimate-interest", "legal-obligation"],
     origin: { kind: "controller", descriptionCode: "operator-task" },
-    // Deleting the account clears the actor from its jobs; 90 days after a job
-    // finished (DATA_MANAGER_JOB_RETENTION_DAYS) it is deleted, or, while
-    // data-manager has not swept its records yet, loses its actor.
+    // Deleting the account clears the actor from its jobs through the foreign
+    // key; 90 days after a job finished (DATA_MANAGER_JOB_RETENTION_DAYS) it
+    // is deleted, or, while data-manager has not swept its records yet, loses
+    // its actor.
     retention: {
       kind: "fixed-days",
       days: 90,
@@ -573,7 +574,7 @@ const registrationDefinitions: SubjectDataRegistration[] = [
   },
   {
     id: "offline-package-ownership",
-    version: 3,
+    version: 1,
     category: "offline-data",
     source: "openmapx-db",
     strategy: "collector",
@@ -581,12 +582,12 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     locators: [
       {
         type: "hmac_principal",
-        field: "data_manager.offline_package_job_owners.principal",
+        field: "data_manager.offline_package_job_owner.principal",
         purposeCode: "offline-package",
       },
       {
         type: "hmac_principal",
-        field: "data_manager.offline_package_artifact_references.principal",
+        field: "data_manager.offline_package_artifact_reference.principal",
         purposeCode: "offline-package",
       },
     ],
@@ -618,7 +619,7 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     category: "operational-logs",
     source: "openmapx-db",
     strategy: "operator_task",
-    locators: [{ type: "exact_identifier", field: "app_logs.metadata.subjectId", format: "uuid" }],
+    locators: [{ type: "exact_identifier", field: "app_log.metadata.subjectId", format: "uuid" }],
     purposes: ["security-and-abuse-prevention", "support-and-operations"],
     legalBases: ["legitimate-interest", "legal-obligation"],
     origin: { kind: "controller", descriptionCode: "operational-log" },

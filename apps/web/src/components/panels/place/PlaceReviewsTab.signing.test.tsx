@@ -2,6 +2,7 @@ import { encryptWithPassphrase, generateKeypair, keypairToJwk } from "@openmapx/
 import { MangroveProvider, type MangroveTransport } from "@openmapx/mangrove-react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MANGROVE_SIGNER_STORAGE_KEYS } from "@/lib/signOutStorage";
 import { render, screen, userEvent, waitFor } from "@/test";
 import { PlaceReviewsTab } from "./PlaceReviewsTab";
 
@@ -35,7 +36,11 @@ describe("advanced local review choice", () => {
     } as unknown as MangroveTransport;
     render(
       <QueryClientProvider client={new QueryClient()}>
-        <MangroveProvider transport={transport} currentUser={null}>
+        <MangroveProvider
+          transport={transport}
+          currentUser={null}
+          signerStorageKeys={MANGROVE_SIGNER_STORAGE_KEYS}
+        >
           <PlaceReviewsTab
             place={{ id: "osm:node/1", name: "Cafe", coordinates: [6, 50], ids: {} } as never}
           />
@@ -92,6 +97,7 @@ describe("advanced local review choice", () => {
           <MangroveProvider
             transport={transport}
             currentUser={{ id: "owner", authorityId: "session" }}
+            signerStorageKeys={MANGROVE_SIGNER_STORAGE_KEYS}
           >
             <PlaceReviewsTab
               place={{ id: "osm:node/1", name: "Cafe", coordinates: [6, 50], ids: {} } as never}

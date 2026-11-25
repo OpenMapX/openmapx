@@ -17,6 +17,10 @@ import {
   validateAmbientRegion,
 } from "@openmapx/core/ambient-places";
 import { itemAt } from "@openmapx/core/item-at";
+import {
+  OSM_SEARCH_SCHEMA_VERSION,
+  OVERTURE_PLACES_SCHEMA_VERSION,
+} from "@openmapx/core/published-data";
 import type postgres from "postgres";
 import { cancellableTransaction } from "../execution/worker-scope.js";
 import { dropRetiredFeatureStorage } from "./feature-storage.js";
@@ -87,12 +91,15 @@ export async function buildAmbientPlaces(
             status: string;
             published_at: Date | null;
             place_count: string;
+            schema_version: number;
           }[]
         >(
-          `SELECT region,epoch,status,published_at,place_count::TEXT FROM osm_search.index_state WHERE singleton=1`,
+          `SELECT region,epoch,status,published_at,place_count::TEXT,schema_version FROM osm_search.index_state WHERE singleton=1`,
         );
         if (!osmState || osmState.status !== "ready")
           throw new Error("OSM search index must be ready");
+        if (osmState.schema_version !== OSM_SEARCH_SCHEMA_VERSION)
+          throw new Error("Rebuild the OSM search index with the current builder");
         const osmPublished = fresh(osmState.published_at);
         if (region.coverage === "germany") return buildGermanyPlaces(tx, region, osmState, options);
         // Unlike Germany, a regional build takes no source lock, so that it
@@ -122,9 +129,10 @@ export async function buildAmbientPlaces(
               status: string;
               places_published_at: Date | null;
               sources_catalogue: AmbientOvertureRow["sources_catalogue"];
+              schema_version: number;
             }[]
           >(
-            `SELECT region,release,status,places_published_at,sources_catalogue FROM overture_places.conflation_state WHERE singleton=1`,
+            `SELECT region,release,status,places_published_at,sources_catalogue,schema_version FROM overture_places.conflation_state WHERE singleton=1`,
           );
           if (!state) {
             const input = itemAt(
@@ -138,6 +146,8 @@ export async function buildAmbientPlaces(
           }
           if (state && state.status !== "completed")
             throw new Error("Overture conflation must be completed before ambient publication");
+          if (state && state.schema_version !== OVERTURE_PLACES_SCHEMA_VERSION)
+            throw new Error("Re-import Overture places with the current builder");
           if (state) {
             const publishedAt = fresh(state.places_published_at);
             const releases = itemAt(

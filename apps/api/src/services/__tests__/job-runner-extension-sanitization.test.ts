@@ -87,6 +87,7 @@ const validPayload = {
     id: "fixture-extension",
     name: "Fixture extension",
     version: "1.0.0",
+    platform: "1.0",
     integrations: [
       {
         id: "fixture-integration",
@@ -186,7 +187,7 @@ describe("extension job durable boundaries", () => {
       }),
     );
     const projection = {
-      version: 3 as const,
+      version: 1 as const,
       steps: {},
       eventTotal: 0,
       byteTotal: 0,
@@ -264,19 +265,19 @@ describe("extension job durable boundaries", () => {
 
   it("does not alter payloads or outputs for unrelated job types", async () => {
     const payload = { exact: sensitive };
-    await jobRunner.enqueue("fixture.unrelated", payload);
+    await jobRunner.enqueue("integration.reload", payload);
     expect(database.inserts.at(-1)).toMatchObject({ payload });
     database.inserts.length = 0;
     database.updates.length = 0;
 
-    jobRunner.register("fixture.unrelated", async (ctx) => {
+    jobRunner.register("integration.reload", async (ctx) => {
       await ctx.log(sensitive);
       await ctx.checkpoint({ checkpoint: sensitive });
       return { result: sensitive };
     });
     await executeJob(
       "unrelated-success",
-      "fixture.unrelated",
+      "integration.reload",
       payload,
       null,
       {},
@@ -290,7 +291,7 @@ describe("extension job durable boundaries", () => {
     expect(database.updates).toContainEqual(
       expect.objectContaining({
         result: { checkpoint: sensitive, result: sensitive },
-        status: "success",
+        status: "succeeded",
       }),
     );
   });

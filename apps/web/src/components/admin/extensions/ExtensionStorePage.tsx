@@ -535,6 +535,13 @@ function BrowseTab() {
                     {t("securityAdvisory", { advisory: e.critical.reason })}
                   </Alert>
                 )}
+                {e.installedCritical && !e.critical && (
+                  <Alert severity="error">
+                    {t("installedVersionSecurityAdvisory", {
+                      advisory: e.installedCritical.reason,
+                    })}
+                  </Alert>
+                )}
                 {!e.compatible && (
                   <Alert severity="warning">
                     {t("requiresPlatform", {
@@ -678,6 +685,11 @@ function InstalledTab() {
                   </TableCell>
                   <TableCell>
                     {ext.installedVersion}
+                    {!isError && ext.critical && (
+                      <Alert severity="error" sx={{ mt: 0.5, py: 0 }}>
+                        {t("installedVersionSecurityAdvisory", { advisory: ext.critical.reason })}
+                      </Alert>
+                    )}
                     {(isError || ext.hasUpdate === null) && (
                       <Typography
                         variant="caption"

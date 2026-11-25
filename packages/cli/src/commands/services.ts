@@ -35,7 +35,7 @@ type LoadedService = coreServices.LoadedService;
 export interface ListOptions {
   rootDir?: string;
   capability?: string;
-  quality?: "built-in" | "community-verified" | "community";
+  quality?: "built-in" | "community";
   enabledOnly?: boolean;
 }
 
@@ -246,7 +246,7 @@ export function registerServicesCommands(program: Command): void {
     .command("list")
     .description("List discovered services")
     .option("--capability <cap>", "Filter by provided capability")
-    .option("--quality <q>", "Filter by quality (built-in, community-verified, community)")
+    .option("--quality <q>", "Filter by quality (built-in, community)")
     .option("--enabled", "Show only enabled services")
     .action(
       async (options: {

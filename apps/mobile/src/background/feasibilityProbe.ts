@@ -16,7 +16,7 @@ export async function runFeasibilityProbe(batch: {
   locations: readonly RawLocation[];
   errorCode?: string;
 }): Promise<void> {
-  const repository = new FeasibilityRepository(await getDatabase());
+  const repository = await FeasibilityRepository.open(await getDatabase());
   const effects = await handleFeasibilityBatch(batch, { repository, nowMs: Date.now() });
 
   // Effects run strictly after the commit, so a crash between the two loses a

@@ -92,7 +92,8 @@ export const transitSourcesQuerySchema = z.strictObject({
 });
 const mutationShape = {
   idempotencyKey: z.string().max(200).optional(),
-  triggeredBy: z.string().max(200).optional(),
+  /** The administrator the API starts the job for; only the API may name one. */
+  triggeredByUserId: z.string().min(1).max(200).optional(),
 };
 const expectedSourceRevision = z.string().regex(/^[a-f0-9]{64}$/);
 export const transitMutationRequestSchema = z.strictObject({
@@ -119,7 +120,7 @@ export const transitDesiredSourceMutationSchema = z.discriminatedUnion("action",
     expectedSourceRevision: expectedSourceRevision,
     source: addTransitSourceRequestSchema.omit({
       idempotencyKey: true,
-      triggeredBy: true,
+      triggeredByUserId: true,
       expectedSourceRevision: true,
     }),
   }),
@@ -137,12 +138,12 @@ export const transitSourceMutationResultSchema = z.strictObject({
 });
 export const transitSourceActionErrorSchema = z.strictObject({
   error: z.string(),
-  code: z.literal("source_action_not_allowed"),
+  code: z.literal("SOURCE_ACTION_NOT_ALLOWED"),
 });
 /** A refused source change in the error envelope; `code` names why it was refused. */
 export const transitConflictSchema = z.strictObject({
   error: z.string(),
-  code: z.enum(["in-flight", "duplicate-idempotency-key"]),
+  code: z.enum(["IN_FLIGHT", "DUPLICATE_IDEMPOTENCY_KEY"]),
   existingJobId: z.string().nullable(),
 });
 export const transitPreflightBindingSchema = z.strictObject({
@@ -159,17 +160,17 @@ export const transitPreflightSelectionSchema = z.strictObject({
 });
 export const transitPreflightStaleSchema = z.strictObject({
   error: z.string(),
-  code: z.literal("preflight_stale"),
+  code: z.literal("PREFLIGHT_STALE"),
 });
 /** A transit sync refused because it names a country outside the operations profile. */
 export const transitScopeRejectedSchema = z.strictObject({
   error: z.string(),
-  code: z.literal("outside-operations-profile"),
+  code: z.literal("OUTSIDE_OPERATIONS_PROFILE"),
 });
 /** A MOTIS restart refused because no durable receiver can admit the maintenance. */
 export const transitRestartUnavailableSchema = z.strictObject({
   error: z.string(),
-  code: z.literal("ops-agent-unavailable"),
+  code: z.literal("OPS_AGENT_UNAVAILABLE"),
 });
 export const transitSyncRequestSchema = z
   .strictObject({

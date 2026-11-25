@@ -1,3 +1,11 @@
+import {
+  DATA_JOB_STATUSES,
+  DATA_JOB_TRIGGERS,
+  type DataJobStatus,
+  type DataJobTrigger,
+  JOB_STAGE_STATUSES,
+  type JobStageStatus,
+} from "@openmapx/core/jobs";
 import { type SQL, sql } from "drizzle-orm";
 import {
   type AnyPgColumn,
@@ -24,22 +32,23 @@ import {
  */
 export const dataManager = pgSchema("data_manager");
 
-export const jobs = dataManager.table(
-  "jobs",
+export const job = dataManager.table(
+  "job",
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
     /** e.g. "transit-sync", "download-osm" */
     kind: text("kind").notNull(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
-    /** "queued" | "running" | "cancel_pending" | "ok" | "partial" | "error" |
-     * "canceled" | "interrupted" */
-    status: text("status").notNull(),
+    status: text("status").$type<DataJobStatus>().notNull(),
+    /** What started the job. */
+    trigger: text("trigger").$type<DataJobTrigger>().notNull(),
     /**
-     * `<trigger>:<actor>`, e.g. "cron:data-manager-cron" or "api:user:<user id>".
-     * A user id here is personal data: the API deletes a finished row 90 days
-     * after it finished, and deleting the account clears the column.
+     * The administrator the API started the job for. Personal data: the API
+     * clears it 90 days after the job finished, and a foreign key to "user"
+     * (declared in 0001_database_objects.sql, since this schema package does
+     * not see the API's tables) sets it to NULL when the account is deleted.
      */
-    triggeredBy: text("triggered_by"),
+    triggeredByUserId: text("triggered_by_user_id"),
     /**
      * Client-supplied idempotency token of a local transit sync. Replaying the
      * same key within 24 hours returns the original job instead of starting a
@@ -49,7 +58,7 @@ export const jobs = dataManager.table(
     /** Notes outside the execution: a backup restore that closed the job
      * records `{ failureReason }`. */
     metadata: jsonb("metadata"),
-    operationKey: text("operation_key").notNull().unique("jobs_operation_key_key"),
+    operationKey: text("operation_key").notNull().unique("job_operation_key_key"),
     operationFingerprint: text("operation_fingerprint").notNull(),
     executionFingerprint: text("execution_fingerprint").notNull(),
     admittedAt: timestamp("admitted_at", { withTimezone: true }).notNull(),
@@ -88,41 +97,46 @@ export const jobs = dataManager.table(
   (table) => [
     // Finished rows stay 90 days. The API's prune and the control prune's
     // sweep of restore-closed rows select by finish time.
-    index("jobs_finished_at_idx").on(table.finishedAt),
+    index("job_finished_at_idx").on(table.finishedAt),
     // The few rows a backup restore closed whose key-named files the control
     // prune has yet to sweep, in the key order it reads them.
-    index("jobs_operation_key_idx")
+    index("job_operation_key_idx")
       .on(table.operationKey)
       .where(sql`${table.executionAdmission} IS NULL AND ${table.releasedAt} IS NULL`),
     // The admin job listings and the last-sync lookup read one kind, newest first.
-    index("jobs_kind_admitted_at_idx").on(table.kind, table.admittedAt),
+    index("job_kind_admitted_at_idx").on(table.kind, table.admittedAt),
     // Startup recovery lists these in admission order, and an exclusive
     // admission looks among them for an unfinished job.
-    index("jobs_admitted_at_idx")
+    index("job_admitted_at_idx")
       .on(table.admittedAt)
       .where(
         sql`${table.finishedAt} IS NULL OR (${table.executionAdmission} IS NOT NULL AND ${table.releasedAt} IS NULL)`,
       ),
     // A local transit sync replays its idempotency key within 24 hours.
-    index("jobs_idempotency_key_idx")
+    index("job_idempotency_key_idx")
       .on(table.idempotencyKey)
       .where(sql`${table.idempotencyKey} IS NOT NULL`),
+    // Deleting an account sets its jobs' actor to NULL through the foreign key.
+    index("job_triggered_by_user_id_idx").on(table.triggeredByUserId),
+    check("job_status_check", inValues(table.status, DATA_JOB_STATUSES)),
+    check("job_trigger_check", inValues(table.trigger, DATA_JOB_TRIGGERS)),
+    // Only the API names the administrator it started a job for.
     check(
-      "jobs_status_check",
-      sql`${table.status} IN ('queued','running','cancel_pending','ok','partial','error','canceled','interrupted')`,
+      "job_triggered_by_user_id_check",
+      sql`${table.triggeredByUserId} IS NULL OR ${table.trigger} = 'api'`,
     ),
     // The code bounds the progress's compact JSON at 256 KiB; jsonb's text form
     // adds a space after each separator, so it stays under twice that.
     check(
-      "jobs_execution_bounds_check",
+      "job_execution_bounds_check",
       sql`${table.ownershipVersion} >= 0 AND (${table.executionProgress} IS NULL OR octet_length(${table.executionProgress}::text) <= 524288)`,
     ),
     check(
-      "jobs_execution_row_check",
+      "job_execution_row_check",
       sql`(${table.executionAdmission} IS NULL) = (${table.executionProgress} IS NULL) AND (${table.executionAdmission} IS NOT NULL OR ${table.finishedAt} IS NOT NULL) AND (${table.executionCompletion} IS NULL OR ${table.executionAdmission} IS NOT NULL) AND (${table.releasedAt} IS NULL OR ${table.finishedAt} IS NOT NULL)`,
     ),
     check(
-      "jobs_execution_shape_check",
+      "job_execution_shape_check",
       sql`${table.operationKey} ~ '^opk1_[A-Za-z0-9_-]{16,64}$' AND ${table.operationFingerprint} ~ '^[a-f0-9]{64}$' AND ${table.executionFingerprint} ~ '^[a-f0-9]{64}$' AND ${table.deadlineAt} > ${table.admittedAt}`,
     ),
   ],
@@ -148,7 +162,7 @@ export const configurationFence = dataManager.table(
     /** The prepare request body, compared on a repeated prepare. */
     input: jsonb("input").notNull(),
     /** "prepared" | "settled" | "refused" */
-    state: text("state").notNull(),
+    status: text("status").notNull(),
     /** "applied" | "unused" | "contained", set by the settle. */
     outcome: text("outcome"),
     preparedAt: timestamp("prepared_at", { withTimezone: true }).notNull().defaultNow(),
@@ -156,12 +170,12 @@ export const configurationFence = dataManager.table(
     settledAt: timestamp("settled_at", { withTimezone: true }),
   },
   (table) => [
-    uniqueIndex("configuration_fence_state_prepared_key")
-      .on(table.state)
-      .where(sql`${table.state} = 'prepared'`),
+    uniqueIndex("configuration_fence_status_prepared_key")
+      .on(table.status)
+      .where(sql`${table.status} = 'prepared'`),
     check(
-      "configuration_fence_state_check",
-      sql`(${table.state} = 'prepared' AND ${table.outcome} IS NULL AND ${table.settledAt} IS NULL) OR (${table.state} = 'settled' AND ${table.outcome} IN ('applied','unused','contained') AND ${table.settledAt} IS NOT NULL) OR (${table.state} = 'refused' AND ${table.outcome} IS NULL AND ${table.settledAt} IS NOT NULL)`,
+      "configuration_fence_status_check",
+      sql`(${table.status} = 'prepared' AND ${table.outcome} IS NULL AND ${table.settledAt} IS NULL) OR (${table.status} = 'settled' AND ${table.outcome} IN ('applied','unused','contained') AND ${table.settledAt} IS NOT NULL) OR (${table.status} = 'refused' AND ${table.outcome} IS NULL AND ${table.settledAt} IS NOT NULL)`,
     ),
   ],
 );
@@ -188,22 +202,20 @@ export const JOB_STAGE_NAMES = [
   // downloads the GTFS archives Transitous already cleaned.
   "mirror",
 ] as const;
-/** How a recorded stage ended. */
-export const JOB_STAGE_STATUSES = ["ok", "skipped", "error", "partial"] as const;
 
 /** `column IN (…)` over a closed set of values written as SQL literals. */
 function inValues(column: AnyPgColumn, values: readonly string[]): SQL {
-  if (values.some((value) => !/^[a-z][a-z-]*$/.test(value))) throw Error("Unsafe value literal");
+  if (values.some((value) => !/^[a-z][a-z_-]*$/.test(value))) throw Error("Unsafe value literal");
   return sql`${column} IN (${sql.raw(values.map((value) => `'${value}'`).join(","))})`;
 }
 
-export const jobStages = dataManager.table(
-  "job_stages",
+export const jobStage = dataManager.table(
+  "job_stage",
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
     jobId: uuid("job_id").notNull(),
     stage: text("stage").notNull(),
-    status: text("status").notNull(),
+    status: text("status").$type<JobStageStatus>().notNull(),
     startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
     finishedAt: timestamp("finished_at", { withTimezone: true }).notNull(),
     durationMs: integer("duration_ms").notNull(),
@@ -215,13 +227,13 @@ export const jobStages = dataManager.table(
   // read stages by job. Without this index each of those is a full table scan.
   (table) => [
     foreignKey({
-      name: "job_stages_job_id_fkey",
+      name: "job_stage_job_id_fkey",
       columns: [table.jobId],
-      foreignColumns: [jobs.id],
+      foreignColumns: [job.id],
     }).onDelete("cascade"),
-    index("job_stages_job_id_idx").on(table.jobId),
-    check("job_stages_stage_check", inValues(table.stage, JOB_STAGE_NAMES)),
-    check("job_stages_status_check", inValues(table.status, JOB_STAGE_STATUSES)),
+    index("job_stage_job_id_idx").on(table.jobId),
+    check("job_stage_stage_check", inValues(table.stage, JOB_STAGE_NAMES)),
+    check("job_stage_status_check", inValues(table.status, JOB_STAGE_STATUSES)),
   ],
 );
 
@@ -280,8 +292,8 @@ export const overtureRelease = dataManager.table(
 );
 
 /** Durable physical offline-package work. Opaque principals live only in the owner table. */
-export const offlinePackageJobs = dataManager.table(
-  "offline_package_jobs",
+export const offlinePackageJob = dataManager.table(
+  "offline_package_job",
   {
     id: uuid("id").primaryKey(),
     requestKey: text("request_key").notNull(),
@@ -297,21 +309,21 @@ export const offlinePackageJobs = dataManager.table(
     leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
   },
   (table) => [
-    uniqueIndex("offline_package_jobs_request_key_live_key")
+    uniqueIndex("offline_package_job_request_key_live_key")
       .on(table.requestKey)
       .where(sql`${table.status} IN ('preparing', 'ready-to-download')`),
-    index("offline_package_jobs_status_created_at_idx").on(table.status, table.createdAt),
-    index("offline_package_jobs_package_id_idx").on(table.packageId),
+    index("offline_package_job_status_created_at_idx").on(table.status, table.createdAt),
+    index("offline_package_job_package_id_idx").on(table.packageId),
     check(
-      "offline_package_jobs_status_check",
+      "offline_package_job_status_check",
       sql`${table.status} IN ('preparing','ready-to-download','failed','expired')`,
     ),
   ],
 );
 
 /** Many opaque principals may independently own/account for one deduplicated physical job. */
-export const offlinePackageJobOwners = dataManager.table(
-  "offline_package_job_owners",
+export const offlinePackageJobOwner = dataManager.table(
+  "offline_package_job_owner",
   {
     jobId: uuid("job_id").notNull(),
     principal: text("principal").notNull(),
@@ -319,21 +331,21 @@ export const offlinePackageJobOwners = dataManager.table(
   },
   (table) => [
     primaryKey({
-      name: "offline_package_job_owners_pkey",
+      name: "offline_package_job_owner_pkey",
       columns: [table.jobId, table.principal],
     }),
     foreignKey({
-      name: "offline_package_job_owners_job_id_fkey",
+      name: "offline_package_job_owner_job_id_fkey",
       columns: [table.jobId],
-      foreignColumns: [offlinePackageJobs.id],
+      foreignColumns: [offlinePackageJob.id],
     }).onDelete("cascade"),
-    index("offline_package_job_owners_principal_idx").on(table.principal),
+    index("offline_package_job_owner_principal_idx").on(table.principal),
   ],
 );
 
 /** Logical retention is charged once per principal/reference even when bytes are shared. */
-export const offlinePackageArtifactReferences = dataManager.table(
-  "offline_package_artifact_references",
+export const offlinePackageArtifactReference = dataManager.table(
+  "offline_package_artifact_reference",
   {
     principal: text("principal").notNull(),
     packageId: text("package_id").notNull(),
@@ -342,11 +354,11 @@ export const offlinePackageArtifactReferences = dataManager.table(
   },
   (table) => [
     primaryKey({
-      name: "offline_package_artifact_references_pkey",
+      name: "offline_package_artifact_reference_pkey",
       columns: [table.principal, table.packageId],
     }),
-    index("offline_package_artifact_references_package_id_idx").on(table.packageId),
-    index("offline_package_artifact_references_principal_retained_at_idx").on(
+    index("offline_package_artifact_reference_package_id_idx").on(table.packageId),
+    index("offline_package_artifact_reference_principal_retained_at_idx").on(
       table.principal,
       table.retainedAt,
     ),

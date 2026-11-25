@@ -14,7 +14,8 @@ export function DeletionSection({
   onDeleted,
   setMessage,
 }: {
-  onDeleted: () => void;
+  /** The account is gone; `cleanupIncomplete` when this device still holds some of its data. */
+  onDeleted: (cleanupIncomplete: boolean) => void;
   setMessage: SetAccountMessage;
 }) {
   const t = useTranslations("account");
@@ -32,8 +33,10 @@ export function DeletionSection({
         setMessage(refusalMessage(error) ?? { type: "error", text: t("failedDeleteAccount") });
         return;
       }
-      await clearPrivateDeviceData({ queryClient });
-      onDeleted();
+      const { failures } = await clearPrivateDeviceData({ queryClient });
+      // The account is gone either way: the settings close, and an incomplete
+      // cleanup is told where the signed-out view lands.
+      onDeleted(failures > 0);
     } catch {
       setMessage({ type: "error", text: t("failedDeleteAccount") });
     }

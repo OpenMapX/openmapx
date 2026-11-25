@@ -24,7 +24,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(result.portableRecords).toBe(60_000);
       expect(result.streamedBytes).toBeGreaterThan(0);
       expect(result.sha256).toMatch(/^[a-f0-9]{64}$/);
-      expect(result.schemaId).toBe("article-15-record-v1");
+      expect(result.schemaId).toBe("export-record-1");
       expect(result.peakExternal).toBeLessThan(48 * 1024 * 1024);
       expect(result.peakRss).toBeLessThan(320 * 1024 * 1024);
     }, 150_000);

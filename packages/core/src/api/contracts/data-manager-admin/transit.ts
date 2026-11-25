@@ -1,6 +1,7 @@
 import { licensingSchema } from "@openmapx/extension-contracts/licensing-schema";
 import { parseLicensing } from "@openmapx/mobility-core/licensing";
 import z from "zod/v4";
+import { DATA_JOB_TRIGGERS } from "../../../jobs/vocabulary";
 import { adminCountSchema as count, adminTimestampSchema as timestamp } from "./common";
 export const transitStateSummarySchema = z.strictObject({
   transitousRef: z.string().nullable(),
@@ -37,7 +38,9 @@ export const transitJobSchema = z.strictObject({
   status: z.string(),
   startedAt: timestamp,
   finishedAt: timestamp.nullable(),
-  triggeredBy: z.string().nullable(),
+  trigger: z.enum(DATA_JOB_TRIGGERS),
+  /** The administrator the API started the job for. */
+  triggeredByUserId: z.string().nullable(),
   idempotencyKey: z.string().nullable(),
   metadata: z.json(),
 });

@@ -8,6 +8,7 @@ import DialogTitle from "@mui/material/DialogTitle";
 import IconButton from "@mui/material/IconButton";
 import LinearProgress from "@mui/material/LinearProgress";
 import Typography from "@mui/material/Typography";
+import { CACHE_STORAGE_NAMES } from "@openmapx/core";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
@@ -27,6 +28,7 @@ import {
   getStoredQueryCacheBytes,
   isRecentMapDataCacheEnabled,
   isRecentMapDataQueryKey,
+  QUERY_CACHE_KEY,
   setRecentMapDataCacheEnabled,
 } from "@/lib/recentMapDataCache";
 import { formatBytes } from "@/lib/storageFormat";
@@ -51,20 +53,21 @@ interface StorageInfo {
 }
 
 const ROW_LABELS: Record<string, string> = {
-  "static-assets": "appShell",
+  [CACHE_STORAGE_NAMES.staticAssets]: "appShell",
+  // Serwist's default runtime cache for pages keeps the library's own name.
   pages: "appShell",
-  "openmapx-preferences": "preferences",
+  [CACHE_STORAGE_NAMES.preferences]: "preferences",
   [MAP_TILE_CACHE]: "mapTiles",
   [STREET_LEVEL_IMAGERY_TILE_CACHE]: "mapTiles",
   [VECTOR_TILE_CACHE]: "vectorTiles",
-  "api-geodata": "apiResponses",
-  "api-category-search": "apiResponses",
-  "api-autocomplete": "apiResponses",
-  "api-weather": "apiResponses",
-  "api-photos": "apiResponses",
-  "api-landmark-coverage": "apiResponses",
-  "api-landmark-cells": "apiResponses",
-  "api-landmark-models": "apiResponses",
+  [CACHE_STORAGE_NAMES.apiGeodata]: "apiResponses",
+  [CACHE_STORAGE_NAMES.apiCategorySearch]: "apiResponses",
+  [CACHE_STORAGE_NAMES.apiAutocomplete]: "apiResponses",
+  [CACHE_STORAGE_NAMES.apiWeather]: "apiResponses",
+  [CACHE_STORAGE_NAMES.apiPhotos]: "apiResponses",
+  [CACHE_STORAGE_NAMES.apiLandmarkCoverage]: "apiResponses",
+  [CACHE_STORAGE_NAMES.apiLandmarkCells]: "apiResponses",
+  [CACHE_STORAGE_NAMES.apiLandmarkModels]: "apiResponses",
 };
 
 // "Clear cached tiles" empties the worker's tile caches (CLEARABLE_TILE_CACHES).
@@ -82,7 +85,7 @@ async function inspectStorage(t: (key: string) => string): Promise<StorageInfo> 
   const queryCacheBytes = await getStoredQueryCacheBytes();
   if (queryCacheBytes > 0) {
     rows.push({
-      cacheName: "openmapx-query-cache",
+      cacheName: QUERY_CACHE_KEY,
       label: t("recentMapDataCache"),
       bytes: queryCacheBytes,
       count: 1,
@@ -130,7 +133,7 @@ async function inspectStorage(t: (key: string) => string): Promise<StorageInfo> 
         // ignore
       }
     }
-    const labelKey = name.startsWith("offline-package-glyphs-")
+    const labelKey = name.startsWith(CACHE_STORAGE_NAMES.offlinePackageGlyphsPrefix)
       ? "offlinePackages"
       : (ROW_LABELS[name] ?? "apiResponses");
     rows.push({ cacheName: name, label: t(labelKey), bytes, count: reqs.length });

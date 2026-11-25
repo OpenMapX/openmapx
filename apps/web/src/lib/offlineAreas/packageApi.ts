@@ -49,7 +49,7 @@ async function jsonBody(response: Response): Promise<unknown> {
     return JSON.parse(text);
   } catch {
     throw new OfflinePackageApiError(
-      "invalid-response",
+      "INVALID_RESPONSE",
       response.status,
       "Invalid package API response",
     );
@@ -70,7 +70,7 @@ function apiError(response: Response, body: unknown): OfflinePackageApiError {
         )
       : undefined;
   return new OfflinePackageApiError(
-    error?.code ?? `http-${response.status}`,
+    error?.code ?? `HTTP_${response.status}`,
     response.status,
     error?.error ?? `Offline package API returned HTTP ${response.status}`,
     retryAfterSeconds,
@@ -86,7 +86,7 @@ async function expectJson(response: Response): Promise<unknown> {
 async function expectJob(response: Response): Promise<OfflinePackagePreparation> {
   const result = offlinePackagePreparationSchema.safeParse(await expectJson(response));
   if (!result.success) {
-    throw new OfflinePackageApiError("invalid-response", response.status, "Invalid package job");
+    throw new OfflinePackageApiError("INVALID_RESPONSE", response.status, "Invalid package job");
   }
   return result.data;
 }
@@ -98,16 +98,16 @@ export function createOfflinePackageApi(apiBaseUrl = ""): OfflinePackageApi {
       const response = await fetch(apiPath("/api/offline/packages/capability"), { signal });
       const body = await jsonBody(response);
       if (!response.ok) {
-        // The public proxy answers "source-unavailable" when data-manager is
+        // The public proxy answers SOURCE_UNAVAILABLE when data-manager is
         // down. Settings shows that as unavailable rather than as a failure.
         const error = apiError(response, body);
-        if (error.code !== "source-unavailable") throw error;
+        if (error.code !== "SOURCE_UNAVAILABLE") throw error;
         return { available: false, provider: "openmapx", reason: "source-unavailable" };
       }
       const result = offlinePackageCapabilitySchema.safeParse(body);
       if (!result.success) {
         throw new OfflinePackageApiError(
-          "invalid-response",
+          "INVALID_RESPONSE",
           response.status,
           "Invalid package capability",
         );

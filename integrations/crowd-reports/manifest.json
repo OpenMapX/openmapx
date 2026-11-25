@@ -8,7 +8,6 @@
     "routes": true
   },
   "quality": "built-in",
-  "category": "Navigation",
   "configSchema": {
     "type": "object",
     "properties": {

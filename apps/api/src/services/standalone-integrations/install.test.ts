@@ -16,7 +16,12 @@ import { openOpsJobJournal } from "../../../../ops-agent/src/journal";
 import { buildOpsAgentServer } from "../../../../ops-agent/src/server";
 import { installStandaloneIntegrationRuntime } from "../../../../ops-agent/src/standalone-integration-runtime";
 import * as schema from "../../db/schema";
+import { TEST_ADMIN_COOKIE } from "../../test/admin-session";
+import { mockAdminSession } from "../../test/auth";
 import { createMigratedPostgresFixture } from "../../test/postgres-fixture";
+
+/** The administrator the test session acts as; artifact stages belong to them. */
+const ADMIN_ID = mockAdminSession().user.id;
 
 const state = vi.hoisted(() => ({
   fixture: null as unknown as Awaited<ReturnType<typeof createMigratedPostgresFixture>>,
@@ -31,6 +36,9 @@ vi.mock("../../db", () => ({
   },
 }));
 vi.mock("../../redis", () => ({ redis: null }));
+vi.mock("../../utils/require-admin", async (actual) =>
+  (await import("../../test/admin-session")).testAdminSessionModule(await actual()),
+);
 vi.mock("../service-registry", async (actual) => ({
   ...(await actual<typeof import("../service-registry")>()),
   getServiceRegistry: () => ({
@@ -56,7 +64,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       cleanups.push(async () => rmSync(state.host.cleanupRoot, { recursive: true, force: true }));
       vi.stubEnv("BETTER_AUTH_SECRET", "standalone-fixture-auth-secret-not-for-production");
       vi.stubEnv("NODE_ENV", "test");
-      vi.stubEnv("OPENMAPX_LOCAL_ADMIN_TOKEN", "standalone-local-fixture");
+      await state.fixture
+        .sql`INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
+        VALUES (${ADMIN_ID}, 'Test Admin', 'admin@test.example', true, now(), now())`;
       const tokenFile = join(state.host.cleanupRoot, "api-token");
       writeFileSync(tokenFile, state.host.token, { mode: 0o600 });
       vi.stubEnv("OPS_AGENT_TOKEN_FILE", tokenFile);
@@ -83,7 +93,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         },
         runtime: state.host.runtime,
         resourceClaimer: state.host.claimer,
-        journal: await openOpsJobJournal(join(state.host.infraDir, "state/ops-agent/jobs-v1.json")),
+        journal: await openOpsJobJournal(join(state.host.infraDir, "state/ops-agent/jobs.json")),
         controlInstallation: installation,
         artifactTransfers: store,
       });
@@ -212,7 +222,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         headers: {
           "content-type": "application/json",
           "idempotency-key": key,
-          "x-openmapx-local-admin": "standalone-local-fixture",
+          cookie: TEST_ADMIN_COOKIE,
         },
         body: JSON.stringify(body),
       });
@@ -226,7 +236,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           .select()
           .from(schema.adminJob)
           .where(eq(schema.adminJob.id, String(jobId)));
-        if (row && ["success", "failed", "canceled"].includes(row.status)) return row;
+        if (row && ["succeeded", "failed", "cancelled"].includes(row.status)) return row;
         if (Date.now() > deadline)
           throw Error(
             `Standalone job did not finish: ${row?.status} ${row?.error ?? ""} ${JSON.stringify(row?.result)}`,
@@ -254,14 +264,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const stage = await store.createStage({
         purpose: "integration-artifact",
         direction: "upload",
-        ownerId: "loopback",
+        ownerId: ADMIN_ID,
         operationKey: `opk1_${randomUUID().replaceAll("-", "")}`,
         declaredBytes: bytes.length,
         expectedSha256: digest,
       });
       await store.upload({
         stageId: stage.stageId,
-        ownerId: "loopback",
+        ownerId: ADMIN_ID,
         purpose: stage.purpose,
         attemptId: randomUUID(),
         deadlineAt: Date.now() + 60000,
@@ -279,7 +289,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     }
     async function inventoryEntry(id: string) {
       const response = await fetch(`${apiUrl}/api/admin/standalone-integrations`, {
-        headers: { "x-openmapx-local-admin": "standalone-local-fixture" },
+        headers: { cookie: TEST_ADMIN_COOKIE },
       });
       expect(response.status).toBe(200);
       return (await response.json()).entries.find(
@@ -293,7 +303,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         (await post("preview", { source }, randomUUID())).body.jobId,
       );
       expect(previewJob.status, previewJob.error ?? JSON.stringify(previewJob.result)).toBe(
-        "success",
+        "succeeded",
       );
       const inspection = previewJob.result as { inspectionId: string; contentDigest: string };
       const accepted = await post(
@@ -302,7 +312,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         randomUUID(),
       );
       const done = await completed(accepted.body.jobId);
-      expect(done.status, done.error ?? JSON.stringify(done.result)).toBe("success");
+      expect(done.status, done.error ?? JSON.stringify(done.result)).toBe("succeeded");
       const entry = await inventoryEntry(id);
       expect(entry).toMatchObject({
         ownership: "standalone",
@@ -333,7 +343,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       ).toBe(409);
       const previewJob = await completed(preview.body.jobId);
       expect(previewJob.status, previewJob.error ?? JSON.stringify(previewJob.result)).toBe(
-        "success",
+        "succeeded",
       );
       const inspection = previewJob.result as { inspectionId: string; contentDigest: string };
       const key = randomUUID(),
@@ -344,7 +354,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const accepted = await post("install", request, key);
       expect(accepted.status, JSON.stringify(accepted.body)).toBe(202);
       const done = await completed(accepted.body.jobId);
-      expect(done.status, done.error ?? JSON.stringify(done.result)).toBe("success");
+      expect(done.status, done.error ?? JSON.stringify(done.result)).toBe("succeeded");
       expect(await post("install", request, key)).toEqual(accepted);
       const [parent] = await state.fixture.db
         .select()
@@ -383,7 +393,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         (
           await store.getStage({
             stageId: stage.stageId,
-            ownerId: "loopback",
+            ownerId: ADMIN_ID,
             purpose: stage.purpose,
           })
         ).state,
@@ -395,7 +405,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const { stage, source } = await upload("standalone-lost-response");
       const preview = await post("preview", { source }, randomUUID()),
         previewJob = await completed(preview.body.jobId);
-      expect(previewJob.status).toBe("success");
+      expect(previewJob.status).toBe("succeeded");
       const inspection = previewJob.result as { inspectionId: string; contentDigest: string };
       dropInstallResponse = true;
       const before = installPosts;
@@ -405,13 +415,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         randomUUID(),
       );
       const done = await completed(accepted.body.jobId);
-      expect(done.status, done.error ?? JSON.stringify(done.result)).toBe("success");
+      expect(done.status, done.error ?? JSON.stringify(done.result)).toBe("succeeded");
       expect(installPosts - before).toBe(1);
       expect(
         (
           await store.getStage({
             stageId: stage.stageId,
-            ownerId: "loopback",
+            ownerId: ADMIN_ID,
             purpose: stage.purpose,
           })
         ).state,
@@ -421,7 +431,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const { stage, source } = await upload("standalone-rollback");
       const preview = await post("preview", { source }, randomUUID()),
         previewJob = await completed(preview.body.jobId);
-      expect(previewJob.status).toBe("success");
+      expect(previewJob.status).toBe("succeeded");
       const inspection = previewJob.result as { inspectionId: string; contentDigest: string };
       await state.fixture
         .sql`alter table installed_integration add constraint fixture_reject_standalone check (id <> 'standalone-rollback')`;
@@ -443,7 +453,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         (
           await store.getStage({
             stageId: stage.stageId,
-            ownerId: "loopback",
+            ownerId: ADMIN_ID,
             purpose: stage.purpose,
           })
         ).state,
@@ -454,14 +464,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         .sql`alter table installed_integration drop constraint fixture_reject_standalone`;
       const retry = await post("preview", { source }, randomUUID()),
         retryJob = await completed(retry.body.jobId);
-      expect(retryJob.status, retryJob.error ?? JSON.stringify(retryJob.result)).toBe("success");
+      expect(retryJob.status, retryJob.error ?? JSON.stringify(retryJob.result)).toBe("succeeded");
     }, 90000);
 
     it("keeps a published cancellation pending until exact restoration and stage release", async () => {
       const { stage, source } = await upload("standalone-cancel");
       const preview = await post("preview", { source }, randomUUID()),
         previewJob = await completed(preview.body.jobId);
-      expect(previewJob.status).toBe("success");
+      expect(previewJob.status).toBe("succeeded");
       const inspection = previewJob.result as { inspectionId: string; contentDigest: string };
       cancelIntegrationId = "standalone-cancel";
       const accepted = await post(
@@ -481,7 +491,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         (
           await store.getStage({
             stageId: stage.stageId,
-            ownerId: "loopback",
+            ownerId: ADMIN_ID,
             purpose: stage.purpose,
           })
         ).state,
@@ -499,12 +509,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await hasVerifiedStandaloneRestoration(restored.result, restored.protocol, restored.id),
       ).toBe(true);
       const done = await completed(accepted.body.jobId, true);
-      expect(done.status, done.error ?? JSON.stringify(done.result)).toBe("canceled");
+      expect(done.status, done.error ?? JSON.stringify(done.result)).toBe("cancelled");
       expect(
         (
           await store.getStage({
             stageId: stage.stageId,
-            ownerId: "loopback",
+            ownerId: ADMIN_ID,
             purpose: stage.purpose,
           })
         ).state,
@@ -548,7 +558,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const remove = await post(`${id}/remove`, body, randomUUID());
       expect(remove.status).toBe(202);
       const done = await completed(remove.body.jobId);
-      expect(done.status, done.error ?? JSON.stringify(done.result)).toBe("success");
+      expect(done.status, done.error ?? JSON.stringify(done.result)).toBe("succeeded");
       expect(existsSync(directory)).toBe(false);
       expect(
         await state.fixture.db
@@ -638,7 +648,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       }
       const retry = await post(`${id}/remove`, body, randomUUID()),
         done = await completed(retry.body.jobId);
-      expect(done.status, done.error ?? JSON.stringify(done.result)).toBe("success");
+      expect(done.status, done.error ?? JSON.stringify(done.result)).toBe("succeeded");
       expect(existsSync(directory)).toBe(false);
     }, 120000);
 
@@ -655,7 +665,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const accepted = await post(`${id}/remove`, { expectedContentDigest: null }, randomUUID());
       expect(accepted.status).toBe(202);
       const done = await completed(accepted.body.jobId);
-      expect(done.status, done.error ?? JSON.stringify(done.result)).toBe("success");
+      expect(done.status, done.error ?? JSON.stringify(done.result)).toBe("succeeded");
       expect(await inventoryEntry(id)).toBeUndefined();
     }, 120000);
     it("keeps canceled removal pending until its exact quarantined component is restored", async () => {
@@ -675,7 +685,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       );
       const inventory = await (
         await fetch(`${apiUrl}/api/admin/standalone-integrations`, {
-          headers: { "x-openmapx-local-admin": "standalone-local-fixture" },
+          headers: { cookie: TEST_ADMIN_COOKIE },
         })
       ).json();
       const body = {
@@ -700,7 +710,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await jobRunner.reconcile();
       }
       const done = await completed(accepted.body.jobId, true);
-      expect(done.status, done.error ?? JSON.stringify(done.result)).toBe("canceled");
+      expect(done.status, done.error ?? JSON.stringify(done.result)).toBe("cancelled");
       expect(existsSync(directory)).toBe(true);
       const { hasVerifiedStandaloneRestoration } = await import("./settlement-checkpoint");
       expect(await hasVerifiedStandaloneRestoration(done.result, done.protocol, done.id)).toBe(

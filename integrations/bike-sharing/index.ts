@@ -40,8 +40,8 @@ export function setup(ctx: IntegrationContext): void {
     dataSources: ctx.manifest.dataSources ?? [],
     searchCityBikes,
     searchDbBikes: createDbBikeClient({
-      clientId: ctx.config["db-bike-client-id"] as string | undefined,
-      apiKey: ctx.config["db-bike-api-key"] as string | undefined,
+      clientId: ctx.config.dbBikeClientId as string | undefined,
+      apiKey: ctx.config.dbBikeApiKey as string | undefined,
       http: ctx.http,
       contributors: resolveContributors(["db-bike"]),
     }),

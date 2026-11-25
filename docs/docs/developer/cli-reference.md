@@ -36,28 +36,31 @@ as a **flag** (`services build osrm --region europe/germany`).
 A few environment variables (read from `infra/docker/.env` or your shell) change
 where the CLI points and how it authenticates:
 
-| Variable                       | Default                 | Used by                                     |
-| ------------------------------ | ----------------------- | ------------------------------------------- |
-| `DOMAIN`                       | `localhost`             | the public domain baked into renders        |
-| `DATA_MANAGER_URL`             | `http://localhost:4000` | the `data` commands                         |
-| `API_URL` / `OPENMAPX_API_URL` | `http://localhost:3001` | the `ext` admin commands                    |
-| `OPENMAPX_REGION`              | (unset)                 | fallback region for `data` downloads/builds |
-| `OPENMAPX_ENABLED_SERVICES`    | (unset)                 | overrides the persisted service selection   |
+| Variable                    | Default                 | Used by                                                                                                      |
+| --------------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `DOMAIN`                    | `localhost`             | the public domain baked into renders, and the admin API origin `https://DOMAIN` of `system update` and `ext` |
+| `DATA_MANAGER_URL`          | `http://localhost:4000` | the `data` commands                                                                                          |
+| `OPENMAPX_REGION`           | (unset)                 | fallback region for `data` downloads/builds                                                                  |
+| `OPENMAPX_ENABLED_SERVICES` | (unset)                 | overrides the persisted service selection                                                                    |
 
 The `data` commands authenticate to the data-manager with the host CLI's own
 token, read from `infra/docker/secrets/data-manager-host-cli-token`. Commands
 the operations agent runs for the admin panel use the agent's token instead.
 
-`ext` sends the `x-openmapx-local-admin` header, using
-`OPENMAPX_LOCAL_ADMIN_TOKEN` when configured. The local administrator path
-requires a loopback connection and the API's matching token policy. Production
-requires a configured token; `OPENMAPX_DISABLE_LOCALHOST_AUTH=1` disables this
-path. The managed API service does not publish port 3001 on the host, so the
-default CLI endpoint is unavailable in that deployment. Use the authenticated
-admin UI there. Pointing the CLI at a remote host does not grant administrator
-access. `API_URL` takes
-precedence over `OPENMAPX_API_URL`. Data-manager commands send the configured
-bearer token. See [Users and access](../administration/users-and-access.md).
+`system update` and the `ext` commands act as the operator's own administrator
+session. Each takes `--session-file <path>`: a private file (owned by you, mode
+`0600`, one link) that contains only a signed-in full administrator's Better
+Auth session cookie (`better-auth.session_token=…` or its `__Secure-` variant).
+The CLI never discovers browser cookies or creates a session. It sends the
+cookie only to the HTTPS API origin, `https://DOMAIN` unless `--api-origin`
+names another, and refuses redirects; `--allow-loopback-http` permits plain
+HTTP to a loopback origin for development only. The CLI sends the API origin as
+the request's `Origin`, so a changing request (such as `ext preview`, `ext
+install` or `system update`) is refused with `403` unless that origin is listed
+in the API's `CORS_ORIGIN`. A production deployment lists `https://DOMAIN`; the
+development example in `apps/api/.env.example` lists `http://127.0.0.1:3001`,
+so use `--api-origin http://127.0.0.1:3001` there. Data-manager commands send the
+configured bearer token. See [Host CLI access](../administration/admin-panel.md#host-cli-access).
 
 ## `services`
 
@@ -67,7 +70,7 @@ in full under [Managing services](../install/managing-services.md).
 
 | Command                     | Description                                                                                                                                                                                                                                                                                                                                                                |
 | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `services list`             | List discovered services as a table. Filters: `--capability <cap>`, `--quality <built-in\|community-verified\|community>`, `--enabled`.                                                                                                                                                                                                                                    |
+| `services list`             | List discovered services as a table. Filters: `--capability <cap>`, `--quality <built-in\|community>`, `--enabled`.                                                                                                                                                                                                                                                        |
 | `services get <id>`         | Print one service's full manifest as JSON.                                                                                                                                                                                                                                                                                                                                 |
 | `services selected`         | Show the requested roots and the effective set after dependency expansion.                                                                                                                                                                                                                                                                                                 |
 | `services enable <ids...>`  | Persistently add root services to `infra/docker/state/ops-agent/service-selection.json`.                                                                                                                                                                                                                                                                                   |
@@ -99,7 +102,7 @@ hand-written compose file — the renderer derives it from the enabled manifests
 | `compose render`                | Apply the selection as a new configuration generation: compose file and hardlink plan from the manifests, with the settings and credentials the admin panel last applied. Generates any missing platform secret files in `infra/docker/secrets/`, among them the API's and data-manager's database passwords and the data-manager caller tokens. Flags: `--domain <d>` (default `$DOMAIN`), `--services <ids>`, `--preset <names>`.                                                                                                                                                                                                           |
 | `compose up`                    | Render, apply hardlinks, then `docker compose up -d` the whole selection. When the applied configuration pins no release, it first pins the release the configured selection resolves to; existing pins are kept. Flags: `--domain <d>`, `--services <ids>`, `--preset <names>`.                                                                                                                                                                                                                                                                                                                                                              |
 | `compose release`               | Resolve `OPENMAPX_RELEASE` (main, preview, exact version/digest; default main) and render a new configuration generation that pins the five product images: API, web, data-manager, ops-agent and Transitous runner. `--check` validates and caches metadata without changing pins or running services. Bare selection is bootstrap or exact-match recovery only when Data Manager exists. `--status` shows the applied configuration's pins without registry access; `--clear` renders the configuration without pins and refuses while Data Manager runs the pinned image. `OPENMAPX_RELEASE=local` explicitly disables release resolution. |
-| `system update`                 | Apply an already checked release through the real administrator's public API. Requires `--release-id`, `--digest`, `--session-file`, and a new private `--receipt`. Always creates and verifies a backup. `--api-origin` defaults to `https://DOMAIN`; `--resume` reuses the original requests/jobs. See [Upgrading](../install/upgrading.md#4-check-and-apply-the-complete-release) for private session-file and recovery requirements.                                                                                                                                                                                                      |
+| `system update`                 | Apply an already checked release through the real administrator's public API. Requires `--release-id`, `--digest`, `--session-file`, and a new private `--receipt`. Always creates and verifies a backup. `--api-origin` defaults to `https://DOMAIN`; `--resume` reuses the original requests/jobs. See [Upgrading](../install/upgrading.md#3-apply-the-release) for private session-file and recovery requirements.                                                                                                                                                                                                                         |
 | `compose down`                  | Stop the stack (`docker compose down`). Flag: `--volumes` removes named volumes (**destructive**).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `compose pull [ids...]`         | Pull the selected images (no args pulls all services); for product services, pin a coherent release first when the applied configuration pins none. For core OpenMapX app releases, use the aggregate release-manifest procedure in [Upgrading](../install/upgrading.md).                                                                                                                                                                                                                                                                                                                                                                     |
 | `compose rotate-redis-password` | Replace the password and reconcile its ACL while Redis clients are stopped. Each file is replaced atomically; the pair is not one transaction. Flag: `--confirm-clients-stopped`. Follow the [rotation procedure](https://github.com/OpenMapX/openmapx/blob/main/infra/docker/secrets/README.md#redis-password-and-redis-aclconf-generated).                                                                                                                                                                                                                                                                                                  |
@@ -185,7 +188,8 @@ database, and temporary-disk cost.
 ## `ext`
 
 Browse and manage bundles of declarative integrations and isolated services.
-These commands use the admin API and its local administrator policy described
+These commands use the admin API as the administrator session in
+`--session-file`, with `--api-origin` and `--allow-loopback-http` as described
 above. See [Community extensions](../administration/community-extensions.md)
 for installation, host-port exposure, and recovery.
 
@@ -203,8 +207,8 @@ its exact fingerprint with `--host-port-confirmation <fingerprint>`. An updated
 snapshot requires a new review. A preview alone does not authorize exposure.
 
 ```bash
-pnpm openmapx ext preview openconditions
-pnpm openmapx ext install openconditions
+pnpm openmapx ext preview openconditions --session-file "$HOME/.local/state/openmapx/admin-session"
+pnpm openmapx ext install openconditions --session-file "$HOME/.local/state/openmapx/admin-session"
 ```
 
 The install command can require the confirmation flag after preview; it does not
@@ -265,7 +269,7 @@ and the restore prerequisites and recovery procedure.
 | `backup create`         | Back up every backup-enabled service volume. Flag: `--name <name>` (default: ISO timestamp).                                                                                                                                                                                               |
 | `backup list`           | List existing backups.                                                                                                                                                                                                                                                                     |
 | `backup restore <name>` | Restore a backup. Flags: `--services <ids...>` restricts to a subset; `--stop-running` stops target services and isolates `api` during an OpenMapX database restore. Database restores keep object owners and grants and the live database's owner; the database roles must already exist. |
-| `backup prune`          | Delete backups older than the retention period. Flag: `--retention-days <days>` (defaults to `BACKUP_RETENTION_DAYS`, itself 30).                                                                                                                                                          |
+| `backup prune`          | Delete backups older than the retention period. Flag: `--retention-days <days>` (defaults to `RETENTION_BACKUP_DAYS`, itself 30).                                                                                                                                                          |
 | `backup delete <name>`  | Delete a backup directory.                                                                                                                                                                                                                                                                 |
 
 ## `cache`

@@ -4,7 +4,7 @@ import type { GetAdminConfigurationMigrationInventory200DocumentInstallationsIte
 import type { GetAdminConfigurationMigrationInventory200DocumentInstallationsItemProvenance } from "./getAdminConfigurationMigrationInventory200DocumentInstallationsItemProvenance";
 
 export type GetAdminConfigurationMigrationInventory200DocumentInstallationsItem = {
-  /** @pattern ^[a-z0-9][a-z0-9-]{0,63}$ */
+  /** @pattern ^(?=.{1,48}$)[a-z0-9]+(?:-[a-z0-9]+)*$ */
   integrationId: string;
   version: string | null;
   contentDigest: string | null;

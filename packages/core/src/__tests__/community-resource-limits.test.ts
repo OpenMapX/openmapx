@@ -21,6 +21,7 @@ function manifest(container: Record<string, unknown> = {}, quality = "community"
     id: "community-limits",
     name: "Community Limits",
     version: "1.0.0",
+    platform: "1.0",
     quality,
     container: { image: "alpine", tag: "latest", expose: [8080], ...container },
   };

@@ -32,7 +32,7 @@ const SEARCH_DIR = join(
 
 function loadManifest(): IntegrationManifest {
   const raw = JSON.parse(readFileSync(join(SEARCH_DIR, "manifest.json"), "utf-8"));
-  const validation = validateManifest(raw);
+  const validation = validateManifest(raw, { firstParty: true });
   if (!validation.valid) throw new Error(validation.errors.join(", "));
   return raw as IntegrationManifest;
 }

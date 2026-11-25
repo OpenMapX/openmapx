@@ -66,7 +66,7 @@ export function resolvePlatformConfiguration({
     acmeEmail: env.ACME_EMAIL || "admin@example.com",
     releaseSelector: env.OPENMAPX_RELEASE || "main",
     defaultRegion: env.OPENMAPX_REGION || null,
-    backupRetentionDays: Number(env.BACKUP_RETENTION_DAYS || 30),
+    backupRetentionDays: Number(env.RETENTION_BACKUP_DAYS || 30),
   };
   const values = { ...host };
   const sources = {} as Record<keyof PlatformValues, "host" | "database" | "invocation">;

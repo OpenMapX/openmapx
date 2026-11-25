@@ -8,9 +8,9 @@ export const CancelAdminTransitPinExecution200Status = {
   queued: "queued",
   running: "running",
   cancel_pending: "cancel_pending",
-  ok: "ok",
-  partial: "partial",
-  error: "error",
-  canceled: "canceled",
+  succeeded: "succeeded",
+  failed: "failed",
+  cancelled: "cancelled",
+  partially_succeeded: "partially_succeeded",
   interrupted: "interrupted",
 } as const;

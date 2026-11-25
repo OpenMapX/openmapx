@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
+import { COMPONENT_ID_PATTERN } from "@openmapx/core/component-id";
 import { services as coreServices } from "@openmapx/core/server";
 import type { TrustedConfigurationAuthoritySnapshot } from "./trusted-config-runtime";
 
@@ -11,7 +12,7 @@ const {
 type TrustedAuthorityFilesystem = InstanceType<typeof coreServices.TrustedAuthorityFilesystem>;
 
 const FAILED = "Trusted configuration authority rejected";
-const SERVICE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const SERVICE_ID = COMPONENT_ID_PATTERN;
 const MAX_DIRECTORIES = 4_096;
 const MAX_DIRECTORY_ENTRIES = 2_048;
 const MAX_MANIFESTS = 256;

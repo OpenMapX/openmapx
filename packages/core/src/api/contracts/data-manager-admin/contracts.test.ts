@@ -56,10 +56,11 @@ describe("application data-manager administration contracts", () => {
     const job = {
       id: "j",
       kind: "transitous-sync",
-      status: "error",
+      status: "failed",
       startedAt: "2026-10-19T00:00:00.000Z",
       finishedAt: null,
-      triggeredBy: null,
+      trigger: "cron",
+      triggeredByUserId: null,
       idempotencyKey: null,
       metadata: null,
       stages: [
@@ -129,7 +130,7 @@ describe("application data-manager administration contracts", () => {
     expect(
       dataManagerAdminOperations.postApiDataManagerTransitSync.responses[409].schema.parse({
         error: "Another data job is running. Try again when it finishes.",
-        code: "in-flight",
+        code: "IN_FLIGHT",
         existingJobId: null,
       }),
     ).toMatchObject({ existingJobId: null });

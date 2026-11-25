@@ -7,7 +7,7 @@ import { services } from "@openmapx/core/server";
 import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { loadAuthPolicy } from "../account/auth-policy";
 import { db } from "../db";
-import { adminJob, platformConfigurationPreview, systemSettings } from "../db/schema";
+import { adminJob, platformConfigurationPreview, systemSetting } from "../db/schema";
 import { withAdministrativeConfigurationRead } from "./administrative-configuration-writer-owner";
 import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "./ops-client";
 import { PLATFORM_CONFIGURATION_SETTING } from "./platform-configuration";
@@ -66,8 +66,8 @@ export async function previewPlatformConfiguration(input: {
   const policy = await loadAuthPolicy(db);
   const [desired] = await db
     .select({ version: sql<string>`xmin::text` })
-    .from(systemSettings)
-    .where(eq(systemSettings.key, PLATFORM_CONFIGURATION_SETTING));
+    .from(systemSetting)
+    .where(eq(systemSetting.key, PLATFORM_CONFIGURATION_SETTING));
   const preview = await withAdministrativeConfigurationRead({}, async (read) => {
     const resolved = await resolveAllServiceConfigsStrict(
       read.services.map((service) => ({

@@ -1,8 +1,9 @@
 /** The services Compose may create for a fixed creation command. Selection and
  * data producers are deliberately separate from actual depends_on edges. */
+import { COMPONENT_ID_PATTERN } from "../component-id";
 import type { LoadedService } from "./types";
 
-const id = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const id = COMPONENT_ID_PATTERN;
 const unavailable = () => Error("Service creation dependencies unavailable");
 function closure(targets: readonly string[], dependencies: ReadonlyMap<string, readonly string[]>) {
   const found = new Set<string>(),

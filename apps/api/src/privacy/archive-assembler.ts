@@ -1,5 +1,11 @@
 import { createHash } from "node:crypto";
 import { createTranslator, type Locale, locales, resolveLocale } from "@openmapx/i18n";
+import {
+  ARCHIVE_SCHEMA_IDS,
+  type ArchiveSchemaId,
+  archiveSchemaUrn,
+  portableSchemaId,
+} from "./archive-schema-ids.js";
 import { type ArchiveEntryInput, archivePathForLogicalId } from "./archive-writer.js";
 import { SUBJECT_DATA_CATALOGUE } from "./catalogue.js";
 import type {
@@ -62,15 +68,15 @@ type ArchiveWriteEntrySource = ArchiveEntryInput["source"];
 
 const ARCHIVE_SCHEMAS: ReadonlyArray<{
   logicalId: string;
-  schemaId: string;
+  schemaId: ArchiveSchemaId;
   schema: Record<string, unknown>;
 }> = [
   {
     logicalId: "manifest-schema",
-    schemaId: "export-manifest-v2",
+    schemaId: ARCHIVE_SCHEMA_IDS.exportManifest,
     schema: {
       $schema: "https://json-schema.org/draft/2020-12/schema",
-      $id: "https://openmapx.example/privacy/export-manifest-v2",
+      $id: archiveSchemaUrn(ARCHIVE_SCHEMA_IDS.exportManifest),
       type: "object",
       required: [
         "version",
@@ -87,7 +93,7 @@ const ARCHIVE_SCHEMAS: ReadonlyArray<{
         "members",
       ],
       properties: {
-        version: { const: 2 },
+        version: { const: 1 },
         generatedAt: { type: "string", format: "date-time" },
         root: { const: "openmapx-data-export/" },
         locale: { enum: locales },
@@ -134,35 +140,11 @@ const ARCHIVE_SCHEMAS: ReadonlyArray<{
     },
   },
   {
-    logicalId: "category-schema",
-    schemaId: "category-manifest-v1",
-    schema: {
-      $schema: "https://json-schema.org/draft/2020-12/schema",
-      $id: "https://openmapx.example/privacy/category-manifest-v1",
-      type: "object",
-      required: ["id", "version", "outcome"],
-      properties: {
-        id: { type: "string" },
-        version: { type: "string" },
-        outcome: {
-          enum: [
-            "included",
-            "not_applicable",
-            "unavailable",
-            "reviewed_no_match",
-            "omitted_with_reason",
-          ],
-        },
-      },
-      additionalProperties: true,
-    },
-  },
-  {
     logicalId: "export-record-schema",
-    schemaId: "article-15-record-v1",
+    schemaId: ARCHIVE_SCHEMA_IDS.exportRecord,
     schema: {
       $schema: "https://json-schema.org/draft/2020-12/schema",
-      $id: "https://openmapx.example/privacy/article-15-record-v1",
+      $id: archiveSchemaUrn(ARCHIVE_SCHEMA_IDS.exportRecord),
       type: "object",
       required: ["id"],
       properties: {
@@ -174,10 +156,10 @@ const ARCHIVE_SCHEMAS: ReadonlyArray<{
   },
   {
     logicalId: "portable-profile-schema",
-    schemaId: "article-20-v1",
+    schemaId: ARCHIVE_SCHEMA_IDS.portableProfile,
     schema: {
       $schema: "https://json-schema.org/draft/2020-12/schema",
-      $id: "https://openmapx.example/privacy/portable-profile-v1",
+      $id: archiveSchemaUrn(ARCHIVE_SCHEMA_IDS.portableProfile),
       type: "array",
       items: {
         type: "object",
@@ -189,10 +171,10 @@ const ARCHIVE_SCHEMAS: ReadonlyArray<{
   },
   {
     logicalId: "portable-places-schema",
-    schemaId: "article-20-v1",
+    schemaId: ARCHIVE_SCHEMA_IDS.portablePlaces,
     schema: {
       $schema: "https://json-schema.org/draft/2020-12/schema",
-      $id: "https://openmapx.example/privacy/portable-places-v1",
+      $id: archiveSchemaUrn(ARCHIVE_SCHEMA_IDS.portablePlaces),
       type: "object",
       required: ["type", "features"],
       properties: {
@@ -216,10 +198,10 @@ const ARCHIVE_SCHEMAS: ReadonlyArray<{
   },
   {
     logicalId: "processing-information-schema",
-    schemaId: "processing-information-v2",
+    schemaId: ARCHIVE_SCHEMA_IDS.processingInformation,
     schema: {
       $schema: "https://json-schema.org/draft/2020-12/schema",
-      $id: "https://openmapx.example/privacy/processing-information-v2",
+      $id: archiveSchemaUrn(ARCHIVE_SCHEMA_IDS.processingInformation),
       type: "object",
       required: [
         "version",
@@ -234,7 +216,7 @@ const ARCHIVE_SCHEMAS: ReadonlyArray<{
         "sources",
       ],
       properties: {
-        version: { const: 2 },
+        version: { const: 1 },
         request: { type: "object" },
         controller: { type: "object" },
         deployment: { type: "object" },
@@ -364,9 +346,7 @@ function requestedSchema(
 ): boolean {
   if (["portable-profile-schema", "portable-places-schema"].includes(logicalId))
     return includesPortability(kind);
-  if (
-    ["category-schema", "export-record-schema", "processing-information-schema"].includes(logicalId)
-  )
+  if (["export-record-schema", "processing-information-schema"].includes(logicalId))
     return includesAccess(kind);
   return true;
 }
@@ -469,7 +449,7 @@ export function buildSubjectArchiveEntries(
           ? "application/json"
           : "application/jsonl",
       recordCount: records.length,
-      schemaId: "article-15-record-v1",
+      schemaId: ARCHIVE_SCHEMA_IDS.exportRecord,
     });
   }
   for (const [target, records] of portableParts) {
@@ -486,7 +466,7 @@ export function buildSubjectArchiveEntries(
           ? "application/geo+json"
           : "application/json",
       recordCount: records.length,
-      schemaId: "article-20-v1",
+      schemaId: portableSchemaId(target),
     });
   }
 
@@ -537,7 +517,7 @@ export function buildSubjectArchiveEntries(
       logicalId: "processing-information",
       source: json(report.processingInformation),
       mediaType: "application/json",
-      schemaId: "processing-information-v2",
+      schemaId: ARCHIVE_SCHEMA_IDS.processingInformation,
     });
   // The manifest hashes every other plaintext member, never itself.
   const generatedAt = input.responseContext.generatedAt;
@@ -565,7 +545,7 @@ export function buildSubjectArchiveEntries(
   if (members.some((member) => member.path === null))
     throw new Error("Missing archive path for registered member");
   const manifest = {
-    version: 2,
+    version: 1,
     generatedAt,
     root: "openmapx-data-export/",
     locale: input.locale,
@@ -604,7 +584,7 @@ export function buildSubjectArchiveEntries(
     mediaType: "application/json",
     bytes: manifestBuffer.byteLength,
     sha256: digest(manifestBuffer),
-    schemaId: "export-manifest-v2",
+    schemaId: ARCHIVE_SCHEMA_IDS.exportManifest,
   });
   return entries;
 }

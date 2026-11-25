@@ -4,6 +4,7 @@
 export type GetStatus503Phase = (typeof GetStatus503Phase)[keyof typeof GetStatus503Phase];
 
 export const GetStatus503Phase = {
+  "database-schema": "database-schema",
   "offline-storage": "offline-storage",
   "job-reconciliation": "job-reconciliation",
   "cron-schedulers": "cron-schedulers",

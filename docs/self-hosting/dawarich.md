@@ -18,13 +18,10 @@ the provisioned custom hostname), correct proxy routing, enough import/storage
 capacity, and a protected off-host recovery plan. Review Dawarich's default
 `STORE_GEODATA=true` and its reverse-geocoder disclosures before onboarding.
 
-Verify persistence before collecting real history. In particular, compare the
-running dedicated PostGIS `PGDATA` with its actual Docker mounts: the current
-Dawarich manifest declares `/var/lib/postgresql/data`, while the platform's
-PostgreSQL 18 manifest uses `/var/lib/postgresql`. A named-volume declaration
-alone does not prove that the selected image writes its live database there.
-Resolve any mismatch and prove restart/recreation and restore behavior on a
-disposable instance before relying on it for retained data.
+The dedicated PostGIS database (PostgreSQL 18 / PostGIS 3.6) mounts its named
+volume at `/var/lib/postgresql`, which holds the image's `PGDATA`
+(`/var/lib/postgresql/18/docker`), as the platform database does. Prove restore
+behavior on a disposable instance before relying on it for retained data.
 
 Provisioning must supply consistent database, Rails, and OIDC vault secrets and
 the persisted confidential Better Auth client. Do not use plaintext environment

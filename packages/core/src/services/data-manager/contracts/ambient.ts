@@ -22,7 +22,7 @@ export const ambientRegionSchema = z
   }, "invalid ambient region");
 const generation = z.string().regex(new RegExp(AMBIENT_GENERATION_PATTERN));
 export const ambientManifestSchema = z.strictObject({
-  version: z.literal(2),
+  version: z.literal(1),
   policyVersion: countSchema,
   generation,
   publishedAt: timestampSchema,

@@ -1,6 +1,6 @@
 {
   "$schema": "./feeds-overlay.schema.json",
-  "version": 3,
+  "version": 1,
   "comment": "Copy to data/overrides/feeds-overlay.json. Keep credentials out; use secret references for authenticated sources.",
   "sources": [],
   "patches": [],

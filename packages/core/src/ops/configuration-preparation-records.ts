@@ -1,5 +1,6 @@
 /** Portable bounded candidate records; parsing creates no authority. */
 import { z } from "zod";
+import { COMPONENT_ID_PATTERN } from "../component-id";
 import { platformConfigurationSchema } from "../services/platform-configuration";
 import { strictlyAscending } from "../utils/strictlyAscending";
 import { protectedConfigurationReconcileIdsSchema } from "./configuration-handoff-records";
@@ -8,7 +9,7 @@ import { coordinatorLifecycleMetadataSchema } from "./coordinator-lifecycle-reco
 import { configurationSnapshotSchema, trustedConfigurationPayloadSchema } from "./trusted-config";
 
 const revision = z.string().regex(/^cfg1_[A-Za-z0-9_-]{43}$/);
-const id = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/);
+const id = z.string().regex(COMPONENT_ID_PATTERN);
 const key = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/);
 export const coordinatorModeSchema = z.enum(["ensure-running", "require-running"]);
 export const configurationSourcesInspectionSchema = z
@@ -76,6 +77,7 @@ export const platformConfigurationIntentSchema = z
         ciphertext: z.string().min(1).max(8192),
         iv: z.string().min(1).max(64),
         tag: z.string().min(1).max(64),
+        keyVersion: z.literal(1),
       })
       .optional(),
   })

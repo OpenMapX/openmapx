@@ -110,8 +110,8 @@ describe.skipIf(skipE2e)("Overture publication beside readers", () => {
       await pg.sql.unsafe(
         `INSERT INTO "${schema}".conflation_state
            (release, region, place_count, status, phase, source_fingerprint, extracted_count,
-            sources_catalogue)
-         VALUES ($1, 'europe/germany', 1, 'pending', 'extract', $2, $3, '[]')`,
+            sources_catalogue, schema_version)
+         VALUES ($1, 'europe/germany', 1, 'pending', 'extract', $2, $3, '[]', 1)`,
         [
           release,
           schema === "overture_places" ? "same-pbf" : null,
@@ -270,8 +270,8 @@ describe.skipIf(skipE2e)("Overture publication beside readers", () => {
     await insertLink("poi_conflation_link", 1, "g1");
     await pg.sql.unsafe(
       `INSERT INTO overture_places.conflation_state
-         (release, region, place_count, status, sources_catalogue)
-       VALUES ('2026-07-22.0', 'europe/germany/berlin', 2, 'pending', '[]')`,
+         (release, region, place_count, status, sources_catalogue, schema_version)
+       VALUES ('2026-07-22.0', 'europe/germany/berlin', 2, 'pending', '[]', 1)`,
     );
     let failAfterSwap = true;
     const dependencies = {
@@ -415,9 +415,9 @@ describe.skipIf(skipE2e)("Overture publication beside readers", () => {
       await pg.sql.unsafe(
         `INSERT INTO overture_places.conflation_state
          (release, region, place_count, status, phase, attempt_count, source_fingerprint,
-          emitted_count, extracted_count, sources_catalogue, updated_at)
+          emitted_count, extracted_count, sources_catalogue, updated_at, schema_version)
        VALUES ('2026-07-22.0', 'europe/germany/berlin', 2, 'running', $1, 1, 'snapshot',
-               2, 2, '[]', now() - interval '1 hour')`,
+               2, 2, '[]', now() - interval '1 hour', 1)`,
         [phase],
       );
       await pg.sql.unsafe(`UPDATE overture_places.conflation_state SET ${progress}`);
@@ -487,9 +487,10 @@ describe.skipIf(skipE2e)("Overture publication beside readers", () => {
     await pg.sql.unsafe(
       `INSERT INTO overture_places.conflation_state
          (release, region, place_count, status, phase, attempt_count, source_fingerprint,
-          emitted_count, extracted_count, candidate_count, staged_link_count, sources_catalogue)
+          emitted_count, extracted_count, candidate_count, staged_link_count, sources_catalogue,
+          schema_version)
        VALUES ('2026-07-22.0', 'europe/germany/berlin', 2, 'failed', 'publish', 1, 'snapshot',
-               2, 2, 2, 2, '[]')`,
+               2, 2, 2, 2, '[]', 1)`,
     );
     const extract = vi.fn(async () => ({ emitted: 2, extracted: 2 }));
     await expect(

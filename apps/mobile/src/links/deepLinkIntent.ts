@@ -14,6 +14,9 @@
  * at somebody else's.
  */
 
+import { MAP_INTENT_PARAMS, MAP_LINK_PARAMS } from "@openmapx/core/map-link-params";
+import { coordinateId } from "@openmapx/core/place-ids";
+
 export type DeepLinkIntent =
   /** Show the map, with a query the web app already knows how to read. */
   | { kind: "map"; query: string }
@@ -159,22 +162,23 @@ function parseGeoLink(url: URL): DeepLinkIntent | null {
   const base = point === undefined ? null : readGeoPoint(point);
   if (!base) return null;
   const params = new URLSearchParams();
+  // `q` and `z` belong to the inbound Android geo intent, not to OpenMapX's map URL.
   const query = url.searchParams.get("q")?.trim();
   const target = query ? readGeoPoint(query) : base;
   if (query && !target) {
     // A numeric-looking invalid coordinate must not become an address search.
     if (/^[+-]?[\d.]+\s*,\s*[+-]?[\d.]+(?:\(.*\))?$/.test(query)) return null;
-    params.set("q", query);
+    params.set(MAP_INTENT_PARAMS.query, query);
   } else if (target) {
     const { lat, lng, label } = target;
     const coords = `${lat},${lng}`;
     const rawZoom = url.searchParams.get("z");
     const zoom = rawZoom !== null && /^\d+(?:\.\d+)?$/.test(rawZoom) ? Number(rawZoom) : 16;
-    params.set("map", `${coords},${zoom >= 0 && zoom <= 21 ? zoom : 16},0,0`);
-    params.set("panel", "place");
-    params.set("place", `geo:${coords}`);
-    params.set("at", coords);
-    params.set("name", label || coords);
+    params.set(MAP_LINK_PARAMS.camera, `${coords},${zoom >= 0 && zoom <= 21 ? zoom : 16},0,0`);
+    params.set(MAP_LINK_PARAMS.panel, "place");
+    params.set(MAP_LINK_PARAMS.place, `coordinate:${coordinateId([lng, lat])}`);
+    params.set(MAP_LINK_PARAMS.placeLocation, coords);
+    params.set(MAP_LINK_PARAMS.placeName, label || coords);
   }
   return mapIntent(params.toString());
 }

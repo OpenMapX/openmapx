@@ -174,7 +174,7 @@ Use `http://localhost:3000` for the web app, matching the API's default
 `CORS_ORIGIN` and authentication origin configuration. If you change either
 origin or port, update those settings together. The
 default OpenMapX style uses keyless OpenFreeMap when the API has no MapTiler key.
-A configured server-side `MAPTILER_KEY` in `apps/api/.env` or admin settings
+A configured server-side `MAPTILER_API_KEY` in `apps/api/.env` or admin settings
 selects MapTiler in `auto` mode; the key never enters the browser bundle. Override
 the hosted choice with `BASEMAP_PROVIDER` or admin settings. Enabled TileServer GL
 or explicit self-hosted tile URLs always take priority.
@@ -373,18 +373,30 @@ The API's migrations in `apps/api/src/db/migrations` are two files:
   account role `CHECK` on Better Auth's `user` table.
   `apps/api/src/db/custom-migration.test.ts` refuses any other statement kind.
 
-Regenerating the baseline is allowed only until the first release that
-contains it is installed anywhere. After that, every installed database must
-stay upgradeable: a schema change adds an incremental migration with
-`pnpm db:generate` from `apps/api`, which writes the next `0002_*` file, and
-`0000` and `0001` are never edited or regenerated again.
+`released-migrations.json`, beside them, lists every migration a release
+ships: its tag, its journal `when` and the SHA-256 of its `.sql` file. Release
+preparation (`node scripts/prepare-product-release.mjs`) appends every
+migration the journal holds that the lock does not list yet, and the
+preparation PR commits the result. `pnpm check-drizzle-drift` then fails when a
+listed file changed or is missing, when a listed journal entry is missing or
+re-dated, or when a new journal entry's `when` is not greater than every listed
+one. The migrator applies a journal entry only when its `when` is greater than
+the newest applied one, so an installed database would skip such an entry, or
+fail on a regenerated baseline at its first statement.
 
-Until then, no installation predates the baseline, so a schema change
-regenerates both files from an empty folder instead of adding a migration. From
-`apps/api`:
+While the lock lists no migration, nothing has been released and no
+installation predates the baseline. The journal must then hold exactly the two
+baseline files, and a schema change regenerates both from an empty folder
+instead of adding a migration. Once the lock lists migrations, every installed
+database must stay upgradeable: a schema change adds an incremental migration
+with `pnpm db:generate` from `apps/api`, which writes the next `0002_*` file,
+and listed migrations are never edited or regenerated again.
+
+To regenerate the baseline while the lock is empty, from `apps/api`:
 
 1. Copy the body of `0001_database_objects.sql` aside.
-2. `git rm -r src/db/migrations`.
+2. `git rm -r src/db/migrations/*.sql src/db/migrations/meta`, which keeps
+   `released-migrations.json`.
 3. `pnpm exec drizzle-kit generate --name baseline`.
 4. `pnpm exec drizzle-kit generate --custom --name database_objects`.
 5. Write the saved body, plus any new custom objects, into the new custom file.
@@ -402,12 +414,13 @@ anything or the folder holds uncommitted changes. drizzle-kit exits 0 without
 writing anything when it would ask a question, such as whether a column was
 renamed, or cannot load the schema, so the gate also requires both commands'
 "no change" messages ("Everything's fine" and "No schema changes, nothing to
-migrate") and fails on any output line with `Error` or `TTY`. While the journal holds only
-`0000_baseline` and `0001_database_objects`, it also regenerates the baseline
-into a temporary folder and fails unless `0000_baseline.sql` is byte-identical
-to the committed file and its snapshot differs only in `id` and `prevId`, so a
-hand edit to the generated SQL is refused. Once an incremental migration
-follows the baseline, it skips that comparison and says so.
+migrate") and fails on any output line with `Error` or `TTY`. It checks the
+journal against `released-migrations.json` as described above. While the lock
+lists no migration, it also regenerates the baseline into a temporary folder
+and fails unless `0000_baseline.sql` is byte-identical to the committed file
+and its snapshot differs only in `id` and `prevId`, so a hand edit to the
+generated SQL is refused. Once the lock lists migrations, it skips that
+comparison and says so.
 
 Better Auth's tables are declared in `apps/api/src/db/auth-schema.ts`, which is
 exactly what `pnpm auth:generate` writes, formatted by Biome; it is never edited

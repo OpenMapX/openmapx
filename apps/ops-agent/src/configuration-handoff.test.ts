@@ -359,11 +359,11 @@ it("uses actual server job state when excluding a live log observer from drain",
       method: "POST",
       headers: {
         authorization: `Bearer ${api}`,
-        "x-ops-protocol-version": "2",
+        "x-ops-protocol-version": "1",
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        version: 2,
+        version: 1,
         requestId: `ops1_observation${suffix}`,
         operationKey: `opk1_observation${suffix}`,
         issuedAt: new Date().toISOString(),

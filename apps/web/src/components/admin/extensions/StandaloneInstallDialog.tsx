@@ -29,7 +29,7 @@ import {
   useActivityClient,
 } from "../activity/activityQueries";
 
-const terminal = new Set(["success", "failed", "canceled"]);
+const terminal = new Set(["succeeded", "failed", "cancelled"]);
 export function StandaloneInstallDialog() {
   const { apiUrl } = useActivityClient();
   return <StandaloneInstallDialogContent key={apiUrl} />;
@@ -118,7 +118,7 @@ function StandaloneInstallDialogContent() {
       hasUnresolvedJobObservation(job.result)
     )
       return;
-    if (job.status !== "success") {
+    if (job.status !== "succeeded") {
       setError(job.error ?? t("operationDidNotCompleteSuccessfully"));
       return;
     }

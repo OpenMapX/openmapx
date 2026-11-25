@@ -20,6 +20,7 @@ import {
   opsExecutionBudget,
 } from "@openmapx/core/ops";
 import { applyHardlinkPlan } from "@openmapx/hardlinks";
+import { PRINCIPAL_TRIGGER } from "../../principals.js";
 import {
   type MotisOperationsPolicy,
   transitAllowedCountries,
@@ -68,7 +69,7 @@ export function createDataExecutionReceiver(deps: {
     input: DataExecutionInput,
     source: Pick<
       Parameters<DataExecutionRuntime["admit"]>[1],
-      "triggeredBy" | "idempotencyKey" | "work" | "refused"
+      "trigger" | "triggeredByUserId" | "idempotencyKey" | "work" | "refused"
     >,
   ) => {
     const requestedDeadlineAt = Date.now() + opsExecutionBudget(input.kind).processMs,
@@ -87,7 +88,8 @@ export function createDataExecutionReceiver(deps: {
       if (
         input.kind !== "transit-sync" ||
         canonicalJson(input.countries) !== canonicalJson(countries) ||
-        record.triggeredBy !== (request.triggeredBy ?? null) ||
+        record.trigger !== request.actor.trigger ||
+        record.triggeredByUserId !== (request.actor.triggeredByUserId ?? null) ||
         input.preflight?.preflightId !== request.preflightId ||
         input.preflight.fingerprint !== request.fingerprint
       )
@@ -109,6 +111,7 @@ export function createDataExecutionReceiver(deps: {
       return runtime.admit(input, {
         operationKey: options.operationKey,
         requestedDeadlineAt: options.requestedDeadlineAt,
+        trigger: PRINCIPAL_TRIGGER[options.transportPrincipal],
         ...(verified
           ? {
               parent: verified.parent,
@@ -148,6 +151,7 @@ export function createDataExecutionReceiver(deps: {
       const admitted = await runtime.admit(input, {
         operationKey: request.operationKey,
         requestedDeadlineAt: request.requestedDeadlineAt,
+        trigger: PRINCIPAL_TRIGGER[transportPrincipal],
         ...(linkSender ? { linkSender } : {}),
         // From the first link on, a failure part-way may have changed links: it
         // is a known partial outcome, never an unknown publication.
@@ -178,7 +182,7 @@ export function createDataExecutionReceiver(deps: {
         status = (await runtime.inspect(status.id)) ?? status;
       }
       if (!isDataExecutionTerminal(status)) return { state: "running" as const, status };
-      if (status.status === "ok" && status.result?.kind === "generation-link") {
+      if (status.status === "succeeded" && status.result?.kind === "generation-link") {
         const { linked, skipped, pruned } = status.result.hardlinks;
         return { state: "applied" as const, linked, skipped, pruned };
       }
@@ -192,7 +196,7 @@ export function createDataExecutionReceiver(deps: {
         statusCode: 500,
       });
     },
-    admitLocal: async (value, source) => admitRoot(validate(value), source ?? {}),
+    admitLocal: async (value, source) => admitRoot(validate(value), source),
     async runLocal(input, run, options) {
       let outcome: { value: Awaited<ReturnType<typeof run>> } | { error: unknown } | undefined;
       let refusal: unknown;
@@ -214,7 +218,11 @@ export function createDataExecutionReceiver(deps: {
       const completion = runtime.settled(status.id).then(async () => {
         if (outcome && "error" in outcome) throw outcome.error;
         const final = await runtime.inspect(status.id);
-        if (!outcome || !final || (final.status !== "ok" && final.status !== "partial"))
+        if (
+          !outcome ||
+          !final ||
+          (final.status !== "succeeded" && final.status !== "partially_succeeded")
+        )
           throw Object.assign(
             Error(
               final?.diagnostics.tail.at(-1)?.message ??

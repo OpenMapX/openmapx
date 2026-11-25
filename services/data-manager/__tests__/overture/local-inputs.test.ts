@@ -111,7 +111,7 @@ it("reports a complete pull without a valid catalogue instead of skipping to an 
   const { sourcesCatalogue: _, ...withoutCatalogue } = JSON.parse(
     readFileSync(contractPath, "utf8"),
   );
-  writeFileSync(contractPath, JSON.stringify({ ...withoutCatalogue, contractVersion: 1 }), {
+  writeFileSync(contractPath, JSON.stringify({ ...withoutCatalogue, contractVersion: 2 }), {
     mode: 0o600,
   });
   const refusal =

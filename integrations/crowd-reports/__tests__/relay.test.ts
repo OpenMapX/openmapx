@@ -6,7 +6,9 @@ import {
   isSafeReportId,
   isSubClaimAction,
   RECORD_CLASSES,
+  RELAY_TOKEN_MIN_LENGTH,
   relayContribution,
+  relayToken,
   SUBCLAIM_ACTIONS,
 } from "../relay.js";
 
@@ -25,6 +27,23 @@ describe("contributionsBaseUrl", () => {
     expect(contributionsBaseUrl({ OPENCONDITIONS_CONTRIBUTIONS_URL: "  " })).toBe(
       "http://localhost:4200",
     );
+  });
+});
+
+const TOKEN = "r".repeat(RELAY_TOKEN_MIN_LENGTH);
+
+describe("relayToken", () => {
+  it("is absent when unset or blank", () => {
+    expect(relayToken({})).toBeUndefined();
+    expect(relayToken({ OPENCONDITIONS_RELAY_TOKEN: "  " })).toBeUndefined();
+  });
+
+  it("returns a token of at least 32 characters, trimmed", () => {
+    expect(relayToken({ OPENCONDITIONS_RELAY_TOKEN: ` ${TOKEN} ` })).toBe(TOKEN);
+  });
+
+  it("refuses a set but shorter token", () => {
+    expect(() => relayToken({ OPENCONDITIONS_RELAY_TOKEN: "short" })).toThrow(/at least 32/);
   });
 });
 
@@ -48,6 +67,22 @@ describe("relayContribution", () => {
       redirect: "error",
     });
     expect(result).toEqual({ status: 201, body: { id: "abc" } });
+  });
+
+  it("sends only Accept without a relay token, and the bearer token when one is set", async () => {
+    const http = fakeHttpClient(() => ({ status: 200, headers: {}, body: {} }));
+    await relayContribution(http, "POST", "/contrib/enroll", {
+      base: "https://contrib.example.org",
+    });
+    await relayContribution(http, "GET", "/contrib/issuer-keys", {
+      base: "https://contrib.example.org",
+      token: TOKEN,
+    });
+    expect(http.calls[0]?.options?.headers).toEqual({ Accept: "application/json" });
+    expect(http.calls[1]?.options?.headers).toEqual({
+      Accept: "application/json",
+      Authorization: `Bearer ${TOKEN}`,
+    });
   });
 
   it("propagates a non-2xx upstream status and its JSON body", async () => {

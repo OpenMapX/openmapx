@@ -23,10 +23,22 @@ this choice with the operator and enables it by default.
 
 The host checkout supplies the CLI, service definitions, and configuration used
 to operate the stack. Application images are prebuilt and selected through a
-release manifest. A Git pull updates the checkout but leaves running containers
-unchanged; a release selection renders a new configuration that pins the release's
-images but does not replace containers.
-Both operations are followed by an explicit service update.
+release manifest. The update runs in this order, and only this order works:
+
+1. Back up.
+2. Check the candidate release with `pnpm openmapx compose release --check`.
+3. Apply it through **Admin → System → Updates** or `pnpm openmapx system update`.
+   Neither needs a new checkout: the operations agent renders with the release's
+   own service files.
+4. Check out the applied release's source revision and reinstall the workspace.
+5. Verify.
+
+The host CLI renders a configuration only while the checkout's built-in services
+agree with the applied release's. A pull before the update would make every
+rendering host command (`compose render`, `compose up`, `compose pull`,
+`services start`, `services update`, `data link`) refuse until the release that
+matches the checkout is applied, so the checkout follows the update instead of
+preceding it.
 
 Application release metadata selects five digest-pinned images: the API, web,
 data-manager, ops-agent and Transitous runner. Some digests can be reused from an earlier release. Do not infer
@@ -50,7 +62,10 @@ records of host operations and do not convert earlier records; their release
 notes mark the change as breaking. Such a release needs a fresh installation
 with an empty API database and an empty `infra/docker/state`: do not upgrade an
 existing installation to it in place, and do not delete individual state files
-to make it start. The release that replaced the update system is one of them.
+to make it start. Such a release carries a new state epoch in its release
+manifest: `compose release --check`, System → Updates and `system update` refuse
+it on an installation of another epoch and say that it cannot be applied in
+place.
 
 ## 1. Optional: create a backup
 
@@ -80,7 +95,8 @@ cp -p infra/docker/.env infra/docker/.env.bak
 chmod 600 infra/docker/.env.bak
 ```
 
-A restore overwrites data and has version and erasure-journal checks. Inspect
+A restore overwrites data and has schema and erasure-journal checks: it refuses
+a database newer than the running release knows. Inspect
 the snapshot and follow [Backup and restore](../administration/backup-and-restore.md)
 before restoring. When appropriate, stop clients through the restore workflow:
 
@@ -90,41 +106,7 @@ pnpm openmapx backup restore pre-upgrade --stop-running
 ```
 
 See [Backup & restore](../administration/backup-and-restore.md) for per-service
-restore, the version-compatibility check, and `--stop-running`.
-
-## 2. Pull the latest code
-
-From the repo root, inspect `git status` and preserve local customizations before
-fetching code. Use a fast-forward pull so unexpected branch divergence stops for
-review, then reinstall the locked workspace. A new release
-can change dependencies, the CLI, or the manifests, so always reinstall after a
-pull:
-
-```bash
-git pull --ff-only
-pnpm install --frozen-lockfile
-```
-
-The ops-agent runs the built-in service and integration manifests of its own
-release, and the files those services mount, not the checkout's, and checks no
-file permissions in it. The checkout must still be writable only by the
-operator's account: `services build` uses its build contexts, and
-`infra/docker/.env` and the agent's state live in it. A private group per user, the Debian and
-Ubuntu default, meets this even with their umask of `002`. Where the account's
-group has other members, clone and pull with umask `022`.
-
-Keep the checkout at the selected release. The host CLI runs the checkout's
-own code and manifests, so a host render reads the selected release's service
-files from its operations-agent image and refuses while the checkout's built-in
-services differ from that release's. It names the differing files and says
-what to do: wait until the release of the checkout's commit is published and
-use the coordinated update below, or check out the selected release's source
-revision. A changed service file belongs in an
-[override](./managing-services.md#service-file-overrides), which the refusal
-ignores. `pnpm openmapx check` reports the same.
-
-The checkout has changed, but running containers still use their existing
-images. Continue with release selection and replacement.
+restore, the schema check, and `--stop-running`.
 
 :::note[Read the release notes]
 Before upgrading, read the release notes for breaking changes, including
@@ -133,41 +115,10 @@ needs attention. OpenMapX is under active development, so an occasional manual
 step between versions is expected.
 :::
 
-## 3. Re-render the compose stack
+## 2. Check the release
 
-Review changes to `infra/docker/.env.example` and your selected service manifests,
-then render the new configuration:
-
-```bash
-pnpm openmapx compose render
-```
-
-This applies a new configuration generation (compose file and hardlink plan)
-from your current manifests, `infra/docker/.env` and the settings saved in the
-admin panel. The output is deterministic, and re-rendering when nothing changed
-preserves the same stack content. The update command also renders, but this
-separate step lets you inspect configuration before replacement.
-
-Run it as the checkout's owner. The stack's own containers run as the
-deployment's user, `UID:GID` in `.env`, with no fallback: the first render on
-the host writes whichever of the two `.env` lacks from the checkout's owner,
-and keeps an explicit value. The operations agent only reads them and refuses
-renders and configuration changes until both are set; a render refuses to run
-as another uid or to take the user from a checkout root owns.
-
-## 4. Check and apply the complete release
-
-For an existing installation, use **Admin → System → Updates**. Check the
-configured release and apply that exact candidate.
-The coordinated producer preserves Data Manager ownership, drains active work,
-records the update as one maintenance in the operations agent's state and
-observes the original job across API and agent replacement. Keep the backup option enabled.
-
-The host CLI can drive the same public administrative producer when only the panel is
-unavailable. If an agent/helper replacement or prerequisite actually failed, inspect
-Activity and host diagnostics and resolve it first. Running the same candidate
-through the CLI does not repair that failure and may create another backup. Run as the deployment/store owner from a current checkout. First
-check the configured candidate without changing selected or running images:
+From the checkout of the applied release, as the deployment/store owner, check
+the configured candidate without changing selected or running images:
 
 ```bash
 pnpm openmapx compose release --status
@@ -179,6 +130,21 @@ image pins, and caches the canonical manifest under its digest. It prints a
 **Checked release** ID and a **Manifest digest**. It does not change the applied
 configuration's pins, download application images or replace containers. Configuration changes
 require inspection before checking again.
+
+## 3. Apply the release
+
+For an existing installation, use **Admin → System → Updates**. Check the
+configured release and apply that exact candidate.
+The coordinated producer preserves Data Manager ownership, drains active work,
+records the update as one maintenance in the operations agent's state and
+observes the original job across API and agent replacement. Keep the backup option enabled.
+
+The host CLI can drive the same public administrative producer when only the panel is
+unavailable. If an agent/helper replacement or prerequisite actually failed, inspect
+Activity and host diagnostics and resolve it first. Running the same candidate
+through the CLI does not repair that failure and may create another backup. Run
+it from the checkout of the applied release, with the ID and digest the check
+in step 2 printed.
 
 Create a private directory for the client receipt and an operator-provided
 session file:
@@ -192,7 +158,7 @@ The session file must already contain only the signed-in full administrator's
 Better Auth session cookie (`better-auth.session_token=…` or its `__Secure-`
 variant), be owned by this user, have mode `0600`, and have one link. Obtain it
 through your normal administrator session; the CLI never discovers browser
-credentials, creates a session or uses local-admin authentication for an update.
+credentials or creates a session.
 Do not commit or publish it. The session needs at least two minutes remaining;
 if it later expires, provide a fresh session for the same administrator and resume.
 
@@ -429,10 +395,10 @@ Start a fresh checked update afterward; use `--no-backup` for CLI updates and
 their resumes when that is your selected policy, or disable the panel's backup
 option. Do not delete locks, clear database flags or edit the agent's records.
 
-## 5. Database migrations apply automatically
+### Database migrations apply automatically
 
 OpenMapX does not have a separate "run migrations" command for a self-host
-upgrade. When `services update` replaces `api` (step 4), it first stops the
+upgrade. When the update replaces `api`, it first stops the
 old `api` and applies the new image's pending Drizzle migrations in a one-off
 container. Their output is part of the update's output. Only then does it start
 the new containers. The migrator is **idempotent**; it skips migrations that are
@@ -459,7 +425,7 @@ that cross a schema change, consider taking the optional backup in step 1 when
 the deployment contains state you cannot readily recreate.
 :::
 
-### While a migration runs
+#### While a migration runs
 
 The migration step logs `Applying N database migrations` with their names before
 it starts. The API is unavailable until it finishes and the new containers have
@@ -486,7 +452,41 @@ image pull, and its migration with it. Apply a release whose migration needs
 longer from the host with `pnpm openmapx services update`, which has no time
 limit.
 
-## 6. Verify the upgrade
+## 4. Check out the release's source
+
+Once the release is applied, bring the checkout to the same source, so the host
+CLI's code and built-in manifests match what runs. The release ID that
+`pnpm openmapx compose release --status` prints as **Pinned release** has the
+form `<commit>-<run-id>-<attempt>`; its first part is the source commit. A named
+product release also has its version tag.
+
+From the repo root, inspect `git status` and preserve local customizations, then
+check out that commit and reinstall the locked workspace. A release can change
+dependencies, the CLI or the manifests, so always reinstall:
+
+```bash
+git fetch origin
+git checkout <source commit>
+pnpm install --frozen-lockfile
+```
+
+Until this step, rendering host commands refuse, naming the files in which the
+checkout's built-in services differ from the applied release's.
+`pnpm openmapx check` reports the same. A changed service file belongs in an
+[override](./managing-services.md#service-file-overrides), which the refusal
+ignores.
+
+The ops-agent runs the built-in service and integration manifests of its own
+release, and the files those services mount, not the checkout's, and checks no
+file permissions in it. The checkout must still be writable only by the
+operator's account: `services build` uses its build contexts, and
+`infra/docker/.env` and the agent's state live in it. A private group per user, the Debian and
+Ubuntu default, meets this even with their umask of `002`. Where the account's
+group has other members, clone and check out with umask `022`.
+
+Review changes to `infra/docker/.env.example` against your `infra/docker/.env`.
+
+## 5. Verify the upgrade
 
 Check that every container came back healthy and the API is serving:
 
@@ -531,7 +531,7 @@ while the applied generation pins no release. It also refuses when no such
 generation is retained: no release update was applied, or its generation was
 pruned (sixteen generations are kept).
 
-Check out the target release's source first (step 2 of the upgrade, in reverse).
+Check out the target release's source first, as in step 4 of the upgrade.
 The render compares the checkout's built-in service files with the release's and
 refuses on a difference, naming the revision to check out.
 
@@ -552,9 +552,8 @@ running; stop them with `pnpm openmapx services stop <id>`.
 The command refuses when the database has a newer migration than the previous
 release ships. The migrator only applies migrations newer than the newest applied
 one, so an older API would otherwise run against a newer schema without complaint.
-CI records each release's newest migration in its release manifest; a release
-published before that cannot be checked and is refused too. In those cases, restore the backup taken before the
-update. PostGIS must be running so that the command can read the database's
+CI records each release's newest migration in its release manifest. In that
+case, restore the backup taken before the update. PostGIS must be running so that the command can read the database's
 migrations. A rollback is itself a release change, so a second rollback returns to
 the configuration you rolled back from.
 
@@ -577,12 +576,11 @@ engine data. Avoid `docker system prune --volumes` as an upgrade cleanup step.
 Community extensions have their own versions and update workflow. Use
 **Admin → Extensions** to preview and apply an update. The CLI also provides
 `ext list`, `ext preview`, and `ext update`, including explicit confirmation of
-reviewed host ports. Those commands need an authenticated admin API endpoint;
-their default `http://localhost:3001` is not host-published by the managed
-`api` manifest. A public HTTPS URL alone does not grant loopback admin
-access. Follow [Community extensions](../administration/community-extensions.md)
-for the supported access and confirmation workflow instead of assuming host CLI
-invocation authenticates through the public proxy.
+reviewed host ports. They authenticate like `system update`: with
+`--session-file` and the same private administrator session file, sent only to
+`https://DOMAIN` or `--api-origin`. Follow
+[Community extensions](../administration/community-extensions.md) for the
+confirmation workflow.
 
 An accepted request queues work; check admin activity for completion before
 retrying an interrupted request.

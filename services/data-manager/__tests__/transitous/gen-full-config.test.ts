@@ -103,7 +103,7 @@ describe("gen-full-config osm region override (promote-config parity)", () => {
     process.env.OPENMAPX_REGION = "europe/germany";
     const fx = setupCatalog(TEMPLATE_WITH_OSM);
     const result = await genFullConfigRun(ctxFor(fx.dataDir, fx.catalogDir, ["de"]));
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(result.artifacts).toMatchObject({ osmRegionOverridden: true });
     // This is the regression: the serve config must NOT keep planet-latest, or
     // the post-promote `/motis import` verify-fails on a missing extract.
@@ -122,7 +122,7 @@ describe("gen-full-config tiles disable (promote-config parity)", () => {
   it("strips the tiles block by default (stock motis image ships no tiles profile)", async () => {
     const fx = setupCatalog(TEMPLATE_WITH_TILES);
     const result = await genFullConfigRun(ctxFor(fx.dataDir, fx.catalogDir, ["de"]));
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(result.artifacts).toMatchObject({ tilesDisabled: true });
     const updated = readFileSync(fx.configPath, "utf-8");
     // The whole block (key + indented children) is gone, neighbours intact.
@@ -213,7 +213,7 @@ timetable:
     const result = await genFullConfigRun(
       ctxWithProxyVars(fx.catalogDir, fx.dataDir, ["de-bvg-0"]),
     );
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(result.artifacts).toMatchObject({ rtRewritten: 1 });
     const updated = readFileSync(fx.configPath, "utf-8");
     // de-bvg-0 is in our proxy set → repointed.
@@ -250,7 +250,7 @@ timetable:
     const result = await genFullConfigRun(
       ctxWithProxyVars(fx.catalogDir, fx.dataDir, ["de-bvg-0", "de-vbb-0"]),
     );
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(result.artifacts).toMatchObject({ rtRewritten: 3, gbfsProxyRewritten: 1 });
     const updated = readFileSync(fx.configPath, "utf-8");
     expect(updated).toContain("  proxy: http://openmapx-motis-feed-proxy");
@@ -277,7 +277,7 @@ timetable:
       `gbfs:\n  proxy: https://rt.triptix.tech\n  feeds:\n    missing:\n      url: https://rt.triptix.tech/feed/de-missing-0\n`,
     );
     const result = await genFullConfigRun(ctxWithProxyVars(fx.catalogDir, fx.dataDir, []));
-    expect(result.status).toBe("error");
+    expect(result.status).toBe("failed");
     expect(result.message).toContain("de-missing-0");
   });
 
@@ -291,7 +291,7 @@ timetable:
       osmInput: "germany.osm.pbf",
     });
     const result = await genFullConfigRun(ctx);
-    expect(result.status).toBe("error");
+    expect(result.status).toBe("failed");
     expect(result.message).toMatch(/sovereign.*prohibited hosted runtime URLs/);
     expect(result.message).toContain("rt.triptix.tech/feed/de-vbb-0");
   });

@@ -1,10 +1,14 @@
 import z from "zod/v4";
+import { missingServiceSettingsSchema } from "../../../ops/configuration-result-records";
 import { authenticationRetryAfterHeadersSchema } from "./headers";
 
 export const countSchema = z.number().finite().nonnegative();
 export const timestampSchema = z.iso.datetime({ offset: true });
+/** A machine reason in an error envelope: UPPER_SNAKE. */
+export const errorCodeSchema = z.string().regex(/^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/);
 export const errorResponseSchema = z.strictObject({
   error: z.string(),
+  code: errorCodeSchema.optional(),
   message: z.string().optional(),
   jobId: z.string().optional(),
 });
@@ -14,7 +18,18 @@ export const frameworkErrorSchema = z.strictObject({
   message: z.string(),
   code: z.string().optional(),
 });
-export const httpErrorSchema = z.union([errorResponseSchema, frameworkErrorSchema]);
+/** A configuration apply refused because enabled services lack required settings. */
+export const REQUIRED_SETTINGS_MISSING = "REQUIRED_SETTINGS_MISSING";
+export const requiredSettingsMissingSchema = z.strictObject({
+  error: z.string(),
+  code: z.literal(REQUIRED_SETTINGS_MISSING),
+  missingSettings: missingServiceSettingsSchema,
+});
+export const httpErrorSchema = z.union([
+  errorResponseSchema,
+  requiredSettingsMissingSchema,
+  frameworkErrorSchema,
+]);
 export const okSchema = z.strictObject({ ok: z.literal(true) });
 export const acceptedSchema = z.strictObject({ accepted: z.literal(true) });
 export const regionSchema = z

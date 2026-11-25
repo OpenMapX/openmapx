@@ -20,6 +20,10 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA "data_manager" TO o
 -- Tables the API role creates in `data_manager` after this migration get the
 -- same grant.
 ALTER DEFAULT PRIVILEGES IN SCHEMA "data_manager" GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO openmapx_data_manager;--> statement-breakpoint
+-- Data-manager waits at startup until the migrations its build expects are
+-- applied; it reads the migration history for that and nothing else there.
+GRANT USAGE ON SCHEMA "drizzle" TO openmapx_data_manager;--> statement-breakpoint
+GRANT SELECT ON "drizzle"."__drizzle_migrations" TO openmapx_data_manager;--> statement-breakpoint
 -- PostgreSQL 15 and later no longer let every role create objects in
 -- `public`; state it, since data-manager must never place tables beside the
 -- API's. Data-manager finds PostGIS in the `extensions` schema and has no
@@ -28,6 +32,11 @@ REVOKE CREATE ON SCHEMA public FROM PUBLIC;--> statement-breakpoint
 
 -- Better Auth generates the "user" table and cannot declare a CHECK on it.
 ALTER TABLE "user" ADD CONSTRAINT user_role_check CHECK (role IS NULL OR role IN ('user','admin'));--> statement-breakpoint
+
+-- The data_manager schema code lives in a package that cannot see the API's
+-- "user" table, so drizzle-kit cannot generate this foreign key. Deleting an
+-- account clears it from the jobs the API started for it.
+ALTER TABLE "data_manager"."job" ADD CONSTRAINT job_triggered_by_user_id_fkey FOREIGN KEY ("triggered_by_user_id") REFERENCES "user"("id") ON DELETE SET NULL;--> statement-breakpoint
 
 -- At least one active administrator always remains. The guard row counts the
 -- active administrators; the trigger keeps it in step with every insert and
@@ -95,8 +104,8 @@ BEGIN
      OR (left(identifier, length(erased_change_prefix)) = erased_change_prefix
          AND strpos(substr(identifier, length(erased_change_prefix) + 1), ':') = 0);
   -- Audit rows stay as the record of what happened, without the person.
-  UPDATE admin_audit_log SET actor_id = NULL, ip_address = NULL, user_agent = NULL
-  WHERE actor_id = OLD.id;
+  UPDATE admin_audit_log SET actor_user_id = NULL, ip_address = NULL, user_agent = NULL
+  WHERE actor_user_id = OLD.id;
   UPDATE admin_audit_log SET target_id = NULL
   WHERE target_type = 'user' AND target_id = OLD.id;
   -- In jsonb the string values are tested too: in the text form an escape
@@ -109,20 +118,18 @@ BEGIN
               OR EXISTS (SELECT FROM jsonb_path_query(details, 'strict $.**') AS item(value)
                          WHERE jsonb_typeof(item.value) = 'string'
                            AND item.value #>> '{}' ~* erased_email_re)));
-  DELETE FROM app_logs
-  WHERE position(erased_id in msg) > 0
+  DELETE FROM app_log
+  WHERE position(erased_id in message) > 0
      OR position(erased_id in metadata::text) > 0
-     OR (position(erased_email in lower(msg)) > 0 AND msg ~* erased_email_re)
+     OR (position(erased_email in lower(message)) > 0 AND message ~* erased_email_re)
      OR (position(erased_email in lower(metadata::text)) > 0
          AND (metadata::text ~* erased_email_re
               OR EXISTS (SELECT FROM jsonb_path_query(metadata, 'strict $.**') AS item(value)
                          WHERE jsonb_typeof(item.value) = 'string'
                            AND item.value #>> '{}' ~* erased_email_re)));
-  UPDATE data_manager.jobs SET triggered_by = NULL
-  WHERE triggered_by = 'api:user:' || OLD.id;
   -- A pending administrator confirmation of an action on this account.
   DELETE FROM admin_action_reauthentication
-  WHERE purpose LIKE 'account.%' AND target_id = OLD.id;
+  WHERE purpose LIKE 'user.%' AND target_id = OLD.id;
   -- An impersonation session must not outlive the administrator who started
   -- it as an ordinary-looking session of the impersonated account.
   DELETE FROM session WHERE impersonated_by = OLD.id;

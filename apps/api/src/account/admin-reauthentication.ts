@@ -109,7 +109,7 @@ export class AdminActionReauthentication {
         const [prior] = await tx
           .select()
           .from(challenge)
-          .where(and(eq(challenge.actorId, input.actorId), eq(challenge.requestKey, key)))
+          .where(and(eq(challenge.actorUserId, input.actorId), eq(challenge.requestKey, key)))
           .for("update");
         if (prior) {
           if (
@@ -118,7 +118,7 @@ export class AdminActionReauthentication {
             prior.intentFingerprint !==
               (input.intentFingerprint ??
                 (input.purpose === "platform.domain.apply" ? input.targetId : null)) ||
-            prior.state !== "pending" ||
+            prior.status !== "pending" ||
             prior.expiresAt <= now ||
             !input.nonce ||
             !nonceMatchesDigest(input.nonce, prior.nonceDigest)
@@ -132,8 +132,8 @@ export class AdminActionReauthentication {
         .from(challenge)
         .where(
           and(
-            eq(challenge.actorId, input.actorId),
-            inArray(challenge.state, ["pending", "completed"]),
+            eq(challenge.actorUserId, input.actorId),
+            inArray(challenge.status, ["pending", "completed"]),
             sql`${challenge.expiresAt}>${now.toISOString()}`,
           ),
         )
@@ -142,15 +142,15 @@ export class AdminActionReauthentication {
       const family = requestedNonce
         ? rows.filter((r) => nonceMatchesDigest(requestedNonce, r.nonceDigest))
         : [];
-      if (family.some((r) => r.state === "completed")) deny("REAUTH_GROUP_RESTART_REQUIRED");
+      if (family.some((r) => r.status === "completed")) deny("REAUTH_GROUP_RESTART_REQUIRED");
       const others = family.filter((r) => r.purpose !== input.purpose),
         pair = new Set([input.purpose, ...others.map((r) => r.purpose)]);
       if (
         others.length &&
         (others.length !== 1 ||
           pair.size !== 2 ||
-          !pair.has("credentials.import") ||
-          !pair.has("transit.credentials"))
+          !pair.has("credential.import") ||
+          !pair.has("transit.credential.update"))
       )
         deny("REAUTH_GROUP_RESTART_REQUIRED");
       // A non-empty family was matched by the requested nonce.
@@ -159,11 +159,11 @@ export class AdminActionReauthentication {
         expiresAt = family[0]?.expiresAt ?? new Date(now.getTime() + REAUTH_TTL_MS);
       await tx
         .update(challenge)
-        .set({ state: "superseded", updatedAt: now })
+        .set({ status: "superseded", updatedAt: now })
         .where(
           and(
-            eq(challenge.actorId, input.actorId),
-            inArray(challenge.state, ["pending", "completed"]),
+            eq(challenge.actorUserId, input.actorId),
+            inArray(challenge.status, ["pending", "completed"]),
             family.length ? eq(challenge.purpose, input.purpose) : sql`true`,
           ),
         );
@@ -171,7 +171,7 @@ export class AdminActionReauthentication {
       const [created] = await tx
         .insert(challenge)
         .values({
-          actorId: input.actorId,
+          actorUserId: input.actorId,
           startingSessionId: input.startingSessionId,
           purpose: input.purpose,
           targetId: input.targetId,
@@ -195,12 +195,12 @@ export class AdminActionReauthentication {
     nonce: Buffer | string,
     sessionId: string,
     tx: AuthDatabase,
-    states: ReadonlyArray<string>,
+    statuses: ReadonlyArray<string>,
     lockRows = true,
   ) {
     if (
       !row ||
-      !states.includes(row.state) ||
+      !statuses.includes(row.status) ||
       row.expiresAt <= this.now() ||
       !nonceMatchesDigest(nonce, row.nonceDigest) ||
       row.startingSessionId === sessionId
@@ -208,7 +208,7 @@ export class AdminActionReauthentication {
       deny();
     const live = await this.live(sessionId, tx, true, lockRows),
       a = live.assurance;
-    if (!a || live.user.id !== row.actorId || a.authenticatedAt <= row.createdAt) deny();
+    if (!a || live.user.id !== row.actorUserId || a.authenticatedAt <= row.createdAt) deny();
     const proof: ReauthenticationSession = {
       id: sessionId,
       userId: live.user.id,
@@ -242,14 +242,14 @@ export class AdminActionReauthentication {
         "completed",
       ]);
       if (!row) deny();
-      if (row.state === "completed") {
+      if (row.status === "completed") {
         if (row.completedSessionId !== proof.id) deny();
         return;
       }
       await tx
         .update(challenge)
         .set({
-          state: "completed",
+          status: "completed",
           completedSessionId: proof.id,
           completedMethod: proof.method,
           completedAt: this.now(),
@@ -267,7 +267,7 @@ export class AdminActionReauthentication {
       deny();
     if (input.proofs.length === 2) {
       const purposes = new Set(input.proofs.map((p) => p.purpose));
-      if (!purposes.has("credentials.import") || !purposes.has("transit.credentials")) deny();
+      if (!purposes.has("credential.import") || !purposes.has("transit.credential.update")) deny();
     }
     await this.live(input.sessionId, tx, true, consume);
     for (const ref of [...input.proofs].sort((a, b) =>
@@ -297,7 +297,7 @@ export class AdminActionReauthentication {
     if (consume)
       await tx
         .update(challenge)
-        .set({ state: "consumed", consumedAt: this.now(), updatedAt: this.now() })
+        .set({ status: "consumed", consumedAt: this.now(), updatedAt: this.now() })
         .where(
           inArray(
             challenge.id,

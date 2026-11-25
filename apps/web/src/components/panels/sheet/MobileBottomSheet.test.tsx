@@ -1,3 +1,4 @@
+import { HISTORY_STATE_KEY } from "@openmapx/core";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { resetBackNavigationForTests } from "@/lib/backNavigation";
@@ -414,7 +415,7 @@ describe("MobileBottomSheet and Back", () => {
     };
     host.snapToPoint = vi.fn();
     expand(host);
-    expect(window.history.state?.omx?.depth).toBe(1);
+    expect(window.history.state?.[HISTORY_STATE_KEY]?.depth).toBe(1);
 
     window.history.back();
     await act(settleHistory);
@@ -433,7 +434,7 @@ describe("MobileBottomSheet and Back", () => {
       </MobileBottomSheet>,
     );
     expand(container.querySelector("bottom-sheet") as HTMLElement);
-    expect(window.history.state?.omx?.depth ?? 0).toBe(0);
+    expect(window.history.state?.[HISTORY_STATE_KEY]?.depth ?? 0).toBe(0);
   });
 });
 

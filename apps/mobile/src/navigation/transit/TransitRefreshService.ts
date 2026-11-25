@@ -2,10 +2,10 @@ import type { TransitMobileSession } from "@openmapx/core/navigation";
 import {
   type ApiClient,
   type ApiRequestOptions,
-  createApiClient,
   isApiClientError,
   refreshTransitItinerary,
 } from "@openmapx/core/navigation/api";
+import { createNativeApiClient, isUpdateRequired } from "../../api/nativeApiClient";
 import { fetchJourneyCaptures } from "./journeyCaptures";
 import type { RefreshFailure } from "./refreshState";
 import { REQUEST_TIMEOUT_MS } from "./refreshState";
@@ -74,15 +74,10 @@ export class TransitRefreshService {
   private readonly client: ApiClient;
 
   constructor(deps: RefreshServiceDeps) {
-    this.client =
-      deps.client ??
-      createApiClient({
-        baseUrl: deps.apiOrigin,
-        // The token in the body is the only credential this call carries. A
-        // WebView cookie riding along would be an identity the rider never
-        // agreed to attach to a timetable lookup.
-        credentials: "omit",
-      });
+    // The token in the body is the only credential this call carries. A
+    // WebView cookie riding along would be an identity the rider never agreed
+    // to attach to a timetable lookup.
+    this.client = deps.client ?? createNativeApiClient(deps.apiOrigin);
   }
 
   async request(request: RefreshRequest): Promise<RefreshOutcome> {
@@ -120,6 +115,7 @@ export class TransitRefreshService {
 
       return { ...base, ok: true, itinerary, journeys };
     } catch (error) {
+      if (isUpdateRequired(error)) return { ...base, ok: false, failure: "update-required" };
       if (isApiClientError(error)) {
         if (error.status === 400 || error.status === 409)
           return { ...base, ok: false, failure: "rejected" };

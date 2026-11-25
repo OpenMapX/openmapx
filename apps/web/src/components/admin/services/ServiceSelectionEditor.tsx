@@ -19,8 +19,8 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { useServiceSelection, useServiceSelectionSave, useServicesList } from "@/hooks/useServices";
-import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { useAdminDraft } from "@/lib/admin/useAdminDraft";
+import { useAdminErrorText } from "@/lib/admin/useAdminErrorText";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { AdminJobLink } from "../activity/AdminJobLink";
 import { useActivityClient } from "../activity/activityQueries";
@@ -38,6 +38,7 @@ export function ServiceSelectionEditor() {
 function SelectionEditor() {
   const t = useTranslations("adminServices");
   const tCommon = useTranslations("common");
+  const adminErrorText = useAdminErrorText();
   const selection = useServiceSelection();
   const services = useServicesList();
   const save = useServiceSelectionSave();

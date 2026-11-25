@@ -116,8 +116,10 @@ function validWaypoint(value: unknown): RouteShareWaypoint | null {
  */
 export function validateRouteShare(input: unknown): RouteSharePayload | null {
   if (typeof input !== "object" || input === null) return null;
-  const { waypoints, mode, avoidHighways, avoidTolls, avoidFerries, scheduleVersion, schedules } =
-    input as Record<string, unknown>;
+  const { waypoints, mode, avoidHighways, avoidTolls, avoidFerries, schedules } = input as Record<
+    string,
+    unknown
+  >;
   if (!ROUTE_SHARE_MODES.includes(mode as RouteShareMode)) return null;
   if (!validBikeRoutingOptions(input as Record<string, unknown>)) return null;
   if (!Array.isArray(waypoints) || waypoints.length < 2 || waypoints.length > MAX_WAYPOINTS) {
@@ -147,7 +149,6 @@ export function validateRouteShare(input: unknown): RouteSharePayload | null {
       payload.bikePreferQuietRoads = bike.bikePreferQuietRoads;
   }
 
-  if (scheduleVersion !== undefined && scheduleVersion !== 1) return null;
   if (schedules !== undefined) {
     if (!Array.isArray(schedules) || schedules.length !== parsed.length) return null;
     const parsedSchedules: (ShareWaypointSchedule | null)[] = [];
@@ -156,12 +157,37 @@ export function validateRouteShare(input: unknown): RouteSharePayload | null {
       if (schedule === undefined) return null;
       parsedSchedules.push(schedule);
     }
-    if (parsedSchedules.some((schedule) => schedule !== null)) {
-      payload.scheduleVersion = 1;
-      payload.schedules = parsedSchedules;
-    }
+    if (parsedSchedules.some((schedule) => schedule !== null)) payload.schedules = parsedSchedules;
   }
   return payload;
+}
+
+/** The snapshot format every new snapshot share is written in. */
+export const SHARE_SNAPSHOT_VERSION = 1;
+
+export type StoredShareSnapshot =
+  | { targetType: "route"; route: RouteSharePayload }
+  | { targetType: "list"; list: StoredListSnapshot };
+
+/**
+ * Read a stored snapshot with the parser of its target type and format
+ * version. A version this code does not know reads as unavailable.
+ */
+export function parseStoredSnapshot(
+  targetType: string,
+  snapshotVersion: number | null,
+  snapshot: unknown,
+): StoredShareSnapshot | null {
+  if (snapshotVersion !== SHARE_SNAPSHOT_VERSION) return null;
+  if (targetType === "route") {
+    const route = validateRouteShare(snapshot);
+    return route ? { targetType, route } : null;
+  }
+  if (targetType === "list") {
+    const list = parseStoredListSnapshot(snapshot);
+    return list ? { targetType, list } : null;
+  }
+  return null;
 }
 
 function waypointName(waypoint: RouteShareWaypoint): string {

@@ -3,7 +3,7 @@ import type postgres from "postgres";
 import { pickCronExpression } from "../../utils/cron-expression.js";
 import type { SearchIndexOperationLock } from "../search-index/operation-lock.js";
 import { DEFAULT_NOTABLE_MIN_SITELINKS } from "./sparql.js";
-import { hasPublishedNotablePlaces, type NotablePlacesRuntimeState } from "./state.js";
+import { hasCurrentNotablePlaces, type NotablePlacesRuntimeState } from "./state.js";
 
 /** Monthly: fame moves slowly, and each refresh downloads a few hundred MB. */
 const NOTABLE_PLACES_REFRESH_CRON_DEFAULT = "0 2 1 * *";
@@ -38,16 +38,19 @@ export interface NotablePlacesScheduleOptions {
 }
 
 export interface NotablePlacesSchedule {
-  /** Builds the index now if none is published yet; resolves when that build ends. */
-  buildIfMissing(): Promise<void>;
+  /**
+   * Builds the index now if none is published yet or an older builder wrote
+   * it; resolves when that build ends.
+   */
+  buildIfMissingOrOutdated(): Promise<void>;
   stop(): void;
 }
 
 /**
  * Keeps the notable-places index present and fresh without an operator: one
- * build when the data-manager starts without a snapshot, then a refresh on
- * the schedule. A failed build leaves the previous snapshot searchable and is
- * retried at the next run.
+ * build when the data-manager starts without a snapshot of the current
+ * builder version, then a refresh on the schedule. A failed build leaves the
+ * previous snapshot in place and is retried at the next run.
  */
 export function scheduleNotablePlaces(opts: NotablePlacesScheduleOptions): NotablePlacesSchedule {
   const expression = pickCronExpression(
@@ -69,10 +72,10 @@ export function scheduleNotablePlaces(opts: NotablePlacesScheduleOptions): Notab
     ? new Cron(expression, { name: "notable-places-refresh", protect: true }, () => run("schedule"))
     : null;
   return {
-    async buildIfMissing() {
+    async buildIfMissingOrOutdated() {
       if (!expression) return;
-      if (await hasPublishedNotablePlaces(opts.sql)) return;
-      await run("no snapshot published");
+      if (await hasCurrentNotablePlaces(opts.sql)) return;
+      await run("no current snapshot published");
     },
     stop() {
       cron?.stop();

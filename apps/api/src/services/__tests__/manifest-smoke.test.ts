@@ -35,7 +35,7 @@ describe("Integration manifests", () => {
         const raw = JSON.parse(readFileSync(manifestPath, "utf-8"));
 
         it("passes manifest validation", () => {
-          const result = validateManifest(raw);
+          const result = validateManifest(raw, { firstParty: true });
           expect(result.errors).toEqual([]);
           expect(result.valid).toBe(true);
         });

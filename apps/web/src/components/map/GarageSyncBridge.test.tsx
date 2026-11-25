@@ -139,7 +139,7 @@ describe("GarageSyncBridge", () => {
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     expect(put).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(storage.map.get("openmapx:garage:vehicles")).toBeUndefined());
-    expect(storage.map.get("openmapx:garage:importedFor")).toContain("user-1");
+    expect(storage.map.get("openmapx:garage:imported-for")).toContain("user-1");
 
     view.rerender(<GarageSyncBridge />);
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
@@ -160,10 +160,12 @@ describe("GarageSyncBridge", () => {
     await act(async () => {});
     expect(storage.map.get("openmapx:garage:vehicles")).toBeTruthy();
     expect(storage.map.get("openmapx:garage:parked")).toBeTruthy();
-    expect(storage.map.get("openmapx:garage:importedFor")).toBeUndefined();
+    expect(storage.map.get("openmapx:garage:imported-for")).toBeUndefined();
     view.unmount();
     render(<GarageSyncBridge />, { wrapper });
-    await waitFor(() => expect(storage.map.get("openmapx:garage:importedFor")).toContain("user-1"));
+    await waitFor(() =>
+      expect(storage.map.get("openmapx:garage:imported-for")).toContain("user-1"),
+    );
     expect(post).toHaveBeenCalledTimes(2);
     expect(put).toHaveBeenCalledTimes(1);
     expect(storage.map.get("openmapx:garage:vehicles")).toBeUndefined();
@@ -218,7 +220,9 @@ describe("garage import parking ownership", () => {
       .spyOn(boundary, "put")
       .mockResolvedValue({ id: "0193e4a0-0000-7000-8002-000000000004" });
     render(<GarageSyncBridge />, { wrapper });
-    await waitFor(() => expect(storage.map.get("openmapx:garage:importedFor")).toContain("user-1"));
+    await waitFor(() =>
+      expect(storage.map.get("openmapx:garage:imported-for")).toContain("user-1"),
+    );
     expect(
       put.mock.calls.map((call) => (call[1] as { vehicleId: string | null }).vehicleId),
     ).toEqual(["0193e4a0-0000-7000-8002-000000000101", "0193e4a0-0000-7000-8002-000000000102"]);
@@ -248,7 +252,9 @@ describe("garage import parking ownership", () => {
       .spyOn(boundary, "put")
       .mockResolvedValue({ id: "0193e4a0-0000-7000-8002-000000000004" });
     render(<GarageSyncBridge />, { wrapper });
-    await waitFor(() => expect(storage.map.get("openmapx:garage:importedFor")).toContain("user-1"));
+    await waitFor(() =>
+      expect(storage.map.get("openmapx:garage:imported-for")).toContain("user-1"),
+    );
     expect(post).not.toHaveBeenCalled();
     expect(put).not.toHaveBeenCalled();
   });
@@ -289,7 +295,7 @@ it("preserves local rows when parking success does not match the server contract
   await waitFor(() => expect(put).toHaveBeenCalledTimes(1));
   expect(storage.map.get("openmapx:garage:vehicles")).toBeTruthy();
   expect(storage.map.get("openmapx:garage:parked")).toBeTruthy();
-  expect(storage.map.get("openmapx:garage:importedFor")).toBeUndefined();
+  expect(storage.map.get("openmapx:garage:imported-for")).toBeUndefined();
 });
 
 it("stops sync on a malformed creation receipt without clearing local data", async () => {
@@ -301,5 +307,5 @@ it("stops sync on a malformed creation receipt without clearing local data", asy
   await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
   expect(put).not.toHaveBeenCalled();
   expect(storage.map.get("openmapx:garage:vehicles")).toBeTruthy();
-  expect(storage.map.get("openmapx:garage:importedFor")).toBeUndefined();
+  expect(storage.map.get("openmapx:garage:imported-for")).toBeUndefined();
 });

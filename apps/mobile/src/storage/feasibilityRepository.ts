@@ -1,4 +1,10 @@
 import type { Database } from "./database";
+import {
+  CREATE_FEASIBILITY_PROBE,
+  DELETE_FEASIBILITY_PROBE,
+  SELECT_FEASIBILITY_PROBE,
+  UPSERT_FEASIBILITY_PROBE,
+} from "./sql";
 
 /**
  * Persistence for the feasibility probe.
@@ -84,12 +90,19 @@ function fromRow(row: ProbeRow): FeasibilityProbeState {
 }
 
 export class FeasibilityRepository {
-  constructor(private readonly database: Database) {}
+  private constructor(private readonly database: Database) {}
+
+  /**
+   * The probe's table is not part of the release schema: only a feasibility
+   * build reaches this, and it creates the table on first use.
+   */
+  static async open(database: Database): Promise<FeasibilityRepository> {
+    await database.execAsync(CREATE_FEASIBILITY_PROBE);
+    return new FeasibilityRepository(database);
+  }
 
   async read(): Promise<FeasibilityProbeState> {
-    const row = await this.database.getFirstAsync<ProbeRow>(
-      "SELECT * FROM feasibility_probe WHERE id = 1",
-    );
+    const row = await this.database.getFirstAsync<ProbeRow>(SELECT_FEASIBILITY_PROBE);
     return row ? fromRow(row) : { ...EMPTY_PROBE_STATE };
   }
 
@@ -103,7 +116,7 @@ export class FeasibilityRepository {
   ): Promise<FeasibilityProbeState> {
     let committed: FeasibilityProbeState = { ...EMPTY_PROBE_STATE };
     await this.database.withExclusiveTransactionAsync(async (tx) => {
-      const row = await tx.getFirstAsync<ProbeRow>("SELECT * FROM feasibility_probe WHERE id = 1");
+      const row = await tx.getFirstAsync<ProbeRow>(SELECT_FEASIBILITY_PROBE);
       const current = row ? fromRow(row) : { ...EMPTY_PROBE_STATE };
       const next = mutate(current);
       // Counters are monotonic by construction; a regression would mean a lost
@@ -111,45 +124,25 @@ export class FeasibilityRepository {
       if (next.callbackCount < current.callbackCount) {
         throw new Error("feasibility counters must not regress");
       }
-      await tx.runAsync(
-        `INSERT INTO feasibility_probe (
-           id, callback_count, accepted_fix_count, rejected_fix_count,
-           last_timestamp_ms, last_accuracy_bucket, last_callback_gap_ms,
-           max_callback_gap_ms, last_error_code, pending_audio_probe,
-           audio_result_code, updated_at_ms
-         ) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(id) DO UPDATE SET
-           callback_count = excluded.callback_count,
-           accepted_fix_count = excluded.accepted_fix_count,
-           rejected_fix_count = excluded.rejected_fix_count,
-           last_timestamp_ms = excluded.last_timestamp_ms,
-           last_accuracy_bucket = excluded.last_accuracy_bucket,
-           last_callback_gap_ms = excluded.last_callback_gap_ms,
-           max_callback_gap_ms = excluded.max_callback_gap_ms,
-           last_error_code = excluded.last_error_code,
-           pending_audio_probe = excluded.pending_audio_probe,
-           audio_result_code = excluded.audio_result_code,
-           updated_at_ms = excluded.updated_at_ms`,
-        [
-          next.callbackCount,
-          next.acceptedFixCount,
-          next.rejectedFixCount,
-          next.lastTimestampMs,
-          next.lastAccuracyBucket,
-          next.lastCallbackGapMs,
-          next.maxCallbackGapMs,
-          next.lastErrorCode,
-          next.pendingAudioProbe ? 1 : 0,
-          next.audioResultCode,
-          next.updatedAtMs,
-        ],
-      );
+      await tx.runAsync(UPSERT_FEASIBILITY_PROBE, [
+        next.callbackCount,
+        next.acceptedFixCount,
+        next.rejectedFixCount,
+        next.lastTimestampMs,
+        next.lastAccuracyBucket,
+        next.lastCallbackGapMs,
+        next.maxCallbackGapMs,
+        next.lastErrorCode,
+        next.pendingAudioProbe ? 1 : 0,
+        next.audioResultCode,
+        next.updatedAtMs,
+      ]);
       committed = next;
     });
     return committed;
   }
 
   async reset(): Promise<void> {
-    await this.database.runAsync("DELETE FROM feasibility_probe");
+    await this.database.runAsync(DELETE_FEASIBILITY_PROBE);
   }
 }

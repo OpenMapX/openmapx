@@ -1,4 +1,5 @@
 import { toPoiSearchOutcome } from "@openmapx/core";
+import { OVERTURE_PLACES_SCHEMA_VERSION } from "@openmapx/core/published-data";
 import { createMockIntegrationContext, nth } from "@openmapx/integration-framework/testing";
 import type { PoiSearchProvider, PoiSearchReturn } from "@openmapx/integration-poi-search/types";
 import { assert, beforeEach, describe, expect, it, vi } from "vitest";
@@ -240,6 +241,7 @@ describe("poi-overture health check", () => {
         place_count: "3913971",
         place_release: "2026-07-22.0",
         state_release: "2026-07-22.0",
+        schema_version: OVERTURE_PLACES_SCHEMA_VERSION,
         status: "completed",
         phase: "complete",
         updated_at: new Date(),
@@ -260,6 +262,7 @@ describe("poi-overture health check", () => {
         place_count: 100,
         place_release: "2026-07-22.0",
         state_release: "2026-07-22.0",
+        schema_version: OVERTURE_PLACES_SCHEMA_VERSION,
         status: "failed",
         phase: "assign",
         updated_at: new Date(),
@@ -274,6 +277,27 @@ describe("poi-overture health check", () => {
       status: "up",
       error: "Places available; conflation is failed in assign: worker restarted",
     });
+  });
+
+  it("returns down when an older builder wrote the places", async () => {
+    const db = makeFakeDb([
+      {
+        place_count: 100,
+        place_release: "2026-07-22.0",
+        state_release: "2026-07-22.0",
+        schema_version: OVERTURE_PLACES_SCHEMA_VERSION + 1,
+        status: "completed",
+        phase: "complete",
+        updated_at: new Date(),
+        last_error: null,
+      },
+    ]);
+    const ctx = createMockIntegrationContext({ db });
+    const { setup } = await import("../index.js");
+    setup(ctx);
+    const status = await nth(ctx.registered.healthChecks, 0)();
+    expect(status.status).toBe("down");
+    expect(status.error).toContain("outdated layout");
   });
 
   it("returns down when the place snapshot and conflation state releases disagree", async () => {

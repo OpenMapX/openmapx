@@ -28,7 +28,7 @@ function status(step: "osm" | "transit" | "fonts", input: DataExecutionInput) {
       ["osm", "transit", "fonts"].indexOf(step),
     ),
     kind: input.kind,
-    status: "ok",
+    status: "succeeded",
     publication: "committed",
     admittedAt: Date.now(),
     deadlineAt,
@@ -41,7 +41,7 @@ function status(step: "osm" | "transit" | "fonts", input: DataExecutionInput) {
         : input.kind === "transit-sync"
           ? {
               kind: input.kind,
-              finalStatus: "ok",
+              finalStatus: "succeeded",
               sourceRevision: "pinned-catalog",
               countries: ["de"],
             }
@@ -95,13 +95,13 @@ it("checkpoints and completes data -> graphs -> generation/hardlinks in order", 
   });
   expect(e.checkpoint.mock.calls.length).toBeGreaterThan(5);
 });
-it.each(["partial", "error", "interrupted", "canceled", "running"] as const)(
+it.each(["partially_succeeded", "failed", "interrupted", "cancelled", "running"] as const)(
   "never builds after transit %s",
   async (outcome) => {
     const e = effects();
     e.runDataStep.mockImplementation(async (step, input) => ({
       ...status(step, input),
-      status: step === "transit" ? outcome : "ok",
+      status: step === "transit" ? outcome : "succeeded",
     }));
     await expect(runDataUpdate(options, e)).rejects.toBeInstanceOf(DataUpdateFailure);
     expect(e.build).not.toHaveBeenCalled();

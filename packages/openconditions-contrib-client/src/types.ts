@@ -9,6 +9,13 @@
  * decided by the receiving instance's registry, not here.
  */
 
+/**
+ * The signed claim protocol version. Every signed body carries it as a
+ * top-level `"v"`, inside the JCS bytes the signature covers, and the
+ * verifier refuses any other value.
+ */
+export const CLAIM_VERSION = 1 as const;
+
 /** A GeoJSON geometry position/coordinates tree (WGS84). */
 export type GeoJsonPosition = number[];
 
@@ -79,6 +86,8 @@ export interface Effect {
  * well-formed Unicode.
  */
 export interface SituationClaim {
+  /** Signed claim protocol version; part of the signed bytes. */
+  v: typeof CLAIM_VERSION;
   claimClass: "situation";
   /** Registered situation kind, e.g. "closure" or "incident". */
   kind: string;
@@ -102,6 +111,8 @@ export interface SituationClaim {
 
 /** "This is the value now": a reading of a property of a feature or a place. */
 export interface ObservationClaim {
+  /** Signed claim protocol version; part of the signed bytes. */
+  v: typeof CLAIM_VERSION;
   claimClass: "observation";
   subject: { featureId: string; componentKey?: string } | { location: Record<string, unknown> };
   property: string;
@@ -150,6 +161,8 @@ export type SubClaimType = "confirm" | "negate" | "flag";
  * WITHOUT the envelope fields.
  */
 export interface SubClaimBody {
+  /** Signed claim protocol version; part of the signed bytes. */
+  v: typeof CLAIM_VERSION;
   subject: RecordRef;
   claimType: SubClaimType;
   /** Why a record is flagged; max 2000 chars. */

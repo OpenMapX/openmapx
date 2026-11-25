@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  capabilityNameErrors,
   checkCapabilityName,
-  collectCapabilityWarnings,
   WELL_KNOWN_CAPABILITIES,
   WELL_KNOWN_DATA_TYPES,
 } from "../services/capabilities";
@@ -56,53 +56,50 @@ describe("checkCapabilityName", () => {
   });
 });
 
-describe("collectCapabilityWarnings", () => {
-  it("returns no warnings for an all-well-known manifest", () => {
-    const warnings = collectCapabilityWarnings({
-      id: "valhalla",
-      provides: ["routing-engine"],
-      produces: [{ type: "osm-pbf" }],
-      consumes: [{ type: "gtfs" }],
-    });
-    expect(warnings).toEqual([]);
+describe("capabilityNameErrors", () => {
+  it("returns no errors for an all-well-known manifest", () => {
+    expect(
+      capabilityNameErrors({
+        provides: ["routing-engine"],
+        produces: [{ type: "osm-pbf" }],
+        consumes: [{ type: "gtfs" }],
+      }),
+    ).toEqual([]);
   });
 
-  it("returns no warnings for a namespaced community capability", () => {
-    const warnings = collectCapabilityWarnings({
-      id: "acme-thing",
-      provides: ["acme/super-router"],
-      produces: [{ type: "acme/proprietary-blob" }],
-    });
-    expect(warnings).toEqual([]);
+  it("returns no errors for a namespaced community capability", () => {
+    expect(
+      capabilityNameErrors({
+        provides: ["acme/super-router"],
+        produces: [{ type: "acme/proprietary-blob" }],
+      }),
+    ).toEqual([]);
   });
 
-  it("warns on an unrecognised capability with the right path", () => {
-    const warnings = collectCapabilityWarnings({
-      id: "weird",
-      provides: ["routing-engine", "totally-made-up"],
-    });
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]?.path).toBe("provides[1]");
-    expect(warnings[0]?.value).toBe("totally-made-up");
-    expect(warnings[0]?.kind).toBe("capability");
+  it("names the path of an unrecognised capability", () => {
+    const errors = capabilityNameErrors({ provides: ["routing-engine", "totally-made-up"] });
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toMatch(/^provides\[1\]: "totally-made-up"/);
   });
 
-  it("warns on an unrecognised data type in produces / consumes", () => {
-    const warnings = collectCapabilityWarnings({
-      id: "weird",
+  it("reports unrecognised data types in produces and consumes", () => {
+    const errors = capabilityNameErrors({
       produces: [{ type: "unknown-thing" }],
       consumes: [{ type: "another-unknown" }],
     });
-    expect(warnings).toHaveLength(2);
-    expect(warnings.map((w) => w.path).sort()).toEqual(["consumes[0].type", "produces[0].type"]);
+    expect(errors.map((error) => error.split(":")[0])).toEqual([
+      "produces[0].type",
+      "consumes[0].type",
+    ]);
   });
 });
 
-describe("validateServiceManifest — capability warnings", () => {
+describe("validateServiceManifest — capability names", () => {
   const baseManifest = {
     id: "myservice",
     name: "My Service",
     version: "1.0.0",
+    platform: "1.0",
     quality: "community" as const,
     container: { image: "owner/image", tag: "latest", expose: [80], memory: "256m" },
   };
@@ -111,24 +108,17 @@ describe("validateServiceManifest — capability warnings", () => {
   // manifest discovered in a cloned repo.
   const validateCommunity = (raw: unknown) => validateServiceManifest(raw, { firstParty: false });
 
-  it("attaches warnings to the validation result without making it invalid", () => {
-    const result = validateCommunity({
-      ...baseManifest,
-      provides: ["myroutingthing"],
-    });
-    expect(result.valid).toBe(true);
-    expect(result.warnings).toBeDefined();
-    expect(result.warnings).toHaveLength(1);
-    expect(result.warnings?.[0]?.value).toBe("myroutingthing");
+  it("refuses a community manifest with an un-namespaced capability", () => {
+    const result = validateCommunity({ ...baseManifest, provides: ["myroutingthing"] });
+    expect(result.valid).toBe(false);
+    expect(result.errors).toHaveLength(1);
+    expect(result.errors[0]).toContain('"myroutingthing"');
   });
 
-  it("omits warnings entirely when everything is well-known or namespaced", () => {
-    const result = validateCommunity({
-      ...baseManifest,
-      provides: ["routing-engine", "vendor/extra-thing"],
-    });
-    expect(result.valid).toBe(true);
-    expect(result.warnings).toBeUndefined();
+  it("accepts well-known and namespaced capabilities", () => {
+    expect(
+      validateCommunity({ ...baseManifest, provides: ["routing-engine", "vendor/extra-thing"] }),
+    ).toEqual({ valid: true, errors: [] });
   });
 
   it("accepts the structured `provides` form with metadata", () => {
@@ -141,18 +131,16 @@ describe("validateServiceManifest — capability warnings", () => {
         },
       ],
     });
-    expect(result.valid).toBe(true);
-    expect(result.warnings).toBeUndefined();
+    expect(result).toEqual({ valid: true, errors: [] });
   });
 
-  it("warns on the structured form when the capability is unrecognised", () => {
+  it("refuses the structured form when the capability is unrecognised", () => {
     const result = validateCommunity({
       ...baseManifest,
       provides: [{ capability: "weird-thing", metadata: { foo: "bar" } }],
     });
-    expect(result.valid).toBe(true);
-    expect(result.warnings).toHaveLength(1);
-    expect(result.warnings?.[0]?.value).toBe("weird-thing");
+    expect(result.valid).toBe(false);
+    expect(result.errors[0]).toContain('"weird-thing"');
   });
 
   it("accepts a mix of bare strings and structured entries on the same service", () => {
@@ -160,7 +148,16 @@ describe("validateServiceManifest — capability warnings", () => {
       ...baseManifest,
       provides: ["routing-engine", { capability: "tile-server", metadata: { region: "europe" } }],
     });
-    expect(result.valid).toBe(true);
-    expect(result.warnings).toBeUndefined();
+    expect(result).toEqual({ valid: true, errors: [] });
+  });
+
+  it("leaves built-in capability names to review", () => {
+    const { platform: _, ...builtIn } = baseManifest;
+    expect(
+      validateServiceManifest(
+        { ...builtIn, quality: "built-in", provides: ["myroutingthing"] },
+        { firstParty: true },
+      ).valid,
+    ).toBe(true);
   });
 });

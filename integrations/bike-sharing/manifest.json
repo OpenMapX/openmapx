@@ -23,7 +23,7 @@
         "type": "boolean",
         "default": true
       },
-      "db-bike-client-id": {
+      "dbBikeClientId": {
         "type": "string",
         "title": "DB Call-a-Bike Client ID",
         "description": "Deutsche Bahn GBFS client ID.",
@@ -41,7 +41,7 @@
           "notes": "GBFS data for DB Call a Bike / DB Connect. One DB application can serve all DB integrations. The PRO plan is requested by email to DBC.SharingAPI@deutschebahn.com."
         }
       },
-      "db-bike-api-key": {
+      "dbBikeApiKey": {
         "type": "string",
         "title": "DB Call-a-Bike API Key",
         "description": "Deutsche Bahn GBFS API key.",
@@ -114,7 +114,6 @@
     }
   ],
   "quality": "built-in",
-  "category": "Shared Mobility",
   "dataSources": [
     {
       "sourceId": "citybikes",

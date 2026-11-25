@@ -1,8 +1,16 @@
 import type { dataManagerOperations } from "@openmapx/core/data-manager-contracts";
+import type { DataJobTrigger } from "@openmapx/core/jobs";
 
 /** The callers that hold a data-manager token, each its own. */
 export const DATA_MANAGER_PRINCIPALS = ["api", "ops-agent", "host-cli"] as const;
 export type DataManagerPrincipal = (typeof DATA_MANAGER_PRINCIPALS)[number];
+
+/** The trigger recorded on a job a caller starts. */
+export const PRINCIPAL_TRIGGER: { readonly [P in DataManagerPrincipal]: DataJobTrigger } = {
+  api: "api",
+  "ops-agent": "agent",
+  "host-cli": "cli",
+};
 
 /**
  * Whether the API's token reaches each route. The API faces the network and

@@ -51,9 +51,9 @@ export async function runGuardedSystemRelease(ctx: JobContext): Promise<Record<s
     .select()
     .from(adminJob)
     .where(jobOwnership(ctx.jobId, ctx.execution, ["running", "cancel_pending"]));
-  if (!job?.createdBy || job.type !== "system.update")
+  if (!job?.createdByUserId || job.type !== "system.update")
     throw new JobObservationPending("invalid_identity");
-  const actorId = job.createdBy,
+  const actorId = job.createdByUserId,
     operationKey = createDurableOpsKey("admin-job.guarded-release", ctx.jobId),
     candidate = readAdminJobProtocol(ctx.protocol).candidate,
     // Rows not yet saved and not cancelled: the forward path below runs again
@@ -69,7 +69,7 @@ export async function runGuardedSystemRelease(ctx: JobContext): Promise<Record<s
   if (!retained) {
     const [actor] = await db.select().from(user).where(eq(user.id, actorId));
     if (actor?.role !== "admin" || actor.banned === true)
-      throw new AdminJobFailure("Release administrator is unavailable", { errorCode: "forbidden" });
+      throw new AdminJobFailure("Release administrator is unavailable", { errorCode: "FORBIDDEN" });
     if (payload.createBackup !== false) {
       await ctx.log("Creating a backup before applying the checked release");
       await executeAdminJobOperation(

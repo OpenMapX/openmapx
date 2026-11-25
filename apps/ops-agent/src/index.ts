@@ -122,12 +122,20 @@ async function main(): Promise<void> {
       service.enabled = bootstrapEnabledServiceIds.has(service.manifest.id);
     }
     const journal = await openOpsJobJournal(config.journalFile);
+    const foreignRows = journal.foreignRecords();
+    if (foreignRows.length > 0) {
+      const recovery = foreignRows.filter((row) => row.recoveryRequired).length;
+      process.stderr.write(
+        `Kept ${foreignRows.length} job journal row(s) that another release recorded in a form this release cannot read; ${recovery} need recovery. Callers asking for them are told so\n`,
+      );
+    }
     // A maintenance job this agent was stopped in left its fence behind, and
     // with it a quiesced data-manager worker that would never ask again.
     try {
       const recovery = await recoverInterruptedTrafficMaintenance({
         trafficDataRoot: join(paths.infraDir, "data"),
         journalRecords: journal.records(),
+        foreignRecords: foreignRows,
       });
       if (recovery.state === "released") {
         process.stderr.write(

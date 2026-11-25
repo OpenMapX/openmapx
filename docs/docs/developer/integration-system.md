@@ -76,17 +76,24 @@ the exhaustive list.
 
 ```ts
 {
-  id: string;            // lowercase, hyphen-separated — /^[a-z0-9][a-z0-9-]*$/
+  id: string;            // lowercase slug, at most 48 characters — /^[a-z0-9]+(-[a-z0-9]+)*$/
   name?: string;         // display name; falls back to id
-  version?: string;
+  version?: string;      // required for community integrations: a semantic version
   description?: string;
   author?: string;
   license?: string;      // SPDX id of the integration's own code
   documentation?: string;
-  platform?: string;     // minimum platform version, "major.minor"
-  quality?: "built-in" | "community-verified" | "community";
+  platform?: string;     // minimum platform version, "major.minor"; required for community integrations
+  quality?: "built-in" | "community";
 }
 ```
+
+The manifest is strict at the top level: a key the schema does not name fails
+validation. `validateManifest(raw, { firstParty })` applies the built-in rules
+when `firstParty` is true. For a community integration it also requires
+`platform` and a semantic `version`, accepts only `quality: "community"` (or no
+`quality`), and refuses a `requires[].capability` that is neither well-known nor
+namespaced as `<vendor>/<name>`.
 
 The `id` names the integration's directory, its config cache
 namespace, its environment-variable prefix, and its API route prefix
@@ -1040,7 +1047,10 @@ of a route that needs more. Every matched route consumes exactly one operation-t
 bucket: `rateLimitTier` defaults to `public`, upstream-heavy point/list routes use
 `expensive`, turn-by-turn directions use `routing`, routes a client calls on
 every debounced keystroke (autocomplete, forward geocoding) use `typeahead`,
-and tile fan-out uses `tile`. A request
+and tile fan-out uses `tile`. `contribution` (30 a minute) and `enrollment`
+(10 a minute) are for crowd contributions and reporter-key enrollment that the
+API relays under its own credential, where the upstream no longer limits each
+client address. A request
 under `/api/integrations/` that matches no enabled integration route is charged
 to the host's unmatched-route bucket before its 404. In addition, `POST`, `PUT`, `PATCH`, and
 `DELETE` requests consume a separate per-client integration-ingress bucket before
@@ -1724,7 +1734,7 @@ The host treats the two install locations differently, and the
   Docker operations are separately owned by the operations agent. The installer rejects such entry points.
   Backend behavior belongs in a separately containerized service component;
   executable presentation remains disabled until a cross-origin sandbox exists. A community
-  integration may declare a minimum `platform` version in its manifest; if the
+  integration must declare a minimum `platform` version in its manifest; if the
   running platform's major version differs, or its minor is lower, the host skips
   the integration with a warning. The platform version uses simple
   `major.minor` semantics: the major is bumped for breaking protocol changes,

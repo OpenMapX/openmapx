@@ -18,7 +18,7 @@ describe("shouldBuildReviewFallbackSearch", () => {
   it("allows Google Maps fallback search broadly", () => {
     expect(
       shouldBuildReviewFallbackSearch(
-        "googleMaps",
+        "google-maps",
         place({ category: "atm", rawCategory: "amenity/atm", osmTags: { amenity: "atm" } }),
       ),
     ).toBe(true);

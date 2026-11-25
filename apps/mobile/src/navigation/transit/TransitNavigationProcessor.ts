@@ -53,6 +53,28 @@ export class TransitNavigationProcessor implements NavigationProcessor<"transit"
   readonly needsScheduleTicks = true;
 
   private readonly cache = new TransitItineraryCache();
+  /** Sessions this process has already ticked; see `reviveAfterUpdate`. */
+  private readonly seenSessions = new Set<string>();
+
+  /**
+   * A refused protocol stops live refreshes until the app is updated, and only
+   * a new process can run an updated build. So the first tick a process gives a
+   * restored session clears the refusal and tries once more; the same build
+   * gets the refusal again and stays stopped until the next start.
+   */
+  private reviveAfterUpdate(session: TransitMobileSession): TransitMobileSession {
+    const firstTick = !this.seenSessions.has(session.sessionId);
+    this.seenSessions.add(session.sessionId);
+    const refresh = session.payload.refresh;
+    if (!firstTick || !refresh.updateRequired) return session;
+    return {
+      ...session,
+      payload: {
+        ...session.payload,
+        refresh: { status: "ready", generation: refresh.generation, attempts: 0 },
+      },
+    };
+  }
 
   prepare(
     startPackage: TransitNavigationStartPackage,
@@ -76,7 +98,12 @@ export class TransitNavigationProcessor implements NavigationProcessor<"transit"
     fixes: readonly FixInput[],
     nowMs: number,
   ): ProcessorMutation {
-    const outcome = processTransitBatch({ session, fixes, nowMs, cache: this.cache });
+    const outcome = processTransitBatch({
+      session: this.reviveAfterUpdate(session),
+      fixes,
+      nowMs,
+      cache: this.cache,
+    });
     const { arrived, needsReplan: _needsReplan, events, ...mutation } = outcome;
     void events;
 
@@ -90,7 +117,8 @@ export class TransitNavigationProcessor implements NavigationProcessor<"transit"
         ...refresh,
         ambiguousAttempts: undefined,
         firstAttemptAtMs: undefined,
-        ...(refresh.status === "broken" && hasJourneys
+        // A refused protocol refuses capture polling too; only an update helps.
+        ...(refresh.status === "broken" && hasJourneys && !refresh.updateRequired
           ? { status: "ready" as const, attempts: 0 }
           : {}),
       };

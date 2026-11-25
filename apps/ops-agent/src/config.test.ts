@@ -13,7 +13,7 @@ describe("ops-agent configuration", () => {
       apiTokenFile: "/run/secrets/ops-agent-api-token",
       dataManagerTokenFile: "/run/secrets/ops-agent-data-manager-token",
       rootDir: "/srv/openmapx",
-      journalFile: "/srv/openmapx/infra/docker/state/ops-agent/jobs-v1.json",
+      journalFile: "/srv/openmapx/infra/docker/state/ops-agent/jobs.json",
       // The agent reaches the queue through the checkout; it has no mount of its own.
       host: "0.0.0.0",
       port: 4300,

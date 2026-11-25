@@ -54,10 +54,10 @@ it.each(["SIGTERM", "SIGINT"] as const)(
         headers: {
           authorization: "Bearer shutdown-fixture-token",
           "content-type": "application/json",
-          "x-ops-protocol-version": "2",
+          "x-ops-protocol-version": "1",
         },
         body: JSON.stringify({
-          version: 2,
+          version: 1,
           requestId: "ops1_shutdown0000000000",
           operationKey: "opk1_shutdown0000000000",
           issuedAt: new Date(now).toISOString(),
@@ -129,7 +129,11 @@ it("production bootstrap retains health and observation when the release cache i
           "data-manager": Buffer.alloc(32, 2).toString("base64url"),
         },
         resourcePolicy: { allowGlobal: () => true, allowService: () => true },
-        journal: { records: () => [retained], replace: async () => undefined },
+        journal: {
+          records: () => [retained],
+          foreignRecords: () => [],
+          replace: async () => undefined,
+        },
         dispatch,
       },
       createDefaultReleaseEffects(root),
@@ -143,7 +147,7 @@ it("production bootstrap retains health and observation when the release cache i
       ok: true,
       releaseRecovery: { ready: false, reason: "recovery_required" },
     });
-    const headers = { authorization: `Bearer ${token}`, "x-ops-protocol-version": "2" };
+    const headers = { authorization: `Bearer ${token}`, "x-ops-protocol-version": "1" };
     expect(
       (await app.inject({ method: "GET", url: "/v1/operations/job1_0123456789abcdef", headers }))
         .statusCode,
@@ -163,7 +167,7 @@ it("production bootstrap retains health and observation when the release cache i
     ).toBe(200);
     const now = Date.now();
     const envelope = (operation: unknown, requestId: string) => ({
-      version: 2,
+      version: 1,
       requestId,
       operationKey: "opk1_bootstrapnew0000",
       issuedAt: new Date(now).toISOString(),

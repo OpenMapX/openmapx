@@ -27,7 +27,6 @@
     "type": "custom"
   },
   "quality": "built-in",
-  "category": "External",
   "dataSources": [
     {
       "sourceId": "overture",

@@ -19,7 +19,6 @@
     }
   },
   "quality": "built-in",
-  "category": "Transit",
   "dataSources": [
     {
       "sourceId": "opentransportdata-ch-siri-sx",

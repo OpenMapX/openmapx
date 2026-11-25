@@ -1,478 +1,19 @@
-import { type PrivacySource, privacySourceSchema } from "@openmapx/core/privacy";
 import { eq, inArray } from "drizzle-orm";
 import { db } from "../db";
-import { systemSecret, systemSettings } from "../db/schema";
+import { systemSecret, systemSetting } from "../db/schema";
 import { actorUserIdOrNull } from "../utils/actor";
-import { resolveSettingPrecedence, type SettingSource } from "../utils/settings-resolution";
-import { appLogger } from "./app-logger";
-import { assertSecretsConfigured, decrypt, encrypt } from "./secrets";
+import { assertSecretsConfigured, decrypt, encrypt, secretAad } from "./secrets";
+import { SETTING_DEFS, type SettingDef, settingEnvName } from "./setting-defs";
 
-interface SettingDef {
-  group: string;
-  key: string;
-  label: string;
-  description?: string;
-  type: "string" | "number" | "boolean" | "object" | "select";
-  options?: string[];
-  secret?: boolean;
-  env?: string;
-  default: unknown;
-  /**
-   * Optional subgroup identifier. Settings sharing a subgroup render under a
-   * common subheader on the client. Used in the Email panel to split the
-   * SMTP / EmailLabs / Lettermint alternatives clearly.
-   */
-  subgroup?: string;
-  /**
-   * Show this setting only when another setting in the same group has a
-   * matching value. Evaluated client-side against the current local form
-   * state — lets a panel hide fields that don't apply to the current choice.
-   */
-  showWhen?: { key: string; equals: unknown | unknown[] };
-  parse?: (raw: string) => unknown;
-  validate?: (value: unknown) => boolean;
-}
+export {
+  PLATFORM_CONFIGURATION_SETTING,
+  SETTING_DEFS,
+  type SettingDef,
+  type SmtpSecurity,
+  settingEnvName,
+} from "./setting-defs";
 
-const validEmail = (value: unknown): boolean =>
-  typeof value === "string" &&
-  value.length <= 320 &&
-  (value === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value));
-const boundedInteger =
-  (min: number, max: number) =>
-  (value: unknown): boolean =>
-    typeof value === "number" && Number.isInteger(value) && value >= min && value <= max;
-const validJurisdiction = (value: unknown): boolean =>
-  typeof value === "string" && (value === "" || /^[A-Z]{2}(?:-[A-Z0-9]{1,8})?$/.test(value));
-const hasControlCharacter = (value: string): boolean =>
-  Array.from(value).some((character) => {
-    const code = character.charCodeAt(0);
-    return code < 32 || code === 127;
-  });
-const optionalSingleLine =
-  (maxLength: number) =>
-  (value: unknown): boolean =>
-    typeof value === "string" &&
-    value.length <= maxLength &&
-    (value === "" || (value.trim().length > 0 && !hasControlCharacter(value)));
-const validPhone = (value: unknown): boolean =>
-  typeof value === "string" &&
-  (value === "" ||
-    (value.length <= 64 && value.trim().length > 0 && /^[+()0-9 .\-/]+$/.test(value)));
-const validHttpUrl = (value: unknown): boolean => {
-  if (value === "") return true;
-  if (typeof value !== "string" || value.length > 2048) return false;
-  try {
-    const parsed = new URL(value);
-    return (
-      (parsed.protocol === "http:" || parsed.protocol === "https:") &&
-      parsed.username === "" &&
-      parsed.password === ""
-    );
-  } catch {
-    return false;
-  }
-};
-const parsePrivacySources = (raw: string): PrivacySource[] => {
-  const parsed: unknown = JSON.parse(raw);
-  return privacySourceSchema.array().parse(parsed);
-};
-
-export const SETTING_DEFS: SettingDef[] = [
-  // General
-  {
-    group: "general",
-    key: "instanceName",
-    label: "Instance Name",
-    description: "Display name shown in the admin UI and page titles.",
-    type: "string",
-    env: "INSTANCE_NAME",
-    default: "OpenMapX",
-  },
-  {
-    group: "general",
-    key: "instanceUrl",
-    label: "Instance URL",
-    description: "Public URL of this OpenMapX instance (used in emails and links).",
-    type: "string",
-    env: "PUBLIC_URL",
-    default: "",
-  },
-  {
-    group: "general",
-    key: "defaultLocale",
-    label: "Default Locale",
-    type: "select",
-    options: ["en", "de", "fr", "es", "it", "nl", "pt", "pl", "ja", "zh"],
-    env: "DEFAULT_LOCALE",
-    default: "en",
-  },
-  {
-    group: "general",
-    key: "mapCenter",
-    label: "Default Map Center",
-    description: "Default latitude, longitude and zoom for the map on first load.",
-    type: "object",
-    default: { lat: 20, lng: 0, zoom: 2 },
-  },
-  // Authentication
-  {
-    group: "auth",
-    key: "emailVerificationRequired",
-    label: "Require Email Verification",
-    description: "New users must verify their email before accessing the app.",
-    type: "boolean",
-    env: "AUTH_EMAIL_VERIFICATION",
-    default: true,
-  },
-  {
-    group: "auth",
-    key: "sessionDurationHours",
-    validate: boundedInteger(1, 8760),
-    label: "Session Duration (hours)",
-    description: "Absolute lifetime of new sessions. Existing sessions keep their original expiry.",
-    type: "number",
-    default: 168,
-  },
-  {
-    group: "auth",
-    key: "twoFaEnabled",
-    label: "Enable Two-Factor Authentication",
-    description: "Allow new TOTP enrollment. Existing second-factor challenges remain required.",
-    type: "boolean",
-    default: true,
-  },
-  {
-    group: "auth",
-    key: "passwordMinLength",
-    validate: boundedInteger(8, 128),
-    label: "Minimum Password Length",
-    type: "number",
-    default: 8,
-  },
-  // Email — shared field used by every provider.
-  {
-    group: "email",
-    subgroup: "common",
-    key: "smtpFromAddress",
-    label: "From Address",
-    description: "Used as the From header by every provider. e.g. noreply@example.com",
-    type: "string",
-    env: "EMAIL_FROM",
-    default: "",
-  },
-  // EmailLabs (Polish EU provider, 9k emails/mo free) — priority 1.
-  // Send picks EmailLabs when all three fields are set, otherwise falls
-  // through to Lettermint, then SMTP. See apps/api/src/utils/email.ts.
-  {
-    group: "email",
-    subgroup: "emaillabs",
-    key: "emailLabsAppKey",
-    label: "App Key",
-    type: "string",
-    secret: true,
-    env: "EMAILLABS_APP_KEY",
-    default: "",
-  },
-  {
-    group: "email",
-    subgroup: "emaillabs",
-    key: "emailLabsSecretKey",
-    label: "Secret Key",
-    type: "string",
-    secret: true,
-    env: "EMAILLABS_SECRET_KEY",
-    default: "",
-  },
-  {
-    group: "email",
-    subgroup: "emaillabs",
-    key: "emailLabsSmtpAccount",
-    label: "SMTP Account",
-    type: "string",
-    env: "EMAILLABS_SMTP_ACCOUNT",
-    default: "",
-  },
-  // Lettermint (Dutch EU provider, 300 emails/mo free) — priority 2.
-  {
-    group: "email",
-    subgroup: "lettermint",
-    key: "lettermintApiToken",
-    label: "API Token",
-    type: "string",
-    secret: true,
-    env: "LETTERMINT_API_TOKEN",
-    default: "",
-  },
-  // SMTP — universal fallback (priority 3).
-  {
-    group: "email",
-    subgroup: "smtp",
-    key: "smtpHost",
-    label: "Host",
-    type: "string",
-    env: "SMTP_HOST",
-    default: "",
-  },
-  {
-    group: "email",
-    subgroup: "smtp",
-    key: "smtpPort",
-    label: "Port",
-    type: "number",
-    env: "SMTP_PORT",
-    default: 587,
-  },
-  {
-    group: "email",
-    subgroup: "smtp",
-    key: "smtpUser",
-    label: "Username",
-    type: "string",
-    env: "SMTP_USER",
-    default: "",
-  },
-  {
-    group: "email",
-    subgroup: "smtp",
-    key: "smtpPassword",
-    label: "Password",
-    type: "string",
-    secret: true,
-    env: "SMTP_PASS",
-    default: "",
-  },
-  {
-    group: "email",
-    subgroup: "smtp",
-    key: "smtpTls",
-    label: "Use TLS / STARTTLS",
-    type: "boolean",
-    env: "SMTP_SECURE",
-    default: true,
-  },
-  // Map
-  {
-    group: "map",
-    key: "hostedBasemapProvider",
-    label: "Hosted Vector Basemap",
-    description:
-      "Used only when self-hosted tiles are not configured or enabled. Auto uses MapTiler with a configured key, otherwise OpenFreeMap. Reload the map after saving.",
-    type: "select",
-    options: ["auto", "openfreemap", "maptiler"],
-    env: "BASEMAP_PROVIDER",
-    default: "auto",
-  },
-  {
-    group: "map",
-    key: "maptilerApiKey",
-    label: "MapTiler API Key",
-    description: "MapTiler Cloud API key for the built-in MapTiler tile and style proxy.",
-    type: "string",
-    secret: true,
-    env: "MAPTILER_KEY",
-    default: "",
-  },
-  // Data-Use Policy
-  {
-    group: "policy",
-    key: "allowNonCommercial",
-    label: "Allow non-commercial-only sources",
-    description:
-      "When on (default), data sources whose licence forbids commercial use (e.g. Open-Meteo, RainViewer) are included. Turn off for a commercial deployment unless you hold commercial terms for them.",
-    type: "boolean",
-    env: "OPENMAPX_ALLOW_NONCOMMERCIAL",
-    default: true,
-  },
-  {
-    group: "policy",
-    key: "allowGreyArea",
-    label: "Allow grey-area / undocumented-terms sources",
-    description:
-      "When on (default), data sources with unclear or undocumented usage terms (e.g. unofficial or scraped APIs) are included — most are public APIs whose terms are merely undocumented. Turn off to exclude them (e.g. DB/HAFAS and the regional-transit registry).",
-    type: "boolean",
-    env: "OPENMAPX_ALLOW_GREY_AREA",
-    default: true,
-  },
-  // Legal pages — facts published on /privacy that vary by hosting setup.
-  // Resolved env > database > default like every other setting here, then
-  // read by the public /legal-config endpoint that the privacy page fetches.
-  {
-    group: "legal",
-    subgroup: "operator",
-    key: "legalControllerName",
-    label: "Controller name",
-    description: "Legal name of the person or organization operating this instance.",
-    type: "string",
-    env: "LEGAL_NAME",
-    default: "",
-    validate: optionalSingleLine(200),
-  },
-  {
-    group: "legal",
-    subgroup: "operator",
-    key: "legalControllerStreet",
-    label: "Street and house number",
-    type: "string",
-    env: "LEGAL_STREET",
-    default: "",
-    validate: optionalSingleLine(200),
-  },
-  {
-    group: "legal",
-    subgroup: "operator",
-    key: "legalControllerPostalCode",
-    label: "Postal code",
-    type: "string",
-    env: "LEGAL_POSTAL_CODE",
-    default: "",
-    validate: optionalSingleLine(32),
-  },
-  {
-    group: "legal",
-    subgroup: "operator",
-    key: "legalControllerCity",
-    label: "City",
-    type: "string",
-    env: "LEGAL_CITY",
-    default: "",
-    validate: optionalSingleLine(120),
-  },
-  {
-    group: "legal",
-    subgroup: "operator",
-    key: "legalControllerCountry",
-    label: "Country",
-    type: "string",
-    env: "LEGAL_COUNTRY",
-    default: "",
-    validate: optionalSingleLine(120),
-  },
-  {
-    group: "legal",
-    subgroup: "contact",
-    key: "legalControllerEmail",
-    label: "Legal contact email",
-    description: "Published contact address for the operator on legal pages.",
-    type: "string",
-    env: "LEGAL_EMAIL",
-    default: "",
-    validate: validEmail,
-  },
-  {
-    group: "legal",
-    subgroup: "contact",
-    key: "legalControllerPhone",
-    label: "Legal contact phone",
-    description: "Optional phone number published on the legal notice.",
-    type: "string",
-    env: "LEGAL_PHONE",
-    default: "",
-    validate: validPhone,
-  },
-  {
-    group: "legal",
-    subgroup: "hosting",
-    key: "legalHostingProvider",
-    label: "Hosting Provider",
-    description:
-      "Company that hosts this instance's servers. Named in the privacy policy's hosting section as the data processor (Art. 28 GDPR). Leave blank to omit that sentence.",
-    type: "string",
-    env: "LEGAL_HOSTING_PROVIDER",
-    default: "",
-  },
-  {
-    group: "legal",
-    subgroup: "hosting",
-    key: "legalHostingLocations",
-    label: "Hosting Data-Center Locations",
-    description:
-      'Where the hosting data centers are located (e.g. "Germany, Finland"). Appended to the hosting sentence on /privacy. Leave blank to omit.',
-    type: "string",
-    env: "LEGAL_HOSTING_LOCATIONS",
-    default: "",
-  },
-  {
-    group: "legal",
-    subgroup: "governance",
-    key: "legalSupervisoryAuthority",
-    label: "Data-Protection Supervisory Authority",
-    description:
-      "Name of the competent data-protection supervisory authority, shown in the privacy policy's GDPR-rights section. Leave blank to omit that sentence.",
-    type: "string",
-    env: "LEGAL_SUPERVISORY_AUTHORITY",
-    default: "",
-    validate: optionalSingleLine(300),
-  },
-  {
-    group: "legal",
-    subgroup: "governance",
-    key: "legalSupervisoryAuthorityUrl",
-    label: "Supervisory Authority URL",
-    description:
-      "Link to the supervisory authority named above. Rendered next to it on /privacy. Leave blank to show just the name.",
-    type: "string",
-    env: "LEGAL_SUPERVISORY_AUTHORITY_URL",
-    default: "",
-    validate: validHttpUrl,
-  },
-  {
-    group: "legal",
-    subgroup: "retention",
-    key: "legalServerLogRetentionDays",
-    label: "Server-Log Retention (days)",
-    description:
-      "How long persisted API warning/error logs are kept before automatic deletion. Infrastructure logs use the operator's separate policy. Must be a positive whole number; defaults to 30.",
-    type: "number",
-    env: "LEGAL_SERVER_LOG_RETENTION_DAYS",
-    default: 30,
-    validate: boundedInteger(1, 3650),
-  },
-  {
-    group: "legal",
-    subgroup: "contact",
-    key: "legalDataRequestEmail",
-    label: "Data-subject request email",
-    description: "Controller contact for access requests. Falls back to LEGAL_EMAIL when unset.",
-    type: "string",
-    env: "LEGAL_DATA_REQUEST_EMAIL",
-    default: "",
-    validate: validEmail,
-  },
-  {
-    group: "legal",
-    subgroup: "retention",
-    key: "legalDsarCaseRetentionDays",
-    label: "DSAR case retention (days)",
-    type: "number",
-    env: "LEGAL_DSAR_CASE_RETENTION_DAYS",
-    default: 1095,
-    validate: boundedInteger(30, 3650),
-  },
-  {
-    group: "legal",
-    subgroup: "governance",
-    key: "legalDeploymentJurisdiction",
-    label: "Deployment jurisdiction",
-    description: "Informational ISO 3166-1 alpha-2 jurisdiction, optionally with a subdivision.",
-    type: "string",
-    env: "LEGAL_DEPLOYMENT_JURISDICTION",
-    default: "",
-    validate: validJurisdiction,
-  },
-  {
-    group: "legal",
-    subgroup: "sources",
-    key: "legalPrivacySources",
-    label: "Privacy sources",
-    description: "Strict JSON source declarations used by the access report.",
-    type: "object",
-    env: "LEGAL_PRIVACY_SOURCES",
-    default: [],
-    parse: parsePrivacySources,
-    validate: (value) =>
-      Array.isArray(value) && privacySourceSchema.array().safeParse(value).success,
-  },
-];
+export type SettingSource = "default" | "database" | "env";
 
 interface ResolvedSetting {
   group: string;
@@ -488,7 +29,8 @@ interface ResolvedSetting {
   envVar?: string;
   envOverride: boolean;
   showWhen?: { key: string; equals: unknown | unknown[] };
-  /** A stored secret in effect that the current secrets key cannot decrypt. */
+  /** A stored secret in effect that the current secrets key cannot decrypt,
+   * or a stored value in effect that the setting does not accept. */
   unreadable?: true;
 }
 
@@ -499,7 +41,6 @@ interface SettingsGroup {
 }
 
 const GROUP_LABELS: Record<string, string> = {
-  general: "General",
   auth: "Authentication",
   email: "Email",
   map: "Map",
@@ -507,12 +48,56 @@ const GROUP_LABELS: Record<string, string> = {
   legal: "Legal",
 };
 
+const DEFS_BY_KEY: ReadonlyMap<string, SettingDef> = new Map(
+  SETTING_DEFS.map((def) => [def.key, def]),
+);
+
+/** A setting's value, from the environment or the database, is not one it accepts. */
+export class SettingValueError extends Error {
+  override name = "SettingValueError";
+}
+
+/** The definition of a known setting; throws for an unknown key. */
+export function settingDefinition(key: string): SettingDef {
+  const def = DEFS_BY_KEY.get(key);
+  if (!def) throw new Error(`Unknown setting ${key}`);
+  return def;
+}
+
+/** The environment variable of a setting, or undefined when only the database sets it. */
+export function settingEnvVar(def: SettingDef): string | undefined {
+  return def.env || def.envOnly ? settingEnvName(def.key) : undefined;
+}
+
+/** Whether the given environment sets a setting (an empty value does not). */
+export function isSetInEnvironment(
+  def: SettingDef,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): boolean {
+  const name = settingEnvVar(def);
+  return name !== undefined && Boolean(env[name]?.trim());
+}
+
+/**
+ * Parse an environment value for a setting. Booleans accept exactly
+ * `true|false|1|0`, numbers plain decimal digits, objects strict JSON.
+ * Throws for anything else; the caller checks the result's range.
+ */
 export function parseEnvValue(raw: string, def: SettingDef): unknown {
   if (def.parse) return def.parse(raw);
-  const type = def.type;
-  if (type === "boolean") return raw === "true" || raw === "1";
-  if (type === "number") return Number(raw);
-  return raw;
+  switch (def.type) {
+    case "boolean":
+      if (raw === "true" || raw === "1") return true;
+      if (raw === "false" || raw === "0") return false;
+      throw new Error("not one of true, false, 1, 0");
+    case "number":
+      if (!/^-?\d+(\.\d+)?$/.test(raw)) throw new Error("not a decimal number");
+      return Number(raw);
+    case "object":
+      return JSON.parse(raw);
+    default:
+      return raw;
+  }
 }
 
 export function matchesDeclaredType(def: SettingDef, value: unknown): boolean {
@@ -527,63 +112,55 @@ export function matchesDeclaredType(def: SettingDef, value: unknown): boolean {
     case "select":
       return typeof value === "string" && (def.options?.includes(value) ?? true);
     case "object":
-      return (
-        typeof value === "object" &&
-        value !== null &&
-        (def.key === "legalPrivacySources" || !Array.isArray(value))
-      );
+      return typeof value === "object" && value !== null;
   }
 }
 
-const SECRET_SETTING_KEYS: ReadonlySet<string> = new Set(
-  SETTING_DEFS.filter((def) => def.secret).map((def) => def.key),
-);
+/**
+ * The environment's value of a setting: `undefined` when the variable is not
+ * set or empty, otherwise the parsed value. Throws SettingValueError, naming
+ * the variable, for a value the setting does not accept.
+ */
+export function settingFromEnvironment(
+  def: SettingDef,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): unknown {
+  const name = settingEnvVar(def);
+  if (!name) return undefined;
+  const raw = env[name]?.trim();
+  if (!raw) return undefined;
+  let value: unknown;
+  try {
+    value = parseEnvValue(raw, def);
+  } catch (error) {
+    throw new SettingValueError(`${name} is invalid: ${(error as Error).message}`);
+  }
+  if (!matchesDeclaredType(def, value))
+    throw new SettingValueError(`${name} is invalid for the setting ${def.key}`);
+  return value;
+}
+
+/**
+ * Refuses every invalid environment value of a setting at once, naming the
+ * variables. The API calls it before it starts serving.
+ */
+export function assertSettingsEnvironment(
+  env: Readonly<Record<string, string | undefined>> = process.env,
+): void {
+  const problems: string[] = [];
+  for (const def of SETTING_DEFS) {
+    try {
+      settingFromEnvironment(def, env);
+    } catch (error) {
+      problems.push((error as Error).message);
+    }
+  }
+  if (problems.length > 0) throw new SettingValueError(problems.join("; "));
+}
 
 /** Whether a setting's value is kept encrypted in `system_secret`. */
 export function isSecretSetting(key: string): boolean {
-  return SECRET_SETTING_KEYS.has(key);
-}
-
-/** Store the given settings in one transaction, attributed to the acting
- * administrator (none for the loopback actor, which has no account). Secret
- * settings are encrypted into `system_secret`; an empty value removes one. */
-export async function saveSystemSettings(
-  entries: ReadonlyArray<{ key: string; value: unknown }>,
-  actorId: string,
-  database: typeof db = db,
-): Promise<void> {
-  const updatedBy = actorUserIdOrNull(actorId);
-  const secrets = entries.filter(({ key }) => isSecretSetting(key));
-  for (const { key, value } of secrets) {
-    if (typeof value !== "string") throw new Error(`The secret setting ${key} must be a string`);
-  }
-  if (secrets.some(({ value }) => value !== "")) assertSecretsConfigured();
-  await database.transaction(async (transaction) => {
-    for (const { key, value } of entries) {
-      if (isSecretSetting(key)) {
-        if (value === "") {
-          await transaction.delete(systemSecret).where(eq(systemSecret.key, key));
-          continue;
-        }
-        const sealed = encrypt(value as string);
-        await transaction
-          .insert(systemSecret)
-          .values({ key, ...sealed, updatedBy })
-          .onConflictDoUpdate({
-            target: systemSecret.key,
-            set: { ...sealed, updatedAt: new Date(), updatedBy },
-          });
-        continue;
-      }
-      await transaction
-        .insert(systemSettings)
-        .values({ key, value: value as never, updatedBy })
-        .onConflictDoUpdate({
-          target: systemSettings.key,
-          set: { value: value as never, updatedAt: new Date(), updatedBy },
-        });
-    }
-  });
+  return DEFS_BY_KEY.get(key)?.secret === true;
 }
 
 /** A stored secret setting cannot be decrypted: the secrets key is missing,
@@ -605,29 +182,138 @@ export async function storedSecretSettingKeys(database: typeof db = db): Promise
 }
 
 /**
- * The stored values of the given secret settings, decrypted; a setting without
- * a stored value is absent. Only the listed settings are decrypted, so callers
- * pass just those whose environment override (SMTP_PASS, MAPTILER_KEY, …) is
- * unset, and an unreadable value never breaks a setting the environment
- * supplies. Throws SecretSettingUnreadableError, naming the setting, when a
- * listed value cannot be decrypted.
+ * The values of the given settings, each resolved in the same order: a set
+ * environment variable, then the stored value, then the declared default.
+ * Secret values are decrypted only for settings the environment does not
+ * set. With `database: null` stored values are not read.
+ *
+ * Throws SettingValueError for a value a setting does not accept and
+ * SecretSettingUnreadableError for a stored secret that cannot be decrypted.
  */
-export async function loadSecretSettings(
+export async function resolveSettingValues(
   keys: readonly string[],
-  database: typeof db = db,
-): Promise<Record<string, string>> {
-  const wanted = keys.filter(isSecretSetting);
-  if (wanted.length === 0) return {};
-  const rows = await database.select().from(systemSecret).where(inArray(systemSecret.key, wanted));
-  const values: Record<string, string> = {};
-  for (const row of rows) {
-    try {
-      values[row.key] = decrypt(row.ciphertext, row.iv, row.tag);
-    } catch (error) {
-      throw new SecretSettingUnreadableError(row.key, error);
+  options: { database?: typeof db | null } = {},
+): Promise<Record<string, unknown>> {
+  const database = options.database === undefined ? db : options.database;
+  const defs = keys.map(settingDefinition);
+  const values: Record<string, unknown> = {};
+  const fromDatabase: SettingDef[] = [];
+  for (const def of defs) {
+    const env = settingFromEnvironment(def);
+    if (env !== undefined) values[def.key] = env;
+    else if (def.envOnly || !database) values[def.key] = def.default;
+    else fromDatabase.push(def);
+  }
+  if (fromDatabase.length === 0 || !database) return values;
+  const plainKeys = fromDatabase.filter((def) => !def.secret).map((def) => def.key);
+  const secretKeys = fromDatabase.filter((def) => def.secret).map((def) => def.key);
+  const stored = new Map<string, unknown>();
+  if (plainKeys.length > 0) {
+    const rows = await database
+      .select({ key: systemSetting.key, value: systemSetting.value })
+      .from(systemSetting)
+      .where(inArray(systemSetting.key, plainKeys));
+    for (const row of rows) stored.set(row.key, row.value);
+  }
+  if (secretKeys.length > 0) {
+    const rows = await database
+      .select()
+      .from(systemSecret)
+      .where(inArray(systemSecret.key, secretKeys));
+    for (const row of rows) {
+      try {
+        stored.set(row.key, decrypt(row, secretAad.systemSecret(row.key)));
+      } catch (error) {
+        throw new SecretSettingUnreadableError(row.key, error);
+      }
     }
   }
+  for (const def of fromDatabase) {
+    if (!stored.has(def.key)) {
+      values[def.key] = def.default;
+      continue;
+    }
+    const value = stored.get(def.key);
+    if (!matchesDeclaredType(def, value))
+      throw new SettingValueError(`The stored value of the setting ${def.key} is invalid`);
+    values[def.key] = value;
+  }
   return values;
+}
+
+/** The value of one setting; see `resolveSettingValues`. */
+export async function resolveSetting(
+  key: string,
+  options: { database?: typeof db | null } = {},
+): Promise<unknown> {
+  return (await resolveSettingValues([key], options))[key];
+}
+
+/**
+ * The stored settings in effect (the environment does not set them) whose
+ * value the setting does not accept, for example a row edited by hand or a
+ * value saved before a later release narrowed the setting. Their readers
+ * refuse them; the API still starts, so an administrator can save a valid
+ * value. Secrets are not decrypted here.
+ */
+export async function invalidStoredSettings(database: typeof db = db): Promise<Set<string>> {
+  const keys = SETTING_DEFS.filter(
+    (def) => !def.secret && !def.envOnly && settingFromEnvironment(def) === undefined,
+  ).map((def) => def.key);
+  const invalid = new Set<string>();
+  if (keys.length === 0) return invalid;
+  const rows = await database
+    .select({ key: systemSetting.key, value: systemSetting.value })
+    .from(systemSetting)
+    .where(inArray(systemSetting.key, keys));
+  for (const row of rows) {
+    if (!matchesDeclaredType(settingDefinition(row.key), row.value)) invalid.add(row.key);
+  }
+  return invalid;
+}
+
+/** Store the given settings in one transaction, attributed to the acting
+ * administrator, or to nobody when no account acts. Secret
+ * settings are encrypted into `system_secret`; an empty value removes one. */
+export async function saveSystemSettings(
+  entries: ReadonlyArray<{ key: string; value: unknown }>,
+  actorId: string | null,
+  database: typeof db = db,
+): Promise<void> {
+  const updatedByUserId = actorUserIdOrNull(actorId);
+  for (const { key, value } of entries) {
+    const def = settingDefinition(key);
+    if (def.envOnly) throw new Error(`The setting ${key} is set only by the environment`);
+    if (!matchesDeclaredType(def, value)) throw new SettingValueError(`Invalid value for ${key}`);
+  }
+  const secrets = entries.filter(({ key }) => isSecretSetting(key));
+  if (secrets.some(({ value }) => value !== "")) assertSecretsConfigured();
+  await database.transaction(async (transaction) => {
+    for (const { key, value } of entries) {
+      if (isSecretSetting(key)) {
+        if (value === "") {
+          await transaction.delete(systemSecret).where(eq(systemSecret.key, key));
+          continue;
+        }
+        const sealed = encrypt(value as string, secretAad.systemSecret(key));
+        await transaction
+          .insert(systemSecret)
+          .values({ key, ...sealed, updatedByUserId })
+          .onConflictDoUpdate({
+            target: systemSecret.key,
+            set: { ...sealed, updatedAt: new Date(), updatedByUserId },
+          });
+        continue;
+      }
+      await transaction
+        .insert(systemSetting)
+        .values({ key, value: value as never, updatedByUserId })
+        .onConflictDoUpdate({
+          target: systemSetting.key,
+          set: { value: value as never, updatedAt: new Date(), updatedByUserId },
+        });
+    }
+  });
 }
 
 /** The stored secret settings among `keys` that cannot be decrypted, without throwing. */
@@ -640,7 +326,7 @@ async function unreadableSecretSettings(
   const rows = await database.select().from(systemSecret).where(inArray(systemSecret.key, keys));
   for (const row of rows) {
     try {
-      decrypt(row.ciphertext, row.iv, row.tag);
+      decrypt(row, secretAad.systemSecret(row.key));
     } catch {
       unreadable.add(row.key);
     }
@@ -648,54 +334,41 @@ async function unreadableSecretSettings(
   return unreadable;
 }
 
-export async function resolveSettings(database: typeof db = db): Promise<SettingsGroup[]> {
-  const dbRows = await database.select().from(systemSettings);
-  const dbMap: Record<string, unknown> = Object.fromEntries(
-    dbRows.filter((r) => !isSecretSetting(r.key)).map((r) => [r.key, r.value]),
+/**
+ * Every setting with its effective value and where it comes from, for the
+ * administration. A secret is shown only as configured (`***`), never with
+ * its value.
+ */
+export async function settingsView(database: typeof db = db): Promise<SettingsGroup[]> {
+  // An invalid stored value is shown as its default and marked, so the
+  // editor stays usable to replace it.
+  const invalid = await invalidStoredSettings(database);
+  const values = await resolveSettingValues(
+    SETTING_DEFS.filter((def) => !def.secret && !invalid.has(def.key)).map((def) => def.key),
+    { database },
   );
-  // A stored secret is shown only as configured, never with its value. One in
-  // effect (no environment override) is also checked against the current key,
-  // so the editor can say when a restore brought it back without its key.
+  for (const key of invalid) values[key] = settingDefinition(key).default;
+  const storedRows = await database.select({ key: systemSetting.key }).from(systemSetting);
+  const storedKeys = new Set(storedRows.map((row) => row.key));
   const storedSecrets = await storedSecretSettingKeys(database);
-  for (const key of storedSecrets) dbMap[key] = "***";
+  // A stored secret in effect (no environment override) is checked against the
+  // current key, so the editor can say when a restore brought it back without its key.
   const unreadable = await unreadableSecretSettings(
     SETTING_DEFS.filter(
-      (def) => def.secret && storedSecrets.has(def.key) && !(def.env && process.env[def.env]),
+      (def) =>
+        def.secret && storedSecrets.has(def.key) && settingFromEnvironment(def) === undefined,
     ).map((def) => def.key),
     database,
   );
 
   const grouped: Record<string, ResolvedSetting[]> = {};
-
   for (const def of SETTING_DEFS) {
-    const envVal = def.env ? process.env[def.env] : undefined;
-    const dbVal = dbMap[def.key];
-    const resolved = resolveSettingPrecedence({
-      envValue: envVal,
-      databaseValue: dbVal,
-      defaultValue: def.default,
-      parseEnv: (raw) => parseEnvValue(raw, def),
-      validate: (candidate): candidate is unknown => matchesDeclaredType(def, candidate),
-    });
-    let { value } = resolved;
-    const { source } = resolved;
-
-    if (resolved.invalidEnv) {
-      appLogger.add({
-        level: "warn",
-        source: "privacy-settings",
-        msg: "Invalid legal setting ignored",
-        time: Date.now(),
-        metadata: { setting: def.key, reason: "invalid-value" },
-      });
-    }
-
-    // Never send a raw secret to the client, whatever its source. "***" is a
-    // "configured" sentinel so the UI can show the field as set + locked
-    // without exposing the value (the real value stays in env / the DB).
-    if (def.secret && value !== "") {
-      value = "***";
-    }
+    const fromEnv = settingFromEnvironment(def) !== undefined;
+    const stored = def.secret ? storedSecrets.has(def.key) : storedKeys.has(def.key);
+    const source: SettingSource = fromEnv ? "env" : stored && !def.envOnly ? "database" : "default";
+    let value: unknown;
+    if (def.secret) value = fromEnv || stored ? "***" : "";
+    else value = values[def.key];
 
     const groupSettings = grouped[def.group] ?? [];
     grouped[def.group] = groupSettings;
@@ -706,22 +379,23 @@ export async function resolveSettings(database: typeof db = db): Promise<Setting
       label: def.label,
       description: def.description,
       type: def.type,
-      options: def.options,
+      options: def.options ? [...def.options] : undefined,
       secret: def.secret ?? false,
       value,
       source,
-      envVar: def.env,
-      envOverride: source === "env",
+      envVar: settingEnvVar(def),
+      // A setting only the environment sets is never editable here.
+      envOverride: fromEnv || def.envOnly === true,
       showWhen: def.showWhen,
-      ...(source === "database" && unreadable.has(def.key) ? { unreadable: true } : {}),
+      ...(source === "database" && (unreadable.has(def.key) || invalid.has(def.key))
+        ? { unreadable: true }
+        : {}),
     });
   }
 
-  const groups = Object.entries(GROUP_LABELS).map(([id, label]) => ({
+  return Object.entries(GROUP_LABELS).map(([id, label]) => ({
     id,
     label,
     settings: grouped[id] ?? [],
   }));
-
-  return groups;
 }

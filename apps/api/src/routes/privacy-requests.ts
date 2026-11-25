@@ -51,7 +51,7 @@ function publicRequest(row: Record<string, unknown>): Record<string, unknown> {
     id: row.id,
     kind: row.kind,
     channel: row.channel,
-    state: row.state,
+    status: row.status,
     locale: row.locale,
     timeZone: row.timeZone,
     receivedAt: row.receivedAt,

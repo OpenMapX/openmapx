@@ -11,6 +11,7 @@
 // pre-cache the offline page + manifest into APP_SHELL_CACHE, which is enough
 // for the goals (offline fallback, installable). The Next build manifest is
 // not auto-precached; runtime caches handle everything else lazily.
+import { CACHE_STORAGE_NAMES } from "@openmapx/core/storage-keys";
 import { defaultCache } from "@serwist/next/worker";
 import {
   CacheFirst,
@@ -42,6 +43,7 @@ import {
   SCRIPT_FONT_CACHE,
   STATIC_OFFLINE_FALLBACK_URL,
   STREET_LEVEL_IMAGERY_TILE_CACHE,
+  STYLE_ASSETS_CACHE_PREFIX,
   VECTOR_TILE_CACHE,
 } from "./lib/swCaches";
 
@@ -61,7 +63,7 @@ const APP_SHELL_CACHE = `${APP_SHELL_CACHE_PREFIX}${__SW_BUILD_ID__}`;
 // too, so a deploy that changes the self-hosted style serves the new one on the
 // next load instead of the worker's stale copy. Old style caches are pruned on
 // activate.
-const STYLE_CACHE = `style-assets-${__SW_BUILD_ID__}`;
+const STYLE_CACHE = `${STYLE_ASSETS_CACHE_PREFIX}${__SW_BUILD_ID__}`;
 // Only a distinct, credential-free offline document is retained. The requested
 // navigation (including `/`) is never stored or looked up in Cache Storage.
 const BUNDLED_MAP_ASSETS = [
@@ -77,13 +79,13 @@ const MAPLIBRE_RUNTIME_ASSETS = [
 const OPTIONAL_BUNDLED_MAP_ASSETS = ["/styles/sprite@2x.json", "/styles/sprite@2x.png"] as const;
 const APP_SHELL_URLS = [OFFLINE_URL, "/manifest.webmanifest", ...BUNDLED_MAP_ASSETS];
 const RECENT_MAP_DATA_CACHE_NAMES = [
-  "api-geodata",
-  "api-category-search",
-  "api-autocomplete",
-  "api-weather",
-  "api-photos",
-  "api-landmark-cells",
-  "api-landmark-models",
+  CACHE_STORAGE_NAMES.apiGeodata,
+  CACHE_STORAGE_NAMES.apiCategorySearch,
+  CACHE_STORAGE_NAMES.apiAutocomplete,
+  CACHE_STORAGE_NAMES.apiWeather,
+  CACHE_STORAGE_NAMES.apiPhotos,
+  CACHE_STORAGE_NAMES.apiLandmarkCells,
+  CACHE_STORAGE_NAMES.apiLandmarkModels,
 ] as const;
 
 /** Keep only responses the server allows to be stored (`no-store` answers stay out). */
@@ -91,7 +93,7 @@ const storableOnly = {
   cacheWillUpdate: async ({ response }: { response: Response }) =>
     responseAllowsStorage(response) ? response : null,
 };
-const RECENT_MAP_DATA_CACHE_PREFERENCE_CACHE = "openmapx-preferences";
+const RECENT_MAP_DATA_CACHE_PREFERENCE_CACHE = CACHE_STORAGE_NAMES.preferences;
 const RECENT_MAP_DATA_CACHE_PREFERENCE_URL = "/__openmapx/recent-map-data-cache-enabled";
 
 let recentMapDataCacheEnabled: boolean | null = null;
@@ -227,7 +229,7 @@ const serwist = new Serwist({
       {
         matcher: /^\/_next\/static\/.*/i,
         handler: new CacheFirst({
-          cacheName: "static-assets",
+          cacheName: CACHE_STORAGE_NAMES.staticAssets,
           plugins: [new ExpirationPlugin({ maxEntries: 500, maxAgeSeconds: 30 * 24 * 60 * 60 })],
         }),
       },
@@ -280,7 +282,7 @@ const serwist = new Serwist({
         matcher: ({ url }: { url: URL }) =>
           url.pathname === "/api/integrations/landmark-models/coverage",
         handler: new NetworkFirst({
-          cacheName: "api-landmark-coverage",
+          cacheName: CACHE_STORAGE_NAMES.apiLandmarkCoverage,
           plugins: [storableOnly, new ExpirationPlugin({ maxEntries: 1 })],
         }),
       },
@@ -289,7 +291,7 @@ const serwist = new Serwist({
           /^\/api\/integrations\/landmark-models\/cells\//.test(url.pathname),
         handler: withRecentMapDataCache(
           new CacheFirst({
-            cacheName: "api-landmark-cells",
+            cacheName: CACHE_STORAGE_NAMES.apiLandmarkCells,
             plugins: [
               storableOnly,
               new ExpirationPlugin({
@@ -306,7 +308,7 @@ const serwist = new Serwist({
           /^\/api\/integrations\/landmark-models\/models\//.test(url.pathname),
         handler: withRecentMapDataCache(
           new CacheFirst({
-            cacheName: "api-landmark-models",
+            cacheName: CACHE_STORAGE_NAMES.apiLandmarkModels,
             plugins: [
               storableOnly,
               new ExpirationPlugin({
@@ -347,7 +349,7 @@ const serwist = new Serwist({
         matcher: ({ url }: { url: URL }) => isDirectionsApiPath(url.pathname),
         handler: withRecentMapDataCache(
           new NetworkFirst({
-            cacheName: "api-geodata",
+            cacheName: CACHE_STORAGE_NAMES.apiGeodata,
             plugins: [
               {
                 cacheWillUpdate: async ({ response }) =>
@@ -365,7 +367,7 @@ const serwist = new Serwist({
           /\/api\/integrations\/geocoding\/geocode/.test(url.pathname),
         handler: withRecentMapDataCache(
           new StaleWhileRevalidate({
-            cacheName: "api-geodata",
+            cacheName: CACHE_STORAGE_NAMES.apiGeodata,
             plugins: [new ExpirationPlugin({ maxEntries: 500, maxAgeSeconds: 24 * 60 * 60 })],
           }),
         ),
@@ -377,7 +379,7 @@ const serwist = new Serwist({
           /\/api\/places\//.test(url.pathname) && !url.pathname.includes("/places/search"),
         handler: withRecentMapDataCache(
           new NetworkFirst({
-            cacheName: "api-geodata",
+            cacheName: CACHE_STORAGE_NAMES.apiGeodata,
             networkTimeoutSeconds: 5,
             plugins: [new ExpirationPlugin({ maxEntries: 500, maxAgeSeconds: 24 * 60 * 60 })],
           }),
@@ -389,7 +391,7 @@ const serwist = new Serwist({
         matcher: /\/api\/places\/search/,
         handler: withRecentMapDataCache(
           new NetworkFirst({
-            cacheName: "api-category-search",
+            cacheName: CACHE_STORAGE_NAMES.apiCategorySearch,
             networkTimeoutSeconds: 5,
             plugins: [new ExpirationPlugin({ maxEntries: 100, maxAgeSeconds: 5 * 60 })],
           }),
@@ -401,7 +403,7 @@ const serwist = new Serwist({
         matcher: /\/api\/integrations\/geocoding\/autocomplete/,
         handler: withRecentMapDataCache(
           new NetworkFirst({
-            cacheName: "api-autocomplete",
+            cacheName: CACHE_STORAGE_NAMES.apiAutocomplete,
             networkTimeoutSeconds: 3,
             plugins: [new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 60 * 60 })],
           }),
@@ -413,7 +415,7 @@ const serwist = new Serwist({
         matcher: /\/api\/integrations\/weather\//,
         handler: withRecentMapDataCache(
           new StaleWhileRevalidate({
-            cacheName: "api-weather",
+            cacheName: CACHE_STORAGE_NAMES.apiWeather,
             plugins: [new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 30 * 60 })],
           }),
         ),
@@ -424,7 +426,7 @@ const serwist = new Serwist({
         matcher: /\/api\/integrations\/photos\//,
         handler: withRecentMapDataCache(
           new StaleWhileRevalidate({
-            cacheName: "api-photos",
+            cacheName: CACHE_STORAGE_NAMES.apiPhotos,
             plugins: [new ExpirationPlugin({ maxEntries: 300, maxAgeSeconds: 7 * 24 * 60 * 60 })],
           }),
         ),

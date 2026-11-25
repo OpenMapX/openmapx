@@ -40,7 +40,7 @@ vi.mock("./db/index.js", () => {
 vi.mock("./db/schema.js", () => ({
   integrationConfig: { integrationId: "integrationId", config: "config" },
   integrationSecret: {},
-  systemSettings: {},
+  systemSetting: {},
 }));
 
 vi.mock("./services/attribution/index.js", () => ({
@@ -169,8 +169,8 @@ function lastIndexedSourceIds(): string[] {
 }
 
 beforeEach(async () => {
-  vi.stubEnv("OPENMAPX_ALLOW_NONCOMMERCIAL", "false");
-  vi.stubEnv("OPENMAPX_ALLOW_GREY_AREA", "");
+  vi.stubEnv("DATA_USE_ALLOW_NON_COMMERCIAL", "false");
+  vi.stubEnv("DATA_USE_ALLOW_GREY_AREA", "");
   setIntegrationSourcesChangedHook(() => {
     invalidateDataUsePolicy();
     void refreshDataUsePolicy();

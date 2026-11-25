@@ -1,10 +1,16 @@
 "use client";
 
-import { API_ENDPOINTS, type MutationHookOptions } from "@openmapx/core";
 import {
+  API_ENDPOINTS,
+  INDEXED_DB_DATABASES,
+  type MutationHookOptions,
+  STORAGE_KEYS,
+} from "@openmapx/core";
+import {
+  CLAIM_VERSION,
   type DeviceKey,
+  indexedDbDeviceKeyStore,
   loadOrCreateDeviceKey,
-  localStorageDeviceKeyStore,
   type RecordRef,
   type ReportClaim,
   type SubClaimBody,
@@ -17,15 +23,33 @@ import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { generateNonce } from "./claim";
 import type { SubClaimAction } from "./relay";
 
-const GRANT_STORAGE_KEY = "openconditions.contrib.grant";
+const GRANT_STORAGE_KEY = STORAGE_KEYS.crowdGrant.key;
+/** Version of the cached grant record; a record of any other version is ignored. */
+const GRANT_RECORD_VERSION = 1;
 // Reporting grants live ~24h; treat a cached grant as expired after 23h so we
 // re-enroll before the contributions-api would reject it, avoiding a failed
 // submit on a stale grant.
 const GRANT_TTL_MS = 23 * 60 * 60 * 1000;
 
+/** A reporting grant, bound to the key it was issued for. */
 interface CachedGrant {
+  version: typeof GRANT_RECORD_VERSION;
+  keyId: string;
   reportingGrant: unknown;
   issuedAt: number;
+}
+
+/**
+ * The device identity in IndexedDB, a non-extractable key pair. `onClosed`
+ * runs when another context deletes the database, for example on account
+ * deletion.
+ */
+export function crowdDeviceKeyStore(onClosed?: () => void) {
+  return indexedDbDeviceKeyStore({
+    databaseName: INDEXED_DB_DATABASES.crowd,
+    recordKey: STORAGE_KEYS.crowdDeviceKey.key,
+    onClosed,
+  });
 }
 
 /** Entitlement returned by POST /contrib/enroll (relayed via /enroll). */
@@ -36,20 +60,32 @@ interface Entitlement {
   reason?: string;
 }
 
-function loadCachedGrant(): CachedGrant | null {
+/** The cached grant for this key, or null when there is none or it belongs to another key. */
+function loadCachedGrant(keyId: string): CachedGrant | null {
   try {
     const raw = globalThis.localStorage?.getItem(GRANT_STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as CachedGrant;
-    if (typeof parsed?.issuedAt !== "number" || parsed.reportingGrant == null) return null;
-    return parsed;
+    const parsed = JSON.parse(raw) as Partial<CachedGrant> | null;
+    if (
+      parsed?.version !== GRANT_RECORD_VERSION ||
+      parsed.keyId !== keyId ||
+      typeof parsed.issuedAt !== "number" ||
+      parsed.reportingGrant == null
+    )
+      return null;
+    return parsed as CachedGrant;
   } catch {
     return null;
   }
 }
 
-function storeGrant(reportingGrant: unknown): CachedGrant {
-  const entry: CachedGrant = { reportingGrant, issuedAt: Date.now() };
+function storeGrant(keyId: string, reportingGrant: unknown): CachedGrant {
+  const entry: CachedGrant = {
+    version: GRANT_RECORD_VERSION,
+    keyId,
+    reportingGrant,
+    issuedAt: Date.now(),
+  };
   try {
     globalThis.localStorage?.setItem(GRANT_STORAGE_KEY, JSON.stringify(entry));
   } catch {
@@ -58,16 +94,17 @@ function storeGrant(reportingGrant: unknown): CachedGrant {
   return entry;
 }
 
-function isFresh(entry: CachedGrant): boolean {
-  return Date.now() - entry.issuedAt < GRANT_TTL_MS;
+function isFresh(entry: CachedGrant, keyId: string): boolean {
+  return entry.keyId === keyId && Date.now() - entry.issuedAt < GRANT_TTL_MS;
 }
 
 /**
  * The device-local, pseudonymous signing identity for crowd reports plus its
  * reporting entitlement. There is no login: `loadOrCreateDeviceKey` mints a
- * P-256 key on first use (private JWK persisted in localStorage, never
+ * non-extractable P-256 key pair on first use (kept in IndexedDB, never
  * account-bound), and `ensureGrant` enrolls that key with the contributions-api
- * to obtain a `reportingGrant` — required to authorize every report/vote.
+ * to obtain a `reportingGrant` — required to authorize every report/vote. The
+ * cached grant names the key it was issued for and is used only with it.
  *
  * A no-attestation device MUST still enroll (per the OpenConditions ADR): the
  * enroll body carries a minimal `DeviceProof` of just `{ keyId }`; hardware
@@ -84,7 +121,15 @@ export function useContributorSession() {
 
   const ensureKey = useCallback(async (): Promise<DeviceKey> => {
     if (keyRef.current) return keyRef.current;
-    const key = await loadOrCreateDeviceKey(localStorageDeviceKeyStore());
+    // When the stored identity is deleted, stop signing with the copy held
+    // here; the next report mints a new, unrelated key.
+    const key = await loadOrCreateDeviceKey(
+      crowdDeviceKeyStore(() => {
+        keyRef.current = null;
+        grantRef.current = null;
+        setKeyId(null);
+      }),
+    );
     keyRef.current = key;
     setKeyId(key.keyId);
     return key;
@@ -105,7 +150,7 @@ export function useContributorSession() {
       if (entitlement?.reportingGrant == null) {
         throw new Error("Enroll returned no reportingGrant");
       }
-      const entry = storeGrant(entitlement.reportingGrant);
+      const entry = storeGrant(key.keyId, entitlement.reportingGrant);
       grantRef.current = entry;
       return entry.reportingGrant;
     },
@@ -113,13 +158,14 @@ export function useContributorSession() {
   );
 
   const ensureGrant = useCallback(async (): Promise<unknown> => {
-    if (grantRef.current && isFresh(grantRef.current)) return grantRef.current.reportingGrant;
-    const cached = loadCachedGrant();
-    if (cached && isFresh(cached)) {
+    const key = await ensureKey();
+    if (grantRef.current && isFresh(grantRef.current, key.keyId))
+      return grantRef.current.reportingGrant;
+    const cached = loadCachedGrant(key.keyId);
+    if (cached && isFresh(cached, key.keyId)) {
       grantRef.current = cached;
       return cached.reportingGrant;
     }
-    const key = await ensureKey();
     return enroll(key);
   }, [ensureKey, enroll]);
 
@@ -198,6 +244,7 @@ export function useVote() {
       const key = await ensureKey();
       const reportingGrant = await ensureGrant();
       const body: SubClaimBody = {
+        v: CLAIM_VERSION,
         subject,
         claimType: action,
         reportedAt: new Date().toISOString(),

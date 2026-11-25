@@ -50,7 +50,7 @@ function provenance(row: typeof adminJob.$inferSelect) {
     id: row.id,
     type: row.type,
     payload: row.payload,
-    createdBy: row.createdBy,
+    createdBy: row.createdByUserId,
   });
 }
 export async function prepareCoordinatorLifecycleIntent(
@@ -87,7 +87,7 @@ export async function prepareCoordinatorLifecycleIntent(
       !Number.isInteger(originalOrdinal) ||
       originalOrdinal < 0 ||
       originalOrdinal > 255 ||
-      row.type !== "service.bulk" ||
+      row.type !== "service.batch.run" ||
       payload.action !== "update" ||
       !Array.isArray(payload.serviceIds) ||
       payload.serviceIds[originalOrdinal] !== "data-manager" ||
@@ -165,7 +165,7 @@ export function assertRetainedCoordinatorLifecycleProvenance(
       ? row.type !== "service.apply" ||
         payload.service !== "data-manager" ||
         Object.keys(payload).some((k) => k !== "service" && k !== "_maintenanceRequest")
-      : row.type !== "service.bulk" ||
+      : row.type !== "service.batch.run" ||
         payload.action !== "update" ||
         !Array.isArray(payload.serviceIds) ||
         payload.serviceIds[fixed.originalOrdinal] !== "data-manager" ||

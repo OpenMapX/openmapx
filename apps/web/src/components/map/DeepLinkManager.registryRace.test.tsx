@@ -36,19 +36,19 @@ afterEach(() => {
 
 describe("DeepLinkManager before the overlay registry is initialized", () => {
   it("keeps the overlay params in the URL and applies them once the registry initializes", () => {
-    window.history.replaceState(null, "", "/?ov=weather&weather=wind");
+    window.history.replaceState(null, "", "/?overlay=weather&weather=wind");
     render(<DeepLinkManager />);
 
     // Nothing can be applied yet, but the link's intent must survive untouched.
     expect(isOverlayActive("weather")).toBe(false);
-    expect(window.location.search).toContain("ov=weather");
+    expect(window.location.search).toContain("overlay=weather");
     expect(window.location.search).toContain("weather=wind");
 
     act(() => initOverlayRegistry([WEATHER]));
 
     expect(isOverlayActive("weather")).toBe(true);
     expect(useWeatherStore.getState().activeSubLayer).toBe("wind");
-    expect(window.location.search).toContain("ov=weather");
+    expect(window.location.search).toContain("overlay=weather");
     expect(window.location.search).toContain("weather=wind");
     act(() => useWeatherStore.getState().closePanel());
     expect(isOverlayActive("weather")).toBe(false);

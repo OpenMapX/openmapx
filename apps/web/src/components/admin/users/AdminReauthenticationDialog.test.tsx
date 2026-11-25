@@ -39,7 +39,7 @@ beforeEach(() => {
   });
   mocks.start.mockImplementation(async (body: unknown) => ({
     data: {
-      challengeId: (body as { purpose: string }).purpose === "credentials.import" ? first : second,
+      challengeId: (body as { purpose: string }).purpose === "credential.import" ? first : second,
       expiresAt: new Date(Date.now() + 600000).toISOString(),
       loginPath: "/auth/admin",
     },
@@ -54,7 +54,7 @@ it.each([
 ])("preserves the reauthentication return route %s", async (path) => {
   window.history.replaceState(null, "", path);
   await startStoredAdminReauthentication("http://api.test", [
-    { purpose: "account.verify", targetId: "subject-a" },
+    { purpose: "user.email.verify", targetId: "subject-a" },
   ]);
   expect(readStoredAdminReauthentication("http://api.test")?.returnPath).toBe(path);
   await expect(completeStoredAdminReauthentication("http://api.test")).resolves.toBe(path);
@@ -62,7 +62,7 @@ it.each([
 it("captures the allowed tab while dropping unrelated public or private query keys", async () => {
   window.history.replaceState(null, "", "/admin/data/transit?tab=credentials&token=private");
   await startStoredAdminReauthentication("http://api.test", [
-    { purpose: "account.verify", targetId: "subject-a" },
+    { purpose: "user.email.verify", targetId: "subject-a" },
   ]);
   expect(readStoredAdminReauthentication("http://api.test")?.returnPath).toBe(
     "/admin/data/transit?tab=credentials",
@@ -80,11 +80,11 @@ it("starts the finite pair before login and stores no credentials", async () => 
       purposes={[
         {
           targetId: "candidate-a",
-          purpose: "credentials.import",
+          purpose: "credential.import",
           intentFingerprint: "a".repeat(64),
         },
         {
-          purpose: "transit.credentials",
+          purpose: "transit.credential.update",
           targetId: "catalog-a",
           intentFingerprint: "b".repeat(64),
         },
@@ -106,7 +106,7 @@ it("does not report completed proof on a failed start", async () => {
   const done = vi.fn();
   mount(
     <AdminReauthenticationDialog
-      purpose="account.verify"
+      purpose="user.email.verify"
       targetId="subject-a"
       onCompleted={done}
       onClose={vi.fn()}
@@ -124,7 +124,7 @@ it("completes exact stored references and restricts return to a fixed local surf
     key,
     JSON.stringify({
       phase: "login",
-      requests: [{ purpose: "account.verify", targetId: "a" }],
+      requests: [{ purpose: "user.email.verify", targetId: "a" }],
       challengeIds: [first],
       expiresAt: new Date(Date.now() + 600000).toISOString(),
       returnPath: "https://attacker.invalid",
@@ -138,7 +138,7 @@ it("resumes confirmation only for the matching completed intent", async () => {
     adminReauthStorageKey("http://api.test"),
     JSON.stringify({
       phase: "completed",
-      requests: [{ purpose: "account.verify", targetId: "subject-a" }],
+      requests: [{ purpose: "user.email.verify", targetId: "subject-a" }],
       challengeIds: [first],
       expiresAt: new Date(Date.now() + 600000).toISOString(),
       returnPath: "/admin/users",
@@ -147,7 +147,7 @@ it("resumes confirmation only for the matching completed intent", async () => {
   const done = vi.fn();
   mount(
     <AdminReauthenticationDialog
-      purpose="account.verify"
+      purpose="user.email.verify"
       targetId="subject-a"
       onCompleted={done}
       onClose={vi.fn()}
@@ -162,7 +162,7 @@ it("rejects expired stored ceremonies without attempting completion", async () =
     adminReauthStorageKey("http://api.test"),
     JSON.stringify({
       phase: "login",
-      requests: [{ purpose: "account.verify", targetId: "subject-a" }],
+      requests: [{ purpose: "user.email.verify", targetId: "subject-a" }],
       challengeIds: [first],
       expiresAt: new Date(Date.now() - 1).toISOString(),
       returnPath: "/admin/users",
@@ -189,12 +189,12 @@ it("does not expose a partial pair when its second start fails", async () => {
     <AdminReauthenticationDialog
       purposes={[
         {
-          purpose: "credentials.import",
+          purpose: "credential.import",
           targetId: "candidate-a",
           intentFingerprint: "a".repeat(64),
         },
         {
-          purpose: "transit.credentials",
+          purpose: "transit.credential.update",
           targetId: "catalog-a",
           intentFingerprint: "b".repeat(64),
         },
@@ -214,7 +214,7 @@ it("rechecks resumed proof against the current session before handing it to an a
     adminReauthStorageKey("http://api.test"),
     JSON.stringify({
       phase: "completed",
-      requests: [{ purpose: "account.verify", targetId: "subject-a" }],
+      requests: [{ purpose: "user.email.verify", targetId: "subject-a" }],
       challengeIds: [first],
       expiresAt: new Date(Date.now() + 600000).toISOString(),
       returnPath: "/admin/users",
@@ -222,13 +222,13 @@ it("rechecks resumed proof against the current session before handing it to an a
   );
   mocks.complete.mockResolvedValue({
     status: 409,
-    data: { error: "REAUTHENTICATION_FAILED" },
+    data: { error: "Reauthentication failed", code: "REAUTHENTICATION_FAILED" },
     headers: new Headers(),
   });
   const done = vi.fn();
   mount(
     <AdminReauthenticationDialog
-      purpose="account.verify"
+      purpose="user.email.verify"
       targetId="subject-a"
       onCompleted={done}
       onClose={vi.fn()}

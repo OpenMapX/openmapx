@@ -27,7 +27,6 @@
     "url": "https://api.brightsky.dev/"
   },
   "quality": "built-in",
-  "category": "Weather",
   "dataSources": [
     {
       "sourceId": "bright-sky",

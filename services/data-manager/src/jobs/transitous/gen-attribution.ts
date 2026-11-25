@@ -22,7 +22,7 @@ export const run: StageFn = async (ctx) => {
         // A deliberately partial dev/test catalog has no candidate at all.
         // Once a config exists, however, attribution is part of the immutable
         // tuple and must fail closed.
-        status: existsSync(configPath) ? "error" : "skipped",
+        status: existsSync(configPath) ? "failed" : "skipped",
         startedAt,
         finishedAt: ctx.now(),
         durationMs: Date.now() - start,
@@ -53,7 +53,7 @@ export const run: StageFn = async (ctx) => {
 
     return {
       stage: "gen-attribution",
-      status: "ok",
+      status: "succeeded",
       startedAt,
       finishedAt: ctx.now(),
       durationMs: Date.now() - start,
@@ -67,7 +67,7 @@ export const run: StageFn = async (ctx) => {
     const err = error as Error;
     return {
       stage: "gen-attribution",
-      status: "error",
+      status: "failed",
       startedAt,
       finishedAt: ctx.now(),
       durationMs: Date.now() - start,

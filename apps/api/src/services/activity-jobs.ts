@@ -6,12 +6,18 @@ import {
   createDataManagerTransport,
   requestDataExecutionCancellation,
 } from "@openmapx/core/data-manager-sdk";
+import {
+  ACTIVE_JOB_STATUSES,
+  type DataJobStatus,
+  type DataJobTrigger,
+  type JobStatus,
+} from "@openmapx/core/jobs";
 import { envString } from "@openmapx/core/server-env";
 import { readDataManagerToken } from "@openmapx/core/service-secret-files";
 import { and, count, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { unionAll } from "drizzle-orm/pg-core";
 import { db } from "../db";
-import { adminJob, adminJobLog, dataManagerJobStages, dataManagerJobs } from "../db/schema";
+import { adminJob, adminJobLog, dataManagerJob, dataManagerJobStage } from "../db/schema";
 import { type ActorSummary, resolveActors } from "../utils/resolve-actor";
 import { publicAdminJobPayload } from "./admin-job-failure";
 
@@ -44,59 +50,45 @@ interface ActivityJobRow {
   error: string | null;
   progress: number | null;
   createdBy: string | null;
-  triggeredBy: string | null;
+  trigger: DataJobTrigger | null;
+  triggeredByUserId: string | null;
   createdAt: Date;
   startedAt: Date | null;
   finishedAt: Date | null;
   cancelable: boolean;
 }
 
-const APPLICATION_STATUSES: Record<ActivityJobFilter, string[]> = {
-  active: ["queued", "running", "cancel_pending"],
-  completed: ["success", "canceled"],
+const APPLICATION_STATUSES: Record<ActivityJobFilter, JobStatus[]> = {
+  active: [...ACTIVE_JOB_STATUSES],
+  completed: ["succeeded", "cancelled"],
   failed: ["failed"],
 };
 
-const DATA_MANAGER_STATUSES: Record<ActivityJobFilter, string[]> = {
-  active: ["queued", "running", "cancel_pending"],
-  completed: ["ok", "partial", "canceled"],
-  failed: ["error", "interrupted"],
+const DATA_MANAGER_STATUSES: Record<ActivityJobFilter, DataJobStatus[]> = {
+  active: [...ACTIVE_JOB_STATUSES],
+  completed: ["succeeded", "partially_succeeded", "cancelled"],
+  failed: ["failed"],
 };
 
-export function normalizeDataManagerJobStatus(status: string): string {
-  if (status === "ok") return "success";
-  if (status === "error") return "failed";
-  return status;
-}
-
-export function parseDataManagerActor(triggeredBy: string | null): {
-  userId: string | null;
-  label: string;
-} {
-  if (!triggeredBy) return { userId: null, label: "System" };
-
-  for (const prefix of ["api:user:", "manual:admin:", "manual:user:"]) {
-    if (triggeredBy.startsWith(prefix)) {
-      return { userId: triggeredBy.slice(prefix.length) || null, label: "Administrator" };
-    }
+/** Who started a data job, as the Activity list names it. */
+export function dataManagerActor(
+  trigger: DataJobTrigger,
+  triggeredByUserId: string | null,
+): { userId: string | null; label: string } {
+  switch (trigger) {
+    case "api":
+      return triggeredByUserId
+        ? { userId: triggeredByUserId, label: "Administrator" }
+        : { userId: null, label: "API" };
+    case "agent":
+      return { userId: null, label: "Operations agent" };
+    case "cli":
+      return { userId: null, label: "Host CLI" };
+    case "cron":
+      return { userId: null, label: "Scheduled" };
+    case "bootstrap":
+      return { userId: null, label: "Bootstrap" };
   }
-
-  if (triggeredBy === "cron" || triggeredBy.includes("data-manager-cron")) {
-    return { userId: null, label: "Scheduled" };
-  }
-  if (triggeredBy === "bootstrap") return { userId: null, label: "Bootstrap" };
-  // The data-manager stores its scheduled runs as `cron:<scheduler>`.
-  if (triggeredBy === "data-manager-auto-bump" || triggeredBy === "cron:data-manager-auto-bump") {
-    return { userId: null, label: "Automatic version bump" };
-  }
-
-  return {
-    userId: null,
-    label: triggeredBy
-      .replace(/^api:/, "")
-      .replace(/^manual:/, "")
-      .replace(/[-_:]+/g, " "),
-  };
 }
 
 function applicationWhere(filter?: ActivityJobFilter) {
@@ -105,15 +97,11 @@ function applicationWhere(filter?: ActivityJobFilter) {
 
 function dataManagerWhere(filter?: ActivityJobFilter) {
   if (!filter) return undefined;
-  const ordinary = inArray(dataManagerJobs.status, DATA_MANAGER_STATUSES[filter]);
-  return filter === "active"
-    ? or(ordinary, dataManagerRecoveryPending())
-    : filter === "failed"
-      ? and(ordinary, sql`NOT (${dataManagerRecoveryPending()})`)
-      : ordinary;
+  const ordinary = inArray(dataManagerJob.status, DATA_MANAGER_STATUSES[filter]);
+  return filter === "active" ? or(ordinary, dataManagerRecoveryPending()) : ordinary;
 }
 function dataManagerRecoveryPending() {
-  return sql<boolean>`coalesce(${dataManagerJobs.status}='interrupted' AND ${dataManagerJobs.finishedAt} IS NULL AND ${dataManagerJobs.executionState}->>'publication'='unknown',false)`;
+  return sql<boolean>`coalesce(${dataManagerJob.status}='interrupted' AND ${dataManagerJob.finishedAt} IS NULL AND ${dataManagerJob.executionState}->>'publication'='unknown',false)`;
 }
 function currentDataManagerMutation(job: {
   status: string;
@@ -136,13 +124,14 @@ function applicationSelect(filter?: ActivityJobFilter) {
     .select({
       source: sql<ActivityJobSource>`'application'::text`.as("source"),
       id: adminJob.id,
-      type: adminJob.type,
-      status: adminJob.status,
+      type: sql<string>`${adminJob.type}`.as("type"),
+      status: sql<string>`${adminJob.status}`.as("status"),
       payload: adminJob.payload,
       error: adminJob.error,
       progress: adminJob.progress,
-      createdBy: adminJob.createdBy,
-      triggeredBy: sql<string | null>`null::text`.as("triggered_by"),
+      createdBy: adminJob.createdByUserId,
+      trigger: sql<DataJobTrigger | null>`null::text`.as("trigger"),
+      triggeredByUserId: sql<string | null>`null::text`.as("triggered_by_user_id"),
       createdAt: adminJob.createdAt,
       startedAt: adminJob.startedAt,
       finishedAt: adminJob.finishedAt,
@@ -156,27 +145,26 @@ function dataManagerSelect(filter?: ActivityJobFilter) {
   return db
     .select({
       source: sql<ActivityJobSource>`'data-manager'::text`.as("source"),
-      id: dataManagerJobs.id,
-      type: dataManagerJobs.kind,
-      status: sql<string>`case
-        when ${dataManagerJobs.status} = 'ok' then 'success'
-        when ${dataManagerJobs.status} = 'error' then 'failed'
-        else ${dataManagerJobs.status}
-      end`.as("status"),
-      payload: sql<unknown>`${dataManagerJobs.executionInput}`.as("payload"),
+      id: dataManagerJob.id,
+      type: dataManagerJob.kind,
+      status: sql<string>`${dataManagerJob.status}`.as("status"),
+      payload: sql<unknown>`${dataManagerJob.executionInput}`.as("payload"),
       error: sql<string | null>`null::text`.as("error"),
       progress: sql<number | null>`null::integer`.as("progress"),
       createdBy: sql<string | null>`null::text`.as("created_by"),
-      triggeredBy: dataManagerJobs.triggeredBy,
-      createdAt: dataManagerJobs.admittedAt,
-      startedAt: dataManagerJobs.admittedAt,
-      finishedAt: dataManagerJobs.finishedAt,
+      trigger: sql<DataJobTrigger | null>`${dataManagerJob.trigger}`.as("trigger"),
+      triggeredByUserId: sql<string | null>`${dataManagerJob.triggeredByUserId}`.as(
+        "triggered_by_user_id",
+      ),
+      createdAt: dataManagerJob.admittedAt,
+      startedAt: dataManagerJob.admittedAt,
+      finishedAt: dataManagerJob.finishedAt,
       cancelable:
-        sql<boolean>`(${dataManagerJobs.status} IN ('queued','running','cancel_pending') OR ${dataManagerRecoveryPending()})`.as(
+        sql<boolean>`(${dataManagerJob.status} IN ('queued','running','cancel_pending') OR ${dataManagerRecoveryPending()})`.as(
           "cancelable",
         ),
     })
-    .from(dataManagerJobs)
+    .from(dataManagerJob)
     .where(dataManagerWhere(filter));
 }
 
@@ -196,21 +184,19 @@ export async function listActivityJobs(options: {
       .limit(limit)
       .offset(offset),
     db.select({ total: count() }).from(adminJob).where(applicationWhere(options.filter)),
-    db.select({ total: count() }).from(dataManagerJobs).where(dataManagerWhere(options.filter)),
+    db.select({ total: count() }).from(dataManagerJob).where(dataManagerWhere(options.filter)),
   ]);
 
   const typedRows = rows as ActivityJobRow[];
-  const actorIds = typedRows.map((row) =>
-    row.source === "application" ? row.createdBy : parseDataManagerActor(row.triggeredBy).userId,
-  );
-  const actors = await resolveActors(actorIds);
+  const actorOf = (row: ActivityJobRow) =>
+    row.source === "data-manager" && row.trigger
+      ? dataManagerActor(row.trigger, row.triggeredByUserId)
+      : { userId: row.createdBy, label: "System" };
+  const actors = await resolveActors(typedRows.map((row) => actorOf(row).userId));
 
   return {
     jobs: typedRows.map((row) => {
-      const parsedActor =
-        row.source === "data-manager"
-          ? parseDataManagerActor(row.triggeredBy)
-          : { userId: row.createdBy, label: "System" };
+      const parsedActor = actorOf(row);
       const createdBy = parsedActor.userId;
       return {
         source: row.source,
@@ -238,7 +224,13 @@ export async function getActivityJob(id: string, source: ActivityJobSource) {
     const [row] = await db.select().from(adminJob).where(eq(adminJob.id, id)).limit(1);
     if (!row) return null;
     // The runner's protocol state and log accounting never leave the API.
-    const { protocol: _protocol, logEvents: _events, logBytes: _bytes, ...job } = row;
+    const {
+      protocol: _protocol,
+      logEvents: _events,
+      logBytes: _bytes,
+      createdByUserId: createdBy,
+      ...job
+    } = row;
     const logs = await db
       .select({
         jobId: adminJobLog.jobId,
@@ -252,29 +244,30 @@ export async function getActivityJob(id: string, source: ActivityJobSource) {
       .orderBy(adminJobLog.seq);
     return {
       ...job,
+      createdBy,
       result: job.result,
       payload: publicAdminJobPayload(job.type, job.payload),
       source,
-      actorLabel: job.createdBy ? "Administrator" : "System",
+      actorLabel: createdBy ? "Administrator" : "System",
       cancelable: job.status === "queued" || job.status === "running",
       logs,
       stages: [],
     };
   }
 
-  const [job] = await db.select().from(dataManagerJobs).where(eq(dataManagerJobs.id, id)).limit(1);
+  const [job] = await db.select().from(dataManagerJob).where(eq(dataManagerJob.id, id)).limit(1);
   if (!job) return null;
   const stages = await db
     .select()
-    .from(dataManagerJobStages)
-    .where(eq(dataManagerJobStages.jobId, id))
-    .orderBy(dataManagerJobStages.startedAt);
-  const actor = parseDataManagerActor(job.triggeredBy);
+    .from(dataManagerJobStage)
+    .where(eq(dataManagerJobStage.jobId, id))
+    .orderBy(dataManagerJobStage.startedAt);
+  const actor = dataManagerActor(job.trigger, job.triggeredByUserId);
   return {
     source,
     id: String(job.id),
     type: job.kind,
-    status: normalizeDataManagerJobStatus(job.status),
+    status: job.status,
     payload: job.executionInput,
     result: null,
     error: null,
@@ -295,7 +288,7 @@ export async function getActivityJob(id: string, source: ActivityJobSource) {
 /** Load the receiver-owned immutable tuple; browser parameters select only the
  * visible job. The receiver persists cancellation before signaling its worker. */
 export async function cancelDataManagerActivityJob(id: string): Promise<boolean> {
-  const [job] = await db.select().from(dataManagerJobs).where(eq(dataManagerJobs.id, id)).limit(1);
+  const [job] = await db.select().from(dataManagerJob).where(eq(dataManagerJob.id, id)).limit(1);
   if (
     !job ||
     !currentDataManagerMutation(job) ||

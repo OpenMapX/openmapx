@@ -12,13 +12,13 @@ describe.skipIf(skipE2e)("Overture schema in PostGIS", () => {
     try {
       await pg.sql.unsafe(buildSchemaDDL("overture_places"));
       await pg.sql.unsafe(
-        `INSERT INTO overture_places.conflation_state (release, region, place_count, status, sources_catalogue)
-         VALUES ('2026-07-22.0', 'europe/germany/berlin', 100, 'pending', '[{"sourceId":"overture","name":"Overture Maps"}]')`,
+        `INSERT INTO overture_places.conflation_state (release, region, place_count, status, sources_catalogue, schema_version)
+         VALUES ('2026-07-22.0', 'europe/germany/berlin', 100, 'pending', '[{"sourceId":"overture","name":"Overture Maps"}]', 1)`,
       );
       await expect(
         pg.sql.unsafe(
-          `INSERT INTO overture_places.conflation_state (release, region, place_count, status, sources_catalogue)
-           VALUES ('2026-07-22.0', 'europe/germany/berlin', 100, 'pending', '[{"sourceId":"overture","name":"Overture Maps"}]')`,
+          `INSERT INTO overture_places.conflation_state (release, region, place_count, status, sources_catalogue, schema_version)
+           VALUES ('2026-07-22.0', 'europe/germany/berlin', 100, 'pending', '[{"sourceId":"overture","name":"Overture Maps"}]', 1)`,
         ),
       ).rejects.toMatchObject({ code: "23505" });
 
@@ -129,14 +129,14 @@ describe.skipIf(skipE2e)("Overture schema in PostGIS", () => {
       ).rejects.toThrow(/Geometry type \(LineString\) does not match column type \(Point\)/i);
       await expect(
         pg.sql.unsafe(`
-        INSERT INTO overture_places.conflation_state (release, region, place_count, status)
-        VALUES ('fixture', 'europe/germany/berlin', 2, 'pending')
+        INSERT INTO overture_places.conflation_state (release, region, place_count, status, schema_version)
+        VALUES ('fixture', 'europe/germany/berlin', 2, 'pending', 1)
       `),
       ).rejects.toMatchObject({ code: "23502", column_name: "sources_catalogue" });
       await expect(
         pg.sql.unsafe(`
-        INSERT INTO overture_places.conflation_state (release, region, place_count, status, sources_catalogue)
-        VALUES ('fixture', 'europe/germany/berlin', 2, 'pending', '{}')
+        INSERT INTO overture_places.conflation_state (release, region, place_count, status, sources_catalogue, schema_version)
+        VALUES ('fixture', 'europe/germany/berlin', 2, 'pending', '{}', 1)
       `),
       ).rejects.toMatchObject({ code: "23514" });
       await pg.sql.unsafe(`

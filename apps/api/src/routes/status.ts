@@ -260,7 +260,7 @@ const processStatusStore = createStatusSnapshotStore({
     appLogger.add({
       level: "warn",
       source: "status",
-      msg: "Status dependency snapshot refresh failed",
+      message: "Status dependency snapshot refresh failed",
       time: Date.now(),
       metadata: { generation, errorClass },
     });

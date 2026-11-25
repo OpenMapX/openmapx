@@ -1,6 +1,7 @@
 /** Control record primitives; contains no admission or retirement constructors. */
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { COMPONENT_ID_PATTERN } from "../component-id";
 import { canonicalJson } from "../ops/canonical-json";
 import type { ControlExecutionOrigin } from "../ops/control-root-key";
 import type { ControlIssuer, ExecutionRef } from "../ops/execution-identity";
@@ -44,7 +45,7 @@ export function controlDigest(value: unknown): string {
   return createHash("sha256").update(canonicalJson(value)).digest("hex");
 }
 export const targetSchema = z
-  .array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/))
+  .array(z.string().regex(COMPONENT_ID_PATTERN))
   .min(1)
   .max(256)
   .refine(

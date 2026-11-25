@@ -1,4 +1,5 @@
 import z from "zod/v4";
+import { COMPONENT_ID_PATTERN } from "../../../component-id";
 import {
   standaloneInstallSourceSchema,
   standaloneInventoryEntrySchema,
@@ -23,7 +24,7 @@ const responses = {
   503: adminJson(httpErrorSchema),
 };
 export const standaloneOwnershipParamsSchema = z.strictObject({
-  id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
+  id: z.string().regex(COMPONENT_ID_PATTERN),
 });
 const standaloneRemovalRequestSchema = z.strictObject({
   expectedContentDigest: z

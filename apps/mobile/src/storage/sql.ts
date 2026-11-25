@@ -9,9 +9,11 @@
  * Every value is bound; nothing here interpolates.
  */
 
-/* ------------------------------------------------------------------ DDL --- */
-
-/** Records which ordered migrations have been applied, and when. */
+/**
+ * Records which ordered migrations have been applied, and when. It is the one
+ * table created before the ledger is read, so it is the one created only if
+ * it does not exist yet.
+ */
 export const CREATE_SCHEMA_MIGRATIONS = `CREATE TABLE IF NOT EXISTS schema_migrations (
   version INTEGER PRIMARY KEY,
   applied_at_ms INTEGER NOT NULL
@@ -19,6 +21,9 @@ export const CREATE_SCHEMA_MIGRATIONS = `CREATE TABLE IF NOT EXISTS schema_migra
 
 /**
  * Feasibility probe state from the qualification build.
+ *
+ * Not part of the versioned schema: release builds refuse feasibility mode, so
+ * the probe creates its table itself, in feasibility builds only.
  *
  * Deliberately has no latitude/longitude column: proving the background path
  * works must not create a location history.
@@ -44,7 +49,7 @@ export const CREATE_FEASIBILITY_PROBE = `CREATE TABLE IF NOT EXISTS feasibility_
  * Singleton by primary key rather than by convention: two rows would mean two
  * authorities, and a `CHECK` catches that at the engine instead of in review.
  */
-export const CREATE_ACTIVE_NAVIGATION = `CREATE TABLE IF NOT EXISTS active_navigation (
+export const CREATE_ACTIVE_NAVIGATION = `CREATE TABLE active_navigation (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   session_id TEXT NOT NULL,
   revision INTEGER NOT NULL CHECK (revision >= 0),
@@ -56,14 +61,14 @@ export const CREATE_ACTIVE_NAVIGATION = `CREATE TABLE IF NOT EXISTS active_navig
   session_json TEXT NOT NULL
 )`;
 
-export const CREATE_ACTIVE_NAVIGATION_INDEX = `CREATE INDEX IF NOT EXISTS idx_active_navigation_session
+export const CREATE_ACTIVE_NAVIGATION_INDEX = `CREATE INDEX idx_active_navigation_session
   ON active_navigation (session_id)`;
 
 /**
  * The only record that outlives a finished session. Carries no route, fix, stop
  * name, cue text or token, so it is safe to keep after cleanup.
  */
-export const CREATE_TERMINAL_ACK = `CREATE TABLE IF NOT EXISTS terminal_ack (
+export const CREATE_TERMINAL_ACK = `CREATE TABLE terminal_ack (
   session_id TEXT PRIMARY KEY,
   kind TEXT NOT NULL CHECK (kind IN ('ground','transit')),
   final_status TEXT NOT NULL CHECK (final_status IN ('arrived','stopped','expired','error')),
@@ -72,28 +77,10 @@ export const CREATE_TERMINAL_ACK = `CREATE TABLE IF NOT EXISTS terminal_ack (
 )`;
 
 /**
- * An event outbox that nothing ever delivered. Version 2 created it and version
- * 3 drops it; the statements stay because the migration history is append-only.
- */
-export const CREATE_NAVIGATION_EVENTS = `CREATE TABLE IF NOT EXISTS navigation_events (
-  event_id TEXT PRIMARY KEY,
-  session_id TEXT NOT NULL,
-  critical INTEGER NOT NULL DEFAULT 0 CHECK (critical IN (0,1)),
-  sequence INTEGER NOT NULL,
-  created_at_ms INTEGER NOT NULL,
-  payload_json TEXT NOT NULL
-)`;
-
-export const CREATE_NAVIGATION_EVENTS_INDEX = `CREATE INDEX IF NOT EXISTS idx_navigation_events_session
-  ON navigation_events (session_id, sequence)`;
-
-export const DROP_NAVIGATION_EVENTS = "DROP TABLE IF EXISTS navigation_events";
-
-/**
  * Command dedupe. Stores the message ID, the exact response envelope and an
  * expiry — never the command payload, which may carry a route.
  */
-export const CREATE_PROCESSED_COMMANDS = `CREATE TABLE IF NOT EXISTS processed_commands (
+export const CREATE_PROCESSED_COMMANDS = `CREATE TABLE processed_commands (
   message_id TEXT PRIMARY KEY,
   session_id TEXT,
   response_json TEXT NOT NULL,
@@ -101,14 +88,14 @@ export const CREATE_PROCESSED_COMMANDS = `CREATE TABLE IF NOT EXISTS processed_c
   expires_at_ms INTEGER NOT NULL
 )`;
 
-export const CREATE_PROCESSED_COMMANDS_INDEX = `CREATE INDEX IF NOT EXISTS idx_processed_commands_expiry
+export const CREATE_PROCESSED_COMMANDS_INDEX = `CREATE INDEX idx_processed_commands_expiry
   ON processed_commands (expires_at_ms)`;
 
 /**
  * Scheduled local alerts by stable identity, so a restart can reconcile the
  * rows against what the operating system actually still holds.
  */
-export const CREATE_SCHEDULED_ALERTS = `CREATE TABLE IF NOT EXISTS scheduled_alerts (
+export const CREATE_SCHEDULED_ALERTS = `CREATE TABLE scheduled_alerts (
   alert_id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL,
   leg_index INTEGER NOT NULL CHECK (leg_index >= 0),
@@ -117,18 +104,18 @@ export const CREATE_SCHEDULED_ALERTS = `CREATE TABLE IF NOT EXISTS scheduled_ale
   updated_at_ms INTEGER NOT NULL
 )`;
 
-export const CREATE_SCHEDULED_ALERTS_INDEX = `CREATE INDEX IF NOT EXISTS idx_scheduled_alerts_session
+export const CREATE_SCHEDULED_ALERTS_INDEX = `CREATE INDEX idx_scheduled_alerts_session
   ON scheduled_alerts (session_id)`;
 
 /** Bounded local ring of redacted events. Never uploaded; export is user-initiated. */
-export const CREATE_DIAGNOSTIC_EVENTS = `CREATE TABLE IF NOT EXISTS diagnostic_events (
+export const CREATE_DIAGNOSTIC_EVENTS = `CREATE TABLE diagnostic_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   created_at_ms INTEGER NOT NULL,
   type TEXT NOT NULL,
   fields_json TEXT NOT NULL
 )`;
 
-export const CREATE_DIAGNOSTIC_EVENTS_INDEX = `CREATE INDEX IF NOT EXISTS idx_diagnostic_events_created
+export const CREATE_DIAGNOSTIC_EVENTS_INDEX = `CREATE INDEX idx_diagnostic_events_created
   ON diagnostic_events (created_at_ms)`;
 
 /**
@@ -136,12 +123,22 @@ export const CREATE_DIAGNOSTIC_EVENTS_INDEX = `CREATE INDEX IF NOT EXISTS idx_di
  * the original session JSON, which may hold a route, a fix or a refresh token,
  * and which would otherwise outlive the session it came from.
  */
-export const CREATE_QUARANTINED_SESSIONS = `CREATE TABLE IF NOT EXISTS quarantined_sessions (
+export const CREATE_QUARANTINED_SESSIONS = `CREATE TABLE quarantined_sessions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   quarantined_at_ms INTEGER NOT NULL,
   reason TEXT NOT NULL,
   session_id TEXT,
   schema_version INTEGER
+)`;
+
+/**
+ * The places the car offers, as the page last published them for one web
+ * origin. One row: a new scope replaces the previous one, account included.
+ */
+export const CREATE_CAR_DESTINATIONS = `CREATE TABLE car_destinations (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  instance TEXT NOT NULL,
+  payload TEXT NOT NULL
 )`;
 
 /** Tables the session authority owns, used by migration tests and the dev dump. */
@@ -155,7 +152,8 @@ export const SESSION_TABLES = [
   "quarantined_sessions",
 ] as const;
 
-/* -------------------------------------------------------------- queries --- */
+/** Every table a release database holds. */
+export const RELEASE_TABLES = [...SESSION_TABLES, "car_destinations"] as const;
 
 export const SELECT_APPLIED_MIGRATIONS =
   "SELECT version FROM schema_migrations ORDER BY version ASC";
@@ -237,3 +235,30 @@ export const SELECT_QUARANTINE =
 export const TRIM_QUARANTINE = `DELETE FROM quarantined_sessions WHERE id NOT IN (
   SELECT id FROM quarantined_sessions ORDER BY quarantined_at_ms DESC, id DESC LIMIT ?
 )`;
+
+export const UPSERT_CAR_DESTINATIONS =
+  "INSERT OR REPLACE INTO car_destinations (id, instance, payload) VALUES (1, ?, ?)";
+export const DELETE_OTHER_INSTANCE_CAR_DESTINATIONS =
+  "DELETE FROM car_destinations WHERE instance <> ?";
+export const SELECT_CAR_DESTINATIONS = "SELECT payload FROM car_destinations WHERE id = 1";
+
+export const SELECT_FEASIBILITY_PROBE = "SELECT * FROM feasibility_probe WHERE id = 1";
+export const UPSERT_FEASIBILITY_PROBE = `INSERT INTO feasibility_probe (
+  id, callback_count, accepted_fix_count, rejected_fix_count,
+  last_timestamp_ms, last_accuracy_bucket, last_callback_gap_ms,
+  max_callback_gap_ms, last_error_code, pending_audio_probe,
+  audio_result_code, updated_at_ms
+) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(id) DO UPDATE SET
+  callback_count = excluded.callback_count,
+  accepted_fix_count = excluded.accepted_fix_count,
+  rejected_fix_count = excluded.rejected_fix_count,
+  last_timestamp_ms = excluded.last_timestamp_ms,
+  last_accuracy_bucket = excluded.last_accuracy_bucket,
+  last_callback_gap_ms = excluded.last_callback_gap_ms,
+  max_callback_gap_ms = excluded.max_callback_gap_ms,
+  last_error_code = excluded.last_error_code,
+  pending_audio_probe = excluded.pending_audio_probe,
+  audio_result_code = excluded.audio_result_code,
+  updated_at_ms = excluded.updated_at_ms`;
+export const DELETE_FEASIBILITY_PROBE = "DELETE FROM feasibility_probe";

@@ -1,12 +1,16 @@
 import z from "zod/v4";
-import { REQUEST_STATES } from "../../../privacy/request-states";
+import {
+  PRIVACY_ACTOR_KINDS,
+  PRIVACY_EVENT_TYPES,
+  REQUEST_STATUSES,
+} from "../../../privacy/request-statuses";
 import { adminTimestampSchema as date } from "../admin";
 export const privacyCaseViewSchema = z.strictObject({
   id: z.uuid(),
   originalDueAt: date.optional(),
   kind: z.enum(["access", "portability", "access_and_portability"]),
   channel: z.string(),
-  state: z.enum(REQUEST_STATES),
+  status: z.enum(REQUEST_STATUSES),
   userId: z.string().nullable(),
   locale: z.string(),
   timeZone: z.string(),
@@ -49,8 +53,8 @@ export const privacyAdminDetailSchema = z.strictObject({
   tasks: z.array(privacyOperatorTaskSchema),
   events: z.array(
     z.strictObject({
-      eventType: z.string(),
-      actorKind: z.string(),
+      eventType: z.enum(PRIVACY_EVENT_TYPES),
+      actorKind: z.enum(PRIVACY_ACTOR_KINDS),
       createdAt: date,
       payload: z.record(z.string(), z.string().max(128)).optional(),
     }),

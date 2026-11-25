@@ -12,7 +12,7 @@ export const installedIntegration = pgTable(
     sourceType: text("source_type").notNull().default("registry"),
     installedAt: timestamp("installed_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
-    installedBy: text("installed_by"),
+    installedByUserId: text("installed_by_user_id"),
     // The owning extension, if any, is the installed_extension_component row
     // of kind "integration" for this id.
     // The operations agent's install transaction this row records. Writing it
@@ -23,11 +23,11 @@ export const installedIntegration = pgTable(
   },
   (table) => [
     foreignKey({
-      name: "installed_integration_installed_by_fkey",
-      columns: [table.installedBy],
+      name: "installed_integration_installed_by_user_id_fkey",
+      columns: [table.installedByUserId],
       foreignColumns: [user.id],
     }).onDelete("set null"),
-    index("installed_integration_installed_by_idx").on(table.installedBy),
+    index("installed_integration_installed_by_user_id_idx").on(table.installedByUserId),
     check(
       "installed_integration_source_type_check",
       sql`${table.sourceType} in ('registry','artifact','source','uploaded-artifact')`,

@@ -20,6 +20,5 @@
     "routes": false
   },
   "quality": "built-in",
-  "category": "Traffic",
   "runtimeDataSources": true
 }

@@ -1,4 +1,5 @@
 import z from "zod/v4";
+import { COMPONENT_ID_PATTERN } from "../../../component-id";
 import { standaloneInventoryEntrySchema } from "../../../ops/standalone-integrations";
 import { platformConfigurationSchema } from "../../../services/platform-configuration";
 import { type AdminOperation, adminCommonResponses, adminJson, httpErrorSchema } from "../admin";
@@ -10,7 +11,7 @@ import {
 import { migrationOperationResultSchema } from "./credential-transfer";
 
 const value = z.json();
-const id = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/);
+const id = z.string().regex(COMPONENT_ID_PATTERN);
 const values = z
   .record(z.string().min(1).max(128), value)
   .refine(

@@ -12,11 +12,11 @@ import {
 import { services } from "@openmapx/core/server";
 import {
   feedState,
-  jobStages,
-  jobs,
-  offlinePackageArtifactReferences,
-  offlinePackageJobOwners,
-  offlinePackageJobs,
+  job,
+  jobStage,
+  offlinePackageArtifactReference,
+  offlinePackageJob,
+  offlinePackageJobOwner,
 } from "@openmapx/db-schema";
 import { eq } from "drizzle-orm";
 import Fastify from "fastify";
@@ -143,9 +143,9 @@ describe.skipIf(
       const receipt = await fence.prepare({ ...input, delegation }, "ops-agent");
       expect(receipt).toMatchObject({ fenceId: child.executionId, state: "prepared", sequence: 0 });
       const rows =
-        await sql`SELECT state,operation_key,outcome FROM data_manager.configuration_fence WHERE fence_id=${child.executionId}`;
+        await sql`SELECT status,operation_key,outcome FROM data_manager.configuration_fence WHERE fence_id=${child.executionId}`;
       expect(rows).toEqual([
-        { state: "prepared", operation_key: child.operationKey, outcome: null },
+        { status: "prepared", operation_key: child.operationKey, outcome: null },
       ]);
       await settledByAgent(lease, child, receipt);
       expect(await control.inspectArtifactTargetLeaseChildSettlement(lease, child)).toMatchObject({
@@ -160,19 +160,19 @@ describe.skipIf(
       await expect(
         store.admit(
           { kind: "download-fonts" },
-          { operationKey: key, requestedDeadlineAt: deadline },
+          { operationKey: key, requestedDeadlineAt: deadline, trigger: "agent" },
         ),
       ).rejects.toThrow("configuration_maintenance_busy");
       installDataMutationAdmission(fence);
       let dataEffects = 0;
       const actualDb = drizzle(sql, {
           schema: {
-            jobs,
-            jobStages,
+            job,
+            jobStage,
             feedState,
-            offlinePackageJobs,
-            offlinePackageJobOwners,
-            offlinePackageArtifactReferences,
+            offlinePackageJob,
+            offlinePackageJobOwner,
+            offlinePackageArtifactReference,
           },
         }),
         singleFlight = createSingleFlightController(),
@@ -221,7 +221,7 @@ describe.skipIf(
         },
       });
       const beforeRows =
-          await sql`SELECT id,metadata,status,finished_at FROM data_manager.jobs ORDER BY id`,
+          await sql`SELECT id,metadata,status,finished_at FROM data_manager.job ORDER BY id`,
         beforeFences = await sql`SELECT * FROM data_manager.configuration_fence`;
       try {
         // Each mutation comes from a caller whose own token may use its route.
@@ -244,9 +244,13 @@ describe.skipIf(
         // In-process work of both classes is refused at admission.
         for (const input of [{ kind: "traffic-predicted" }, { kind: "data-reload" }] as const)
           await expect(
-            receiver.runLocal(input, async () => {
-              dataEffects++;
-            }),
+            receiver.runLocal(
+              input,
+              async () => {
+                dataEffects++;
+              },
+              { trigger: "cron" },
+            ),
           ).rejects.toThrow("configuration_maintenance_busy");
         const offline = new PostgresOfflinePackageAccountingStore(sql),
           candidate: OfflinePackageJobRecord = {
@@ -309,7 +313,7 @@ describe.skipIf(
         }
         expect(dataEffects).toBe(0);
         expect(
-          await sql`SELECT id,metadata,status,finished_at FROM data_manager.jobs ORDER BY id`,
+          await sql`SELECT id,metadata,status,finished_at FROM data_manager.job ORDER BY id`,
         ).toEqual(beforeRows);
         expect(await sql`SELECT * FROM data_manager.configuration_fence`).toEqual(beforeFences);
       } finally {
@@ -339,19 +343,19 @@ describe.skipIf(
       const fence = createDataConfigurationMaintenance(sql, dm);
       await fence.startup();
       // An unfinished data job refuses the preparation before anything changes.
-      await sql`INSERT INTO data_manager.jobs(id,kind,status,operation_key,operation_fingerprint,
+      await sql`INSERT INTO data_manager.job(id,kind,status,trigger,operation_key,operation_fingerprint,
           execution_fingerprint,admitted_at,deadline_at,execution_input,execution_state,execution_ref,
           execution_admission,execution_progress)
-        VALUES(${busyJob},'download-fonts','running',${`opk1_${randomUUID().replaceAll("-", "")}`},
+        VALUES(${busyJob},'download-fonts','running','cli',${`opk1_${randomUUID().replaceAll("-", "")}`},
           ${"a".repeat(64)},${"b".repeat(64)},now(),now() + interval '1 hour','{}','{}','{}','{}','{}')`;
       await expect(fence.prepare({ ...input, delegation }, "ops-agent")).rejects.toThrow(
         "configuration_maintenance_busy",
       );
       expect(
-        await sql`SELECT state,operation_key,outcome FROM data_manager.configuration_fence WHERE maintenance_id=${input.maintenanceId}`,
-      ).toEqual([{ state: "refused", operation_key: child.operationKey, outcome: null }]);
+        await sql`SELECT status,operation_key,outcome FROM data_manager.configuration_fence WHERE maintenance_id=${input.maintenanceId}`,
+      ).toEqual([{ status: "refused", operation_key: child.operationKey, outcome: null }]);
       // The refusal stands for this request once nothing blocks a fence any more.
-      await sql`DELETE FROM data_manager.jobs WHERE id=${busyJob}`;
+      await sql`DELETE FROM data_manager.job WHERE id=${busyJob}`;
       await expect(fence.prepare({ ...input, delegation }, "ops-agent")).rejects.toThrow(
         "configuration_maintenance_busy",
       );
@@ -371,7 +375,7 @@ describe.skipIf(
         ),
       ).rejects.toMatchObject({ statusCode: 404 });
     } finally {
-      await sql`DELETE FROM data_manager.jobs WHERE id=${busyJob}`;
+      await sql`DELETE FROM data_manager.job WHERE id=${busyJob}`;
       await f.close();
     }
   }, 60000);
@@ -388,7 +392,7 @@ describe.skipIf(
         [oldMaintenance, "96 hours"],
         [recentMaintenance, "1 hour"],
       ] as const)
-        await sql`INSERT INTO data_manager.configuration_fence(maintenance_id,fence_id,operation_key,candidate_id,plan_digest,input,state,settled_at)
+        await sql`INSERT INTO data_manager.configuration_fence(maintenance_id,fence_id,operation_key,candidate_id,plan_digest,input,status,settled_at)
           VALUES(${id}::uuid,gen_random_uuid(),${`opk1_${randomUUID().replaceAll("-", "")}`},${input.candidateId}::uuid,${input.planDigest},${JSON.stringify(input)}::jsonb,'refused',now() - ${age}::interval)`;
       expect((await fence.prepare({ ...input, delegation }, "ops-agent")).state).toBe("prepared");
       expect(
@@ -476,7 +480,7 @@ async function ownedFenceFixture(
         api: host.token,
         "data-manager": Buffer.alloc(32, 23).toString("base64url"),
       },
-      journal: await openOpsJobJournal(join(root, "state/ops-agent/jobs-v1.json")),
+      journal: await openOpsJobJournal(join(root, "state/ops-agent/jobs.json")),
     }),
     tokenFile = join(host.root, "api-token");
   writeFileSync(tokenFile, host.token, { mode: 0o600 });
@@ -550,7 +554,7 @@ async function ownedFenceFixture(
   await fixture.db.insert(apiSchema.adminJob).values({
     id: jobId,
     type: jobType,
-    ...(options.guardedRecovery ? { createdBy: actorId } : {}),
+    ...(options.guardedRecovery ? { createdByUserId: actorId } : {}),
     payload,
     status: "running",
     result: initialResult,
@@ -750,11 +754,11 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
       await expect(
         store.admit(
           { kind: "download-fonts" },
-          { operationKey: key, requestedDeadlineAt: deadline },
+          { operationKey: key, requestedDeadlineAt: deadline, trigger: "agent" },
         ),
       ).rejects.toThrow("configuration_maintenance_busy");
       expect(await store.lookup(key)).toBeNull();
-      expect(await f.sql`SELECT id FROM data_manager.jobs WHERE id=${f.child.executionId}`).toEqual(
+      expect(await f.sql`SELECT id FROM data_manager.job WHERE id=${f.child.executionId}`).toEqual(
         [],
       );
       release();
@@ -812,7 +816,7 @@ it.skipIf(!process.env.OPENMAPX_DATA_EXECUTION_TEST_DATABASE_URL)(
       if (f.input.hardlinkPlanDigest)
         await expect(admit(own, "ops-agent")).resolves.toBeUndefined();
       else await expect(admit(own, "ops-agent")).rejects.toThrow("configuration_maintenance_busy");
-      expect(await f.sql`SELECT id FROM data_manager.jobs`).toEqual([]);
+      expect(await f.sql`SELECT id FROM data_manager.job`).toEqual([]);
       expect(await f.sql`SELECT * FROM data_manager.configuration_fence`).toEqual(before);
       await expect(
         fence.withAdmission(async () => {

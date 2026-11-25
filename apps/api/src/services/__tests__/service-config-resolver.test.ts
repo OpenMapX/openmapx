@@ -40,7 +40,7 @@ afterEach(() => {
 describe("resolveServiceConfigWithSources", () => {
   const schema = {
     properties: {
-      memory_limit: { type: "string", default: "1g" },
+      MEMORY_LIMIT: { type: "string", default: "1g" },
       workers: { type: "number", default: 4 },
       no_default: { type: "string" },
     },
@@ -49,46 +49,46 @@ describe("resolveServiceConfigWithSources", () => {
   it("returns defaults when no DB row and no env override", async () => {
     selectLimitMock.mockResolvedValueOnce([]);
     const r = await resolveServiceConfigWithSources({ id: "test", configSchema: schema });
-    expect(r.memory_limit).toEqual({ value: "1g", source: "default" });
+    expect(r.MEMORY_LIMIT).toEqual({ value: "1g", source: "default" });
     expect(r.workers).toEqual({ value: 4, source: "default" });
     // no_default has no default and no override — omitted.
     expect(r.no_default).toBeUndefined();
   });
 
   it("overlays DB values on top of defaults", async () => {
-    selectLimitMock.mockResolvedValueOnce([{ config: { memory_limit: "2g" } }]);
+    selectLimitMock.mockResolvedValueOnce([{ config: { MEMORY_LIMIT: "2g" } }]);
     const r = await resolveServiceConfigWithSources({ id: "test", configSchema: schema });
-    expect(r.memory_limit).toEqual({ value: "2g", source: "database" });
+    expect(r.MEMORY_LIMIT).toEqual({ value: "2g", source: "database" });
     expect(r.workers).toEqual({ value: 4, source: "default" });
   });
 
   it("env vars override DB values (highest priority)", async () => {
-    selectLimitMock.mockResolvedValueOnce([{ config: { memory_limit: "2g" } }]);
+    selectLimitMock.mockResolvedValueOnce([{ config: { MEMORY_LIMIT: "2g" } }]);
     vi.stubEnv("SERVICE_TEST_MEMORY_LIMIT", "8g");
     const r = await resolveServiceConfigWithSources({ id: "test", configSchema: schema });
-    expect(r.memory_limit).toEqual({ value: "8g", source: "env" });
+    expect(r.MEMORY_LIMIT).toEqual({ value: "8g", source: "env" });
   });
 
   it("returns effective values without source metadata for readiness consumers", async () => {
-    selectLimitMock.mockResolvedValueOnce([{ config: { memory_limit: "2g", workers: 6 } }]);
+    selectLimitMock.mockResolvedValueOnce([{ config: { MEMORY_LIMIT: "2g", workers: 6 } }]);
     vi.stubEnv("SERVICE_TEST_MEMORY_LIMIT", "8g");
 
     await expect(
       resolveEffectiveServiceConfig({ id: "test", configSchema: schema }),
-    ).resolves.toEqual({ memory_limit: "8g", workers: 6 });
+    ).resolves.toEqual({ MEMORY_LIMIT: "8g", workers: 6 });
   });
 
   it("ignores DB keys not declared in the configSchema", async () => {
-    selectLimitMock.mockResolvedValueOnce([{ config: { unknown_key: "x", memory_limit: "2g" } }]);
+    selectLimitMock.mockResolvedValueOnce([{ config: { unknown_key: "x", MEMORY_LIMIT: "2g" } }]);
     const r = await resolveServiceConfigWithSources({ id: "test", configSchema: schema });
     expect(r.unknown_key).toBeUndefined();
-    expect(r.memory_limit).toEqual({ value: "2g", source: "database" });
+    expect(r.MEMORY_LIMIT).toEqual({ value: "2g", source: "database" });
   });
 
   it("falls back to defaults when DB query throws", async () => {
     selectLimitMock.mockRejectedValueOnce(new Error("pg unreachable"));
     const r = await resolveServiceConfigWithSources({ id: "test", configSchema: schema });
-    expect(r.memory_limit).toEqual({ value: "1g", source: "default" });
+    expect(r.MEMORY_LIMIT).toEqual({ value: "1g", source: "default" });
   });
 
   it("returns {} for a service with no configSchema", async () => {
@@ -100,7 +100,7 @@ describe("resolveServiceConfigWithSources", () => {
 describe("resolveAllServiceConfigs", () => {
   const schema = {
     properties: {
-      memory_limit: { type: "string", default: "1g" },
+      MEMORY_LIMIT: { type: "string", default: "1g" },
       workers: { type: "number", default: 4 },
     },
   };
@@ -112,7 +112,7 @@ describe("resolveAllServiceConfigs", () => {
       { id: "test", configSchema: schema },
     ]);
     expect(values.get("test")).toEqual({ workers: 8 });
-    expect(envKeys.get("test")).toEqual(["memory_limit"]);
+    expect(envKeys.get("test")).toEqual(["MEMORY_LIMIT"]);
     expect(JSON.stringify([...values])).not.toContain("secret-ish-8g");
   });
 

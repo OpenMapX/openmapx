@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://openmapx.example/privacy/processing-information-v2",
+  "$id": "urn:openmapx:privacy:processing-information:1",
   "type": "object",
   "required": [
     "version",
@@ -15,7 +15,7 @@
     "sources"
   ],
   "properties": {
-    "version": { "const": 2 },
+    "version": { "const": 1 },
     "request": { "type": "object" },
     "controller": { "type": "object" },
     "deployment": { "type": "object" },

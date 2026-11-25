@@ -145,14 +145,14 @@ integration("timestamps on a database whose default time zone is not UTC", () =>
     await api.db.insert(adminAuditLog).values([
       {
         id: "0193e4a0-0000-7000-8007-000000000001",
-        actorId: "time-zone-subject",
-        action: "fixture.before",
+        actorUserId: "time-zone-subject",
+        action: "cache.clear",
         createdAt: new Date(hold.cutoff.getTime() - halfHour),
       },
       {
         id: "0193e4a0-0000-7000-8007-000000000002",
-        actorId: "time-zone-subject",
-        action: "fixture.after",
+        actorUserId: "time-zone-subject",
+        action: "cache.clear",
         createdAt: new Date(hold.cutoff.getTime() + halfHour),
       },
     ]);
@@ -168,7 +168,7 @@ integration("timestamps on a database whose default time zone is not UTC", () =>
           preservationAllowsDeletion({
             registrationId: "admin-audit-attribution",
             candidateTimestamp: adminAuditLog.createdAt,
-            subjectIds: [adminAuditLog.actorId, adminAuditLog.targetId],
+            subjectIds: [adminAuditLog.actorUserId, adminAuditLog.targetId],
           }),
         ),
       );

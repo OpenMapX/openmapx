@@ -21,7 +21,7 @@ export type ListAdminActivityJobs200JobsItem =
       finishedAt: string | null;
       cancelable: boolean;
       source: "application";
-      status: "queued" | "running" | "cancel_pending" | "success" | "failed" | "canceled";
+      status: "queued" | "running" | "cancel_pending" | "succeeded" | "failed" | "cancelled";
       actor: {
         id: string;
         name: string;
@@ -46,7 +46,15 @@ export type ListAdminActivityJobs200JobsItem =
       finishedAt: string | null;
       cancelable: boolean;
       source: "data-manager";
-      status: "running" | "success" | "partial" | "failed" | "interrupted";
+      status:
+        | "queued"
+        | "running"
+        | "cancel_pending"
+        | "succeeded"
+        | "failed"
+        | "cancelled"
+        | "partially_succeeded"
+        | "interrupted";
       actor: {
         id: string;
         name: string;

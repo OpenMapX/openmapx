@@ -40,7 +40,6 @@ import { schedulePrivacyDeadlineReminders } from "./privacy/deadline-reminders.j
 import { janitorEncryptedSourceSpools } from "./privacy/encrypted-source-spool.js";
 import { createPrivacyNotificationWorker } from "./privacy/notifications.js";
 import { createPrivacyOperationsMonitor } from "./privacy/operations-monitor.js";
-import { privacyRetention } from "./privacy/settings.js";
 import { processLogger } from "./process-logger";
 import {
   cameraMediaSourcesOf,
@@ -51,6 +50,7 @@ import { registerCoreRoutes } from "./routes/index";
 import {
   controlledRequestLoggingOptions,
   corsOptions,
+  makeMobileProtocolHook,
   makeRateLimitTierHook,
   makeSecurityResponseHeaderHook,
   makeStatusAwareRateLimit,
@@ -62,10 +62,7 @@ import {
   uniformErrorHandler,
 } from "./server-wiring";
 import {
-  adminJobRetentionDays,
-  auditLogRetentionDays,
   DATA_MANAGER_JOB_RETENTION_DAYS,
-  parseRequiredRetentionDays,
   pruneAppLogs,
   pruneAuditLog,
   pruneCompletedJobs,
@@ -111,18 +108,23 @@ import {
   stopAdminJobReconciliation,
 } from "./services/job-reconciliation";
 import { jobRunner } from "./services/job-runner";
+import { retentionDays } from "./services/retention-settings";
 import { initServiceRegistry } from "./services/service-registry";
+import { assertSettingsEnvironment, invalidStoredSettings } from "./services/settings";
 import { handleSystemDiagnosticsJob, handleSystemUpdateJob } from "./services/system-maintenance";
 import { readJournalKey } from "./services/user-erasure.js";
 import { applyRequiredMigrations } from "./startup-migrations";
 import { configuredTrustedWebOrigins, makeCsrfGuardHook } from "./utils/csrf";
 import {
   authLimit,
+  contributionApiLimit,
+  enrollmentApiLimit,
   expensivePublicApiLimit,
   integrationIngressApiLimit,
   publicApiLimit,
   routingApiLimit,
   statusPublicApiLimit,
+  stopRateLimiterSweeps,
   tilePublicApiLimit,
   typeaheadApiLimit,
   unmatchedRouteLimit,
@@ -166,6 +168,8 @@ export interface App {
  * too; `stop()` releases those timers through their shutdown handlers.
  */
 export async function createApp(options: CreateAppOptions = {}): Promise<App> {
+  // An invalid setting in the environment refuses the start, naming the variables.
+  assertSettingsEnvironment();
   const loggerInstance = options.logger ?? processLogger;
   const server = Fastify({
     ...controlledRequestLoggingOptions(loggerInstance),
@@ -251,6 +255,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
   await registerResponseCompression(server);
 
   server.addHook("onRequest", makeSecurityResponseHeaderHook());
+  server.addHook("onRequest", makeMobileProtocolHook());
   server.addHook("onRequest", makeCsrfGuardHook(trustedWebOrigins));
   const rateLimitTiers = {
     auth: authLimit.preHandler(),
@@ -258,6 +263,8 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
     expensive: makeTimelineAwareRateLimit(expensivePublicApiLimit),
     routing: routingApiLimit.preHandler(),
     typeahead: typeaheadApiLimit.preHandler(),
+    contribution: contributionApiLimit.preHandler(),
+    enrollment: enrollmentApiLimit.preHandler(),
     integrationIngress: integrationIngressApiLimit.preHandler(),
     status: makeStatusAwareRateLimit(statusPublicApiLimit),
     public: makeTimelineAwareRateLimit(publicApiLimit),
@@ -411,25 +418,30 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
 
   // Prune old health history records daily
   const ONE_DAY_MS = 24 * 60 * 60 * 1000;
-  const AUDIT_RETENTION_DAYS = auditLogRetentionDays();
-  const JOB_RETENTION_DAYS = adminJobRetentionDays();
-  // The server-log period is a legal setting an administrator can change at
-  // runtime, so each run reads it; reading it once here refuses a bad value
-  // at startup.
-  await privacyRetention("serverLog");
-  const BACKUP_RETENTION_DAYS = parseRequiredRetentionDays("BACKUP_RETENTION_DAYS", 30);
-
+  // The environment was checked above. An invalid stored value does not stop
+  // the API, so the administration stays reachable to replace it; its readers
+  // refuse it until then.
+  const invalidSettings = await invalidStoredSettings();
+  if (invalidSettings.size > 0)
+    server.log.warn(
+      { settings: [...invalidSettings] },
+      "Stored settings hold values they do not accept; save valid values in the administration",
+    );
+  // Only the environment sets the backup period, so it cannot change while the API runs.
+  const backupRetentionDays = await retentionDays("backup");
+  // Retention periods are settings an administrator can change at runtime, so
+  // each run reads them.
   const runRetention = () => {
-    void pruneAuditLog(AUDIT_RETENTION_DAYS).catch((err) =>
-      server.log.warn(err, "Audit log prune failed"),
-    );
-    void pruneCompletedJobs(JOB_RETENTION_DAYS).catch((err) =>
-      server.log.warn(err, "Admin job prune failed"),
-    );
+    void retentionDays("auditLog")
+      .then(pruneAuditLog)
+      .catch((err) => server.log.warn(err, "Audit log prune failed"));
+    void retentionDays("adminJob")
+      .then(pruneCompletedJobs)
+      .catch((err) => server.log.warn(err, "Admin job prune failed"));
     void pruneDataManagerJobs(DATA_MANAGER_JOB_RETENTION_DAYS).catch((err) =>
       server.log.warn(err, "Data-manager job prune failed"),
     );
-    void privacyRetention("serverLog")
+    void retentionDays("serverLog")
       .then(pruneAppLogs)
       .catch((err) => server.log.warn(err, "Application log prune failed"));
     void pruneExpiredVerifications().catch((err) =>
@@ -444,7 +456,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
         compactErasureJournal(
           erasureJournalPath,
           readJournalKey(),
-          new Date(Date.now() - (BACKUP_RETENTION_DAYS + 7) * ONE_DAY_MS),
+          new Date(Date.now() - (backupRetentionDays + 7) * ONE_DAY_MS),
         );
       } catch (err) {
         server.log.warn(err, "Erasure journal compaction failed");
@@ -471,7 +483,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
     await serviceRestart(service, ctx);
     return { service, action: "restart" };
   });
-  jobRunner.register("service.core-restart", async (ctx) => {
+  jobRunner.register("service.core.restart", async (ctx) => {
     const { runCoreServiceMaintenance } = await import("./services/core-service-maintenance");
     return runCoreServiceMaintenance(ctx);
   });
@@ -482,18 +494,18 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
     return { service, action: "apply", ...result };
   });
 
-  jobRunner.register("data.operation", handleDataOperationJob);
-  jobRunner.register("backup.operation", handleBackupOperationJob);
-  jobRunner.register("service.bulk", handleServiceBulkJob);
+  jobRunner.register("data.operation.run", handleDataOperationJob);
+  jobRunner.register("backup.operation.run", handleBackupOperationJob);
+  jobRunner.register("service.batch.run", handleServiceBulkJob);
   jobRunner.register("release.clear", handleReleaseClearJob);
-  jobRunner.register("service.images.pull", handleImageStageJob);
+  jobRunner.register("service.image.pull", handleImageStageJob);
   jobRunner.register("backup.prune", handleBackupPruneJob);
   jobRunner.register("compose.render", handleComposeRenderJob);
   jobRunner.register("artifact.validate", handlePreparedArtifactValidationJob);
   jobRunner.register("artifact.import", handlePreparedArtifactImportJob);
   jobRunner.register("artifact.export", handlePreparedArtifactExportJob);
   jobRunner.register("system.update", handleSystemUpdateJob);
-  jobRunner.register("system.diagnostics", handleSystemDiagnosticsJob);
+  jobRunner.register("system.diagnostics.collect", handleSystemDiagnosticsJob);
 
   jobRunner.register("integration.reload", async (ctx) => {
     await ctx.log("Reloading all integrations...");
@@ -530,6 +542,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
   let stopAccountMailWorker: (() => Promise<void>) | undefined;
   server.addHook("onClose", stopAdminJobReconciliation);
   server.addHook("onClose", async () => jobRunner.stopPumping());
+  server.addHook("onClose", async () => stopRateLimiterSweeps());
   server.addHook("onClose", async () => {
     await stopAccountMailWorker?.();
   });

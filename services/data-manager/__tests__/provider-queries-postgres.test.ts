@@ -336,8 +336,8 @@ async function seedSearchIndex(pg: PostgisFixture): Promise<void> {
   await pg.sql.unsafe(buildSearchIndexIndexesDDL("osm_search"));
   await pg.sql.unsafe(
     `INSERT INTO osm_search.index_state (region, source_path, source_fingerprint, current_fingerprint,
-       epoch, status, started_at, published_at, updated_at)
-     VALUES ('germany', '/fixture.osm.pbf', 'f', 'f', 'epoch-1', 'ready', now(), now(), now())`,
+       epoch, status, schema_version, started_at, published_at, updated_at)
+     VALUES ('germany', '/fixture.osm.pbf', 'f', 'f', 'epoch-1', 'ready', 1, now(), now(), now())`,
   );
 }
 
@@ -362,8 +362,8 @@ async function seedNotablePlaces(pg: PostgisFixture): Promise<void> {
   }
   await pg.sql.unsafe(buildNotablePlacesFinishDDL("notable_places", NOTABLE_DISPLAY_LANGUAGES));
   await pg.sql.unsafe(
-    `INSERT INTO notable_places.index_state (source, min_sitelinks, epoch, status, started_at, published_at, updated_at)
-     VALUES ('wikidata', 10, 'epoch-1', 'ready', now(), now(), now())`,
+    `INSERT INTO notable_places.index_state (source, min_sitelinks, epoch, status, schema_version, started_at, published_at, updated_at)
+     VALUES ('wikidata', 10, 'epoch-1', 'ready', 1, now(), now(), now())`,
   );
 }
 

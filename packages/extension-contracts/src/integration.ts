@@ -1,9 +1,12 @@
 import z from "zod/v4";
-import { feedIdSchema } from "./identifiers";
+import { checkCapabilityName } from "./capabilities";
+import { componentIdSchema, feedIdSchema } from "./identifiers";
 import { parseLicensing } from "./licensing";
 import { licensingSchema } from "./licensing-schema";
 import { parseMediaHostEntry } from "./media-hosts";
 import { platformVersionSchema } from "./platform";
+import { semverSchema } from "./semver";
+import type { ManifestProvenance } from "./service-types";
 
 const governanceUrlSchema = z.url().refine((value) => {
   const protocol = new URL(value).protocol;
@@ -202,9 +205,17 @@ export const ENDPOINT_URL_TEMPLATE = /^\$\{endpoint:[\w-]+\}(?:\/(?![\s\S]*\$\{e
 
 /** `${endpoint:<id>}` placeholders in `text` naming no known platform endpoint. */
 function unknownEndpointPlaceholders(text: string): string[] {
-  return [...text.matchAll(/\$\{endpoint:([^}]*)\}/g)]
-    .map((match) => match[1] ?? "")
-    .filter((id) => !isPlatformEndpointId(id));
+  const opener = "${endpoint:";
+  const unknown: string[] = [];
+  let start = text.indexOf(opener);
+  while (start !== -1) {
+    const end = text.indexOf("}", start + opener.length);
+    if (end === -1) break;
+    const id = text.slice(start + opener.length, end);
+    if (!isPlatformEndpointId(id)) unknown.push(id);
+    start = text.indexOf(opener, end + 1);
+  }
+  return unknown;
 }
 
 const healthCheckSchema = z.object({
@@ -376,15 +387,31 @@ const requireEntrySchema = z
   });
 
 /**
- * Slug regex shared with the service manifest schema. The id is used as a
- * filesystem directory name (`integrations/<id>/`, `custom_integrations/<id>/`)
- * and in generated configuration, so we constrain it to safe characters and
- * reject anything that could escape the install tree or a generated value.
+ * Integration config keys are lowerCamel. The host variable splits their
+ * words: `rateLimitPerIpPerHour` is `INTEGRATION_<ID>_RATE_LIMIT_PER_IP_PER_HOUR`.
  */
-export const INTEGRATION_ID_REGEX = /^[a-z0-9][a-z0-9-]*$/;
+// lowerCamel with each later word a capital followed by lower-case letters or
+// digits (`apiKey`, not `APIKey` or `keyA`), so the environment variable that
+// splits the words (`API_KEY`) names exactly one key.
+const INTEGRATION_CONFIG_KEY_REGEX = /^[a-z][a-z0-9]*(?:[A-Z][a-z0-9]+)*$/;
 
-export const integrationManifestSchema = z.object({
-  id: z.string().regex(INTEGRATION_ID_REGEX, "must be lowercase, hyphen-separated"),
+const integrationConfigSchema = z.record(z.string(), z.unknown()).superRefine((schema, context) => {
+  const properties = schema.properties;
+  if (!properties || typeof properties !== "object" || Array.isArray(properties)) return;
+  for (const key of Object.keys(properties)) {
+    if (!INTEGRATION_CONFIG_KEY_REGEX.test(key))
+      context.addIssue({
+        code: "custom",
+        path: ["properties", key],
+        message: "integration config keys must be lowerCamel",
+      });
+  }
+});
+
+const integrationManifestShape = {
+  // A filesystem directory name (`integrations/<id>/`, `custom_integrations/<id>/`)
+  // and part of generated configuration, so it is limited to a bounded slug.
+  id: componentIdSchema,
   name: z.string().optional(),
   version: z.string().optional(),
   description: z.string().optional(),
@@ -401,7 +428,7 @@ export const integrationManifestSchema = z.object({
   frontend: frontendSchema.optional(),
   backend: backendSchema.optional(),
 
-  configSchema: z.record(z.string(), z.unknown()).optional(),
+  configSchema: integrationConfigSchema.optional(),
   /**
    * The setting in `configSchema` that overrides a platform endpoint for this
    * integration, ranked after the self-hosted service and before the
@@ -412,7 +439,8 @@ export const integrationManifestSchema = z.object({
   healthCheck: z.union([healthCheckSchema, z.array(healthCheckSchema)]).optional(),
   /** Minimum time between background probes; explicit admin checks remain immediate. */
   healthCheckIntervalMs: z.number().int().min(60_000).optional(),
-  quality: z.enum(["built-in", "community-verified", "community"]).optional(),
+  /** Display label. Store trust comes from digest pins, never from this field. */
+  quality: z.enum(["built-in", "community"]).optional(),
 
   /**
    * Static sources refuse keys the schema does not name, so a misspelled field
@@ -431,6 +459,21 @@ export const integrationManifestSchema = z.object({
 
   infrastructure: infrastructureSchema.optional(),
   subjectData: integrationSubjectDataSchema.optional(),
+};
+
+/** A built-in integration manifest. Unknown top-level keys are refused. */
+export const integrationManifestSchema = z.strictObject(integrationManifestShape);
+
+/**
+ * An installed community integration manifest: it states the extension
+ * protocol it was written for and a semantic version, and may only call
+ * itself `community`.
+ */
+export const communityIntegrationManifestSchema = z.strictObject({
+  ...integrationManifestShape,
+  version: semverSchema,
+  platform: platformVersionSchema,
+  quality: z.literal("community").optional(),
 });
 
 export type IntegrationManifest = z.infer<typeof integrationManifestSchema>;
@@ -493,11 +536,32 @@ export function validateDataSource(
   return { valid: true, errors: [], dataSource: parsed.data };
 }
 
-export function validateManifest(raw: unknown): ManifestValidationResult {
-  const result = integrationManifestSchema.safeParse(raw);
+/**
+ * Validate an integration manifest. A built-in manifest (`firstParty`) may
+ * leave `platform` and `version` out; a community manifest must state both
+ * and may only require well-known or `<vendor>/<name>` capabilities.
+ */
+export function validateManifest(
+  raw: unknown,
+  provenance: ManifestProvenance,
+): ManifestValidationResult {
+  const result = (
+    provenance.firstParty ? integrationManifestSchema : communityIntegrationManifestSchema
+  ).safeParse(raw);
   if (result.success) {
     const manifest = result.data;
     const errors: string[] = [];
+    if (!provenance.firstParty) {
+      for (const [index, entry] of (manifest.requires ?? []).entries()) {
+        if (
+          entry.capability !== undefined &&
+          !checkCapabilityName(entry.capability, "capability").ok
+        )
+          errors.push(
+            `requires[${index}].capability: "${entry.capability}" is neither a well-known capability nor namespaced as "<vendor>/<name>"`,
+          );
+      }
+    }
 
     if (!manifest.id) {
       errors.push("manifest.id is required");

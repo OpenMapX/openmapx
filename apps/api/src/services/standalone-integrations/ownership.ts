@@ -82,7 +82,7 @@ async function canceled(ctx: JobContext) {
     .from(adminJob)
     .where(eq(adminJob.id, ctx.jobId));
   if (!row) throw new JobObservationPending("recovery_required");
-  return row.status === "cancel_pending" || row.status === "canceled";
+  return row.status === "cancel_pending" || row.status === "cancelled";
 }
 /** Desired ownership and its authenticated completion checkpoint commit in the SAME transaction.
  * A lost COMMIT response is resolved under the original advisory and owned-job locks. */

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { fsyncSync, lstatSync, mkdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { AnchoredDirectory } from "@openmapx/core/build-artifacts";
+import { isComponentId } from "@openmapx/core/component-id";
 import { canonicalJson } from "@openmapx/core/ops";
 import {
   acquireIntegrationComponentLock,
@@ -73,7 +74,7 @@ export function installStandaloneOwnershipRuntime(
       const entries = [];
       for (const name of root.listBounded(1026).sort()) {
         if (name === ".staging" || name === ".installation-locks") continue;
-        const safe = /^[a-z0-9][a-z0-9-]{0,63}$/.test(name),
+        const safe = isComponentId(name),
           integrationId = safe
             ? name
             : `invalid-${createHash("sha256").update(name).digest("hex").slice(0, 24)}`;

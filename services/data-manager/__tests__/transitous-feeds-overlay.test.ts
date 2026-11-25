@@ -20,7 +20,7 @@ afterEach(() => {
 
 function validOverlay() {
   return {
-    version: 3 as const,
+    version: 1 as const,
     sources: [
       {
         spec: "gtfs" as const,
@@ -182,7 +182,7 @@ describe("applyFeedOverlay", () => {
   it("preserves GBFS quarantine semantics", () => {
     const feeds: FeedFile[] = [{ region: "de", sources: [] }];
     const overlay = parseFeedOverlay({
-      version: 3,
+      version: 1,
       sources: [
         {
           spec: "gbfs",

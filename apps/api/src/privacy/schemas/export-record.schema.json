@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://openmapx.example/privacy/article-15-record-v1",
+  "$id": "urn:openmapx:privacy:export-record:1",
   "type": "object",
   "required": ["id"],
   "properties": {

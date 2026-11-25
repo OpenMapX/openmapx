@@ -41,6 +41,7 @@ describe("validateExtensionManifest", () => {
       id: "weather-foo",
       name: "Weather Foo",
       version: "0.1.0",
+      platform: "1.0",
       integrations: [
         { artifact: "https://example.com/foo.tar.gz", id: "weather-foo", sha256: "b".repeat(64) },
       ],
@@ -53,13 +54,19 @@ describe("validateExtensionManifest", () => {
       id: "engine-bar",
       name: "Engine Bar",
       version: "0.1.0",
+      platform: "1.0",
       services: [{ repo: "https://github.com/x/y", service: "engine-bar" }],
     });
     expect(r.valid).toBe(true);
   });
 
   it("rejects a bundle with no components", () => {
-    const r = validateExtensionManifest({ id: "empty", name: "Empty", version: "1.0.0" });
+    const r = validateExtensionManifest({
+      id: "empty",
+      name: "Empty",
+      version: "1.0.0",
+      platform: "1.0",
+    });
     expect(r.valid).toBe(false);
     expect(r.errors.some((e) => e.includes("at least one"))).toBe(true);
   });

@@ -5,5 +5,5 @@ export type InspectTransitSyncPreflight409Code =
   (typeof InspectTransitSyncPreflight409Code)[keyof typeof InspectTransitSyncPreflight409Code];
 
 export const InspectTransitSyncPreflight409Code = {
-  preflight_stale: "preflight_stale",
+  PREFLIGHT_STALE: "PREFLIGHT_STALE",
 } as const;

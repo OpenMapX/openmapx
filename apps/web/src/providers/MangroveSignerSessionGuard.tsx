@@ -1,7 +1,7 @@
 "use client";
 import { useSession } from "@openmapx/core";
-import { clearMangroveSignerStorage } from "@openmapx/mangrove-react";
 import { useEffect, useRef } from "react";
+import { clearSignOutWebStorage } from "@/lib/signOutStorage";
 /** Observe session replacement even while the private tree is being remounted. */
 export function MangroveSignerSessionGuard() {
   const { data, isPending } = useSession();
@@ -11,7 +11,7 @@ export function MangroveSignerSessionGuard() {
   useEffect(() => {
     if (isPending) return;
     if (owner === null || (previous.current !== undefined && previous.current !== owner))
-      clearMangroveSignerStorage(window.sessionStorage);
+      clearSignOutWebStorage();
     previous.current = owner;
   }, [owner, isPending]);
   return null;

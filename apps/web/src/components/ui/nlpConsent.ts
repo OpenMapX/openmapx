@@ -1,4 +1,6 @@
-const KEY = "openmapx.nlp.cloudConsent";
+import { STORAGE_KEYS } from "@openmapx/core";
+
+const KEY = STORAGE_KEYS.nlpCloudConsent.key;
 
 export function getNlpConsent(): boolean | null {
   try {

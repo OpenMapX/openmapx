@@ -65,7 +65,7 @@ describe("CoveragePage snapshot coordination", () => {
   it("resets a rejected revision once even if the same error remains cached", () => {
     mocks.params = new URLSearchParams("regionId=extract:test&snapshotId=expired&offset=50");
     mocks.report.mockReturnValue({
-      error: { status: 409, code: "snapshot_expired" },
+      error: { status: 409, code: "SNAPSHOT_EXPIRED" },
       isError: true,
     });
     render(<CoveragePage />);

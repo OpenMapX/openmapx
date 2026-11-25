@@ -1,27 +1,24 @@
 import type { Command } from "commander";
+import { withAdminSessionOptions } from "../lib/admin-session";
 import { log } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 import { runSystemUpdate } from "../lib/system-update";
 
 export function registerSystemCommands(program: Command) {
-  program
-    .command("system")
-    .description("Coordinated updates as the real administrator")
-    .command("update")
-    .description(
-      "Review and apply an already checked immutable release through the administrative API",
-    )
-    .requiredOption("--release-id <id>", "Release ID printed by compose release --check")
-    .requiredOption("--digest <sha256>", "Canonical manifest digest printed by the check")
-    .requiredOption(
-      "--session-file <path>",
-      "Operator-provided mode-0600 Better Auth session-cookie file",
-    )
+  withAdminSessionOptions(
+    program
+      .command("system")
+      .description("Coordinated updates as the real administrator")
+      .command("update")
+      .description(
+        "Review and apply an already checked immutable release through the administrative API",
+      )
+      .requiredOption("--release-id <id>", "Release ID printed by compose release --check")
+      .requiredOption("--digest <sha256>", "Canonical manifest digest printed by the check"),
+  )
     .requiredOption("--receipt <path>", "New private resumable receipt, in a private directory")
-    .option("--api-origin <origin>", "HTTPS API origin (default: https://DOMAIN)")
     .option("--no-backup", "Skip the pre-update backup, as in the admin panel")
     .option("--resume", "Resume this receipt's original requests and jobs")
-    .option("--allow-loopback-http", "Allow HTTP only to a loopback origin for development")
     .action(async (options) => {
       try {
         const result = await runSystemUpdate({

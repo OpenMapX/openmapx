@@ -93,7 +93,6 @@
     }
   ],
   "quality": "built-in",
-  "category": "Shared Mobility",
   "dataSources": [
     {
       "sourceId": "de-cambio",

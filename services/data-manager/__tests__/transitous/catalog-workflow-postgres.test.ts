@@ -33,11 +33,11 @@ import { createControlRootOperationKey, OpsClient } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
 import {
   feedState,
-  jobStages,
-  jobs,
-  offlinePackageArtifactReferences,
-  offlinePackageJobOwners,
-  offlinePackageJobs,
+  job,
+  jobStage,
+  offlinePackageArtifactReference,
+  offlinePackageJob,
+  offlinePackageJobOwner,
 } from "@openmapx/db-schema";
 import { applyHardlinkPlan } from "@openmapx/hardlinks";
 import { renderFeedProxyNginxConfig } from "@openmapx/motis-feed-proxy-config";
@@ -798,7 +798,7 @@ it
         expect(validated.publication).toBe("unknown");
         expect(["running", "interrupted", "cancel_pending"]).toContain(validated.status);
         const [row] = await state.db
-          .sql`SELECT finished_at FROM data_manager.jobs WHERE id=${validation.id}`;
+          .sql`SELECT finished_at FROM data_manager.job WHERE id=${validation.id}`;
         expect(row?.finished_at).toBeNull();
         expect(heldTargets(dirname(data)).includes("motis")).toBe(true);
         return;
@@ -809,9 +809,12 @@ it
           status: validated,
           agent: processAgent.events,
           stages: await state.db
-            .sql`SELECT stage,status,message,artifacts FROM data_manager.job_stages WHERE job_id=${validation.id}`,
+            .sql`SELECT stage,status,message,artifacts FROM data_manager.job_stage WHERE job_id=${validation.id}`,
         }),
-      ).toMatchObject({ status: "ok", result: { kind: "catalog.validate", status: "passed" } });
+      ).toMatchObject({
+        status: "succeeded",
+        result: { kind: "catalog.validate", status: "passed" },
+      });
       const proof = readCatalogValidation(installation, proposalId, validation.id);
       expect(proof.validation.status).toBe("passed");
       expect(readCatalogPinSet(f.root)).toEqual(active);
@@ -975,7 +978,7 @@ it
           { transport },
         );
         const [row] = await state.db
-          .sql`SELECT finished_at FROM data_manager.jobs WHERE id=${activation.id}`;
+          .sql`SELECT finished_at FROM data_manager.job WHERE id=${activation.id}`;
         expect(row?.finished_at).toBeNull();
         expect(heldTargets(dirname(data)).includes("motis")).toBe(true);
         const next = await sdk.startDataExecution(
@@ -1002,7 +1005,7 @@ it
           nativeDmDiagnostics: nativeDm?.stderr,
         }),
       ).toMatchObject({
-        status: "ok",
+        status: "succeeded",
         result: { outcome: "activated", generationId: pins.generationId },
       });
       expect(readCatalogPinSet(f.root)?.generationId).toBe(pins.generationId);

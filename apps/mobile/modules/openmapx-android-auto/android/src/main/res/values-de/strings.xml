@@ -15,6 +15,7 @@
     <string name="car_no_route">Keine Route zu diesem Ziel gefunden.</string>
     <string name="car_network">Für die Routenplanung ist eine Verbindung nötig. Prüfe deine Verbindung und versuche es erneut.</string>
     <string name="car_unavailable">Die Routenplanung ist gerade nicht verfügbar. Versuche es später erneut.</string>
+    <string name="car_update_required">Aktualisiere OpenMapX auf deinem Smartphone, um Routen zu planen.</string>
     <string name="car_search_hint">Ort oder Adresse eingeben.</string>
     <string name="car_search_none">Keine Orte gefunden.</string>
     <string name="car_overview">Routenübersicht</string>

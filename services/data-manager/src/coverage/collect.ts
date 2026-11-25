@@ -11,6 +11,10 @@ import {
   regionKeyForExtract,
   type StreamEvidence,
 } from "@openmapx/core/coverage";
+import {
+  OSM_SEARCH_SCHEMA_VERSION,
+  OVERTURE_PLACES_SCHEMA_VERSION,
+} from "@openmapx/core/published-data";
 import { Cron } from "croner";
 import type postgres from "postgres";
 import {
@@ -213,10 +217,13 @@ function buildSearchStream(
   const sourceFingerprint = row?.source_fingerprint ?? null;
   const currentFingerprint = row?.current_fingerprint ?? null;
   const publicationAt = iso(row?.published_at);
-  const active = row?.status === "ready" && row?.epoch !== null && publicationAt !== null;
+  const currentLayout = row?.schema_version === OSM_SEARCH_SCHEMA_VERSION;
+  const active =
+    row?.status === "ready" && row?.epoch !== null && publicationAt !== null && currentLayout;
   const placeCount = numeric(row?.place_count);
   const reasons: CoverageReasonCode[] = [];
   if (!exists) reasons.push("schema_unavailable");
+  if (row && !currentLayout) reasons.push("active_version_mismatch");
   if (!row) reasons.push("no_publication_evidence");
   if (!active) reasons.push("no_publication_evidence");
   const fingerprintMatches =
@@ -271,10 +278,12 @@ function buildOvertureStream(
   now: Date,
 ): StreamEvidence {
   const publishedAt = iso(row?.places_published_at);
-  const active = row !== null && publishedAt !== null;
+  const currentLayout = row?.schema_version === OVERTURE_PLACES_SCHEMA_VERSION;
+  const active = row !== null && publishedAt !== null && currentLayout;
   const count = numeric(row?.place_count);
   const reasons: CoverageReasonCode[] = [];
   if (!exists) reasons.push("schema_unavailable");
+  if (row && !currentLayout) reasons.push("active_version_mismatch");
   if (!row) reasons.push("no_publication_evidence");
   if (!publishedAt) reasons.push("no_publication_evidence");
   if (row?.status === "failed") reasons.push("optional_evidence_missing");

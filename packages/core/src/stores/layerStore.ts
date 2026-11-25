@@ -1,10 +1,11 @@
 import { create } from "zustand";
 import { getStorage } from "../platform/storage";
+import { STORAGE_KEYS } from "../platform/storageKeys";
 
 export type MapLayer = "default" | "satellite" | "terrain" | "cycling";
 
-const GLOBE_STORAGE_KEY = "openmapx:globeView";
-const GLOBE_LIGHTING_STORAGE_KEY = "openmapx:globeLighting";
+const GLOBE_STORAGE_KEY = STORAGE_KEYS.globeView.key;
+const GLOBE_LIGHTING_STORAGE_KEY = STORAGE_KEYS.globeLighting.key;
 
 function readGlobePreference(): boolean {
   return getStorage().getString(GLOBE_STORAGE_KEY) === "true";

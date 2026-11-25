@@ -3,11 +3,11 @@ import { assertProductionDatabaseUrlSecret } from "@openmapx/core/deployment-sec
 import { resolveDatabaseUrl } from "@openmapx/core/service-secret-files";
 import {
   feedState,
-  jobStages,
-  jobs,
-  offlinePackageArtifactReferences,
-  offlinePackageJobOwners,
-  offlinePackageJobs,
+  job,
+  jobStage,
+  offlinePackageArtifactReference,
+  offlinePackageJob,
+  offlinePackageJobOwner,
 } from "@openmapx/db-schema";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -34,11 +34,11 @@ export function connectDatabase(applicationName: string): postgres.Sql {
 export const sql = connectDatabase("openmapx-data-manager");
 export const db = drizzle(sql, {
   schema: {
-    jobs,
-    jobStages,
+    job,
+    jobStage,
     feedState,
-    offlinePackageJobs,
-    offlinePackageJobOwners,
-    offlinePackageArtifactReferences,
+    offlinePackageJob,
+    offlinePackageJobOwner,
+    offlinePackageArtifactReference,
   },
 });

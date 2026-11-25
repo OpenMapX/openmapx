@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DATA_JOB_STATUSES } from "../jobs/vocabulary";
 import { serviceBatchResultSchema, serviceLifecycleFailureEvidenceSchema } from "./service-results";
 
 export const PROCESS_OUTPUT_TRUNCATED = "[output truncated]";
@@ -28,16 +29,7 @@ export const dataWorkflowReceiptSchema = z.strictObject({
         jobId: z.uuid(),
         fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
         deadlineAt: z.number().int().nonnegative().safe(),
-        status: z.enum([
-          "queued",
-          "running",
-          "succeeded",
-          "failed",
-          "interrupted",
-          "cancel_pending",
-          "canceled",
-          "unknown",
-        ]),
+        status: z.enum([...DATA_JOB_STATUSES, "unknown"]),
       }),
     )
     .max(16),

@@ -86,13 +86,13 @@ function CatalogPinView() {
     if (!result || transitPinExecutionPending(result) || announced.current === result.id) return;
     announced.current = result.id;
     if (
-      result.status === "ok" &&
+      result.status === "succeeded" &&
       result.result?.kind === "catalog.activate" &&
       result.result.outcome === "activated"
     )
       toast(t("validatedCatalogPairActivated"), "success");
     else if (
-      result.status === "ok" &&
+      result.status === "succeeded" &&
       result.result?.kind === "catalog.validate" &&
       result.result.status === "passed"
     )
@@ -475,7 +475,7 @@ function CatalogPinView() {
             severity={
               execution?.publication === "unknown"
                 ? "warning"
-                : execution?.status === "error"
+                : execution?.status === "failed"
                   ? "error"
                   : "info"
             }

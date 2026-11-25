@@ -13,7 +13,7 @@ crashScenario({
     const submitted = await host.submitUpdate();
     expect(submitted.status).toBe(200);
     const job = await host.settledJob(submitted.jobId as string, 180_000);
-    expect(job.status).not.toBe("success");
+    expect(job.status).not.toBe("succeeded");
     const recreated = host
       .dockerEffects({ command: "compose up", caller: "helper", since: start })
       .map((call) => call.args.at(-1));

@@ -2,6 +2,7 @@
   "id": "__ID__",
   "name": "My Community Service",
   "version": "1.0.0",
+  "platform": "1.0",
   "quality": "community",
   "container": {
     "image": "ghcr.io/your-org/__ID__",

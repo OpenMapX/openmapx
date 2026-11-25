@@ -26,6 +26,7 @@ import {
   listAdminAuditLog,
   unwrapAdminResponse,
 } from "@openmapx/core/api-admin-sdk";
+import type { AuditAction, AuditTargetType } from "@openmapx/core/api-contracts";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
@@ -76,8 +77,8 @@ export function AuditLog() {
   const { apiUrl, client } = useActivityClient();
   const dtf = useDateTimeFormat();
   const queryClient = useQueryClient();
-  const [actionFilter, setActionFilter] = useState("");
-  const [targetTypeFilter, setTargetTypeFilter] = useState("");
+  const [actionFilter, setActionFilter] = useState<AuditAction | "">("");
+  const [targetTypeFilter, setTargetTypeFilter] = useState<AuditTargetType | "">("");
   const [targetSearch, setTargetSearch] = useState("");
   const { page, rowsPerPage, offset, setPage, paginationProps } = useServerPagination(50);
 
@@ -147,7 +148,7 @@ export function AuditLog() {
               value={actionFilter}
               label={t("action")}
               onChange={(e) => {
-                setActionFilter(e.target.value);
+                setActionFilter(e.target.value as AuditAction | "");
                 setPage(0);
               }}
             >
@@ -171,7 +172,7 @@ export function AuditLog() {
               value={targetTypeFilter}
               label={t("targetType")}
               onChange={(e) => {
-                setTargetTypeFilter(e.target.value);
+                setTargetTypeFilter(e.target.value as AuditTargetType | "");
                 setPage(0);
               }}
             >

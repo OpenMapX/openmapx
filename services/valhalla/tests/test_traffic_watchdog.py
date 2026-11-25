@@ -187,6 +187,16 @@ def manifest(generation):
 
 
 class TrafficWatchdogTest(unittest.TestCase):
+    def test_image_settings_reach_the_entrypoint_in_lower_case(self):
+        env = watchdog.image_environment(
+            {"SERVE_TILES": "False", "BUILD_ELEVATION": "True", "PATH": "/bin"}
+        )
+        self.assertEqual(env["serve_tiles"], "False")
+        self.assertEqual(env["build_elevation"], "True")
+        self.assertEqual(env["SERVE_TILES"], "False")
+        self.assertEqual(env["PATH"], "/bin")
+        self.assertNotIn("build_admins", env)
+
     def test_offline_clear_preserves_inode_and_validates_bounds_first(self):
         with tempfile.TemporaryDirectory() as root:
             path = pathlib.Path(root) / "traffic.tar"

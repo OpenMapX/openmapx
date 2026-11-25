@@ -1,7 +1,7 @@
-import { ACTIVE_REQUEST_STATES } from "@openmapx/core/privacy";
+import { ACTIVE_REQUEST_STATUSES } from "@openmapx/core/privacy";
 import { and, eq, gte, inArray } from "drizzle-orm";
 import { db as defaultDb } from "../db/index.js";
-import { TASK_STATES } from "../db/privacy-schema.js";
+import { TASK_STATUSES } from "../db/privacy-schema.js";
 import {
   dataSubjectRequest,
   dataSubjectRequestEvent,
@@ -9,6 +9,7 @@ import {
   dataSubjectRequestTask,
 } from "../db/schema.js";
 import { getMetrics, type PrivacyOperationalMetricSnapshot } from "../services/metrics/index.js";
+import { errorNameCode } from "./error-name-code.js";
 
 const DUE_SOON_MS = 72 * 60 * 60 * 1_000;
 const MAX_ROWS = 50_000;
@@ -69,12 +70,7 @@ async function probe(
 }
 
 function safeCode(error: unknown): string {
-  const raw = error instanceof Error ? error.name : "monitor_failed";
-  const normalized = raw
-    .toLowerCase()
-    .replace(/[^a-z0-9._-]+/g, "-")
-    .slice(0, 96);
-  return normalized || "monitor_failed";
+  return errorNameCode(error, "MONITOR_FAILED");
 }
 
 async function collectSnapshot(
@@ -84,12 +80,12 @@ async function collectSnapshot(
   const now = (options.now ?? (() => new Date()))();
   const requestRows = await database
     .select({
-      state: dataSubjectRequest.state,
+      status: dataSubjectRequest.status,
       dueAt: dataSubjectRequest.dueAt,
       receivedAt: dataSubjectRequest.receivedAt,
     })
     .from(dataSubjectRequest)
-    .where(inArray(dataSubjectRequest.state, [...ACTIVE_REQUEST_STATES]))
+    .where(inArray(dataSubjectRequest.status, [...ACTIVE_REQUEST_STATUSES]))
     .limit(MAX_ROWS);
   const openRequestsByDueState = { on_track: 0, due_soon: 0, overdue: 0 };
   let oldestRequestAgeSeconds = 0;
@@ -109,7 +105,7 @@ async function collectSnapshot(
     .from(dataSubjectRequestTask)
     .limit(MAX_ROWS);
   const sourceTasksByStatus: Record<string, number> = Object.fromEntries(
-    TASK_STATES.map((status) => [status, 0]),
+    TASK_STATUSES.map((status) => [status, 0]),
   );
   for (const row of taskRows)
     sourceTasksByStatus[row.status] = (sourceTasksByStatus[row.status] ?? 0) + 1;
@@ -127,7 +123,7 @@ async function collectSnapshot(
   const notificationRows = await database
     .select({ id: dataSubjectRequestNotification.id })
     .from(dataSubjectRequestNotification)
-    .where(eq(dataSubjectRequestNotification.state, "failed"))
+    .where(eq(dataSubjectRequestNotification.status, "failed"))
     .limit(MAX_ROWS);
   const snapshot: PrivacyOperationsSnapshot = {
     capturedAt: now.toISOString(),

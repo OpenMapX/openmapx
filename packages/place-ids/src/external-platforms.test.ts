@@ -72,7 +72,7 @@ describe("external platform URL builders", () => {
   it("wires the builders into the builtin id-scheme views", () => {
     registerBuiltinIdSchemeViews();
 
-    expect(getIdSchemeView("googleMaps")?.buildUrl?.("123456789012345")).toBe(
+    expect(getIdSchemeView("google-maps")?.buildUrl?.("123456789012345")).toBe(
       "https://www.google.com/maps?cid=123456789012345",
     );
     expect(getIdSchemeView("yelp")?.buildUrl?.("cafe-central-vienna")).toBe(

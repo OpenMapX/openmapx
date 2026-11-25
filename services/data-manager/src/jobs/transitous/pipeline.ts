@@ -116,15 +116,15 @@ export interface RunPipelineResult {
  * Run the staged Transitous pipeline.
  *
  * - Stages 1-11 run in order; each result is persisted via `ctx.onStageComplete`.
- * - If a critical stage returns `status: "error"`, the
+ * - If a critical stage returns `status: "failed"`, the
  *   underlying Error is rethrown after the catalog is reset. Soft-stop stages
  *   record their error in the result list and the pipeline continues.
  * - `motis-import` / `motis-health` / `promote` exec against the staging MOTIS
  *   container and only swap data dirs after smoke probes pass. They return
  *   `"skipped"` when the staging dir / config / container isn't available
  *   (typical for unit tests and dev environments).
- * - The final status aggregates as: `"error"` if any non-skipped stage errored;
- *   `"partial"` if any stage returned `"partial"`; `"ok"` otherwise.
+ * - The final status aggregates as: `"failed"` if any non-skipped stage failed;
+ *   `"partially_succeeded"` if any stage returned it; `"succeeded"` otherwise.
  */
 export async function runTransitousPipeline(
   ctx: JobContext,
@@ -153,10 +153,11 @@ export async function runTransitousPipeline(
       await ctx.onStageComplete(result);
       if (
         entry.criticality === "critical" &&
-        (result.status === "error" || (options.requireCompleteStages && result.status !== "ok"))
+        (result.status === "failed" ||
+          (options.requireCompleteStages && result.status !== "succeeded"))
       ) {
         hardStopError = new Error(
-          options.requireCompleteStages && result.status !== "error"
+          options.requireCompleteStages && result.status !== "failed"
             ? `${entry.name} ${result.status}; reviewed validation requires a complete stage`
             : (result.error?.message ?? result.message ?? `${entry.name} failed`),
         );
@@ -209,10 +210,10 @@ export async function runTransitousPipeline(
 function aggregateFinalStatus(results: StageResult[]): StageStatus {
   let sawPartial = false;
   for (const result of results) {
-    if (result.status === "error") return "error";
-    if (result.status === "partial") sawPartial = true;
+    if (result.status === "failed") return "failed";
+    if (result.status === "partially_succeeded") sawPartial = true;
   }
-  return sawPartial ? "partial" : "ok";
+  return sawPartial ? "partially_succeeded" : "succeeded";
 }
 
 export interface BuildJobContextOptions {

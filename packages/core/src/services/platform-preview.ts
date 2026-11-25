@@ -24,7 +24,7 @@ const variables = {
   acmeEmail: "ACME_EMAIL",
   releaseSelector: "OPENMAPX_RELEASE",
   defaultRegion: "OPENMAPX_REGION",
-  backupRetentionDays: "BACKUP_RETENTION_DAYS",
+  backupRetentionDays: "RETENTION_BACKUP_DAYS",
 } as const;
 export function buildPlatformConfigurationPreview(input: {
   actorId: string;

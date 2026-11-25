@@ -248,14 +248,17 @@ describe("canonical data-manager acquisition", () => {
         ),
       )
       .mockResolvedValueOnce(
-        new Response(JSON.stringify({ error: "snapshot_expired" }), {
-          status: 409,
-          headers: {
-            "content-type": "application/json",
-            "cache-control": "private, no-store",
-            pragma: "no-cache",
+        new Response(
+          JSON.stringify({ error: "Coverage snapshot expired", code: "SNAPSHOT_EXPIRED" }),
+          {
+            status: 409,
+            headers: {
+              "content-type": "application/json",
+              "cache-control": "private, no-store",
+              pragma: "no-cache",
+            },
           },
-        }),
+        ),
       );
     const transport = createDataManagerTransport({
       baseUrl: "http://openmapx-data-manager",

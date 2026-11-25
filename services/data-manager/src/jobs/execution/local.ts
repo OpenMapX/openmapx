@@ -4,7 +4,7 @@ import type {
   LocalDataExecutionKind,
 } from "@openmapx/core/data-manager-contracts";
 import type postgres from "postgres";
-import type { DataExecutionReceiver } from "./api.js";
+import type { DataExecutionReceiver, DataJobActor } from "./api.js";
 
 type LocalInput = Extract<
   DataExecutionInput,
@@ -21,17 +21,17 @@ export function installLocalDataExecutions(value: Pick<DataExecutionReceiver, "r
 export async function startLocalDataExecution<T>(
   input: LocalInput,
   work: (sql: postgres.Sql) => Promise<T>,
-  options?: { triggeredBy?: string },
+  actor: DataJobActor,
 ): Promise<{ status: DataExecutionStatus; completion: Promise<T> }> {
   if (!receiver)
     throw Object.assign(Error("Durable data receiver is unavailable"), { statusCode: 503 });
-  return receiver.runLocal(input, work, options);
+  return receiver.runLocal(input, work, actor);
 }
 /** Runs `work` as a durable data execution and resolves with its value. */
 export async function runLocalDataExecution<T>(
   input: LocalInput,
   work: (sql: postgres.Sql) => Promise<T>,
-  options?: { triggeredBy?: string },
+  actor: DataJobActor,
 ): Promise<T> {
-  return (await startLocalDataExecution(input, work, options)).completion;
+  return (await startLocalDataExecution(input, work, actor)).completion;
 }

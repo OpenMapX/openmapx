@@ -591,7 +591,7 @@ it("refuses a prospective phase plan above the combined64 slots before exposure"
 it("refuses an execution row above its capacity before writing it", async () => {
   const services = Array.from(
       { length: 256 },
-      (_, n) => `svc-${String(n).padStart(3, "0")}-${"a".repeat(50)}`,
+      (_, n) => `svc-${String(n).padStart(3, "0")}-${"a".repeat(40)}`,
     ),
     f = await fixture(false, services);
   try {

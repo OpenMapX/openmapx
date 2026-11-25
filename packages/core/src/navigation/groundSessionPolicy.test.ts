@@ -24,6 +24,7 @@ import {
   REROUTE_IN_FLIGHT_STALE_MS,
   REROUTE_RETRY_DELAYS_MS,
   REROUTE_RETRY_JITTER_MS,
+  REROUTE_UPDATE_REQUIRED,
   type RerouteRuntime,
   recordRerouteSuccess,
   rerouteCandidate,
@@ -208,6 +209,19 @@ describe("canRequestReroute", () => {
     });
     expect(canRequestReroute(failed, EMPTY_REROUTE_CHURN, "online", NOW + 3_000)).toEqual({
       allow: true,
+    });
+  });
+
+  it("reports a refused mobile protocol at once and retries only at the longest delay", () => {
+    const runtime = onRerouteFailed(IDLE_REROUTE, REROUTE_UPDATE_REQUIRED, NOW, 0);
+    const longest = REROUTE_RETRY_DELAYS_MS.at(-1);
+    assert.isDefined(longest);
+
+    expect(runtime).toMatchObject({
+      status: "failed",
+      attempts: REROUTE_FAILURES_REPORTED,
+      lastFailureCode: "update-required",
+      nextAttemptAtMs: NOW + longest,
     });
   });
 

@@ -18,7 +18,7 @@ function makeEntries(count: number) {
     id: i,
     level: "info",
     source: "api",
-    msg: `entry ${i}`,
+    message: `entry ${i}`,
     time: 1700000000000 + i,
   }));
 }

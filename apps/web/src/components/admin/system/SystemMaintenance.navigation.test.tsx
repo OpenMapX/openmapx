@@ -39,7 +39,7 @@ it("retains the rejected release digest when Activity disposes the System route"
         job({
           id: "apply-job",
           status: failed ? "failed" : "running",
-          result: failed ? { errorCode: "host_update_required" } : null,
+          result: failed ? { errorCode: "HOST_UPDATE_REQUIRED" } : null,
         }),
       );
     return Response.json({

@@ -14,6 +14,7 @@ import {
   dataExecutionInputSchema,
   dataExecutionResultSchema,
   dataExecutionStatusSchema,
+  dataExecutionTerminalStatus,
   isDataExecutionTerminal,
   LOCAL_DATA_EXECUTION_KINDS,
   SHORT_DATA_EXECUTION_KINDS,
@@ -284,7 +285,7 @@ export function createDataExecutionControlJournal(
   // Each execution's row lives on its job row.
   local.rows = dataJobExecutionRows(database);
   async function load(execution: ExecutionRef) {
-    const rows = await database.unsafe("SELECT * FROM data_manager.jobs WHERE operation_key=$1", [
+    const rows = await database.unsafe("SELECT * FROM data_manager.job WHERE operation_key=$1", [
       execution.operationKey,
     ]);
     if (rows.length !== 1) throw Error("Original data journal row required");
@@ -296,7 +297,7 @@ export function createDataExecutionControlJournal(
   /** Records how the worker ended, once. */
   async function recordCompletion(execution: ExecutionRef, completion: unknown) {
     const written = await database.unsafe(
-      "UPDATE data_manager.jobs SET execution_completion=$2::text::jsonb WHERE operation_key=$1 AND execution_completion IS NULL RETURNING id",
+      "UPDATE data_manager.job SET execution_completion=$2::text::jsonb WHERE operation_key=$1 AND execution_completion IS NULL RETURNING id",
       [execution.operationKey, canonicalJson(workerSchema.parse(completion))],
     );
     if (written.length !== 1) throw Error("Original worker completion exists");
@@ -530,7 +531,7 @@ export function createDataExecutionControlJournal(
         publication: "unknown",
       };
       const rows = await database.unsafe(
-        "UPDATE data_manager.jobs SET status=$1,execution_state=$2::text::jsonb,finished_at=NULL,ownership_version=ownership_version+1 WHERE id=$3::uuid AND operation_key=$4 AND ownership_version=$5 RETURNING id",
+        "UPDATE data_manager.job SET status=$1,execution_state=$2::text::jsonb,finished_at=NULL,ownership_version=ownership_version+1 WHERE id=$3::uuid AND operation_key=$4 AND ownership_version=$5 RETURNING id",
         [
           status.status,
           canonicalJson({
@@ -863,18 +864,13 @@ export function createDataExecutionControlJournal(
       if (
         owned.result &&
         terminal.status !==
-          (owned.result.kind === "catalog.validate" && owned.result.status === "failed"
-            ? "error"
-            : owned.result.kind === "catalog.activate" && owned.result.outcome !== "activated"
-              ? "error"
-              : owned.result.kind === "transit-sync"
-                ? owned.result.finalStatus
-                : owned.partial
-                  ? "partial"
-                  : "ok")
+          dataExecutionTerminalStatus(owned.result, {
+            partial: owned.partial === true,
+            cancelled: false,
+          })
       )
         throw Error("Terminal status differs from actual dispatcher outcome");
-      if (terminal.status === "ok" && owned.error !== undefined)
+      if (terminal.status === "succeeded" && owned.error !== undefined)
         throw Error("Failed dispatcher cannot succeed");
       const children = rowChildren(value.row).map((raw) => childSchema.parse(raw));
       for (const child of children) {

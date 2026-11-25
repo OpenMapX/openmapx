@@ -4,6 +4,7 @@ import { isAbsolute } from "node:path";
 import { Readable } from "node:stream";
 import {
   type ConfigurationApplyResult,
+  configurationApplyOfSettlement,
   configurationApplyResultSchema,
   OPS_KIND_POLICIES,
   OPS_MAX_EVENT_BATCH,
@@ -19,6 +20,7 @@ import {
   type OpsOperation,
   type OpsOperationKind,
   type OpsResultFor,
+  type OpsSettlement,
   type OpsSubmitResult,
   opsKindRequiresControlAuthority,
   parseOpsResult,
@@ -48,7 +50,9 @@ export class ApiOpsError extends Error {
     super(
       errorClass === "host_update_required" ||
         errorClass === "configuration_prerequisite" ||
-        errorClass === "unsupported_peer"
+        errorClass === "unsupported_peer" ||
+        errorClass === "other_release" ||
+        errorClass === "release_state_epoch"
         ? OPS_PUBLIC_ERROR_MESSAGES[errorClass]
         : "Operations request failed",
     );
@@ -69,6 +73,23 @@ export class OpsObservationPending extends Error {
   ) {
     super("Operations observation is pending");
     this.name = "OpsObservationPending";
+  }
+}
+
+/**
+ * The operation finished in a row another release recorded. Its result is not
+ * read here; `configuration` is the configuration apply it settled, as the row
+ * states it for every release.
+ */
+export class OpsSettledByOtherRelease extends Error {
+  readonly configuration: ConfigurationApplyResult;
+  constructor(
+    readonly identity: { kind: OpsOperationKind; operationKey: string; operationId?: string },
+    readonly settlement: OpsSettlement,
+  ) {
+    super("Another release recorded the operation's outcome");
+    this.name = "OpsSettledByOtherRelease";
+    this.configuration = configurationApplyOfSettlement(settlement);
   }
 }
 
@@ -302,6 +323,14 @@ export async function waitForOpsResult<K extends OpsOperationKind>(
         }
         if (isTransientTransportError(error))
           pending(observerExpired() ? "observer_deadline" : "transport");
+        // Another release recorded the operation in a form the agent cannot
+        // read: its outcome is what the row's settlement states, or else
+        // unknown here, as for an interrupted operation.
+        if (errorClass(error) === "other_release") {
+          const settlement = error instanceof OpsClientError ? error.settlement : undefined;
+          if (settlement) throw new OpsSettledByOtherRelease(identity, settlement);
+          pending("recovery_required");
+        }
         return pending("unavailable");
       }
       if (observerExpired()) pending("observer_deadline");
@@ -548,6 +577,12 @@ export async function submitOpsOperationWithRecovery<K extends OpsOperationKind>
         } as OpsSubmitResult<K>;
       } catch (lookupError) {
         if (lookupError instanceof OpsObservationPending) throw lookupError;
+        // Another release's agent finished it: its row states what it settled.
+        if (lookupError instanceof OpsClientError && lookupError.settlement)
+          throw new OpsSettledByOtherRelease(
+            { kind: operation.kind, operationKey },
+            lookupError.settlement,
+          );
         const lookupClass = errorClass(lookupError);
         if (lookupClass !== "not_found" && !isTransientTransportError(lookupError)) {
           throw new OpsObservationPending({ kind: operation.kind, operationKey }, "unavailable");

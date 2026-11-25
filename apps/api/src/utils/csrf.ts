@@ -57,7 +57,7 @@ export function configuredTrustedWebOrigins(): [string, ...string[]] {
  * normalization here: encoded separators and dot segments must not turn a
  * lookalike application path into an exemption.
  */
-export function isBetterAuthCsrfPath(requestUrl: string): boolean {
+export function isSessionLibraryCsrfPath(requestUrl: string): boolean {
   if (!requestUrl.startsWith("/") || requestUrl.startsWith("//")) return false;
   const queryIndex = requestUrl.indexOf("?");
   const pathname = queryIndex === -1 ? requestUrl : requestUrl.slice(0, queryIndex);
@@ -94,7 +94,7 @@ export function makeCsrfGuardHook(trustedWebOrigins: readonly string[]) {
 
   return async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     if (!UNSAFE_METHODS.has(request.method)) return;
-    if (isBetterAuthCsrfPath(request.url)) return;
+    if (isSessionLibraryCsrfPath(request.url)) return;
     if (!hasRawHeader(request, "cookie")) return;
 
     const origins = rawHeaderValues(request, "origin");

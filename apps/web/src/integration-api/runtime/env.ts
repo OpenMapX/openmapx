@@ -58,7 +58,7 @@ export function buildClientEnv(
     hostedBasemapProviderSchema.catch("auto").parse(runtime.BASEMAP_PROVIDER);
   const keyConfigured =
     mapConfig?.maptilerConfigured ??
-    Boolean(runtime.MAPTILER_KEY?.trim() || runtime.NEXT_PUBLIC_MAPTILER_KEY?.trim());
+    Boolean(runtime.MAPTILER_API_KEY?.trim() || runtime.NEXT_PUBLIC_MAPTILER_KEY?.trim());
   const basemapProvider = tilesUrl
     ? "selfhosted"
     : preference === "auto"

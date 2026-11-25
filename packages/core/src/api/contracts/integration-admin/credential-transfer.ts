@@ -1,5 +1,6 @@
 import { isWellFormedFeedCredentialText } from "@openmapx/transitous-core/feed-credentials";
 import z from "zod/v4";
+import { COMPONENT_ID_PATTERN } from "../../../component-id";
 import { type AdminOperation, adminCommonResponses, adminJson, httpErrorSchema } from "../admin";
 
 /** Public checked reference for decrypt-only review, never apply authority. */
@@ -10,7 +11,7 @@ const encoded = (bytes: number) =>
     .string()
     .regex(/^[A-Za-z0-9_-]+$/)
     .length(Math.ceil((bytes * 4) / 3));
-const id = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/);
+const id = z.string().regex(COMPONENT_ID_PATTERN);
 const key = z
   .string()
   .min(1)

@@ -1,5 +1,6 @@
 /** Finite queued maintenance requests, retained in the existing admin job table. */
 import { createHash } from "node:crypto";
+import type { AdminJobType } from "@openmapx/core/jobs";
 import { canonicalJson } from "@openmapx/core/ops";
 import { and, sql } from "drizzle-orm";
 import { db } from "../db";
@@ -8,9 +9,10 @@ import { actorUserIdOrNull } from "../utils/actor";
 // Service/backup additions share admission identity only. Their existing
 // operation observers and coordinator recovery remain unchanged; they are not
 // added to the finite retainedMaintenanceJob handler-replay routing list.
-export type RetainedMaintenanceJobType =
+export type RetainedMaintenanceJobType = Extract<
+  AdminJobType,
   | "release.clear"
-  | "service.images.pull"
+  | "service.image.pull"
   | "backup.prune"
   | "compose.render"
   | "artifact.validate"
@@ -19,10 +21,11 @@ export type RetainedMaintenanceJobType =
   | "service.start"
   | "service.stop"
   | "service.restart"
-  | "service.core-restart"
+  | "service.core.restart"
   | "service.apply"
-  | "service.bulk"
-  | "backup.operation";
+  | "service.batch.run"
+  | "backup.operation.run"
+>;
 export class MaintenanceRequestConflict extends Error {}
 function maintenanceRequestDigest(type: string, payload: unknown, actorId: string): string {
   return createHash("sha256")
@@ -67,7 +70,7 @@ export async function retainMaintenanceJob(
       .values({
         type,
         status: "queued",
-        createdBy: actorUserIdOrNull(actorId),
+        createdByUserId: actorUserIdOrNull(actorId),
         payload: {
           ...payload,
           _maintenanceRequest: { actorId, key, digest },

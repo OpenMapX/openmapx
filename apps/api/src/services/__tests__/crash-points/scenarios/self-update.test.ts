@@ -12,7 +12,7 @@ crashScenario({
     const submitted = await host.submitUpdate();
     expect(submitted.status).toBe(200);
     const job = await host.waitForJob(submitted.jobId as string);
-    expect(job.status).toBe("success");
+    expect(job.status).toBe("succeeded");
     const images = host.runningImages();
     expect(images.api).toBe(host.releaseImageId("next", "api"));
     expect(images["data-manager"]).toBe(host.releaseImageId("next", "data-manager"));

@@ -512,7 +512,7 @@ describe("service administration visible behavior with the generated SDK", () =>
             id,
             status:
               id === "job-1" && revision >= 1
-                ? "success"
+                ? "succeeded"
                 : id === "job-2" && revision === 2
                   ? "failed"
                   : "cancel_pending",
@@ -700,9 +700,9 @@ describe("service administration visible behavior with the generated SDK", () =>
             id,
             status:
               id === "job-1" && revision >= 2
-                ? "success"
+                ? "succeeded"
                 : id === "job-2" && revision === 3
-                  ? "canceled"
+                  ? "cancelled"
                   : "cancel_pending",
           }),
         );

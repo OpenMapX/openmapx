@@ -7,7 +7,7 @@ export interface AppLogEntry {
   id: number;
   level: string;
   source: string;
-  msg: string;
+  message: string;
   time: number;
   metadata?: Record<string, unknown>;
 }
@@ -38,7 +38,7 @@ const OMIT_KEYS = new Set([
 
 export interface AppLoggerOptions {
   maxSize?: number;
-  /** Most entries waiting to be written to `app_logs`; later ones are counted and dropped. */
+  /** Most entries waiting to be written to `app_log`; later ones are counted and dropped. */
   maxPersistQueue?: number;
   persist?: (entry: AppLogEntry) => Promise<void>;
 }
@@ -47,7 +47,7 @@ async function persistAppLog(entry: AppLogEntry): Promise<void> {
   await db.insert(appLog).values({
     level: entry.level,
     source: entry.source,
-    msg: entry.msg,
+    message: entry.message,
     metadata: entry.metadata ?? null,
   });
 }
@@ -57,7 +57,7 @@ function sanitizeEntry(entry: AppLogEntry): AppLogEntry {
     id: entry.id,
     level: sanitizeLogString(entry.level),
     source: sanitizeLogString(entry.source),
-    msg: sanitizeLogString(entry.msg),
+    message: sanitizeLogString(entry.message),
     time: Number.isFinite(entry.time) ? entry.time : Date.now(),
     ...(entry.metadata === undefined ? {} : { metadata: sanitizeLogMetadata(entry.metadata) }),
   };
@@ -123,7 +123,7 @@ export class AppLogger {
       this.add({
         level: "warn",
         source: "platform",
-        msg: `${dropped} log entries were not written to the database because the write queue was full`,
+        message: `${dropped} log entries were not written to the database because the write queue was full`,
         time: Date.now(),
       });
     }
@@ -175,7 +175,7 @@ export class AppLogger {
     if (opts.search) {
       const q = opts.search.toLowerCase();
       filtered = filtered.filter(
-        (e) => e.msg.toLowerCase().includes(q) || e.source.toLowerCase().includes(q),
+        (e) => e.message.toLowerCase().includes(q) || e.source.toLowerCase().includes(q),
       );
     }
 
@@ -208,7 +208,7 @@ export class AppLogger {
           const levelNum = typeof parsed.level === "number" ? parsed.level : 30;
           const level = LEVEL_MAP[levelNum] ?? "info";
           const source = typeof parsed.name === "string" ? parsed.name : "platform";
-          const msg = typeof parsed.msg === "string" ? parsed.msg : "";
+          const message = typeof parsed.msg === "string" ? parsed.msg : "";
           const time = typeof parsed.time === "number" ? parsed.time : Date.now();
 
           const metadata = Object.create(null) as Record<string, unknown>;
@@ -219,7 +219,7 @@ export class AppLogger {
           self.add({
             level,
             source,
-            msg,
+            message,
             time,
             metadata: Object.keys(metadata).length ? metadata : undefined,
           });

@@ -1,9 +1,11 @@
-export const MAPLIBRE_RUNTIME_CACHE = "maplibre-runtimes";
-export const SCRIPT_FONT_CACHE = "script-fonts";
+import { CACHE_STORAGE_NAMES } from "@openmapx/core/storage-keys";
 
-export const MAP_TILE_CACHE = "map-tiles";
-export const STREET_LEVEL_IMAGERY_TILE_CACHE = "street-level-imagery-tiles";
-export const VECTOR_TILE_CACHE = "vector-tiles";
+export const MAPLIBRE_RUNTIME_CACHE = CACHE_STORAGE_NAMES.maplibreRuntimes;
+export const SCRIPT_FONT_CACHE = CACHE_STORAGE_NAMES.scriptFonts;
+
+export const MAP_TILE_CACHE = CACHE_STORAGE_NAMES.mapTiles;
+export const STREET_LEVEL_IMAGERY_TILE_CACHE = CACHE_STORAGE_NAMES.streetLevelImageryTiles;
+export const VECTOR_TILE_CACHE = CACHE_STORAGE_NAMES.vectorTiles;
 
 /** The tile caches the worker fills and "Clear cached tiles" empties. */
 export const CLEARABLE_TILE_CACHES = [
@@ -59,7 +61,8 @@ export async function handleNetworkOnlyNavigation({
  * offline page, manifest and bundled styles), fetched without credentials and
  * written only when a worker version installs.
  */
-export const APP_SHELL_CACHE_PREFIX = "app-shell-";
+export const APP_SHELL_CACHE_PREFIX = CACHE_STORAGE_NAMES.appShellPrefix;
+export const STYLE_ASSETS_CACHE_PREFIX = CACHE_STORAGE_NAMES.styleAssetsPrefix;
 
 export function isAppShellCacheName(name: string): boolean {
   return name.startsWith(APP_SHELL_CACHE_PREFIX);
@@ -82,7 +85,7 @@ export function isStalePrecacheName(
   current: { appShell: string; style: string },
 ): boolean {
   if (isAppShellCacheName(name)) return name !== current.appShell;
-  if (name.startsWith("style-assets")) return name !== current.style;
+  if (name.startsWith(STYLE_ASSETS_CACHE_PREFIX)) return name !== current.style;
   return false;
 }
 
@@ -97,7 +100,7 @@ export function isBundledScriptFontPath(pathname: string): boolean {
 }
 
 export function offlineGlyphCacheNameForVersion(version: string): string {
-  return `offline-package-glyphs-${version.replace(/[^A-Za-z0-9_-]/g, "_")}`;
+  return `${CACHE_STORAGE_NAMES.offlinePackageGlyphsPrefix}${version.replace(/[^A-Za-z0-9_-]/g, "_")}`;
 }
 
 export function offlineGlyphVersionFromPath(pathname: string): string | undefined {

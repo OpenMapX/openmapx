@@ -26,7 +26,7 @@ beforeEach(() => {
 
 describe("useRecentSearchStore", () => {
   it("hydrates saved queries in newest-first order", () => {
-    storage.setString("openmapx:recentSearches", '["Berlin","Paris"]');
+    storage.setString("openmapx:search:recent-searches", '["Berlin","Paris"]');
     useRecentSearchStore.getState().hydrate();
     expect(useRecentSearchStore.getState().entries).toEqual(["Berlin", "Paris"]);
   });
@@ -49,7 +49,7 @@ describe("useRecentSearchStore", () => {
       "City 2",
       "City 1",
     ]);
-    expect(JSON.parse(storage.getString("openmapx:recentSearches") ?? "null")).toEqual(
+    expect(JSON.parse(storage.getString("openmapx:search:recent-searches") ?? "null")).toEqual(
       useRecentSearchStore.getState().entries,
     );
   });
@@ -58,7 +58,7 @@ describe("useRecentSearchStore", () => {
     useRecentSearchStore.getState().add("Berlin");
     useRecentSearchStore.getState().clear();
     expect(useRecentSearchStore.getState().entries).toEqual([]);
-    expect(storage.getString("openmapx:recentSearches")).toBeNull();
+    expect(storage.getString("openmapx:search:recent-searches")).toBeNull();
   });
 
   it("disabling clears history, blocks writes, and re-enabling starts empty", () => {
@@ -66,12 +66,12 @@ describe("useRecentSearchStore", () => {
     useSettingsStore.getState().setSearchHistoryEnabled(false);
 
     expect(useRecentSearchStore.getState().entries).toEqual([]);
-    expect(storage.getString("openmapx:recentSearches")).toBeNull();
+    expect(storage.getString("openmapx:search:recent-searches")).toBeNull();
     useRecentSearchStore.getState().add("Paris");
-    storage.setString("openmapx:recentSearches", '["Old query"]');
+    storage.setString("openmapx:search:recent-searches", '["Old query"]');
     useRecentSearchStore.getState().hydrate();
     expect(useRecentSearchStore.getState().entries).toEqual([]);
-    expect(storage.getString("openmapx:recentSearches")).toBeNull();
+    expect(storage.getString("openmapx:search:recent-searches")).toBeNull();
 
     useSettingsStore.getState().setSearchHistoryEnabled(true);
     expect(useRecentSearchStore.getState().entries).toEqual([]);
@@ -81,21 +81,21 @@ describe("useRecentSearchStore", () => {
 
   it("does not write when another tab has disabled history", () => {
     useRecentSearchStore.getState().add("Berlin");
-    storage.setString("openmapx:searchHistoryEnabled", "false");
+    storage.setString("openmapx:search:history-enabled", "false");
 
     useRecentSearchStore.getState().add("Paris");
 
     expect(useRecentSearchStore.getState().entries).toEqual([]);
-    expect(storage.getString("openmapx:recentSearches")).toBeNull();
+    expect(storage.getString("openmapx:search:recent-searches")).toBeNull();
   });
 
   it("updates visible history when another tab disables it", () => {
     useRecentSearchStore.getState().add("Berlin");
     const unsubscribe = subscribeRecentSearchStorage();
     try {
-      storage.setString("openmapx:searchHistoryEnabled", "false");
-      storage.remove("openmapx:recentSearches");
-      window.dispatchEvent(new StorageEvent("storage", { key: "openmapx:searchHistoryEnabled" }));
+      storage.setString("openmapx:search:history-enabled", "false");
+      storage.remove("openmapx:search:recent-searches");
+      window.dispatchEvent(new StorageEvent("storage", { key: "openmapx:search:history-enabled" }));
 
       expect(useSettingsStore.getState().searchHistoryEnabled).toBe(false);
       expect(useRecentSearchStore.getState().entries).toEqual([]);
@@ -105,7 +105,7 @@ describe("useRecentSearchStore", () => {
   });
 
   it("drops malformed saved data", () => {
-    storage.setString("openmapx:recentSearches", "{broken");
+    storage.setString("openmapx:search:recent-searches", "{broken");
     useRecentSearchStore.getState().hydrate();
     expect(useRecentSearchStore.getState().entries).toEqual([]);
   });

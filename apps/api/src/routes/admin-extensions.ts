@@ -1,6 +1,7 @@
 import type { AdminExtensionInstallRequest } from "@openmapx/core/api-contracts";
 import { services as coreServices } from "@openmapx/core/server";
 import type { FastifyInstance, FastifyRequest } from "fastify";
+import { criticalAdvisoryFor } from "../services/extension-critical-advisory";
 import { normalizeExtensionInstallPayload } from "../services/extension-install-payload";
 import { previewExtensionInstall } from "../services/extension-installer";
 import {
@@ -55,7 +56,7 @@ function installFailure(request: FastifyRequest, error: unknown, fallback: strin
 
 function assertAdmission(entry: ExtensionCatalogEntry, kill: KillSwitch): void {
   if (kill.removed.has(entry.id)) throw new ExtensionInstallRequestError("Extension delisted");
-  if (kill.critical.has(entry.id))
+  if (criticalAdvisoryFor(kill, entry.id, entry.version))
     throw new ExtensionInstallRequestError("Extension flagged critical");
   if (!isExtensionCompatible(entry))
     throw new ExtensionInstallRequestError("Extension requires a newer platform version");
@@ -82,7 +83,12 @@ async function resolveInstallRequest(body: AdminExtensionInstallRequest): Promis
     const manifest = await resolveDirectExtensionManifest(sourceUrl);
     // The validated identity, never a selector sentinel or supplied trust, owns denial.
     assertAdmission(
-      { id: manifest.id, name: manifest.name, minPlatform: manifest.platform },
+      {
+        id: manifest.id,
+        name: manifest.name,
+        version: manifest.version,
+        minPlatform: manifest.platform,
+      },
       await getKillSwitch(),
     );
     return { manifest, sourceUrl, sourceTrust: "community" };
@@ -103,10 +109,21 @@ export type ExtensionStatus = "verified" | "community" | "revoked" | "stale-revo
  * Revocation outranks trust: a revoked extension is revoked whatever tier it
  * came from. When the deny-only feed could not be refreshed the entry is
  * reported as `stale-revocation-data` rather than silently as clean, so an
- * administrator can tell "not revoked" from "not checked".
+ * administrator can tell "not revoked" from "not checked". An advisory that
+ * covers the installed version revokes the entry too, even when the version the
+ * catalog now offers is outside it.
  */
-function extensionStatus(entry: ExtensionCatalogEntry, kill: KillSwitch): ExtensionStatus {
-  if (kill.removed.has(entry.id) || kill.critical.has(entry.id)) return "revoked";
+function extensionStatus(
+  entry: ExtensionCatalogEntry,
+  kill: KillSwitch,
+  installedVersion: string | undefined,
+): ExtensionStatus {
+  if (
+    kill.removed.has(entry.id) ||
+    criticalAdvisoryFor(kill, entry.id, entry.version) ||
+    (installedVersion !== undefined && criticalAdvisoryFor(kill, entry.id, installedVersion))
+  )
+    return "revoked";
   if (kill.stale) return "stale-revocation-data";
   return entry.trust === "verified" ? "verified" : "community";
 }
@@ -161,10 +178,13 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
           // No spurious update when the live version is unknown (manifest fetch failed).
           hasUpdate: !!inst && e.version != null && inst.installedVersion !== e.version,
           removed: kill.removed.has(e.id) ? kill.removed.get(e.id) : null,
-          critical: kill.critical.has(e.id) ? kill.critical.get(e.id) : null,
+          critical: criticalAdvisoryFor(kill, e.id, e.version) ?? null,
+          installedCritical: inst
+            ? (criticalAdvisoryFor(kill, e.id, inst.installedVersion) ?? null)
+            : null,
           // `verified` | `community` | `revoked` | `stale-revocation-data` are
           // distinct states. "We could not check" must never render as "clean".
-          status: extensionStatus(e, kill),
+          status: extensionStatus(e, kill, inst?.installedVersion),
         };
       }),
       total: entries.length,
@@ -195,7 +215,7 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
       compatible: isExtensionCompatible(entry),
       platformVersion: PLATFORM_VERSION,
       removed: kill.removed.get(entry.id) ?? null,
-      critical: kill.critical.get(entry.id) ?? null,
+      critical: criticalAdvisoryFor(kill, entry.id, entry.version) ?? null,
     };
   });
 
@@ -211,8 +231,10 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
     // Catalog availability must not hide authoritative local inventory/removal.
     // Keep DB reads and output validation outside this optional enrichment boundary.
     let catalog: ExtensionCatalogEntry[] | undefined;
+    let kill: KillSwitch | undefined;
     try {
       catalog = await getExtensionCatalog();
+      kill = await getKillSwitch();
     } catch (error) {
       request.log.warn(
         { errorClass: safeErrorClass(error) },
@@ -248,6 +270,9 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
           components,
           hasUpdate: entry?.version != null ? entry.version !== ext.installedVersion : null,
           latestVersion: entry?.version ?? null,
+          // The advisory that covers the version this instance runs, whatever
+          // version the catalog offers now.
+          critical: kill ? (criticalAdvisoryFor(kill, ext.id, ext.installedVersion) ?? null) : null,
         };
       }),
     };
@@ -302,7 +327,6 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
       await writeAuditLog({
         actorId: adminSession.user.id,
         action: "extension.install",
-        targetType: "extension",
         targetId: manifest.id,
         details: {
           version: manifest.version,
@@ -359,7 +383,6 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
       await writeAuditLog({
         actorId: adminSession.user.id,
         action: "extension.update",
-        targetType: "extension",
         targetId: id,
         details: { version: manifest.version, jobId },
         request,
@@ -385,7 +408,6 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
     await writeAuditLog({
       actorId: adminSession.user.id,
       action: "extension.remove",
-      targetType: "extension",
       targetId: id,
       details: { jobId },
       request,
@@ -414,7 +436,7 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
     }
     await writeAuditLog({
       actorId: adminSession.user.id,
-      action: "extension.add_source",
+      action: "extension.source.add",
       details: { sourceUrl: summarizeExternalUrl(url), label },
       request,
     });
@@ -429,7 +451,7 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
     await removeExtensionSource(url);
     await writeAuditLog({
       actorId: adminSession.user.id,
-      action: "extension.remove_source",
+      action: "extension.source.remove",
       details: { sourceUrl: summarizeExternalUrl(url) },
       request,
     });
@@ -442,7 +464,7 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
     const catalog = await getExtensionCatalog(true);
     await writeAuditLog({
       actorId: adminSession.user.id,
-      action: "extension.refresh_catalog",
+      action: "extension.catalog.refresh",
       details: { entriesLoaded: catalog.length },
       request,
     });

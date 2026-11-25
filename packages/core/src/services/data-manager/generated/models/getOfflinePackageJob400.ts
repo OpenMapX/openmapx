@@ -4,8 +4,29 @@
 export type GetOfflinePackageJob400 =
   | {
       error: string;
+      /** @pattern ^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$ */
+      code?: string;
       message?: string;
       jobId?: string;
+    }
+  | {
+      error: string;
+      code: "REQUIRED_SETTINGS_MISSING";
+      /**
+       * @minItems 1
+       * @maxItems 256
+       */
+      missingSettings: {
+        /** @pattern ^(?=.{1,48}$)[a-z0-9]+(?:-[a-z0-9]+)*$ */
+        serviceId: string;
+        /**
+         * @minItems 1
+         * @maxItems 64
+         * @items.minLength 1
+         * @items.maxLength 128
+         */
+        keys: string[];
+      }[];
     }
   | {
       /**
@@ -20,13 +41,13 @@ export type GetOfflinePackageJob400 =
   | {
       error: string;
       code:
-        | "invalid-principal"
-        | "invalid-request"
-        | "capacity"
-        | "principal-quota"
-        | "source-unavailable"
-        | "generation-failed"
-        | "expired";
+        | "INVALID_PRINCIPAL"
+        | "INVALID_REQUEST"
+        | "CAPACITY"
+        | "PRINCIPAL_QUOTA"
+        | "SOURCE_UNAVAILABLE"
+        | "GENERATION_FAILED"
+        | "EXPIRED";
       /** @minimum 0 */
       retryAfterSeconds?: number;
     };

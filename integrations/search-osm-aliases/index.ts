@@ -1,9 +1,11 @@
+import { OSM_SEARCH_SCHEMA_VERSION } from "@openmapx/core/published-data";
 import type { HealthCheckResult, IntegrationContext } from "@openmapx/integration-framework";
 import { createOsmAliasSuggestionProvider } from "./provider.js";
 
 interface HealthRow {
   relation: string | null;
   status?: string;
+  schema_version?: number;
   source_fingerprint?: string;
   current_fingerprint?: string;
 }
@@ -21,7 +23,7 @@ export function setup(ctx: IntegrationContext): void {
         return { status: "unconfigured", responseTime: Date.now() - startedAt };
       }
       const rows = await ctx.db.execute<HealthRow[]>(
-        "SELECT status, source_fingerprint, current_fingerprint FROM osm_search.index_state WHERE singleton = 1",
+        "SELECT status, source_fingerprint, current_fingerprint, schema_version FROM osm_search.index_state WHERE singleton = 1",
       );
       const state = rows[0];
       if (state?.status !== "ready") {
@@ -29,6 +31,13 @@ export function setup(ctx: IntegrationContext): void {
           status: "down",
           responseTime: Date.now() - startedAt,
           error: "No ready OSM alias index is published",
+        };
+      }
+      if (state.schema_version !== OSM_SEARCH_SCHEMA_VERSION) {
+        return {
+          status: "down",
+          responseTime: Date.now() - startedAt,
+          error: "The OSM alias index has an outdated layout and awaits its rebuild",
         };
       }
       return {

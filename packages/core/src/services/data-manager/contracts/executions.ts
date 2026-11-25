@@ -1,4 +1,9 @@
 import z from "zod/v4";
+import {
+  DATA_JOB_STATUSES,
+  DATA_JOB_TERMINAL_STATUSES,
+  type DataJobTerminalStatus,
+} from "../../../jobs/vocabulary";
 import { controlOriginSchema } from "../../../ops/control-root-key";
 import { executionRefSchema } from "../../../ops/execution-ref";
 import { processDiagnosticsSchema } from "../../../ops/job-evidence";
@@ -167,7 +172,7 @@ export const dataExecutionResultSchema = z
     regional("convert-overpass").extend({ sizeBytes: dataEpochSchema }),
     z.strictObject({
       kind: z.literal("transit-sync"),
-      finalStatus: z.enum(["ok", "partial", "error"]),
+      finalStatus: z.enum(["succeeded", "partially_succeeded", "failed"]),
       sourceRevision: z.string().min(1).max(512),
       countries,
     }),
@@ -221,16 +226,7 @@ export const dataExecutionStatusSchema = z
       "transit-maintenance",
       ...LOCAL_DATA_EXECUTION_KINDS,
     ]),
-    status: z.enum([
-      "queued",
-      "running",
-      "cancel_pending",
-      "ok",
-      "partial",
-      "error",
-      "canceled",
-      "interrupted",
-    ]),
+    status: z.enum(DATA_JOB_STATUSES),
     cancellationRequestedAt: z.iso.datetime({ offset: true }).nullable(),
     progress: z.number().finite().min(0).max(1).nullable(),
     diagnostics: processDiagnosticsSchema,
@@ -299,7 +295,20 @@ export const dataChildAttemptSchema = z
 export type DataChildAttempt = z.infer<typeof dataChildAttemptSchema>;
 export function isDataExecutionTerminal(status: DataExecutionStatus): boolean {
   return (
-    ["ok", "partial", "error", "canceled", "interrupted"].includes(status.status) &&
+    (DATA_JOB_TERMINAL_STATUSES as readonly string[]).includes(status.status) &&
     status.publication !== "unknown"
   );
+}
+
+/** The terminal of a dispatcher that returned `result` (or none), for a run
+ * whose cancellation was or was not requested. */
+export function dataExecutionTerminalStatus(
+  result: DataExecutionResult | undefined,
+  options: { partial: boolean; cancelled: boolean },
+): DataJobTerminalStatus {
+  if (!result) return options.cancelled ? "cancelled" : "failed";
+  if (result.kind === "catalog.validate" && result.status === "failed") return "failed";
+  if (result.kind === "catalog.activate" && result.outcome !== "activated") return "failed";
+  if (result.kind === "transit-sync") return result.finalStatus;
+  return options.partial ? "partially_succeeded" : "succeeded";
 }

@@ -46,7 +46,7 @@ export const run: StageFn = async (ctx) => {
     const overrides = applyConfigOverrides(configPath, ctx.logger);
     return {
       stage: "gen-motis-config",
-      status: "ok",
+      status: "succeeded",
       startedAt,
       finishedAt: ctx.now(),
       durationMs: Date.now() - start,
@@ -60,7 +60,7 @@ export const run: StageFn = async (ctx) => {
     const err = error as Error;
     return {
       stage: "gen-motis-config",
-      status: "error",
+      status: "failed",
       startedAt,
       finishedAt: ctx.now(),
       durationMs: Date.now() - start,

@@ -24,13 +24,20 @@ export const canonicalOfflinePackageRequestSchema = z.strictObject({
   source: offlineSourceDescriptorSchema,
   requestKey: z.string(),
 });
+/** Why an offline package job failed or expired, as its row stores it. */
+export const offlinePackageJobErrorCodeSchema = z.enum([
+  "INVALID_REQUEST",
+  "CAPACITY",
+  "GENERATION_FAILED",
+  "EXPIRED",
+]);
 const offlinePackagePreparationBaseSchema = z.strictObject({
   jobId: z.string(),
   request: canonicalOfflinePackageRequestSchema,
   status: z.enum(["preparing", "ready-to-download", "failed", "expired"]),
   packageId: z.string().optional(),
   manifest: offlineMapPackageManifestSchema.optional(),
-  errorCode: z.enum(["invalid-request", "capacity", "generation-failed", "expired"]).optional(),
+  errorCode: offlinePackageJobErrorCodeSchema.optional(),
   errorMessage: z.string().optional(),
 });
 export const offlinePackagePreparingSchema = offlinePackagePreparationBaseSchema.extend({
@@ -44,12 +51,12 @@ export const offlinePackageReadySchema = offlinePackagePreparationBaseSchema.ext
 });
 export const offlinePackageFailedSchema = offlinePackagePreparationBaseSchema.extend({
   status: z.literal("failed"),
-  errorCode: z.enum(["invalid-request", "capacity", "generation-failed", "expired"]),
+  errorCode: offlinePackageJobErrorCodeSchema,
   errorMessage: z.string(),
 });
 export const offlinePackageExpiredSchema = offlinePackagePreparationBaseSchema.extend({
   status: z.literal("expired"),
-  errorCode: z.literal("expired"),
+  errorCode: z.literal("EXPIRED"),
   errorMessage: z.string(),
 });
 export const offlinePackagePreparationSchema = z.discriminatedUnion("status", [
@@ -77,13 +84,13 @@ export const offlinePackageCapabilitySchema = z.discriminatedUnion("available", 
 export const offlinePackageErrorSchema = z.strictObject({
   error: z.string(),
   code: z.enum([
-    "invalid-principal",
-    "invalid-request",
-    "capacity",
-    "principal-quota",
-    "source-unavailable",
-    "generation-failed",
-    "expired",
+    "INVALID_PRINCIPAL",
+    "INVALID_REQUEST",
+    "CAPACITY",
+    "PRINCIPAL_QUOTA",
+    "SOURCE_UNAVAILABLE",
+    "GENERATION_FAILED",
+    "EXPIRED",
   ]),
   retryAfterSeconds: countSchema.optional(),
 });

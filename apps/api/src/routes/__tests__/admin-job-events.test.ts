@@ -38,7 +38,7 @@ function jobRow(overrides: Record<string, unknown> = {}) {
   return {
     source: "application",
     id: "0193e4a0-0000-7000-8001-000000000001",
-    type: "data.operation",
+    type: "data.operation.run",
     status: "running",
     payload: { operation: "link" },
     result: null,
@@ -94,7 +94,7 @@ describe("GET /admin/jobs/:id/events", () => {
     "observes cancel_pending via %s until terminal completion",
     async (mode) => {
       const id = nextJobId();
-      const pending = { type: "status" as const, status: "cancel_pending" };
+      const pending = { type: "status" as const, status: "cancel_pending" as const };
       mockGetActivityJob.mockResolvedValue(
         jobRow({ id, status: mode === "live" ? "running" : "cancel_pending", cancelable: false }),
       );
@@ -104,7 +104,7 @@ describe("GET /admin/jobs/:id/events", () => {
       }
       const timer = setTimeout(() => {
         if (mode === "live") jobEventBus.publish(id, pending);
-        jobEventBus.publish(id, { type: "status", status: "canceled" });
+        jobEventBus.publish(id, { type: "status", status: "cancelled" });
       }, 20);
       const before = jobEventBus.metrics.activeStreams;
       try {
@@ -124,7 +124,7 @@ describe("GET /admin/jobs/:id/events", () => {
         expect(frames[mode === "live" ? 1 : 0]?.data).toMatchObject(
           mode === "snapshot" ? { job: { status: "cancel_pending", cancelable: false } } : pending,
         );
-        expect(frames.at(-1)?.data).toEqual({ status: "canceled" });
+        expect(frames.at(-1)?.data).toEqual({ status: "cancelled" });
         expect(jobEventBus.metrics.activeStreams).toBe(before);
       } finally {
         clearTimeout(timer);
@@ -283,7 +283,7 @@ describe("GET /admin/jobs/:id/events", () => {
 
   it("uses the numeric query cursor and gives Last-Event-ID precedence", async () => {
     const id = nextJobId();
-    mockGetActivityJob.mockResolvedValue(jobRow({ id, status: "success" }));
+    mockGetActivityJob.mockResolvedValue(jobRow({ id, status: "succeeded" }));
     jobEventBus.publish(id, logEvent(0));
     jobEventBus.publish(id, logEvent(1));
     jobEventBus.publish(id, logEvent(2));
@@ -312,7 +312,7 @@ describe("GET /admin/jobs/:id/events", () => {
     await headerApp.register(adminJobEventsRoute);
     const id = nextJobId();
     mockGetActivityJob.mockResolvedValue(
-      jobRow({ id, status: "success", createdAt: new Date("2026-09-06T08:00:00Z") }),
+      jobRow({ id, status: "succeeded", createdAt: new Date("2026-09-06T08:00:00Z") }),
     );
     try {
       const response = await headerApp.inject({
@@ -352,7 +352,7 @@ describe("GET /admin/jobs/:id/events", () => {
     const id = nextJobId();
     mockGetActivityJob.mockImplementation(async () => {
       disconnect();
-      return jobRow({ id, status: "success" });
+      return jobRow({ id, status: "succeeded" });
     });
     const subscribe = vi.spyOn(jobEventBus, "subscribe");
     try {
@@ -412,7 +412,7 @@ describe("GET /admin/jobs/:id/events", () => {
     const clear = vi.spyOn(globalThis, "clearInterval");
     const start = vi.spyOn(globalThis, "setInterval");
     setTimeout(() => {
-      jobEventBus.publish(id, { type: "status", status: "success" });
+      jobEventBus.publish(id, { type: "status", status: "succeeded" });
     }, 10);
     try {
       await app.inject(`/admin/jobs/${id}/events`);
@@ -427,15 +427,15 @@ describe("GET /admin/jobs/:id/events", () => {
 
   it("sends a snapshot then ends immediately for a finished job", async () => {
     const id = nextJobId();
-    mockGetActivityJob.mockResolvedValue(jobRow({ id, status: "success", progress: 100 }));
+    mockGetActivityJob.mockResolvedValue(jobRow({ id, status: "succeeded", progress: 100 }));
     const res = await app.inject({ method: "GET", url: `/admin/jobs/${id}/events` });
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toBe("text/event-stream");
     const frames = parseSse(res.body);
     expect(frames.map((frame) => frame.event)).toEqual(["snapshot", "end"]);
     expect(frames[0]?.id).toBe(0);
-    expect((frames[0]?.data as { job: { status: string } }).job.status).toBe("success");
-    expect(frames[1]?.data).toEqual({ status: "success" });
+    expect((frames[0]?.data as { job: { status: string } }).job.status).toBe("succeeded");
+    expect(frames[1]?.data).toEqual({ status: "succeeded" });
   });
 
   it("streams live events after the snapshot and ends on a terminal status", async () => {
@@ -444,7 +444,7 @@ describe("GET /admin/jobs/:id/events", () => {
     setTimeout(() => {
       jobEventBus.publish(id, logEvent(0));
       jobEventBus.publish(id, { type: "progress", progress: 50 });
-      jobEventBus.publish(id, { type: "status", status: "success", progress: 100 });
+      jobEventBus.publish(id, { type: "status", status: "succeeded", progress: 100 });
     }, 20);
     const res = await app.inject({ method: "GET", url: `/admin/jobs/${id}/events` });
     const frames = parseSse(res.body);
@@ -494,12 +494,12 @@ describe("GET /admin/jobs/:id/events", () => {
         jobEventBus.publish(id, logEvent(0));
         jobEventBus.publish(id, logEvent(1));
         now = 90;
-        mockGetActivityJob.mockResolvedValue(jobRow({ id, status: "success" }));
+        mockGetActivityJob.mockResolvedValue(jobRow({ id, status: "succeeded" }));
       } else {
         mockGetActivityJob.mockResolvedValueOnce(jobRow({ id }));
         mockGetActivityJob.mockImplementationOnce(async () => {
           jobEventBus.publish(id, logEvent(0));
-          jobEventBus.publish(id, { type: "status", status: "success" });
+          jobEventBus.publish(id, { type: "status", status: "succeeded" });
           now = 90;
           return jobRow({ id });
         });
@@ -521,7 +521,7 @@ describe("GET /admin/jobs/:id/events", () => {
 
   it("falls back to a snapshot when the cursor is unknown to the bus", async () => {
     const id = nextJobId();
-    mockGetActivityJob.mockResolvedValue(jobRow({ id, status: "canceled" }));
+    mockGetActivityJob.mockResolvedValue(jobRow({ id, status: "cancelled" }));
     const before = jobEventBus.metrics.snapshotFallbacks;
     const res = await app.inject({
       method: "GET",
@@ -534,7 +534,7 @@ describe("GET /admin/jobs/:id/events", () => {
 
   it("ends a reconnect whose terminal status already left the ring", async () => {
     const id = nextJobId();
-    mockGetActivityJob.mockResolvedValue(jobRow({ id, status: "success" }));
+    mockGetActivityJob.mockResolvedValue(jobRow({ id, status: "succeeded" }));
     jobEventBus.publish(id, logEvent(0));
     const res = await app.inject({
       method: "GET",
@@ -547,7 +547,7 @@ describe("GET /admin/jobs/:id/events", () => {
 
   it("releases the stream count after the response ends", async () => {
     const id = nextJobId();
-    mockGetActivityJob.mockResolvedValue(jobRow({ id, status: "success" }));
+    mockGetActivityJob.mockResolvedValue(jobRow({ id, status: "succeeded" }));
     const before = jobEventBus.metrics.activeStreams;
     await app.inject({ method: "GET", url: `/admin/jobs/${id}/events` });
     expect(jobEventBus.metrics.activeStreams).toBe(before);

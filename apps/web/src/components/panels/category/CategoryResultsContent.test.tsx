@@ -455,7 +455,7 @@ describe("CategoryResultsContent recovery", () => {
       filtered: [],
       isLoading: false,
       isError: true,
-      error: new Error("area_too_large"),
+      error: new ApiClientError(422, { error: "Area too large", code: "AREA_TOO_LARGE" }, null),
       partial: false,
       truncated: false,
       total: undefined,
@@ -618,7 +618,11 @@ describe("CategoryResultsContent recovery", () => {
   });
 
   it("offers zoom in for an oversized transit stop area instead of retry", async () => {
-    const get = vi.spyOn(apiClient, "get").mockRejectedValue(new Error("area_too_large"));
+    const get = vi
+      .spyOn(apiClient, "get")
+      .mockRejectedValue(
+        new ApiClientError(422, { error: "Area too large", code: "AREA_TOO_LARGE" }, null),
+      );
     const zoomIn = vi.fn();
     act(() => {
       useCategorySearchStore.getState().setActiveCategory("transit");

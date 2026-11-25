@@ -45,13 +45,6 @@ describe("privacy page backup statement", () => {
     expect(statement).toContain("requests@example.test");
   });
 
-  it("states the default and operator configuration when the API is unavailable", () => {
-    const { container } = render(<PrivacyContentEn legal={null} />);
-    expect(backupStatement(container, "Backups")).toContain(
-      "the backup retention period the operator configures (30 days by default)",
-    );
-  });
-
   it("states the periods the API's retention enforces in both languages", () => {
     const en = render(<PrivacyContentEn legal={legal} />).container;
     expect(backupStatement(en, "Sessions, sign-in confirmations")).toContain(
@@ -73,13 +66,9 @@ describe("privacy page backup statement", () => {
     expect(backupStatement(de, "Aufzeichnungen über Offenlegungen")).toContain("drei Jahre");
   });
 
-  it("states the configured administrator activity-log retention, or its default", () => {
+  it("states the configured administrator activity-log retention", () => {
     const en = render(<PrivacyContentEn legal={legal} />).container;
     expect(backupStatement(en, "Administrator activity log")).toContain("deleted after 730 days.");
-    const fallback = render(<PrivacyContentEn legal={null} />).container;
-    expect(backupStatement(fallback, "Administrator activity log")).toContain(
-      "the period the operator configures (365 days by default).",
-    );
     const de = render(<PrivacyContentDe legal={legal} />).container;
     expect(backupStatement(de, "Protokoll administrativer Tätigkeiten")).toContain(
       "nach 730 Tagen gelöscht",

@@ -19,7 +19,7 @@ crashScenario({
     host.fillStateFilesystem();
     effect.release();
     const job = await host.settledJob(stopped.jobId as string, 90_000);
-    expect(job.status).not.toBe("success");
+    expect(job.status).not.toBe("succeeded");
     const [operation] = host.agentOperations("service.stop");
     host.freeStateFilesystem();
     await host.kill("agent");

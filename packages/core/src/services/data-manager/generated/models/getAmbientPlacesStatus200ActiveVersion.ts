@@ -5,5 +5,5 @@ export type GetAmbientPlacesStatus200ActiveVersion =
   (typeof GetAmbientPlacesStatus200ActiveVersion)[keyof typeof GetAmbientPlacesStatus200ActiveVersion];
 
 export const GetAmbientPlacesStatus200ActiveVersion = {
-  NUMBER_2: 2,
+  NUMBER_1: 1,
 } as const;

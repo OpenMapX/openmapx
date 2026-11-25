@@ -404,11 +404,8 @@ function mapStation(
   const emptySlots = sumMatchingCounts(station.vehicleDocksAvailable, matching);
   const hasDockCounts = dockNativeTypeIds.length > 0;
   const sourceId = sourceIdForProvider(station.providerId, sourceByProvider);
-  const primaryScheme = `${origin}/${encodedSegment(station.providerId)}/station`;
   return {
     id: createMotisRentalId(origin, station.providerId, "station", station.id),
-    primaryScheme,
-    ids: { [primaryScheme]: station.id },
     nativeId: station.id,
     providerId: createMotisRentalId(origin, station.providerId, "provider", station.providerId),
     providerGroupId: createMotisRentalId(
@@ -465,11 +462,8 @@ function mapVehicle(
   sourceByProvider: ReadonlyMap<string, string>,
 ): SharedMobilityVehicle {
   const sourceId = sourceIdForProvider(vehicle.providerId, sourceByProvider);
-  const primaryScheme = `${origin}/${encodedSegment(vehicle.providerId)}/vehicle`;
   return {
     id: createMotisRentalId(origin, vehicle.providerId, "vehicle", vehicle.id),
-    primaryScheme,
-    ids: { [primaryScheme]: vehicle.id },
     nativeId: vehicle.id,
     providerId: createMotisRentalId(origin, vehicle.providerId, "provider", vehicle.providerId),
     providerGroupId: createMotisRentalId(

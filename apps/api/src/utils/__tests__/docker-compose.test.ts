@@ -21,7 +21,7 @@ function clientWithExecute(execute: ApiOpsClient["execute"]): ApiOpsClient {
 
 // The execution identity every admission and status carries.
 const identity = {
-  version: 2 as const,
+  version: 1 as const,
   admittedAt: 0,
   deadlineAt: 3_600_000,
   fingerprint: "a".repeat(64),

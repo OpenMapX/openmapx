@@ -24,7 +24,7 @@ const fetchMock = vi.fn((...args: unknown[]) => {
                 {
                   group: "legal",
                   subgroup: "operator",
-                  key: "legalControllerName",
+                  key: "legal.controller.name",
                   label: "Controller name",
                   type: "string",
                   secret: false,
@@ -35,7 +35,7 @@ const fetchMock = vi.fn((...args: unknown[]) => {
                 {
                   group: "legal",
                   subgroup: "retention",
-                  key: "legalDsarCaseRetentionDays",
+                  key: "retention.privacyCaseDays",
                   label: "Case retention",
                   type: "number",
                   secret: false,
@@ -46,7 +46,7 @@ const fetchMock = vi.fn((...args: unknown[]) => {
                 {
                   group: "legal",
                   subgroup: "sources",
-                  key: "legalPrivacySources",
+                  key: "legal.privacySources",
                   label: "Privacy sources",
                   type: "object",
                   secret: false,
@@ -63,13 +63,13 @@ const fetchMock = vi.fn((...args: unknown[]) => {
                 {
                   group: "email",
                   subgroup: "common",
-                  key: "smtpFromAddress",
+                  key: "email.fromAddress",
                   label: "From address",
                   type: "string",
                   secret: false,
                   value: "privacy@example.com",
                   source: "env",
-                  envVar: "EMAIL_FROM",
+                  envVar: "EMAIL_FROM_ADDRESS",
                   envOverride: true,
                 },
               ],
@@ -104,13 +104,13 @@ it("groups setup fields and preserves environment locks without a release review
   ).toBeInTheDocument();
   expect(screen.queryByText("privacySetup.steps.reviews.title")).toBeNull();
 
-  expect(screen.queryByLabelText("privacySetup.settings.smtpFromAddress.label")).toBeNull();
+  expect(screen.queryByLabelText("privacySetup.settings.email.fromAddress.label")).toBeNull();
   expect(screen.getByRole("link", { name: "privacySetup.openEmailSettings" })).toHaveAttribute(
     "href",
     "/admin/settings/email",
   );
 
-  fireEvent.change(screen.getByLabelText("privacySetup.settings.legalControllerName.label"), {
+  fireEvent.change(screen.getByLabelText("privacySetup.settings.legal.controller.name.label"), {
     target: { value: "Updated GmbH" },
   });
   fireEvent.click(nth(screen.getAllByRole("button", { name: "privacySetup.editor.save" }), 0));
@@ -133,12 +133,12 @@ it("saves an edited source declaration", async () => {
   );
   const source = '[{"title":"Regulator","url":"https://example.test/privacy"}]';
   const sourceEditor = await screen.findByLabelText(
-    "privacySetup.settings.legalPrivacySources.label",
+    "privacySetup.settings.legal.privacySources.label",
   );
   fireEvent.change(sourceEditor, {
     target: { value: source },
   });
-  expect(screen.getByLabelText("privacySetup.settings.legalPrivacySources.label")).toHaveValue(
+  expect(screen.getByLabelText("privacySetup.settings.legal.privacySources.label")).toHaveValue(
     source,
   );
 
@@ -154,7 +154,7 @@ it("saves an edited source declaration", async () => {
       fetchMock.mock.calls.some(([, init]) => {
         if ((init as RequestInit | undefined)?.method !== "PATCH") return false;
         const body = JSON.parse(String((init as RequestInit).body)) as Record<string, unknown>;
-        return JSON.stringify(body.legalPrivacySources) === source;
+        return JSON.stringify(body["legal.privacySources"]) === source;
       }),
     ).toBe(true),
   );

@@ -5,14 +5,12 @@ export type JobStatusColor = "default" | "primary" | "success" | "error" | "warn
 const JOB_STATUS_COLOR: Record<string, JobStatusColor> = {
   queued: "default",
   running: "primary",
-  success: "success",
-  ok: "success",
+  succeeded: "success",
   failed: "error",
-  error: "error",
-  canceled: "warning",
-  partial: "warning",
+  cancelled: "warning",
+  partially_succeeded: "warning",
   stale: "warning",
-  // A data job a data-manager restart ended, or one awaiting recovery.
+  // A data job awaiting recovery after its worker ended without an outcome.
   interrupted: "warning",
   skipped: "default",
 };
@@ -25,21 +23,21 @@ export function jobStatusColor(status: string): JobStatusColor {
 const JOB_STATUS_DESCRIPTION_KEY: Record<string, string> = {
   queued: "jobQueued",
   running: "jobRunning",
-  success: "jobSucceeded",
-  ok: "jobSucceeded",
+  succeeded: "jobSucceeded",
   failed: "jobFailed",
-  error: "jobStageFailed",
-  canceled: "jobCanceled",
-  partial: "jobPartial",
+  cancelled: "jobCancelled",
+  partially_succeeded: "jobPartiallySucceeded",
   interrupted: "jobInterrupted",
   skipped: "jobSkipped",
 };
 
+/** A stage's failure stops the run at that stage, which its description says. */
 export function jobStatusDescription(
   status: string,
   t: AdminTranslator<"adminShared">,
+  stage = false,
 ): string | null {
-  const key = JOB_STATUS_DESCRIPTION_KEY[status];
+  const key = stage && status === "failed" ? "jobStageFailed" : JOB_STATUS_DESCRIPTION_KEY[status];
   return key ? t(key) : null;
 }
 

@@ -51,7 +51,7 @@ function requestError(status: number, code?: string): CoverageRequestError {
   return error;
 }
 
-/** Coverage failures keep their HTTP status and the stable code the API names in `error`. */
+/** Coverage failures keep their HTTP status and the stable code the API names in `code`. */
 async function unwrapCoverage<R extends { status: number; headers: Headers; data: unknown }>(
   pending: Promise<R>,
 ) {
@@ -59,7 +59,7 @@ async function unwrapCoverage<R extends { status: number; headers: Headers; data
     return unwrapAdminResponse(await pending);
   } catch (error) {
     if (isApiClientError(error)) {
-      const code = (error.payload as { error?: unknown } | null)?.error;
+      const code = (error.payload as { code?: unknown } | null)?.code;
       throw requestError(error.status, typeof code === "string" ? code : undefined);
     }
     if (error instanceof ApiContractError) throw requestError(error.status);

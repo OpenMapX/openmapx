@@ -32,7 +32,10 @@ describe("generated data-manager evidence acquisition", () => {
       expect(init?.redirect).toBe("error");
       if (urls.length === 1) return Response.json(page("expired", true), { headers });
       if (urls.length === 2)
-        return Response.json({ error: "snapshot_expired" }, { status: 409, headers });
+        return Response.json(
+          { error: "Coverage snapshot expired", code: "SNAPSHOT_EXPIRED" },
+          { status: 409, headers },
+        );
       return Response.json(page("current"), { headers });
     });
     const reader = createDataManagerEvidenceReader({
@@ -55,7 +58,10 @@ describe("generated data-manager evidence acquisition", () => {
     const fetch = vi
       .spyOn(globalThis, "fetch")
       .mockImplementation(async () =>
-        Response.json({ error: "snapshot_expired" }, { status: 409, headers }),
+        Response.json(
+          { error: "Coverage snapshot expired", code: "SNAPSHOT_EXPIRED" },
+          { status: 409, headers },
+        ),
       );
     const reader = createDataManagerEvidenceReader({ baseUrl: "https://dm.example.test" });
     await expect(reader.read()).rejects.toMatchObject({

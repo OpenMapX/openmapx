@@ -8,7 +8,7 @@ import { expect, it } from "vitest";
 import manifest from "../manifest.json";
 
 it("credits the OpenStreetMap notice declared in the manifest", () => {
-  expect(validateManifest(manifest).errors).toEqual([]);
+  expect(validateManifest(manifest, { firstParty: true }).errors).toEqual([]);
   const ctx = createMockIntegrationContext({ manifest: manifest as IntegrationManifest });
 
   expect(resolveIntegrationContributors(ctx, ["openstreetmap"])).toEqual([

@@ -43,6 +43,7 @@ import {
 } from "../../../../../packages/core/src/build-artifacts/filesystem";
 import { installationState } from "../../../../../packages/core/src/build-artifacts/private-records";
 import { runOpsOperation } from "../../ops-client.js";
+import type { DataJobActor } from "../execution/api.js";
 import { runLocalDataExecution } from "../execution/local.js";
 import type { DataExecutionStore } from "../execution/store.js";
 import { readFeedOverlay } from "../transitous-feeds-overlay.js";
@@ -160,138 +161,143 @@ export function createCatalogReviewService(options: {
     branch: string;
     signal?: AbortSignal;
     proposalId?: string;
+    actor: DataJobActor;
   }): Promise<CatalogProposal> {
     const branch = resolutionSchema.shape.branch.parse(input.branch),
       proposalId = input.proposalId ?? randomUUID();
-    return runLocalDataExecution({ kind: "transit-proposal", proposalId }, async () => {
-      input.signal?.throwIfAborted();
-      let resolution = retainedResolution(proposalId);
-      if (resolution && resolution.branch !== branch)
-        throw Error("Original catalog branch changed");
-      if (!resolution) {
-        const active = await runOpsOperation(
-            { kind: "catalogPins.inspect" },
-            { signal: input.signal },
-          ),
-          snapshot = sourceSnapshot();
-        const catalogDir = join(options.dataDir, ".transitous-catalog");
-        const candidate = await resolveCatalogBumpCandidate({ catalogDir, branch });
-        const gbfs = await resolveGbfsCatalogCandidate(
-          "catalog-review",
-          safeUpstreamFetch,
-          () => new Date(),
-          input.signal,
-        );
-        const pins = createCatalogPinSet(
-          lockFromCandidate(
-            candidate,
+    return runLocalDataExecution(
+      { kind: "transit-proposal", proposalId },
+      async () => {
+        input.signal?.throwIfAborted();
+        let resolution = retainedResolution(proposalId);
+        if (resolution && resolution.branch !== branch)
+          throw Error("Original catalog branch changed");
+        if (!resolution) {
+          const active = await runOpsOperation(
+              { kind: "catalogPins.inspect" },
+              { signal: input.signal },
+            ),
+            snapshot = sourceSnapshot();
+          const catalogDir = join(options.dataDir, ".transitous-catalog");
+          const candidate = await resolveCatalogBumpCandidate({ catalogDir, branch });
+          const gbfs = await resolveGbfsCatalogCandidate(
             "catalog-review",
-            "Proposed for explicit source/license review",
-          ),
-          gbfs.lock,
-        );
-        const gitAt = async (directory: string, args: string[]) =>
-          (
-            await execa("git", ["-c", `safe.directory=${directory}`, "-C", directory, ...args], {
-              cancelSignal: input.signal,
-              timeout: 30000,
-              maxBuffer: 16 * 1024 * 1024,
-            })
-          ).stdout;
-        const git = (args: string[]) => gitAt(catalogDir, args),
-          atlasDir = join(catalogDir, "transitland-atlas");
-        const maxGbfsAdditions = catalogCompilerSettings(
-          process.env,
-        ).MOTIS_GBFS_CATALOG_MAX_ADDITIONS;
-        if (maxGbfsAdditions === undefined)
-          throw new Error("Catalog compiler settings lack MOTIS_GBFS_CATALOG_MAX_ADDITIONS");
-        const atlasCommits = [
-          ...new Set([
-            candidate.transitlandAtlasSha,
-            ...(active.active ? [pinnedAtlasCommit(active.active.transitous)] : []),
-          ]),
-        ];
-        if (!existsSync(join(atlasDir, ".git")))
-          throw new CatalogBumpError(
-            "submodule-cache-unavailable",
-            "Initialize the pinned catalog and Atlas cache before proposing updates",
+            safeUpstreamFetch,
+            () => new Date(),
+            input.signal,
           );
-        for (const commit of atlasCommits) {
-          try {
-            await gitAt(atlasDir, ["cat-file", "-e", `${commit}^{commit}`]);
-          } catch (error) {
-            if (![1, 128].includes((error as { exitCode?: number }).exitCode ?? -1)) throw error;
-            await gitAt(atlasDir, ["fetch", "--no-tags", "--depth=1", "origin", commit]);
-            await gitAt(atlasDir, ["cat-file", "-e", `${commit}^{commit}`]);
+          const pins = createCatalogPinSet(
+            lockFromCandidate(
+              candidate,
+              "catalog-review",
+              "Proposed for explicit source/license review",
+            ),
+            gbfs.lock,
+          );
+          const gitAt = async (directory: string, args: string[]) =>
+            (
+              await execa("git", ["-c", `safe.directory=${directory}`, "-C", directory, ...args], {
+                cancelSignal: input.signal,
+                timeout: 30000,
+                maxBuffer: 16 * 1024 * 1024,
+              })
+            ).stdout;
+          const git = (args: string[]) => gitAt(catalogDir, args),
+            atlasDir = join(catalogDir, "transitland-atlas");
+          const maxGbfsAdditions = catalogCompilerSettings(
+            process.env,
+          ).MOTIS_GBFS_CATALOG_MAX_ADDITIONS;
+          if (maxGbfsAdditions === undefined)
+            throw new Error("Catalog compiler settings lack MOTIS_GBFS_CATALOG_MAX_ADDITIONS");
+          const atlasCommits = [
+            ...new Set([
+              candidate.transitlandAtlasSha,
+              ...(active.active ? [pinnedAtlasCommit(active.active.transitous)] : []),
+            ]),
+          ];
+          if (!existsSync(join(atlasDir, ".git")))
+            throw new CatalogBumpError(
+              "SUBMODULE_CACHE_UNAVAILABLE",
+              "Initialize the pinned catalog and Atlas cache before proposing updates",
+            );
+          for (const commit of atlasCommits) {
+            try {
+              await gitAt(atlasDir, ["cat-file", "-e", `${commit}^{commit}`]);
+            } catch (error) {
+              if (![1, 128].includes((error as { exitCode?: number }).exitCode ?? -1)) throw error;
+              await gitAt(atlasDir, ["fetch", "--no-tags", "--depth=1", "origin", commit]);
+              await gitAt(atlasDir, ["cat-file", "-e", `${commit}^{commit}`]);
+            }
           }
+          const [previousFeeds, nextFeeds, previousGbfs] = await Promise.all([
+            active.active
+              ? readCatalogFeedSnapshot(pinnedTransitousCommit(active.active.transitous), git)
+              : Promise.resolve(new Map()),
+            readCatalogFeedSnapshot(candidate.transitousSha, git),
+            active.active
+              ? fetchPinnedGbfsCatalog(active.active.gbfs, safeUpstreamFetch, input.signal)
+              : Promise.resolve(null),
+          ]);
+          const [previousAtlas, nextAtlas] = await Promise.all([
+            active.active
+              ? readAtlasFeedSnapshot(pinnedAtlasCommit(active.active.transitous), (args) =>
+                  gitAt(atlasDir, args),
+                )
+              : Promise.resolve(new Map()),
+            readAtlasFeedSnapshot(candidate.transitlandAtlasSha, (args) => gitAt(atlasDir, args)),
+          ]);
+          const diff = reviewCatalogPair({
+            previousAtlas,
+            nextAtlas,
+            previousFeeds,
+            nextFeeds,
+            previousGbfsRows: previousGbfs ? parseCatalogGbfsRows(previousGbfs) : [],
+            nextGbfsRows: gbfs.rows,
+            countries: transitAllowedCountries(options.operationsPolicy),
+            quarantine: snapshot.overlay?.quarantine ?? [],
+            maxAdditions: Number.parseInt(maxGbfsAdditions, 10),
+          });
+          // Preflight every complete row before retaining a proposal that the
+          // bounded review endpoint could not actually display.
+          for (let offset = 0; offset < diff.total; ) {
+            const page = catalogDiffPage(diff, offset);
+            if (page.nextOffset === null) break;
+            offset = page.nextOffset;
+          }
+          const bytes = canonicalJson(diff);
+          if (Buffer.byteLength(bytes, "utf8") > MAX_DIFF_BYTES)
+            throw Error("Catalog review exceeds its byte limit");
+          if (canonicalJson(snapshot) !== canonicalJson(sourceSnapshot()))
+            throw Error("Catalog source policy changed during resolution");
+          resolution = resolutionSchema.parse({
+            version: 1,
+            branch,
+            proposal: {
+              proposalId,
+              baseGenerationId: active.catalogRevisionId,
+              pins,
+              diffDigest: createHash("sha256").update(bytes).digest("hex"),
+              sourcePolicyRevision: snapshot.sourcePolicyRevision,
+            },
+            overlayDigest: snapshot.overlayDigest,
+            createdAt: new Date().toISOString(),
+          });
+          directory(proposalId, true, (dir) => {
+            dir.write("diff.json", bytes, true);
+            const envelope = canonicalJson(resolution);
+            if (Buffer.byteLength(envelope, "utf8") > 768 * 1024)
+              throw Error("Catalog resolution exceeds its byte limit");
+            dir.write("resolution.json", envelope, true);
+          });
         }
-        const [previousFeeds, nextFeeds, previousGbfs] = await Promise.all([
-          active.active
-            ? readCatalogFeedSnapshot(pinnedTransitousCommit(active.active.transitous), git)
-            : Promise.resolve(new Map()),
-          readCatalogFeedSnapshot(candidate.transitousSha, git),
-          active.active
-            ? fetchPinnedGbfsCatalog(active.active.gbfs, safeUpstreamFetch, input.signal)
-            : Promise.resolve(null),
-        ]);
-        const [previousAtlas, nextAtlas] = await Promise.all([
-          active.active
-            ? readAtlasFeedSnapshot(pinnedAtlasCommit(active.active.transitous), (args) =>
-                gitAt(atlasDir, args),
-              )
-            : Promise.resolve(new Map()),
-          readAtlasFeedSnapshot(candidate.transitlandAtlasSha, (args) => gitAt(atlasDir, args)),
-        ]);
-        const diff = reviewCatalogPair({
-          previousAtlas,
-          nextAtlas,
-          previousFeeds,
-          nextFeeds,
-          previousGbfsRows: previousGbfs ? parseCatalogGbfsRows(previousGbfs) : [],
-          nextGbfsRows: gbfs.rows,
-          countries: transitAllowedCountries(options.operationsPolicy),
-          quarantine: snapshot.overlay?.quarantine ?? [],
-          maxAdditions: Number.parseInt(maxGbfsAdditions, 10),
-        });
-        // Preflight every complete row before retaining a proposal that the
-        // bounded review endpoint could not actually display.
-        for (let offset = 0; offset < diff.total; ) {
-          const page = catalogDiffPage(diff, offset);
-          if (page.nextOffset === null) break;
-          offset = page.nextOffset;
-        }
-        const bytes = canonicalJson(diff);
-        if (Buffer.byteLength(bytes, "utf8") > MAX_DIFF_BYTES)
-          throw Error("Catalog review exceeds its byte limit");
-        if (canonicalJson(snapshot) !== canonicalJson(sourceSnapshot()))
-          throw Error("Catalog source policy changed during resolution");
-        resolution = resolutionSchema.parse({
-          version: 1,
-          branch,
-          proposal: {
-            proposalId,
-            baseGenerationId: active.catalogRevisionId,
-            pins,
-            diffDigest: createHash("sha256").update(bytes).digest("hex"),
-            sourcePolicyRevision: snapshot.sourcePolicyRevision,
-          },
-          overlayDigest: snapshot.overlayDigest,
-          createdAt: new Date().toISOString(),
-        });
-        directory(proposalId, true, (dir) => {
-          dir.write("diff.json", bytes, true);
-          const envelope = canonicalJson(resolution);
-          if (Buffer.byteLength(envelope, "utf8") > 768 * 1024)
-            throw Error("Catalog resolution exceeds its byte limit");
-          dir.write("resolution.json", envelope, true);
-        });
-      }
-      await runOpsOperation(
-        { kind: "transitousLock.propose", ...resolution.proposal },
-        { signal: input.signal },
-      );
-      return readProposal(proposalId);
-    });
+        await runOpsOperation(
+          { kind: "transitousLock.propose", ...resolution.proposal },
+          { signal: input.signal },
+        );
+        return readProposal(proposalId);
+      },
+      input.actor,
+    );
   }
   function reviewPage(proposalId: string, offset = 0) {
     const resolution = retainedResolution(proposalId);
@@ -340,7 +346,7 @@ export function createCatalogReviewService(options: {
             slots = readMotisSlotState(options.dataDir);
           if (
             !completed ||
-            completed.status !== "ok" ||
+            completed.status !== "succeeded" ||
             completed.result?.kind !== "catalog.validate" ||
             completed.result.status !== "passed" ||
             pointer?.selected?.validationId !== validation.validationId ||

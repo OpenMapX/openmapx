@@ -119,7 +119,7 @@ export async function ownedDataManager(options: {
     async fenceStates() {
       const ids = [...maintenanceIds];
       if (!ids.length) return [];
-      return (await options.sql`SELECT state FROM data_manager.configuration_fence WHERE maintenance_id = ANY(${ids}::uuid[]) ORDER BY prepared_at`).map(row => row.state as string);
+      return (await options.sql`SELECT status FROM data_manager.configuration_fence WHERE maintenance_id = ANY(${ids}::uuid[]) ORDER BY prepared_at`).map(row => row.status as string);
     },
     get hardlinkResponseStatuses() { return replies.map(reply => reply.status); },
     get hardlinkResponses() { return structuredClone(replies); },
@@ -128,7 +128,7 @@ export async function ownedDataManager(options: {
     async close() {
       await stopForRestart();
       // Exact fixture-owned execution IDs only; no broad job cleanup.
-      for (const key of keys) await options.sql`DELETE FROM data_manager.jobs WHERE operation_key=${key}`;
+      for (const key of keys) await options.sql`DELETE FROM data_manager.job WHERE operation_key=${key}`;
       for (const id of maintenanceIds) await options.sql`DELETE FROM data_manager.configuration_fence WHERE maintenance_id=${id}::uuid`;
     },
   };

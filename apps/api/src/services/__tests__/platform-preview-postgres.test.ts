@@ -9,7 +9,7 @@ import {
   platformConfigurationPreview,
   session,
   sessionAuthAssurance,
-  systemSettings,
+  systemSetting,
   user,
 } from "../../db/schema";
 import { createMigratedPostgresFixture } from "../../test/postgres-fixture";
@@ -94,7 +94,7 @@ dbDescribe("durable exact platform preview", () => {
       previewFingerprint: result.preview.previewFingerprint,
     });
     expect(stored.preview).toHaveProperty("release", input.release);
-    expect(await fixture.db.select().from(systemSettings)).toHaveLength(0);
+    expect(await fixture.db.select().from(systemSetting)).toHaveLength(0);
   });
   it("constructs and retains the public preview from current typed host and database sources", async () => {
     const actorId = await actor(),
@@ -132,7 +132,7 @@ dbDescribe("durable exact platform preview", () => {
         changes: { version: 1, backupRetentionDays: { source: "database", value: 15 } },
       }),
     ).rejects.toThrow();
-    expect(await fixture.db.select().from(systemSettings)).toHaveLength(0);
+    expect(await fixture.db.select().from(systemSetting)).toHaveLength(0);
     await expect(
       previewPlatformConfiguration({
         ...input,
@@ -161,10 +161,10 @@ dbDescribe("durable exact platform preview", () => {
       await fixture.db.insert(adminJob).values({
         id: jobId,
         type: "platform.apply",
-        createdBy: actorId,
+        createdByUserId: actorId,
         payload: {},
         result: {},
-        status: kind === "uncertain" || kind === "running" ? "running" : "success",
+        status: kind === "uncertain" || kind === "running" ? "running" : "succeeded",
         createdAt: created,
         finishedAt:
           kind === "uncertain" || kind === "running"
@@ -226,7 +226,7 @@ dbDescribe("durable exact platform preview", () => {
     await fixture.db.insert(adminJob).values({
       id: jobId,
       type: "platform.apply",
-      createdBy: actorId,
+      createdByUserId: actorId,
       status: "running",
       payload: { private: "must-not-leak" },
     });
@@ -324,10 +324,10 @@ dbDescribe("durable exact platform preview", () => {
     await fixture.db.insert(adminJob).values({
       id: jobId,
       type: "platform.apply",
-      createdBy: actorId,
+      createdByUserId: actorId,
       payload: {},
       result: {},
-      status: "success",
+      status: "succeeded",
       createdAt: created,
       finishedAt: closed,
     });
@@ -588,8 +588,8 @@ dbDescribe("durable exact platform preview", () => {
     });
     const [priorDesired] = await fixture.db
       .select({ version: sql<string>`xmin::text` })
-      .from(systemSettings)
-      .where(eq(systemSettings.key, "platformConfiguration"));
+      .from(systemSetting)
+      .where(eq(systemSetting.key, "platform.configuration"));
     await retainPlatformPreview(
       {
         actorId,
@@ -648,13 +648,13 @@ dbDescribe("durable exact platform preview", () => {
       id: jobId,
       type: "platform.apply",
       status: "running",
-      createdBy: actorId,
+      createdByUserId: actorId,
       protocol: { execution },
     });
     const [desired] = await fixture.db
       .select({ version: sql<string>`xmin::text` })
-      .from(systemSettings)
-      .where(eq(systemSettings.key, "platformConfiguration"));
+      .from(systemSetting)
+      .where(eq(systemSetting.key, "platform.configuration"));
     return {
       actorId,
       previewFingerprint: bound.previewFingerprint,
@@ -693,7 +693,7 @@ dbDescribe("durable exact platform preview", () => {
       .select()
       .from(adminActionReauthentication)
       .where(eq(adminActionReauthentication.id, input.proof.challengeId));
-    expect(proof?.state).toBe("completed");
+    expect(proof?.status).toBe("completed");
     const [stored] = await fixture.db
       .select()
       .from(platformConfigurationPreview)
@@ -704,8 +704,8 @@ dbDescribe("durable exact platform preview", () => {
       // The receipt names the row version the save wrote.
       const [written] = await tx
         .select({ version: sql<string>`xmin::text` })
-        .from(systemSettings)
-        .where(eq(systemSettings.key, "platformConfiguration"));
+        .from(systemSetting)
+        .where(eq(systemSetting.key, "platform.configuration"));
       expect(receipt.rowVersion).toBe(written?.version);
       await tx
         .update(adminJob)
@@ -714,8 +714,8 @@ dbDescribe("durable exact platform preview", () => {
     });
     const [desired] = await fixture.db
       .select()
-      .from(systemSettings)
-      .where(eq(systemSettings.key, "platformConfiguration"));
+      .from(systemSetting)
+      .where(eq(systemSetting.key, "platform.configuration"));
     expect(desired?.value).toMatchObject({
       version: 1,
       jobId: input.jobId,
@@ -733,8 +733,8 @@ dbDescribe("durable exact platform preview", () => {
     const input = await commitIntent();
     const [before] = await fixture.db
       .select()
-      .from(systemSettings)
-      .where(eq(systemSettings.key, "platformConfiguration"));
+      .from(systemSetting)
+      .where(eq(systemSetting.key, "platform.configuration"));
     for (const change of [
       { confirmations: { ...input.confirmations, alternateLogin: false } },
       { proof: { ...input.proof, nonce: Buffer.alloc(32) } },
@@ -749,14 +749,14 @@ dbDescribe("durable exact platform preview", () => {
       ).rejects.toThrow();
     const [after] = await fixture.db
       .select()
-      .from(systemSettings)
-      .where(eq(systemSettings.key, "platformConfiguration"));
+      .from(systemSetting)
+      .where(eq(systemSetting.key, "platform.configuration"));
     expect(after).toEqual(before);
     const [proof] = await fixture.db
       .select()
       .from(adminActionReauthentication)
       .where(eq(adminActionReauthentication.id, input.proof.challengeId));
-    expect(proof?.state).toBe("completed");
+    expect(proof?.status).toBe("completed");
   });
 
   it("issues only the fixed actor/job/preview participant and rejects copied overlay or issuer", async () => {
@@ -776,7 +776,7 @@ dbDescribe("durable exact platform preview", () => {
     const input = await commitIntent();
     const ctx = {
       jobId: input.jobId,
-      jobType: "platform.apply",
+      jobType: "platform.apply" as const,
       execution: input.execution,
       payload: {},
       signal: new AbortController().signal,

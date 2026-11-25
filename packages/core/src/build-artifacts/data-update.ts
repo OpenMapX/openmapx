@@ -213,7 +213,7 @@ export async function verifyDataUpdatePrerequisites(
         child.jobId !== bound.execution.executionId ||
         child.fingerprint !== bound.execution.fingerprint ||
         child.deadlineAt !== bound.execution.deadlineAt ||
-        terminal.status !== "ok" ||
+        terminal.status !== "succeeded" ||
         terminal.publication !== "committed"
       )
         throw Error("Full Update prerequisite did not complete");

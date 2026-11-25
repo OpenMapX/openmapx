@@ -2,20 +2,23 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import ts from "typescript";
 import { describe, expect, it } from "vitest";
-import { ADMIN_OPERATIONS } from "../apps/api/src/services/admin-operation-catalog";
 import {
   AUDIT_ACTION_GROUPS,
-  AUDIT_TARGET_TYPES,
   DESTRUCTIVE_AUDIT_ACTIONS,
+  AUDIT_TARGET_TYPES as WEB_AUDIT_TARGET_TYPES,
 } from "../apps/web/src/components/admin/activity/auditCatalog";
 import {
   JOB_ACTOR_LABELS,
   jobActorKey,
 } from "../apps/web/src/components/admin/activity/jobActorCatalog";
+import { ADMIN_REAUTH_PURPOSES } from "../packages/core/src/api/contracts/account-admin/reauth";
 import {
-  adminServiceActionSchema,
-  adminServicesBulkActionSchema,
-} from "../packages/core/src/api/contracts/service-admin/services";
+  AUDIT_ACTION_NAMES,
+  AUDIT_ACTION_PATTERN,
+  AUDIT_ACTIONS,
+  AUDIT_TARGET_TYPES,
+} from "../packages/core/src/api/contracts/service-admin/audit-actions";
+import { ADMIN_JOB_TYPES } from "../packages/core/src/jobs/vocabulary";
 import { dataExecutionInputSchema } from "../packages/core/src/services/data-manager/contracts/executions";
 import de from "../packages/i18n/locales/de.json";
 import en from "../packages/i18n/locales/en.json";
@@ -52,7 +55,6 @@ function apiSource(path: string): string {
   return source.text;
 }
 
-const DOTTED_CODE = /^[a-z][a-z0-9-]*(\.[a-z0-9_-]+)+$/;
 /** The first capture group of every match of a global `pattern`. */
 function captures(text: string, pattern: RegExp): string[] {
   return [...text.matchAll(pattern)].map(([whole, group]) => {
@@ -88,27 +90,8 @@ function zodLiterals(schema: unknown, property: string): string[] {
   return [];
 }
 
-function applicationJobTypes(): string[] {
-  const types = new Set<string>();
-  for (const { text } of apiSources)
-    for (const type of captures(
-      text,
-      /\b(?:register|enqueue|enqueueMaintenance|enqueueStandalone)\(\s*"([^"]+)"/g,
-    ))
-      types.add(type);
-  const runner = apiSource("apps/api/src/services/job-runner.ts");
-  for (const name of ["IMMEDIATE_CONFIGURATION_JOB_TYPES", "AGENT_RECOVERABLE_ADMIN_JOB_TYPES"])
-    for (const type of literals(required(runner, new RegExp(`${name} = \\[([^\\]]*)\\]`), name)))
-      types.add(type);
-  for (const union of captures(runner, /\btype:\s*((?:\|\s*)?"[^"]+"(?:\s*\|\s*"[^"]+")*)/g))
-    for (const type of literals(union)) types.add(type);
-  const retained = apiSource("apps/api/src/services/retained-maintenance-job.ts");
-  for (const type of literals(
-    required(retained, /export type RetainedMaintenanceJobType =([^;]+);/, "maintenance types"),
-  ))
-    types.add(type);
-  return [...types].filter((type) => DOTTED_CODE.test(type)).sort();
-}
+/** The job runner's `register` and `enqueue` take only these types. */
+const applicationJobTypes = (): string[] => [...ADMIN_JOB_TYPES].sort();
 
 const dataManagerKinds = () => [...new Set(zodLiterals(dataExecutionInputSchema, "kind"))].sort();
 
@@ -290,7 +273,19 @@ function collectAuditCodes(
       let value: ts.Expression | undefined;
       let spreadAfter = false;
       for (const member of object.properties) {
-        if (ts.isSpreadAssignment(member)) spreadAfter = true;
+        const entryCall =
+          ts.isSpreadAssignment(member) &&
+          ts.isCallExpression(member.expression) &&
+          ts.isIdentifier(member.expression.expression) &&
+          member.expression.expression.text === ENTRY_HELPER
+            ? member.expression
+            : undefined;
+        if (entryCall) {
+          // `...auditEntry(action)` sets the action and the target type the
+          // registry gives it.
+          spreadAfter = false;
+          value = entryCall.arguments[0];
+        } else if (ts.isSpreadAssignment(member)) spreadAfter = true;
         else if (member.name && ts.isIdentifier(member.name) && member.name.text === property) {
           spreadAfter = false;
           if (ts.isPropertyAssignment(member)) value = member.initializer;
@@ -316,6 +311,7 @@ function collectAuditCodes(
 
 const WRITER = "writeAuditLog";
 const TABLE = "adminAuditLog";
+const ENTRY_HELPER = "auditEntry";
 /** Query-builder calls that take the audit table without writing a row. */
 const TABLE_READS = new Set(["from", "delete", "leftJoin", "innerJoin", "rightJoin", "fullJoin"]);
 
@@ -517,53 +513,33 @@ function callsOf(
  * follow, expanded from the code that bounds their values. A new writer of
  * that kind fails the test until it is described here.
  */
+/** The values of an `as const` object literal assigned to `name` in `file`. */
+function lookupValues(file: string, name: string): string[] {
+  return literals(required(file, new RegExp(`const ${name} = \\{([^}]+)\\}`), name));
+}
+
 const DERIVED_ACTIONS: Record<string, (file: string) => string[]> = {
-  "apps/api/src/routes/admin-operations.ts `data.${definition.id}`": () =>
-    ADMIN_OPERATIONS.map((operation) => `data.${operation.id}`),
-  "apps/api/src/routes/admin-services.ts `service.${action}`": () =>
-    zodLiterals(adminServiceActionSchema, "action").map((action) => `service.${action}`),
-  "apps/api/src/routes/admin-services.ts `service.bulk.${action}`": () =>
-    zodLiterals(adminServicesBulkActionSchema, "action").map((action) => `service.bulk.${action}`),
-  "apps/api/src/routes/ambient-places.ts `ambient-places.${action}`": (file) =>
-    captures(
-      required(file, /const operations = \{([^}]+)\}/, "ambient operations"),
-      /^\s*([a-z]+):/gm,
-    )
-      .filter((action) => action !== "status")
-      .map((action) => `ambient-places.${action}`),
+  "apps/api/src/routes/admin-services.ts SERVICE_ACTION_AUDIT[action]": (file) =>
+    lookupValues(file, "SERVICE_ACTION_AUDIT"),
+  "apps/api/src/routes/ambient-places.ts audited[action]": (file) => lookupValues(file, "audited"),
+  "apps/api/src/account/account-provisioning.ts ASSISTED_ACTION_AUDIT[input.action]": (file) =>
+    lookupValues(file, "ASSISTED_ACTION_AUDIT"),
   "apps/api/src/utils/auth-audit-hook.ts route.action": (file) =>
     captures(file, /\baction: "([^"]+)"/g),
-  'apps/api/src/account/account-provisioning.ts input.action === "password" ? "user.password.set" : `user.${input.action}`':
-    (file) =>
-      literals(
-        required(
-          file,
-          /assistedAccountAction\(\s*input: \{\s*action: ([^;]+);/,
-          "assisted account actions",
-        ),
-      ).map((action) => (action === "password" ? "user.password.set" : `user.${action}`)),
   // The writer itself stores whatever its callers pass.
-  "apps/api/src/utils/audit-log.ts entry.action": () => [],
+  "apps/api/src/utils/audit-log.ts action": () => [],
 };
 
-const DERIVED_TARGET_TYPES: Record<string, (file: string) => string[]> = {
-  "apps/api/src/utils/auth-audit-hook.ts route.targetType": (file) =>
-    captures(file, /\btargetType: "([^"]+)"/g),
-  "apps/api/src/utils/audit-log.ts entry.targetType ?? null": () => [],
-};
-
-function auditCodes(
-  property: "action" | "targetType",
-  derived: Record<string, (file: string) => string[]>,
-): string[] {
-  const { codes, unreadable, unusedDerivations } = collectAuditCodes(apiSources, property, derived);
+function auditActions(): string[] {
+  const { codes, unreadable, unusedDerivations } = collectAuditCodes(
+    apiSources,
+    "action",
+    DERIVED_ACTIONS,
+  );
   expect(unreadable, "audit writers this test cannot read").toEqual([]);
   expect(unusedDerivations, "derivations no audit writer uses").toEqual([]);
   return codes;
 }
-
-const auditActions = () => auditCodes("action", DERIVED_ACTIONS);
-const auditTargetTypes = () => auditCodes("targetType", DERIVED_TARGET_TYPES);
 
 /** Catalogue keys cannot hold `.` or `-`; the label helpers read `_` instead. */
 const catalogueKey = (code: string) => code.replace(/[.:-]/g, "_");
@@ -588,7 +564,7 @@ function selectBranches(message: string): string[] {
 describe("admin job type catalogue", () => {
   it("collects the job types from the API and data-manager", () => {
     expect(applicationJobTypes()).toEqual(
-      expect.arrayContaining(["data.operation", "integration.reload", "configuration.apply"]),
+      expect.arrayContaining(["data.operation.run", "integration.reload", "configuration.apply"]),
     );
     expect(dataManagerKinds()).toEqual(
       expect.arrayContaining(["transit-sync", "download-osm", "catalog.validate"]),
@@ -806,14 +782,23 @@ describe("admin audit catalogue", () => {
   it("collects literal and derived audit actions", () => {
     expect(auditActions()).toEqual(
       expect.arrayContaining([
-        "settings.test_email",
-        "data.overture-pull",
-        "service.bulk.build",
-        "ambient-places.rollback",
+        "setting.test_email.send",
+        "data.operation.run",
+        "service.build",
+        "ambient_places.rollback",
         "timeline.switch",
         "user.ban",
       ]),
     );
+  });
+
+  it("records exactly the registered audit actions, each following the action grammar", () => {
+    expect(auditActions()).toEqual(sorted(AUDIT_ACTION_NAMES));
+    expect(AUDIT_ACTION_NAMES.filter((action) => !AUDIT_ACTION_PATTERN.test(action))).toEqual([]);
+    expect(ADMIN_REAUTH_PURPOSES.filter((purpose) => !AUDIT_ACTION_PATTERN.test(purpose))).toEqual(
+      [],
+    );
+    expect(AUDIT_TARGET_TYPES.filter((type) => !/^[a-z][a-z0-9_]*$/.test(type))).toEqual([]);
   });
 
   it("words and offers every audit action the API records, and nothing else", () => {
@@ -830,10 +815,12 @@ describe("admin audit catalogue", () => {
       expect(sorted(selectBranches(messages.adminActivity.audit.actionGroup))).toEqual(groups);
   });
 
-  it("names and offers every audit target type the API records, and nothing else", () => {
-    const types = auditTargetTypes();
-    expect(types).toEqual(expect.arrayContaining(["job", "data-manager-job", "user"]));
+  it("names and offers every registered audit target type, and nothing else", () => {
+    const types = sorted(
+      Object.values(AUDIT_ACTIONS).flatMap(({ targetType }) => (targetType ? [targetType] : [])),
+    );
     expect(sorted(AUDIT_TARGET_TYPES)).toEqual(types);
+    expect(sorted(WEB_AUDIT_TARGET_TYPES)).toEqual(types);
     const keys = sorted(types.map(catalogueKey));
     for (const messages of [en, de])
       expect(sorted(selectBranches(messages.adminActivity.audit.targetTypeOption))).toEqual(keys);

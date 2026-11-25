@@ -116,7 +116,7 @@ unavailable response. Reports and source details are private and `no-store`,
 and every endpoint requires a full-admin session.
 
 Snapshots expire after roughly 30 seconds. If a later page or a source drawer
-requests an expired revision, the API returns `snapshot_expired` and the page
+requests an expired revision, the API returns code `SNAPSHOT_EXPIRED` and the page
 starts a new report. The attention view also pins its membership: if a source
 crosses a freshness or health deadline and the set of attention rows would
 change, the current revision is rejected rather than returning a mixed list.

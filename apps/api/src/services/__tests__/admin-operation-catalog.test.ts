@@ -194,9 +194,9 @@ describe("describeAdminOperationCatalog", () => {
 });
 
 describe("guarded Overture recovery catalogue", () => {
-  it("requires destructive confirmation and a new version for both link modes", () => {
+  it("requires destructive confirmation for both link modes", () => {
     expect(getAdminOperation("overture-conflate")).toMatchObject({
-      version: 2,
+      version: 1,
       risk: "destructive",
       confirmation: { title: expect.any(String), message: expect.any(String) },
     });

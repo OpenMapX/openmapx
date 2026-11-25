@@ -3,6 +3,7 @@ import { MangroveProvider, type MangroveTransport } from "@openmapx/mangrove-rea
 import { QueryClientProvider } from "@tanstack/react-query";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { MANGROVE_SIGNER_STORAGE_KEYS } from "@/lib/signOutStorage";
 import { createTestQueryClient } from "@/test/query";
 import { PlaceReviewsTab } from "./PlaceReviewsTab";
 
@@ -84,7 +85,11 @@ function renderTab(reviews: Review[], summary: ReviewAggregate, pendingAggregate
   };
   const view = render(
     <QueryClientProvider client={client}>
-      <MangroveProvider transport={transport} currentUser={null}>
+      <MangroveProvider
+        transport={transport}
+        currentUser={null}
+        signerStorageKeys={MANGROVE_SIGNER_STORAGE_KEYS}
+      >
         <PlaceReviewsTab place={place} />
       </MangroveProvider>
     </QueryClientProvider>,

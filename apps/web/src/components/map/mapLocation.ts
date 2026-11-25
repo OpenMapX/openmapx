@@ -53,8 +53,8 @@ export function mapLocationPlace(
   const { poi } = location;
   if (poi) {
     return createPlace({
-      primaryScheme: "stylePoi",
-      ids: { stylePoi: poi.featureId },
+      primaryScheme: "style-poi",
+      ids: { "style-poi": poi.featureId },
       name: poi.name,
       address: reverse?.address || poi.name,
       coordinates: poi.coordinates,

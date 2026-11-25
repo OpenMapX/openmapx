@@ -66,7 +66,7 @@
         },
         "default": []
       },
-      "ca-taxi-montreal-api-key": {
+      "caTaxiMontrealApiKey": {
         "type": "string",
         "title": "Taxi Montréal API key",
         "description": "Unlocks the Montreal Taxi Registry GOFS feed (~3,300 taxis), which the registry lists publicly but serves only to keyed callers. Leave empty to skip it; every other feed works without a key.",
@@ -84,19 +84,19 @@
           "notes": "The key is sent as an X-API-KEY request header. The published guide is written for taxi dispatch operators, so a consuming application should say so explicitly when making contact."
         }
       },
-      "gofs-custom-1-api-key": {
+      "gofsCustom1ApiKey": {
         "type": "string",
         "title": "Custom GOFS feed 1 API key",
         "description": "API key for a feed you added above with 'API key slot' set to 1. Stored encrypted and sent only to that feed.",
         "x-openmapx-secret": true
       },
-      "gofs-custom-2-api-key": {
+      "gofsCustom2ApiKey": {
         "type": "string",
         "title": "Custom GOFS feed 2 API key",
         "description": "API key for a feed you added above with 'API key slot' set to 2. Stored encrypted and sent only to that feed.",
         "x-openmapx-secret": true
       },
-      "gofs-custom-3-api-key": {
+      "gofsCustom3ApiKey": {
         "type": "string",
         "title": "Custom GOFS feed 3 API key",
         "description": "API key for a feed you added above with 'API key slot' set to 3. Stored encrypted and sent only to that feed.",
@@ -105,7 +105,6 @@
     }
   },
   "quality": "built-in",
-  "category": "Routing",
   "dataSources": [
     {
       "sourceId": "ca-taxi-montreal",

@@ -87,6 +87,8 @@ const exchangeBodySchema = {
 } as const;
 
 const service = new MobileAuthHandoffService();
+/** One body for every refused handoff, so a refusal tells nothing about the cause. */
+const INVALID_REQUEST = { error: "Invalid handoff request", code: "INVALID_REQUEST" } as const;
 
 function noStore(reply: FastifyReply): void {
   reply.header("Cache-Control", "no-store");
@@ -144,18 +146,21 @@ export const mobileAuthRoute: FastifyPluginAsync = async (fastify) => {
     },
     async (request, reply) => {
       noStore(reply);
-      if (!originAllowed(request)) return reply.code(403).send({ error: "invalid_request" });
+      if (!originAllowed(request)) return reply.code(403).send(INVALID_REQUEST);
 
       const session = await auth.api.getSession({ headers: fromNodeHeaders(request.headers) });
-      if (!session) return reply.code(401).send({ error: "authentication_required" });
-      if (session.session.impersonatedBy) return reply.code(403).send({ error: "invalid_request" });
+      if (!session)
+        return reply
+          .code(401)
+          .send({ error: "Authentication required", code: "AUTHENTICATION_REQUIRED" });
+      if (session.session.impersonatedBy) return reply.code(403).send(INVALID_REQUEST);
 
       const generated = await auth.api.generateOneTimeToken({
         headers: fromNodeHeaders(request.headers),
       });
       const token = (generated as { token?: unknown } | null)?.token;
       const oneTimeToken = typeof token === "string" ? token : "";
-      if (!oneTimeToken) return reply.code(500).send({ error: "invalid_request" });
+      if (!oneTimeToken) return reply.code(500).send(INVALID_REQUEST);
 
       const result = await service.issue({
         userId: session.user.id,
@@ -167,7 +172,7 @@ export const mobileAuthRoute: FastifyPluginAsync = async (fastify) => {
       });
       if (!result.ok) {
         const status = result.reason === "too-many-attempts" ? 429 : 400;
-        return reply.code(status).send({ error: "invalid_request" });
+        return reply.code(status).send(INVALID_REQUEST);
       }
 
       // The code and nothing else. No token, no user, no redirect target.
@@ -194,7 +199,7 @@ export const mobileAuthRoute: FastifyPluginAsync = async (fastify) => {
     },
     async (request, reply) => {
       noStore(reply);
-      if (!originAllowed(request)) return reply.code(403).send({ error: "invalid_request" });
+      if (!originAllowed(request)) return reply.code(403).send(INVALID_REQUEST);
 
       const result = await service.exchange({
         callbackCode: request.body.callbackCode,
@@ -203,7 +208,7 @@ export const mobileAuthRoute: FastifyPluginAsync = async (fastify) => {
         nowMs: Date.now(),
       });
       // One status, one body, for every possible rejection.
-      if (!result.ok) return reply.code(400).send({ error: "invalid_request" });
+      if (!result.ok) return reply.code(400).send(INVALID_REQUEST);
 
       return reply.send({ token: result.oneTimeToken });
     },

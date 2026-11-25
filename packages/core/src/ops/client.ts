@@ -26,6 +26,7 @@ import {
   parseOpsResult,
 } from "./contract";
 import { opsOperationFingerprint } from "./fingerprint";
+import { type OpsSettlement, opsSettlementSchema } from "./journal-settlement";
 import type { TrustedConfigurationPayload } from "./trusted-config";
 
 const TOKEN_BYTES = 43;
@@ -50,6 +51,8 @@ const ERROR_CLASSES = new Set<OpsErrorClass>([
   "recovery_required",
   "host_update_required",
   "unsupported_peer",
+  "other_release",
+  "release_state_epoch",
   "runtime",
 ]);
 
@@ -60,6 +63,8 @@ function isAbortError(error: unknown): boolean {
 }
 
 export class OpsClientError extends Error {
+  /** What a finished row another release recorded settled, when it says. */
+  settlement?: OpsSettlement;
   constructor(
     readonly errorClass: OpsErrorClass,
     readonly status?: number,
@@ -73,7 +78,7 @@ export class OpsProtocolUpgradeRequiredError extends OpsClientError {
   constructor() {
     super("host_update_required", 409);
     this.name = "OpsProtocolUpgradeRequiredError";
-    this.message = "Update the ops-agent before submitting version2 operations";
+    this.message = "Run the ops-agent and its caller from the same release";
   }
 }
 
@@ -192,11 +197,21 @@ function parseResponse(raw: string, requestId: string, status: number): OpsRespo
     throw new OpsClientError("runtime", status);
   }
   const error = envelope.error;
+  const settled =
+    !!error &&
+    typeof error === "object" &&
+    (error as { class?: unknown }).class === "other_release" &&
+    "settlement" in error;
   if (
     !error ||
     typeof error !== "object" ||
     Array.isArray(error) ||
-    !exactKeys(error as Record<string, unknown>, ["class", "message"]) ||
+    !exactKeys(
+      error as Record<string, unknown>,
+      settled ? ["class", "message", "settlement"] : ["class", "message"],
+    ) ||
+    (settled &&
+      !opsSettlementSchema.safeParse((error as { settlement?: unknown }).settlement).success) ||
     !ERROR_CLASSES.has((error as { class?: OpsErrorClass }).class as OpsErrorClass) ||
     ((error as { message?: unknown }).message !==
       OPS_PUBLIC_ERROR_MESSAGES[(error as { class: OpsErrorClass }).class] &&
@@ -212,11 +227,12 @@ function parseResponse(raw: string, requestId: string, status: number): OpsRespo
 
 /** The client error for a refused request; a busy refusal names the holding operation. */
 function opsEnvelopeError(
-  error: { class: OpsErrorClass; message: string },
+  error: { class: OpsErrorClass; message: string; settlement?: OpsSettlement },
   status: number,
 ): OpsClientError {
   const failure = new OpsClientError(error.class, status);
   if (isOpsBusyHolderMessage(error.message)) failure.message = error.message;
+  if (error.settlement) failure.settlement = opsSettlementSchema.parse(error.settlement);
   return failure;
 }
 

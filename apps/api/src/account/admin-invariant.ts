@@ -53,11 +53,11 @@ export async function assertAccountDeletionAllowed(targetId: string) {
     .where(
       and(
         or(
-          eq(adminJob.createdBy, targetId),
+          eq(adminJob.createdByUserId, targetId),
           sql`${adminJob.protocol}->'immediate'->>'actorId' = ${targetId}`,
         ),
         or(
-          sql`${adminJob.status} NOT IN ('success','failed','canceled')`,
+          sql`${adminJob.status} NOT IN ('succeeded','failed','cancelled')`,
           sql`${adminJob.finishedAt} IS NULL`,
           sql`NOT (${noUnsettledManagedOperation()})`,
           openCandidateCondition(),

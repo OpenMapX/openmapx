@@ -6,7 +6,7 @@ import { readTrafficProof } from "./traffic-proof.js";
  * Valhalla multi-modal routing service client (walking, cycling).
  * Default: Stadia Maps' hosted Valhalla (needs a key). Override via the
  * self-hosted `valhalla` service capability or
- * INTEGRATION_ROUTING_VALHALLA_ENDPOINT / INTEGRATION_ROUTING_VALHALLA_APIKEY;
+ * INTEGRATION_ROUTING_VALHALLA_ENDPOINT / INTEGRATION_ROUTING_VALHALLA_API_KEY;
  * self-hosted Valhalla works key-less.
  */
 

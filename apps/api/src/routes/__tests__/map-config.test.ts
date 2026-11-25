@@ -9,22 +9,31 @@ const state = vi.hoisted(() => ({
   reads: 0,
   datasets: null as { basemap: boolean; streetDetail: boolean } | null,
 }));
-vi.mock("../../db/index.js", () => ({
-  db: {
-    select: () => ({
-      from: async () => {
-        state.reads++;
-        if (state.fail) throw new Error("unavailable");
-        return state.rows;
-      },
-    }),
-  },
-}));
-vi.mock("../../db/schema.js", () => ({ systemSettings: {} }));
-vi.mock("../../services/settings.js", () => ({
-  isSecretSetting: (key: string) => key === "maptilerApiKey",
-  loadSecretSettings: async () => state.secrets,
-}));
+vi.mock("../../services/settings.js", () => {
+  const defaults: Record<string, string> = { "basemap.provider": "auto", "maptiler.apiKey": "" };
+  const envNames: Record<string, string> = {
+    "basemap.provider": "BASEMAP_PROVIDER",
+    "maptiler.apiKey": "MAPTILER_API_KEY",
+  };
+  return {
+    SecretSettingUnreadableError: class extends Error {},
+    // Environment, then the stored value, then the default, as the resolver orders them.
+    resolveSetting: async (key: string, options: { database?: null } = {}) => {
+      const env = process.env[envNames[key] ?? ""]?.trim();
+      if (env) {
+        if (key === "basemap.provider" && !["auto", "openfreemap", "maptiler"].includes(env))
+          throw new Error("BASEMAP_PROVIDER is invalid");
+        return env;
+      }
+      if (options.database === null) return defaults[key];
+      state.reads++;
+      if (state.fail) throw new Error("unavailable");
+      return (
+        state.secrets[key] ?? state.rows.find((row) => row.key === key)?.value ?? defaults[key]
+      );
+    },
+  };
+});
 vi.mock("../../services/service-registry.js", () => ({
   serviceUrl: () => (state.local ? "http://tileserver:8080" : null),
 }));
@@ -55,7 +64,7 @@ async function request() {
 
 describe("public map configuration", () => {
   it("returns keyless defaults without secret fields", async () => {
-    vi.stubEnv("MAPTILER_KEY", "");
+    vi.stubEnv("MAPTILER_API_KEY", "");
     const res = await request();
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({
@@ -68,8 +77,8 @@ describe("public map configuration", () => {
     expect(res.headers["cache-control"]).toBe("no-store");
   });
   it("uses admin selection and key but never exposes the credential", async () => {
-    state.rows = [{ key: "hostedBasemapProvider", value: "openfreemap" }];
-    state.secrets = { maptilerApiKey: "private-db-key" };
+    state.rows = [{ key: "basemap.provider", value: "openfreemap" }];
+    state.secrets = { "maptiler.apiKey": "private-db-key" };
     const res = await request();
     expect(res.json()).toMatchObject({
       hostedBasemapProvider: "openfreemap",
@@ -77,12 +86,10 @@ describe("public map configuration", () => {
     });
     expect(res.body).not.toContain("private-db-key");
   });
-  it("environment selection wins, invalid environment falls back to valid admin selection", async () => {
-    state.rows = [{ key: "hostedBasemapProvider", value: "openfreemap" }];
+  it("lets the environment selection win over the admin selection", async () => {
+    state.rows = [{ key: "basemap.provider", value: "openfreemap" }];
     vi.stubEnv("BASEMAP_PROVIDER", "maptiler");
     expect((await request()).json().hostedBasemapProvider).toBe("maptiler");
-    vi.stubEnv("BASEMAP_PROVIDER", "invalid");
-    expect((await request()).json().hostedBasemapProvider).toBe("openfreemap");
   });
   it("publishes only public paths for an enabled local tileserver", async () => {
     state.local = true;
@@ -108,10 +115,10 @@ describe("public map configuration", () => {
     });
   });
   it("uses the hosted basemap with local street detail in hosted-basemap mode", async () => {
-    vi.stubEnv("MAPTILER_KEY", "");
+    vi.stubEnv("MAPTILER_API_KEY", "");
     state.local = true;
     state.datasets = { basemap: false, streetDetail: true };
-    state.rows = [{ key: "hostedBasemapProvider", value: "openfreemap" }];
+    state.rows = [{ key: "basemap.provider", value: "openfreemap" }];
     const res = await request();
     expect(res.json()).toEqual({
       hostedBasemapProvider: "openfreemap",
@@ -120,7 +127,7 @@ describe("public map configuration", () => {
       selfHostedGlyphsUrl: "",
       streetDetailTilesUrl: "/tiles/data/street_detail.json",
     });
-    expect(state.reads).toBe(1);
+    expect(state.reads).toBe(2);
   });
   it("falls back to the hosted basemap when the tileserver serves neither file", async () => {
     state.local = true;

@@ -355,7 +355,7 @@ describe("Gate C — host authority", () => {
         "@infra:data/../state/ops-agent",
         "@infra:../..",
         "@service:pelias:../../infra/docker/state",
-        "../../infra/docker/state/ops-agent/jobs-v1.json",
+        "../../infra/docker/state/ops-agent/jobs.json",
         "config/data-manager.json",
       ]);
       manifest("photon", [
@@ -375,7 +375,7 @@ describe("Gate C — host authority", () => {
           "@infra:data/../state/ops-agent",
           "@infra:../..",
           "@service:pelias:../../infra/docker/state",
-          "../../infra/docker/state/ops-agent/jobs-v1.json",
+          "../../infra/docker/state/ops-agent/jobs.json",
         ].map((source) => `service "data-manager" mounts the operations agent's state (${source})`),
         ...[
           "${OPENMAPX_STATE_DIR}/ops-agent",

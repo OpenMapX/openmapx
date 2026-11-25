@@ -8,7 +8,7 @@ Secret settings saved in the admin panel (the SMTP password, the EmailLabs and
 Lettermint credentials and the MapTiler key) are stored encrypted in their own
 table instead of in clear among the system settings. The admin panel still
 shows them only as configured and lets an administrator replace or clear them;
-environment variables such as `SMTP_PASS` still take precedence.
+environment variables such as `SMTP_PASSWORD` still take precedence.
 
 The key that encrypts everything the API stores secret in the database (these
 settings, the credential vault, personal timeline credentials and assisted

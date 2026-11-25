@@ -10,12 +10,14 @@ export type Article15Decision = z.infer<typeof article15DecisionSchema>;
 export const portabilityDecisionSchema = z.enum(["include", "exclude", "conditional"]);
 export type PortabilityDecision = z.infer<typeof portabilityDecisionSchema>;
 
-export const subjectDataSourceSchema = z.enum([
+/** Where a registration's data lives; also the source of an operator task. */
+export const SUBJECT_DATA_SOURCES = [
   "openmapx-db",
   "redis",
   "managed-service",
   "operator",
-]);
+] as const;
+export const subjectDataSourceSchema = z.enum(SUBJECT_DATA_SOURCES);
 export type SubjectDataSource = z.infer<typeof subjectDataSourceSchema>;
 
 export const locatorTypeSchema = z.enum([
@@ -24,7 +26,6 @@ export const locatorTypeSchema = z.enum([
   "target_id",
   "creator_id",
   "updater_id",
-  "triggered_by",
   "exact_identifier",
   "hmac_principal",
   "managed_oidc_subject",

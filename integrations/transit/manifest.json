@@ -6,6 +6,5 @@
   "domains": ["transit", "search-suggestions"],
   "backend": { "routes": true },
   "quality": "built-in",
-  "category": "Transit",
   "requires": [{ "capability": "transit-engine", "optional": true }]
 }

@@ -10,10 +10,25 @@ import { openTestDatabase } from "./testing/nodeSqliteDatabase";
 async function freshDatabase() {
   const database = openTestDatabase();
   await migrateSessionSchema(database, 1_000);
+  await FeasibilityRepository.open(database);
   return database;
 }
 
 describe("feasibility probe schema", () => {
+  it("is not part of the release schema", async () => {
+    const database = openTestDatabase();
+    await migrateSessionSchema(database, 1_000);
+    await expect(
+      database.getFirstAsync("SELECT name FROM sqlite_schema WHERE name = 'feasibility_probe'"),
+    ).resolves.toBeNull();
+    await FeasibilityRepository.open(database);
+    await FeasibilityRepository.open(database);
+    await expect(
+      database.getFirstAsync("SELECT name FROM sqlite_schema WHERE name = 'feasibility_probe'"),
+    ).resolves.toBeTruthy();
+    await database.closeAsync();
+  });
+
   it("stores no column that could hold a coordinate", async () => {
     const database = await freshDatabase();
     const columns = await database.getAllAsync<{ name: string }>(
@@ -45,13 +60,15 @@ describe("feasibility probe schema", () => {
 describe("FeasibilityRepository", () => {
   it("returns empty state before anything is written", async () => {
     const database = await freshDatabase();
-    await expect(new FeasibilityRepository(database).read()).resolves.toEqual(EMPTY_PROBE_STATE);
+    await expect((await FeasibilityRepository.open(database)).read()).resolves.toEqual(
+      EMPTY_PROBE_STATE,
+    );
     await database.closeAsync();
   });
 
   it("survives repository recreation without losing or regressing counters", async () => {
     const database = await freshDatabase();
-    const first = new FeasibilityRepository(database);
+    const first = await FeasibilityRepository.open(database);
     await first.commit((current) => ({
       ...current,
       callbackCount: current.callbackCount + 1,
@@ -69,7 +86,7 @@ describe("FeasibilityRepository", () => {
 
     // A brand new repository models the process being recreated between
     // background callbacks.
-    const recreated = new FeasibilityRepository(database);
+    const recreated = await FeasibilityRepository.open(database);
     const state = await recreated.read();
     expect(state.callbackCount).toBe(2);
     expect(state.acceptedFixCount).toBe(5);
@@ -80,7 +97,7 @@ describe("FeasibilityRepository", () => {
 
   it("round-trips every field, including the audio probe flag", async () => {
     const database = await freshDatabase();
-    const repository = new FeasibilityRepository(database);
+    const repository = await FeasibilityRepository.open(database);
     await repository.commit((current) => ({
       ...current,
       callbackCount: 7,
@@ -113,7 +130,7 @@ describe("FeasibilityRepository", () => {
 
   it("rejects a mutation that would regress the callback counter", async () => {
     const database = await freshDatabase();
-    const repository = new FeasibilityRepository(database);
+    const repository = await FeasibilityRepository.open(database);
     await repository.commit((current) => ({ ...current, callbackCount: 5, updatedAtMs: 1 }));
     await expect(
       repository.commit((current) => ({ ...current, callbackCount: 1, updatedAtMs: 2 })),
@@ -125,7 +142,7 @@ describe("FeasibilityRepository", () => {
 
   it("leaves state untouched when the mutation throws mid-transaction", async () => {
     const database = await freshDatabase();
-    const repository = new FeasibilityRepository(database);
+    const repository = await FeasibilityRepository.open(database);
     await repository.commit((current) => ({ ...current, callbackCount: 2, updatedAtMs: 1 }));
     await expect(
       repository.commit(() => {
@@ -138,7 +155,7 @@ describe("FeasibilityRepository", () => {
 
   it("clears everything on reset", async () => {
     const database = await freshDatabase();
-    const repository = new FeasibilityRepository(database);
+    const repository = await FeasibilityRepository.open(database);
     await repository.commit((current) => ({ ...current, callbackCount: 3, updatedAtMs: 1 }));
     await repository.reset();
     expect(await repository.read()).toEqual(EMPTY_PROBE_STATE);

@@ -1,4 +1,5 @@
 import { getStorage } from "../platform/storage";
+import { STORAGE_KEYS } from "../platform/storageKeys";
 import type { ParkedLocation, PersonalVehicle } from "./types";
 import {
   MAX_VEHICLES_PER_USER as MAX_LOCAL_VEHICLES,
@@ -6,9 +7,9 @@ import {
   normalizeVehicleDraft,
 } from "./validate";
 
-export const LOCAL_VEHICLES_KEY = "openmapx:garage:vehicles";
-export const LOCAL_PARKED_KEY = "openmapx:garage:parked";
-export const GARAGE_IMPORTED_KEY = "openmapx:garage:importedFor";
+export const LOCAL_VEHICLES_KEY = STORAGE_KEYS.garageVehicles.key;
+export const LOCAL_PARKED_KEY = STORAGE_KEYS.garageParked.key;
+export const GARAGE_IMPORTED_KEY = STORAGE_KEYS.garageImportedFor.key;
 
 function safeParse(raw: string | null): unknown {
   if (!raw) return null;

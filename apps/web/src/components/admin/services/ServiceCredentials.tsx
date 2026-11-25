@@ -27,8 +27,8 @@ import {
   useSetServiceCredential,
 } from "@/hooks/useServices";
 import { useAdminFormat } from "@/lib/admin/adminFormat";
-import { adminErrorText } from "@/lib/admin/adminRequestError";
 import { type AdminTranslator, useAdminTranslations } from "@/lib/admin/adminTranslator";
+import { useAdminErrorText } from "@/lib/admin/useAdminErrorText";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { useActivityClient } from "../activity/activityQueries";
 import { CredentialSetupGuide } from "../integrations/CredentialSetupGuide";
@@ -58,6 +58,7 @@ export function ServiceCredentials({ serviceId }: { serviceId: string }) {
 function ServiceCredentialsView({ serviceId }: { serviceId: string }) {
   const t = useAdminTranslations("adminServices");
   const tCommon = useTranslations("common");
+  const adminErrorText = useAdminErrorText();
   const format = useAdminFormat();
   const { client } = useActivityClient();
   const query = useServiceCredentials(serviceId);

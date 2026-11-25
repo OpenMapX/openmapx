@@ -3,8 +3,8 @@ import {
   carDestinationSchema,
   measurementDistanceParts,
 } from "@openmapx/core/navigation";
-import { createApiClient, fetchGeocode } from "@openmapx/core/navigation/api";
-import { z } from "zod";
+import { fetchGeocode, nativeGeocodeResponseSchema } from "@openmapx/core/navigation/api";
+import { createNativeApiClient, isUpdateRequired } from "../api/nativeApiClient";
 import { readCarDestinations } from "../bridge/receiveCarDestinations";
 import { createLocationDriver } from "../location/createLocationDriver";
 import type { NavigationCoordinator } from "../navigation/NavigationCoordinator";
@@ -22,17 +22,6 @@ const EMPTY_PREVIEW = JSON.stringify({ v: 1, type: "car-preview", routes: [] });
 /** Start refusals the driver can only resolve on the phone. */
 const PHONE_SETUP_CODES = new Set(["app-not-visible", "permission-denied"]);
 
-const searchResponse = z
-  .array(
-    z
-      .object({
-        id: z.string().optional(),
-        label: z.string(),
-        coordinates: z.tuple([z.number(), z.number()]),
-      })
-      .passthrough(),
-  )
-  .max(100);
 /** Owns cancellable public requests; raw URLs and coordinates never reach logs. */
 export class CarCommands {
   private planner: CarRoutePlanner;
@@ -228,10 +217,10 @@ export class CarCommands {
       // The phone search's request, through the shared client (errors, abort, timeout).
       const places = await fetchGeocode(
         { q: query, lang: preferences.locale, proximity: near, limit: 10 },
-        createApiClient({ baseUrl: this.apiOrigin, credentials: "omit" }),
+        createNativeApiClient(this.apiOrigin),
         { signal: controller.signal, timeoutMs: 15000 },
       );
-      const results = searchResponse
+      const results = nativeGeocodeResponseSchema
         .parse(places)
         .flatMap((place, index) => {
           const result = carDestinationSchema.safeParse({
@@ -244,9 +233,13 @@ export class CarCommands {
         .slice(0, 10);
       if (generation === this.searchGeneration && this.connected)
         await this.native.result(JSON.stringify({ results }));
-    } catch {
+    } catch (error) {
       if (generation === this.searchGeneration && this.connected)
-        await this.native.result(JSON.stringify({ error: "search-unavailable" }));
+        await this.native.result(
+          JSON.stringify({
+            error: isUpdateRequired(error) ? "update-required" : "search-unavailable",
+          }),
+        );
     }
   }
 }

@@ -23,8 +23,15 @@ dbDescribe("audited account provisioning and assisted recovery", () => {
     const { accountMailOutbox } = await import("../db/schema");
     await fixture.db
       .update(accountMailOutbox)
-      .set({ state: "failed", ciphertext: null, iv: null, tag: null, finishedAt: new Date() })
-      .where(eq(accountMailOutbox.state, "queued"));
+      .set({
+        status: "failed",
+        ciphertext: null,
+        iv: null,
+        tag: null,
+        keyVersion: null,
+        finishedAt: new Date(),
+      })
+      .where(eq(accountMailOutbox.status, "queued"));
     mail.mockClear();
     mail.mockResolvedValue(undefined);
   });
@@ -172,7 +179,7 @@ dbDescribe("audited account provisioning and assisted recovery", () => {
 
   async function proofFor(
     admin: Awaited<ReturnType<typeof actor>>,
-    purpose: "account.verify" | "account.password.set" | "account.invite",
+    purpose: "user.email.verify" | "user.password.set" | "user.invitation.send",
     targetId: string,
   ) {
     const { AdminActionReauthentication } = await import("./admin-reauthentication"),
@@ -226,7 +233,7 @@ dbDescribe("audited account provisioning and assisted recovery", () => {
         idempotencyKey: randomUUID(),
         actor: admin,
       });
-    const grant = await proofFor(admin, "account.verify", target.userId),
+    const grant = await proofFor(admin, "user.email.verify", target.userId),
       key = randomUUID();
     await expect(
       assistedAccountAction({
@@ -276,7 +283,10 @@ dbDescribe("audited account provisioning and assisted recovery", () => {
         .select()
         .from(adminAuditLog)
         .where(
-          and(eq(adminAuditLog.action, "user.verify"), eq(adminAuditLog.targetId, target.userId)),
+          and(
+            eq(adminAuditLog.action, "user.email.verify"),
+            eq(adminAuditLog.targetId, target.userId),
+          ),
         ),
     ).toHaveLength(1);
   });
@@ -295,7 +305,7 @@ dbDescribe("audited account provisioning and assisted recovery", () => {
         idempotencyKey: randomUUID(),
         actor: admin,
       }),
-      grant = await proofFor(admin, "account.verify", target.userId),
+      grant = await proofFor(admin, "user.email.verify", target.userId),
       subject = itemAt(await fixture.db.select().from(user).where(eq(user.id, target.userId)), 0),
       input = {
         ...grant,
@@ -309,7 +319,7 @@ dbDescribe("audited account provisioning and assisted recovery", () => {
         },
       };
     await fixture.sql.unsafe(
-      "create function reject_assisted_audit() returns trigger language plpgsql as $$begin if NEW.action='user.verify' then raise exception 'synthetic strict audit refusal'; end if; return NEW; end$$",
+      "create function reject_assisted_audit() returns trigger language plpgsql as $$begin if NEW.action='user.email.verify' then raise exception 'synthetic strict audit refusal'; end if; return NEW; end$$",
     );
     await fixture.sql.unsafe(
       "create trigger reject_assisted_audit before insert on admin_audit_log for each row execute function reject_assisted_audit()",
@@ -337,7 +347,7 @@ dbDescribe("audited account provisioning and assisted recovery", () => {
         .from(accountActionReceipt)
         .where(
           and(
-            eq(accountActionReceipt.targetId, target.userId),
+            eq(accountActionReceipt.targetUserId, target.userId),
             eq(accountActionReceipt.action, "verify"),
           ),
         ),
@@ -351,7 +361,10 @@ dbDescribe("audited account provisioning and assisted recovery", () => {
         .select()
         .from(adminAuditLog)
         .where(
-          and(eq(adminAuditLog.targetId, target.userId), eq(adminAuditLog.action, "user.verify")),
+          and(
+            eq(adminAuditLog.targetId, target.userId),
+            eq(adminAuditLog.action, "user.email.verify"),
+          ),
         ),
     ).toHaveLength(1);
   }, 30000);
@@ -367,7 +380,7 @@ dbDescribe("audited account provisioning and assisted recovery", () => {
         idempotencyKey: randomUUID(),
         actor: admin,
       }),
-      grant = await proofFor(admin, "account.password.set", target.userId),
+      grant = await proofFor(admin, "user.password.set", target.userId),
       input = {
         ...grant,
         action: "password" as const,
@@ -524,7 +537,7 @@ dbDescribe("audited account provisioning and assisted recovery", () => {
     let { admin, target, token } = await issuedSetup();
     const { assistedAccountAction } = await import("./account-provisioning");
     for (let i = 0; i < 2; i++) {
-      const grant = await proofFor(admin, "account.invite", target.userId);
+      const grant = await proofFor(admin, "user.invitation.send", target.userId);
       admin = grant.actor;
       await assistedAccountAction({
         ...grant,
@@ -537,7 +550,7 @@ dbDescribe("audited account provisioning and assisted recovery", () => {
     await expect(
       auth.api.resetPassword({ body: { token, newPassword: "synthetic-old-token-password" } }),
     ).rejects.toThrow();
-    const grant = await proofFor(admin, "account.invite", target.userId);
+    const grant = await proofFor(admin, "user.invitation.send", target.userId);
     await expect(
       assistedAccountAction({
         ...grant,
@@ -553,7 +566,7 @@ dbDescribe("audited account provisioning and assisted recovery", () => {
         {
           ...grant.proof,
           sessionId: grant.actor.sessionId,
-          purpose: "account.invite",
+          purpose: "user.invitation.send",
           targetId: target.userId,
         },
         tx,
@@ -575,7 +588,7 @@ dbDescribe("audited account provisioning and assisted recovery", () => {
       },
       target = await provisionAccount(input);
     await fixture.sql.unsafe(
-      "create function account_mail_refuse_final() returns trigger language plpgsql as $$begin if NEW.state='sent' and OLD.kind='verification' then raise exception 'synthetic mail outcome publication failure'; end if; return NEW; end$$",
+      "create function account_mail_refuse_final() returns trigger language plpgsql as $$begin if NEW.status='sent' and OLD.kind='email_verification' then raise exception 'synthetic mail outcome publication failure'; end if; return NEW; end$$",
     );
     await fixture.sql.unsafe(
       "create trigger account_mail_refuse_final before update on account_mail_outbox for each row execute function account_mail_refuse_final()",
@@ -593,15 +606,15 @@ dbDescribe("audited account provisioning and assisted recovery", () => {
       .where(
         and(
           eq(accountMailOutbox.userId, target.userId),
-          eq(accountMailOutbox.kind, "verification"),
+          eq(accountMailOutbox.kind, "email_verification"),
         ),
       );
-    expect(row?.state).toBe("sending");
+    expect(row?.status).toBe("sending");
     await fixture.db
       .update(accountMailOutbox)
       .set({ attemptStartedAt: new Date(Date.now() - 61000) })
       .where(
-        and(eq(accountMailOutbox.userId, target.userId), eq(accountMailOutbox.state, "sending")),
+        and(eq(accountMailOutbox.userId, target.userId), eq(accountMailOutbox.status, "sending")),
       );
     await dispatchAccountMailQueue();
     expect(mail).toHaveBeenCalledTimes(2);
@@ -665,7 +678,7 @@ dbDescribe("audited account provisioning and assisted recovery", () => {
       expect(duplicate.status).toBe(200);
       if (duplicate.status !== 200) throw Error("Duplicate failed");
       expect(duplicate.data.userId).toBe(created.data.userId);
-      const grant = await proofFor(admin, "account.verify", created.data.userId),
+      const grant = await proofFor(admin, "user.email.verify", created.data.userId),
         verified = await sdk.verifyAdminAccount(
           created.data.userId,
           {
@@ -754,7 +767,7 @@ dbDescribe("audited account provisioning and assisted recovery", () => {
               accountActionDigest(["key", admin.id, input.idempotencyKey]),
             ),
           )
-      )[0]?.targetId,
+      )[0]?.targetUserId,
     ).toBeNull();
     await expect(provisionAccount(input)).rejects.toMatchObject({
       code: "ACCOUNT_ACTION_NOT_AVAILABLE",
@@ -823,9 +836,9 @@ dbDescribe("audited account provisioning and assisted recovery", () => {
     await fixture.db.insert(accountActionReceipt).values(
       subjects.map((subject) => ({
         key: accountActionDigest(["fixture", subject.id]),
-        actorId: admin.id,
-        targetId: subject.id,
-        action: "verification-email" as const,
+        actorUserId: admin.id,
+        targetUserId: subject.id,
+        action: "email_verification" as const,
         intentDigest: accountActionDigest([subject.id]),
         result: { created: false },
         mailRequested: true,

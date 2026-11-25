@@ -23,8 +23,8 @@ function publication(
           count: 1,
         };
   return {
-    version: 2,
-    policyVersion: 2,
+    version: 1,
+    policyVersion: 1,
     generation,
     publishedAt,
     region: { name: "Aachen", bounds: [5.9, 50.65, 6.3, 50.95] },
@@ -156,8 +156,8 @@ describe("useAmbientPublication discovery", () => {
       (i: number) => answer(i, { manifest: { ...publication(SECOND), version: 3 } }),
     ],
     [
-      "a previous format version",
-      (i: number) => answer(i, { manifest: { ...publication(SECOND), version: 1 } }),
+      "another format version",
+      (i: number) => answer(i, { manifest: { ...publication(SECOND), version: 2 } }),
     ],
     [
       "a publication without a generation",

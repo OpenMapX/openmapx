@@ -1,3 +1,4 @@
+import { COMPONENT_ID_PATTERN } from "@openmapx/core/component-id";
 import type { ServiceAction } from "@openmapx/core/ops";
 import {
   authorizeOpsResources,
@@ -427,7 +428,7 @@ export function createProductionRegistryResourceClaimer<
     claim: async (operation, fingerprint, signal, owner) => {
       const authority = await options.loadAuthority?.();
       if (!authority || signal.aborted) return null;
-      const id = /^[a-z0-9][a-z0-9-]{0,63}$/;
+      const id = COMPONENT_ID_PATTERN;
       if (
         !/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(authority.revisionId) ||
         authority.services.length > 256 ||

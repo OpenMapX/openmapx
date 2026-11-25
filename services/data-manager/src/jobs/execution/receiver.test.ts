@@ -50,7 +50,7 @@ function refusingRuntime(refusal: unknown): DataExecutionRuntime {
     inspect: async () =>
       refused
         ? status({
-            status: "error",
+            status: "failed",
             diagnostics: {
               tail: [{ stream: "stderr", message: String((refusal as Error).message) }],
               truncated: false,

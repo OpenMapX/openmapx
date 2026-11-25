@@ -7,10 +7,12 @@ import {
   type OpsJobStatus,
   type OpsOperation,
   type OpsOperationKind,
+  type OpsSettlement,
   opsFailureResultSchema,
   opsKindRequiresControlAuthority,
   opsOperationFingerprint,
   opsOperationSchema,
+  opsSettlementSchema,
   type ProcessDiagnostics,
   parseControlRootOperationKey,
   processDiagnosticsSchema,
@@ -49,6 +51,8 @@ export interface ProjectedOperation {
   deadlineAt?: number;
   outcome?: "unknown";
   result?: unknown;
+  /** What another release's agent row stated this operation settled, in place of a result. */
+  settlement?: OpsSettlement;
   failureResult?: OpsFailureResult;
   diagnostics?: ProcessDiagnostics;
   errorClass?: string;
@@ -68,7 +72,7 @@ export interface ProjectedOperation {
 }
 
 export interface OpsProjection {
-  version: 3;
+  version: 1;
   steps: Record<string, { operationKey: string; requestedDeadlineAt: number }>;
   eventTotal: number;
   byteTotal: number;
@@ -81,7 +85,7 @@ function boundedInteger(value: unknown, maximum: number): value is number {
 }
 
 function emptyProjection(): OpsProjection {
-  return { version: 3, steps: {}, eventTotal: 0, byteTotal: 0, truncated: false, operations: {} };
+  return { version: 1, steps: {}, eventTotal: 0, byteTotal: 0, truncated: false, operations: {} };
 }
 
 /**
@@ -98,7 +102,7 @@ export function readProjection(protocol: unknown, result?: unknown): OpsProjecti
   }
   const value = candidate as Record<string, unknown>;
   if (
-    value.version !== 3 ||
+    value.version !== 1 ||
     !boundedInteger(value.eventTotal, ADMIN_EVENT_LIMIT) ||
     !boundedInteger(value.byteTotal, ADMIN_EVENT_BYTE_LIMIT) ||
     typeof value.truncated !== "boolean" ||
@@ -153,6 +157,14 @@ export function readProjection(protocol: unknown, result?: unknown): OpsProjecti
     if (
       operation.failureResult !== undefined &&
       !opsFailureResultSchema.safeParse(operation.failureResult).success
+    )
+      throw new JobObservationPending("invalid_identity");
+    if (
+      operation.settlement !== undefined &&
+      (operation.terminal !== true ||
+        operation.phase !== "terminal" ||
+        operation.result !== undefined ||
+        !opsSettlementSchema.safeParse(operation.settlement).success)
     )
       throw new JobObservationPending("invalid_identity");
     if (
@@ -254,7 +266,7 @@ export function readProjection(protocol: unknown, result?: unknown): OpsProjecti
       throw new JobObservationPending("recovery_required");
   }
   return {
-    version: 3,
+    version: 1,
     steps,
     eventTotal: value.eventTotal,
     byteTotal: value.byteTotal,

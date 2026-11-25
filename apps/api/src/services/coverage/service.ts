@@ -79,8 +79,9 @@ export class CoverageHttpError extends Error {
   constructor(
     readonly statusCode: 400 | 404 | 409 | 503,
     readonly code: string,
+    message: string,
   ) {
-    super(code);
+    super(message);
     this.name = "CoverageHttpError";
   }
 }
@@ -112,7 +113,7 @@ function unique<T>(values: readonly T[]): T[] {
 function validPage(value: number | undefined, fallback: number): number {
   if (value === undefined) return fallback;
   if (!Number.isInteger(value) || value < 1 || value > MAX_PAGE_LIMIT) {
-    throw new CoverageHttpError(400, "invalid_pagination");
+    throw new CoverageHttpError(400, "INVALID_QUERY", "Invalid pagination");
   }
   return value;
 }
@@ -120,7 +121,7 @@ function validPage(value: number | undefined, fallback: number): number {
 function validOffset(value: number | undefined): number {
   if (value === undefined) return 0;
   if (!Number.isInteger(value) || value < 0 || value > MAX_OFFSET) {
-    throw new CoverageHttpError(400, "invalid_pagination");
+    throw new CoverageHttpError(400, "INVALID_QUERY", "Invalid pagination");
   }
   return value;
 }
@@ -841,7 +842,7 @@ export class CoverageService {
       // that same revision, which is what lets a source drawer stay pinned to
       // the report the operator opened.
       if (!existing) {
-        throw new CoverageHttpError(409, "snapshot_expired");
+        throw new CoverageHttpError(409, "SNAPSHOT_EXPIRED", "Coverage snapshot expired");
       }
       if (
         options.membershipKey &&
@@ -849,7 +850,7 @@ export class CoverageService {
         existing.attentionMembership.get(options.filterKey) !==
           options.membershipKey(existing.collected)
       ) {
-        throw new CoverageHttpError(409, "snapshot_expired");
+        throw new CoverageHttpError(409, "SNAPSHOT_EXPIRED", "Coverage snapshot expired");
       }
       if (options.membershipKey) {
         existing.attentionMembership ??= new Map();
@@ -1020,7 +1021,7 @@ export class CoverageService {
 
   private regionOrThrow(collection: CoverageCollection, regionId: string): CoverageRegion {
     const region = collection.regions.find((candidate) => candidate.key === regionId);
-    if (!region) throw new CoverageHttpError(404, "region_not_found");
+    if (!region) throw new CoverageHttpError(404, "REGION_NOT_FOUND", "Coverage region not found");
     return region;
   }
 
@@ -1040,7 +1041,8 @@ export class CoverageService {
 
   async regions(query: CoverageRegionsQuery = {}): Promise<CoverageRegionsResponse> {
     const offset = validOffset(query.offset);
-    if (offset > 0 && !query.snapshotId) throw new CoverageHttpError(400, "snapshot_required");
+    if (offset > 0 && !query.snapshotId)
+      throw new CoverageHttpError(400, "SNAPSHOT_REQUIRED", "A later page needs its snapshotId");
     const limit = validPage(query.limit, DEFAULT_PAGE_LIMIT);
     const filterKey = `regions:${query.search ?? ""}`;
     const revision = await this.revision({ snapshotId: query.snapshotId, filterKey });
@@ -1086,7 +1088,8 @@ export class CoverageService {
 
   async report(query: CoverageReportQuery): Promise<CoverageReport> {
     const offset = validOffset(query.offset);
-    if (offset > 0 && !query.snapshotId) throw new CoverageHttpError(400, "snapshot_required");
+    if (offset > 0 && !query.snapshotId)
+      throw new CoverageHttpError(400, "SNAPSHOT_REQUIRED", "A later page needs its snapshotId");
     const limit = validPage(query.limit, DEFAULT_PAGE_LIMIT);
     const assessment = query.assessment ?? "operational";
     const filterKey = [
@@ -1196,7 +1199,7 @@ export class CoverageService {
     const region = this.regionOrThrow(revision.collected, query.regionId);
     const original = revision.collected.streams.find((stream) => stream.key === query.key);
     if (!original || !streamIncludedInRegion(region, original))
-      throw new CoverageHttpError(404, "source_not_found");
+      throw new CoverageHttpError(404, "SOURCE_NOT_FOUND", "Coverage source not found");
     const evidence = freshenStream(original, now);
     const row = sourceRow(
       evidence,

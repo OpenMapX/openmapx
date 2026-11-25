@@ -18,17 +18,19 @@ import {
   type TransitDesiredSourceMutation,
 } from "@openmapx/core/data-manager-contracts";
 import { RollingStreamBudget } from "@openmapx/core/server";
-import { feedState, jobs } from "@openmapx/db-schema";
+import { feedState, job } from "@openmapx/db-schema";
 import { and, desc, sql as drizzleSql, eq, inArray } from "drizzle-orm";
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type postgres from "postgres";
+import { requestActor } from "./auth.js";
 import { type CoverageApiOptions, registerCoverageEvidenceRoute } from "./coverage/api.js";
 import type { CoverageSnapshotStore } from "./coverage/snapshot-store.js";
 import { db, sql } from "./db/index.js";
 import { registerAmbientPlacesApi } from "./jobs/ambient-places/api.js";
 import {
   type DataExecutionReceiver,
+  type DataJobActor,
   registerDataExecutionApi,
   TransitScopeRejected,
 } from "./jobs/execution/api.js";
@@ -224,7 +226,7 @@ function registerOfflinePackageRoutes(
     if (!owner) {
       return reply.code(400).send({
         error: "Exactly one valid offline package principal is required",
-        code: "invalid-principal",
+        code: "INVALID_PRINCIPAL",
       });
     }
     let body: OfflinePackageRequest;
@@ -233,31 +235,34 @@ function registerOfflinePackageRoutes(
     } catch (error) {
       return reply.code(400).send({
         error: error instanceof Error ? error.message : String(error),
-        code: "invalid-request",
+        code: "INVALID_REQUEST",
       });
     }
     try {
       const result = await generator.prepare(owner, body);
       if (result.status === "ready-to-download") return reply.code(200).send(result);
       if (result.status === "preparing") return reply.code(202).send(result);
-      const status = result.errorCode === "capacity" ? 409 : 400;
-      return reply.code(status).send({ error: result.errorMessage, code: result.errorCode });
+      const status = result.errorCode === "CAPACITY" ? 409 : 400;
+      return reply.code(status).send({
+        error: result.errorMessage,
+        code: result.errorCode ?? "GENERATION_FAILED",
+      });
     } catch (error) {
       if (error instanceof OfflinePackageCapacityError) {
         reply.header("Retry-After", "30");
-        return reply.code(429).send({ error: error.message, code: error.errorCode });
+        return reply.code(429).send({ error: error.message, code: "CAPACITY" });
       }
       if (error instanceof OfflinePackagePrincipalQuotaError) {
         reply.header("Retry-After", "30");
         return reply.code(429).send({
           error: error.message,
-          code: error.errorCode,
+          code: "PRINCIPAL_QUOTA",
           retryAfterSeconds: 30,
         });
       }
       return reply.code(503).send({
         error: error instanceof Error ? error.message : String(error),
-        code: "source-unavailable",
+        code: "SOURCE_UNAVAILABLE",
       });
     }
   });
@@ -267,7 +272,7 @@ function registerOfflinePackageRoutes(
     if (!owner) {
       return reply.code(400).send({
         error: "Exactly one valid offline package principal is required",
-        code: "invalid-principal",
+        code: "INVALID_PRINCIPAL",
       });
     }
     const result = await generator.getJob(owner, request.params.jobId);
@@ -482,7 +487,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
 
   async function admitData(
     input: DataExecutionInput,
-    source?: { triggeredBy?: string; idempotencyKey?: string },
+    source: DataJobActor & { idempotencyKey?: string },
   ) {
     if (!opts.executionReceiver)
       throw Object.assign(Error("Durable data receiver is unavailable"), { statusCode: 503 });
@@ -517,7 +522,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
           throw Error(`Execution ${status.id} requires retained status observation`);
         current = found;
       }
-      if (current.status !== "ok" && current.status !== "partial")
+      if (current.status !== "succeeded" && current.status !== "partially_succeeded")
         throw Error(`Execution ${status.id} ${current.status}`);
       return current;
     } catch (error) {
@@ -530,7 +535,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   }
 
   async function reserveSourceMutation(options: {
-    triggeredBy: string;
+    actor: DataJobActor;
     idempotencyKey?: string;
     sourceId: string;
     action: "add" | "remove" | "enable" | "disable";
@@ -554,7 +559,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     // a running data job refuses the mutation.
     try {
       const admitted = await opts.executionReceiver.admitLocal(input, {
-        triggeredBy: options.triggeredBy,
+        ...options.actor,
         ...(options.idempotencyKey ? { idempotencyKey: options.idempotencyKey } : {}),
       });
       return { ok: true, jobId: admitted.id };
@@ -570,12 +575,12 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
             error instanceof DataExecutionConflict
               ? {
                   error: "This idempotency key was already used for a different change.",
-                  code: "duplicate-idempotency-key",
+                  code: "DUPLICATE_IDEMPOTENCY_KEY",
                   existingJobId: null,
                 }
               : {
                   error: "Another data job is running. Try again when it finishes.",
-                  code: "in-flight",
+                  code: "IN_FLIGHT",
                   existingJobId: null,
                 },
         };
@@ -698,7 +703,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
         }),
       );
       const result = await reserveSourceMutation({
-        triggeredBy: req.body.triggeredBy ?? "api",
+        actor: requestActor(req, req.body.triggeredByUserId),
         idempotencyKey: req.body.idempotencyKey,
         sourceId: mutation.sourceId,
         action: "add",
@@ -735,7 +740,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
         }),
       );
       const result = await reserveSourceMutation({
-        triggeredBy: req.body?.triggeredBy ?? "api",
+        actor: requestActor(req, req.body?.triggeredByUserId),
         idempotencyKey: req.body?.idempotencyKey,
         sourceId: mutation.sourceId,
         action: "remove",
@@ -767,7 +772,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
         }),
       );
       const result = await reserveSourceMutation({
-        triggeredBy: req.body?.triggeredBy ?? "api",
+        actor: requestActor(req, req.body?.triggeredByUserId),
         idempotencyKey: req.body?.idempotencyKey,
         sourceId: mutation.sourceId,
         action: "enable",
@@ -800,7 +805,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
         }),
       );
       const result = await reserveSourceMutation({
-        triggeredBy: req.body?.triggeredBy ?? "api",
+        actor: requestActor(req, req.body?.triggeredByUserId),
         idempotencyKey: req.body?.idempotencyKey,
         sourceId: mutation.sourceId,
         action: "disable",
@@ -839,18 +844,19 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     return result;
   });
 
-  registerDataManagerRoute(app, "reloadDatasets", async () => {
-    return runLocalDataExecution({ kind: "data-reload" }, async () => ({
-      ok: true as const,
-      ...store.reload(),
-    }));
+  registerDataManagerRoute(app, "reloadDatasets", async (req) => {
+    return runLocalDataExecution(
+      { kind: "data-reload" },
+      async () => ({ ok: true as const, ...store.reload() }),
+      requestActor(req),
+    );
   });
 
   // Single-flight: the bake shells out to a slow tile-rewriting tool and
   // restarts Valhalla, so two concurrent runs would fight over the same tiles.
   let bakeInFlight = false;
 
-  registerDataManagerRoute(app, "bakePredictedTraffic", async (_req, reply) => {
+  registerDataManagerRoute(app, "bakePredictedTraffic", async (req, reply) => {
     if (!opts.bakePredicted) {
       reply.code(501);
       return { error: "predicted bake not configured" };
@@ -862,7 +868,11 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     bakeInFlight = true;
     let owned: Awaited<ReturnType<typeof startLocalDataExecution>>;
     try {
-      owned = await startLocalDataExecution({ kind: "traffic-predicted" }, opts.bakePredicted);
+      owned = await startLocalDataExecution(
+        { kind: "traffic-predicted" },
+        opts.bakePredicted,
+        requestActor(req),
+      );
     } catch (error) {
       bakeInFlight = false;
       throw error;
@@ -965,26 +975,27 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       return await transitPreflight.inspect(req.body.countries);
     } catch (error) {
       const e = error as Error & { statusCode?: number; code?: string },
-        known = e.code === "preflight_stale",
+        known = e.code === "PREFLIGHT_STALE",
         status = known ? (e.statusCode ?? 409) : 503;
       return reply.code(status).send({
         error: known
           ? e.message
           : "Transit preview inputs or capacity are unavailable. Check instance status.",
-        ...(status === 409 ? { code: "preflight_stale" } : {}),
+        ...(status === 409 ? { code: "PREFLIGHT_STALE" } : {}),
       });
     }
   });
   registerDataManagerRoute(app, "syncTransit", async (req, reply) => {
     const countries = req.body?.countries ?? transitAllowedCountries(operationsPolicy);
     const reviewed = req.body?.preflightId || req.body?.fingerprint;
+    const actor = requestActor(req, req.body?.triggeredByUserId);
     if (req.body?.idempotencyKey && reviewed) {
       const original = await opts.executionReceiver?.observeReviewedTransit?.({
         key: req.body.idempotencyKey,
         countries,
         preflightId: req.body.preflightId ?? "",
         fingerprint: req.body.fingerprint ?? "",
-        triggeredBy: req.body.triggeredBy,
+        actor,
       });
       if (original)
         return reply.code(202).send({ ok: true, jobId: original.id, status: "started" });
@@ -1001,8 +1012,8 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
         });
       } catch (error) {
         const e = error as Error & { code?: string };
-        return e.code === "preflight_stale"
-          ? reply.code(409).send({ error: e.message, code: "preflight_stale" })
+        return e.code === "PREFLIGHT_STALE"
+          ? reply.code(409).send({ error: e.message, code: "PREFLIGHT_STALE" })
           : reply.code(503).send({
               error: "Transit preview is unavailable. Check instance status before retrying.",
             });
@@ -1016,7 +1027,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
           countries,
           ...(preflight ? { preflight } : {}),
         },
-        { triggeredBy: req.body?.triggeredBy, idempotencyKey: req.body?.idempotencyKey },
+        { ...actor, idempotencyKey: req.body?.idempotencyKey },
       );
     } catch (error) {
       if (!(error instanceof TransitScopeRejected)) throw error;
@@ -1028,13 +1039,16 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   // POST /transit/restart-motis — bounce the primary MOTIS container. Used
   // when a config change requires a full restart rather than the partial
   // reloads the pipeline already performs.
-  registerDataManagerRoute(app, "restartMotis", async (_req, reply) => {
+  registerDataManagerRoute(app, "restartMotis", async (req, reply) => {
     if (!opts.executionReceiver)
       return reply.code(503).send({
         error: "Durable data receiver is unavailable",
-        code: "ops-agent-unavailable",
+        code: "OPS_AGENT_UNAVAILABLE",
       });
-    const admitted = await opts.executionReceiver.admitMaintenance("restart-primary");
+    const admitted = await opts.executionReceiver.admitMaintenance(
+      "restart-primary",
+      requestActor(req),
+    );
     await observeData(admitted, reply);
     if (!reply.raw.destroyed) return { ok: true, status: "restart-initiated" };
     return undefined;
@@ -1045,21 +1059,21 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       return reply.code(503).send({ error: "Durable catalog review is unavailable" });
     const proposalId = req.query.proposalId;
     const matching = proposalId
-      ? drizzleSql`${jobs.executionInput}->>'proposalId' = ${proposalId}`
+      ? drizzleSql`${job.executionInput}->>'proposalId' = ${proposalId}`
       : undefined;
     const [executions, validations] = proposalId
       ? await Promise.all([
           db
-            .select({ id: jobs.id })
-            .from(jobs)
-            .where(and(matching, inArray(jobs.kind, ["catalog.validate", "catalog.activate"])))
-            .orderBy(desc(jobs.admittedAt), desc(jobs.id))
+            .select({ id: job.id })
+            .from(job)
+            .where(and(matching, inArray(job.kind, ["catalog.validate", "catalog.activate"])))
+            .orderBy(desc(job.admittedAt), desc(job.id))
             .limit(1),
           db
-            .select({ id: jobs.id })
-            .from(jobs)
-            .where(and(matching, eq(jobs.kind, "catalog.validate")))
-            .orderBy(desc(jobs.admittedAt), desc(jobs.id))
+            .select({ id: job.id })
+            .from(job)
+            .where(and(matching, eq(job.kind, "catalog.validate")))
+            .orderBy(desc(job.admittedAt), desc(job.id))
             .limit(1),
         ])
       : [[], []];
@@ -1085,6 +1099,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       const proposal = await opts.catalogReview.resolveCatalogProposal({
         branch: req.body?.branch?.trim() || DEFAULT_CATALOG_BRANCH,
         proposalId: req.body?.proposalId,
+        actor: requestActor(req),
       });
       return {
         ok: true,
@@ -1101,8 +1116,8 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     } catch (err) {
       if (err instanceof CatalogBumpError) {
         const status =
-          err.code === "catalog-not-cloned" ? 409 : err.code === "git-fetch-failed" ? 502 : 500;
-        return reply.code(status).send({ error: err.code });
+          err.code === "CATALOG_NOT_CLONED" ? 409 : err.code === "GIT_FETCH_FAILED" ? 502 : 500;
+        return reply.code(status).send({ error: "Transit catalog bump failed", code: err.code });
       }
       throw err;
     }

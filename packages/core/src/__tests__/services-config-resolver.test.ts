@@ -3,6 +3,7 @@ import {
   configSchemaKeys,
   flattenResolvedConfig,
   resolveServiceConfigFromEnv,
+  serviceConfigEnvName,
   serviceConfigEnvPrefix,
 } from "../services/config-resolver";
 
@@ -70,34 +71,35 @@ describe("resolveServiceConfigFromEnv", () => {
         id: "valhalla",
         configSchema: {
           type: "object",
-          properties: { memory: { type: "string", default: "1g" } },
+          properties: { MEMORY: { type: "string", default: "1g" } },
         },
       },
       { SERVICE_VALHALLA_MEMORY: "4g" },
     );
-    expect(r).toEqual({ memory: { value: "4g", source: "env" } });
+    expect(r).toEqual({ MEMORY: { value: "4g", source: "env" } });
   });
 
-  it("uses SERVICE_<ID>_<KEY> with dashes translated to underscores", () => {
+  it("uses SERVICE_<ID>_<KEY> with the id's dashes translated to underscores", () => {
     const r = resolveServiceConfigFromEnv(
       {
         id: "data-manager",
         configSchema: {
           type: "object",
-          properties: { data_dir: { type: "string", default: "/data" } },
+          properties: { DATA_DIR: { type: "string", default: "/data" } },
         },
       },
       { SERVICE_DATA_MANAGER_DATA_DIR: "/srv/data" },
     );
-    expect(r.data_dir).toEqual({ value: "/srv/data", source: "env" });
+    expect(r.DATA_DIR).toEqual({ value: "/srv/data", source: "env" });
   });
 
-  it("matches env key lookup case-insensitively against the schema key", () => {
+  it("names the variable with the UPPER_SNAKE key as is", () => {
+    expect(serviceConfigEnvName("data-manager", "DATA_DIR")).toBe("SERVICE_DATA_MANAGER_DATA_DIR");
     const r = resolveServiceConfigFromEnv(
-      { id: "svc", configSchema: { type: "object", properties: { camelKey: {} } } },
-      { SERVICE_SVC_CAMELKEY: "x" },
+      { id: "svc", configSchema: { type: "object", properties: { KEY: {} } } },
+      { SERVICE_SVC_key: "x" },
     );
-    expect(r.camelKey).toEqual({ value: "x", source: "env" });
+    expect(r.KEY).toBeUndefined();
   });
 
   it("treats an empty env var as unset, as a `${VAR:-}` reference resolves an unset one", () => {
@@ -148,16 +150,16 @@ describe("resolveServiceConfigFromEnv", () => {
         configSchema: {
           type: "object",
           properties: {
-            build_elevation: { type: "boolean", default: true },
-            extra_key: { type: "string", default: "seed" },
+            BUILD_ELEVATION: { type: "boolean", default: true },
+            EXTRA_KEY: { type: "string", default: "seed" },
           },
         },
-        container: { environment: { build_elevation: "True" } },
+        container: { environment: { BUILD_ELEVATION: "True" } },
       },
       {},
     );
-    expect(r.build_elevation).toBeUndefined();
-    expect(r.extra_key).toEqual({ value: "seed", source: "default" });
+    expect(r.BUILD_ELEVATION).toBeUndefined();
+    expect(r.EXTRA_KEY).toEqual({ value: "seed", source: "default" });
   });
 
   it("still honours env overrides for keys the manifest env provides", () => {
@@ -166,14 +168,15 @@ describe("resolveServiceConfigFromEnv", () => {
         id: "valhalla",
         configSchema: {
           type: "object",
-          properties: { build_elevation: { type: "boolean", default: true } },
+          properties: { BUILD_ELEVATION: { type: "boolean", default: true } },
         },
-        container: { environment: { build_elevation: "True" } },
+        container: { environment: { BUILD_ELEVATION: "True" } },
       },
-      { SERVICE_VALHALLA_BUILD_ELEVATION: "False" },
+      { SERVICE_VALHALLA_BUILD_ELEVATION: "False", SERVICE_VALHALLA_build_elevation: "True" },
     );
     // Valhalla overrides are typed before sealing; its renderer emits capitalized False.
-    expect(r.build_elevation).toEqual({ value: false, source: "env" });
+    // The key names its variable exactly; another spelling sets nothing.
+    expect(r.BUILD_ELEVATION).toEqual({ value: false, source: "env" });
   });
 });
 

@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 import { itemAt } from "@openmapx/core/item-at";
 import {
   isValidRequestTransition,
-  REQUEST_STATES,
-  type RequestState,
+  REQUEST_STATUSES,
+  type RequestStatus,
 } from "@openmapx/core/privacy";
 import { eq } from "drizzle-orm";
 import Fastify from "fastify";
@@ -80,8 +80,8 @@ suite("privacy case administration on PostgreSQL", () => {
     vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 9).toString("base64url"));
   });
 
-  /** A case in an exact state, verified, without operator-held tasks. */
-  async function caseIn(state: RequestState, verified = true) {
+  /** A case in an exact status, verified, without operator-held tasks. */
+  async function caseIn(status: RequestStatus, verified = true) {
     const rows = await fixture.db
       .insert(dataSubjectRequest)
       .values({
@@ -89,7 +89,7 @@ suite("privacy case administration on PostgreSQL", () => {
         channel: "email",
         receivedAt: new Date("2026-01-20T12:00:00Z"),
         dueAt: new Date("2026-02-20T12:00:00Z"),
-        state,
+        status,
         ...(verified ? { identityMethod: "manual" as const, identityVerifiedAt: now } : {}),
       })
       .returning();
@@ -107,7 +107,7 @@ suite("privacy case administration on PostgreSQL", () => {
   }
 
   describe("every decision pair through the transition table", () => {
-    const pairs = REQUEST_STATES.flatMap((from) => DECISIONS.map((to) => [from, to] as const));
+    const pairs = REQUEST_STATUSES.flatMap((from) => DECISIONS.map((to) => [from, to] as const));
     it.each(pairs)("%s -> %s", async (from, to) => {
       const request = await caseIn(from);
       const decide = service().recordDecision({
@@ -124,18 +124,22 @@ suite("privacy case administration on PostgreSQL", () => {
           statusCode: 409,
         });
       } else if (isValidRequestTransition(from, to)) {
-        await expect(decide).resolves.toMatchObject({ state: to, version: request.version + 1 });
+        await expect(decide).resolves.toMatchObject({ status: to, version: request.version + 1 });
         const [event] = await fixture.db
-          .select({ eventType: dataSubjectRequestEvent.eventType })
+          .select({
+            eventType: dataSubjectRequestEvent.eventType,
+            payload: dataSubjectRequestEvent.payload,
+          })
           .from(dataSubjectRequestEvent)
           .where(eq(dataSubjectRequestEvent.requestId, request.id));
-        expect(event?.eventType).toBe(`state_${to}`);
+        expect(event?.eventType).toBe("status_changed");
+        expect(event?.payload).toMatchObject({ from, to });
       } else {
         await expect(decide).rejects.toMatchObject({
           code: "INVALID_TRANSITION",
           statusCode: 409,
         });
-        expect((await service().getById(request.id)).state).toBe(from);
+        expect((await service().getById(request.id)).status).toBe(from);
       }
     });
   });
@@ -164,7 +168,7 @@ suite("privacy case administration on PostgreSQL", () => {
       const first = await verify();
       expect(first.statusCode, first.body).toBe(200);
       expect(first.json().request).toMatchObject({
-        state: "in_progress",
+        status: "in_progress",
         identityMethod: "manual",
       });
       // The same key and operation replays; a second verification is refused.
@@ -440,7 +444,7 @@ suite("privacy case administration on PostgreSQL", () => {
         payload: { version, decision: "completed", reasonCode: "answered-by-post" },
       });
       expect(completed.statusCode, completed.body).toBe(200);
-      expect(completed.json().request.state).toBe("completed");
+      expect(completed.json().request.status).toBe("completed");
     } finally {
       await server.close();
     }
@@ -448,15 +452,15 @@ suite("privacy case administration on PostgreSQL", () => {
 
   it("exports an assisted subject only with a fresh purpose-bound administrator proof", async () => {
     for (const [key, value] of Object.entries({
-      LEGAL_NAME: "Admin Export Controller",
-      LEGAL_STREET: "Test Street 1",
-      LEGAL_POSTAL_CODE: "10115",
-      LEGAL_CITY: "Berlin",
-      LEGAL_COUNTRY: "Germany",
-      LEGAL_EMAIL: "privacy@example.test",
+      LEGAL_CONTROLLER_NAME: "Admin Export Controller",
+      LEGAL_CONTROLLER_STREET: "Test Street 1",
+      LEGAL_CONTROLLER_POSTAL_CODE: "10115",
+      LEGAL_CONTROLLER_CITY: "Berlin",
+      LEGAL_CONTROLLER_COUNTRY: "Germany",
+      LEGAL_CONTROLLER_EMAIL: "privacy@example.test",
       LEGAL_DATA_REQUEST_EMAIL: "privacy@example.test",
       LEGAL_DEPLOYMENT_JURISDICTION: "DE-BE",
-      LEGAL_SUPERVISORY_AUTHORITY: "Test Supervisory Authority",
+      LEGAL_SUPERVISORY_AUTHORITY_NAME: "Test Supervisory Authority",
       LEGAL_PRIVACY_SOURCES: "[]",
     }))
       vi.stubEnv(key, value);
@@ -533,7 +537,7 @@ suite("privacy case administration on PostgreSQL", () => {
       const replay = await exportCase(headers);
       expect(replay.statusCode).toBe(409);
       // An administrator export never completes the case on its own.
-      expect((await service().getById(request.id)).state).toBe("in_progress");
+      expect((await service().getById(request.id)).status).toBe("in_progress");
     } finally {
       await server.close();
     }
@@ -698,6 +702,36 @@ suite("privacy case administration on PostgreSQL", () => {
     }
   });
 
+  it("refuses a locator copied into another case", async () => {
+    const open = async (subjectId: string) =>
+      service().create({
+        channel: "post",
+        kind: "access",
+        subject: { locatorType: "user_id", locator: subjectId, accountState: "inaccessible" },
+        actorUserId: ACTOR,
+        locale: "en",
+        timeZone: "UTC",
+      });
+    const source = await open(`moved-locator-source-${randomUUID()}`);
+    const target = await open(`moved-locator-target-${randomUUID()}`);
+    const sourceRow = await service().getById(source.id);
+    await fixture.db
+      .update(dataSubjectRequest)
+      .set({
+        locatorCiphertext: sourceRow.locatorCiphertext,
+        locatorIv: sourceRow.locatorIv,
+        locatorTag: sourceRow.locatorTag,
+        locatorKeyVersion: sourceRow.locatorKeyVersion,
+      })
+      .where(eq(dataSubjectRequest.id, target.id));
+
+    expect(service().subjectUserId(sourceRow)).toMatch(/^moved-locator-source-/);
+    const targetRow = await service().getById(target.id);
+    expect(() => service().subjectUserId(targetRow)).toThrow(
+      expect.objectContaining({ code: "SUBJECT_LOCATOR_UNREADABLE", statusCode: 503 }),
+    );
+  });
+
   it("exports the case actions a staff member took, without the person the case concerns", async () => {
     const subjectEmail = `handled-${randomUUID()}@example.test`;
     const created = await service().create({
@@ -739,10 +773,17 @@ suite("privacy case administration on PostgreSQL", () => {
     expect(handled.map((row) => row.data.eventType ?? row.data.template).sort()).toEqual([
       "admin_new_request",
       "received",
-      "state_in_progress",
+      "status_changed",
     ]);
     for (const row of handled.filter((record) => record.data.eventType))
       expect(row.data).toMatchObject({ actor: "subject", caseKind: "access" });
+    // A status change says which status the staff member set.
+    expect(handled.find((row) => row.data.eventType === "status_changed")?.data).toMatchObject({
+      toStatus: expect.stringMatching(/^(in_progress|waiting_on_requester|completed|refused)$/),
+    });
+    expect(handled.find((row) => row.data.eventType === "received")?.data).not.toHaveProperty(
+      "toStatus",
+    );
     // Only the alert about the self-service request is the handler's; its
     // events are the subject's own.
     expect(

@@ -8,9 +8,7 @@ export type ListAdminIntegrationBindings200LastApplicationHostApply =
       revisionId: string;
       /**
        * @maxItems 256
-       * @items.minLength 1
-       * @items.maxLength 64
-       * @items.pattern ^[a-z0-9][a-z0-9-]*$
+       * @items.pattern ^(?=.{1,48}$)[a-z0-9]+(?:-[a-z0-9]+)*$
        */
       enabledServiceIds: string[];
       followUp: "complete" | "failed";

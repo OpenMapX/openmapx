@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { afterAll, assert, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   dataSubjectRequest,
@@ -106,9 +106,10 @@ suite("privacy request lifecycle on PostgreSQL", () => {
       timeZone: "UTC",
     });
     expect(request).toMatchObject({
-      state: "in_progress",
+      status: "in_progress",
       identityMethod: "account_session",
-      encryptedLocator: null,
+      locatorCiphertext: null,
+      locatorKeyVersion: null,
     });
     // The database assigns time-ordered version 7 ids to the case and its rows.
     const VERSION_7 = /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -184,9 +185,10 @@ suite("privacy request lifecycle on PostgreSQL", () => {
       locale: "en",
       timeZone: "UTC",
     });
-    expect(request).toMatchObject({ state: "open", identityMethod: null, userId: null });
+    expect(request).toMatchObject({ status: "open", identityMethod: null, userId: null });
     // The locator is kept encrypted, never in plain text.
-    expect(request.encryptedLocator).not.toContain("person@example.test");
+    expect(request.locatorKeyVersion).toBe(1);
+    expect(JSON.stringify(request)).not.toContain("person@example.test");
     expect(service().subjectUserId(request)).toBeNull();
     expect(
       (await notifications(request.id))
@@ -226,7 +228,7 @@ suite("privacy request lifecycle on PostgreSQL", () => {
       timeZone: "UTC",
     });
     const downloaded = await service().finishExport(request.id, { kind: "subject", id: userId });
-    expect(downloaded.state).toBe("in_progress");
+    expect(downloaded.status).toBe("in_progress");
     await expect(
       service().recordDecision({
         requestId: request.id,
@@ -248,7 +250,7 @@ suite("privacy request lifecycle on PostgreSQL", () => {
       actorId: ADMINS[0],
       idempotencyKey: `complete-${request.id}`,
     });
-    expect(completed).toMatchObject({ state: "completed" });
+    expect(completed).toMatchObject({ status: "completed" });
     expect(completed.completedAt).not.toBeNull();
     expect(completed.closedAt).not.toBeNull();
     expect((await notifications(request.id)).map((row) => row.template)).toContain("completed");
@@ -275,14 +277,15 @@ suite("privacy request lifecycle on PostgreSQL", () => {
     });
     await resolveAll(request.id);
     const done = await service().finishExport(request.id, { kind: "subject", id: userId });
-    expect(done.state).toBe("completed");
+    expect(done.status).toBe("completed");
     const [event] = await fixture.db
       .select({ payload: dataSubjectRequestEvent.payload })
       .from(dataSubjectRequestEvent)
       .where(
         and(
           eq(dataSubjectRequestEvent.requestId, request.id),
-          eq(dataSubjectRequestEvent.eventType, "state_completed"),
+          eq(dataSubjectRequestEvent.eventType, "status_changed"),
+          sql`${dataSubjectRequestEvent.payload}->>'to' = 'completed'`,
         ),
       );
     expect(event?.payload).toMatchObject({ from: "in_progress", reasonCode: "export-delivered" });
@@ -303,11 +306,11 @@ suite("privacy request lifecycle on PostgreSQL", () => {
       request.version,
       `withdraw-${request.id}`,
     );
-    expect(withdrawn.state).toBe("completed");
+    expect(withdrawn.status).toBe("completed");
     // A replay with the same key is the same withdrawal.
     expect(
       (await service().withdraw(request.id, userId, request.version, `withdraw-${request.id}`))
-        .state,
+        .status,
     ).toBe("completed");
     const [event] = await fixture.db
       .select({ payload: dataSubjectRequestEvent.payload })
@@ -315,7 +318,8 @@ suite("privacy request lifecycle on PostgreSQL", () => {
       .where(
         and(
           eq(dataSubjectRequestEvent.requestId, request.id),
-          eq(dataSubjectRequestEvent.eventType, "state_completed"),
+          eq(dataSubjectRequestEvent.eventType, "status_changed"),
+          sql`${dataSubjectRequestEvent.payload}->>'to' = 'completed'`,
         ),
       );
     expect(event?.payload).toMatchObject({ reasonCode: "withdrawn" });
@@ -375,7 +379,7 @@ suite("privacy request lifecycle on PostgreSQL", () => {
       resumed.version,
       `wait-2-${request.id}`,
     );
-    expect(secondWait.state).toBe("waiting_on_requester");
+    expect(secondWait.status).toBe("waiting_on_requester");
     // The same mutation replayed with its key is a no-op.
     await decide("waiting_on_requester", resumed.version, `wait-2-${request.id}`);
     const waits = (await notifications(request.id)).filter(
@@ -452,7 +456,7 @@ suite("privacy request lifecycle on PostgreSQL", () => {
   });
 
   it("purges closed cases after the case retention while an active sibling keeps them", async () => {
-    vi.stubEnv("LEGAL_DSAR_CASE_RETENTION_DAYS", "30");
+    vi.stubEnv("RETENTION_PRIVACY_CASE_DAYS", "30");
     const userId = await subject();
     const closed = await service().create({
       userId,
@@ -485,7 +489,7 @@ suite("privacy request lifecycle on PostgreSQL", () => {
   });
 
   it("keeps a closed case while a staff member who handled it has an active request", async () => {
-    vi.stubEnv("LEGAL_DSAR_CASE_RETENTION_DAYS", "30");
+    vi.stubEnv("RETENTION_PRIVACY_CASE_DAYS", "30");
     const handled = await service().create({
       channel: "email",
       kind: "access",

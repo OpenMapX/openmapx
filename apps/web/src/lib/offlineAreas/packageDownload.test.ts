@@ -258,7 +258,7 @@ describe("downloadOfflinePackage", () => {
     const error = await failure(() => downloadOfflinePackage(api, storage, current));
     expect(error.name).toBe("QuotaExceededError");
     expect(api.openArchive).not.toHaveBeenCalled();
-    expect((await storage.get(packageId))?.lastError?.code).toBe("quota");
+    expect((await storage.get(packageId))?.lastError?.code).toBe("QUOTA");
   });
 
   it("repairs evicted glyph assets without downloading a valid ready archive again", async () => {
@@ -277,7 +277,7 @@ describe("downloadOfflinePackage", () => {
       downloadOfflinePackage(api, storage, current, { validateStyles }),
     );
     expect(error.message).toContain("glyph cache missing");
-    expect((await storage.get(packageId))?.lastError?.code).toBe("offline-assets-unavailable");
+    expect((await storage.get(packageId))?.lastError?.code).toBe("OFFLINE_ASSETS_UNAVAILABLE");
 
     const repaired = await downloadOfflinePackage(api, storage, current, { validateStyles });
     expect(repaired.status).toBe("ready");

@@ -4,10 +4,11 @@ import {
   isNavigationSessionExpired,
   type NavigationSessionSnapshot,
   parseNavigationSessionSnapshot,
+  STORAGE_KEYS,
 } from "@openmapx/core";
 import { idbDelete, idbGet, idbSet } from "../idbStore";
 
-export const NAVIGATION_SESSION_STORAGE_KEY = "openmapx:navigation-session:v1";
+export const NAVIGATION_SESSION_STORAGE_KEY = STORAGE_KEYS.navigationSession.key;
 
 export interface NavigationSessionStorage {
   read(): Promise<NavigationSessionSnapshot | null>;

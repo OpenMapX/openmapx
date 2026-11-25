@@ -8,6 +8,12 @@ import { useMangroveSigner } from "./signerProvider";
 import type { MangroveTransport } from "./transport";
 import { useReviewIdentity } from "./useReviewIdentity";
 
+const storageKeys = {
+  session: "test:signer-session",
+  pendingLogin: "test:pending-login",
+  mode: "test:mode",
+};
+
 describe("callback controller lifecycle", () => {
   it("allows a new connection after disconnecting from a discovery outage", async () => {
     sessionStorage.clear();
@@ -22,7 +28,11 @@ describe("callback controller lifecycle", () => {
     const client = new QueryClient();
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={client}>
-        <MangroveProvider transport={transport} currentUser={{ id: "a" }}>
+        <MangroveProvider
+          transport={transport}
+          currentUser={{ id: "a" }}
+          signerStorageKeys={storageKeys}
+        >
           {children}
         </MangroveProvider>
       </QueryClientProvider>
@@ -53,7 +63,11 @@ describe("callback controller lifecycle", () => {
     const client = new QueryClient();
     const wrapper = ({ children }: { children: ReactNode }) => (
       <QueryClientProvider client={client}>
-        <MangroveProvider transport={transport} currentUser={{ id: "a" }}>
+        <MangroveProvider
+          transport={transport}
+          currentUser={{ id: "a" }}
+          signerStorageKeys={storageKeys}
+        >
           {children}
         </MangroveProvider>
       </QueryClientProvider>
@@ -86,6 +100,7 @@ describe("callback controller lifecycle", () => {
       owner: JSON.stringify(["a", "a"]),
       origin: location.origin,
       storage: sessionStorage,
+      storageKeys,
       transport: signer,
     });
     seed.activate();
@@ -100,7 +115,11 @@ describe("callback controller lifecycle", () => {
     const wrapper = ({ children }: { children: ReactNode }) => (
       <StrictMode>
         <QueryClientProvider client={client}>
-          <MangroveProvider transport={transport} currentUser={{ id: "a" }}>
+          <MangroveProvider
+            transport={transport}
+            currentUser={{ id: "a" }}
+            signerStorageKeys={storageKeys}
+          >
             {children}
           </MangroveProvider>
         </QueryClientProvider>

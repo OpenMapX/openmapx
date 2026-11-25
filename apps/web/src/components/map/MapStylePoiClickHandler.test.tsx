@@ -226,7 +226,7 @@ describe("MapStylePoiClickHandler", () => {
     });
 
     expect(usePlaceStore.getState().selectedPlace).toMatchObject({
-      id: "stylePoi:42",
+      id: "style-poi:42",
       name: "Smithsonian Institution Building",
       address: "Smithsonian Institution Building",
       coordinates: [-77.02573, 38.88859],
@@ -248,7 +248,7 @@ describe("MapStylePoiClickHandler", () => {
 
     expect(usePlaceStore.getState().selectedPlace).toMatchObject({
       name: "Fernsehturm Berlin",
-      ids: { stylePoi: "7" },
+      ids: { "style-poi": "7" },
     });
   });
 
@@ -360,12 +360,12 @@ describe("MapStylePoiClickHandler", () => {
       expect(screen.queryByTestId("poi-hover-card")).toBeNull();
       advance(30);
       expect(screen.getByTestId("poi-hover-card")).toHaveTextContent(POI.name);
-      expect(lookedUpIds()).not.toContain("stylePoi:42");
+      expect(lookedUpIds()).not.toContain("style-poi:42");
 
       advance(200);
       // The very lookup a click makes, so the panel opens from its cache.
       expect(usePlaceDetailsMock).toHaveBeenLastCalledWith(
-        "stylePoi:42",
+        "style-poi:42",
         [-77.02573, 38.88859],
         POI.name,
         undefined,
@@ -384,7 +384,7 @@ describe("MapStylePoiClickHandler", () => {
       advance(500);
 
       expect(screen.queryByTestId("poi-hover-card")).toBeNull();
-      expect(lookedUpIds()).not.toContain("stylePoi:42");
+      expect(lookedUpIds()).not.toContain("style-poi:42");
     });
 
     it("stays open while the pointer crosses into the card and closes once it leaves", () => {
@@ -438,7 +438,7 @@ describe("MapStylePoiClickHandler", () => {
       advance(150);
 
       fireEvent.click(screen.getByTestId("poi-hover-card"));
-      expect(usePlaceStore.getState().selectedPlace).toMatchObject({ id: "stylePoi:42" });
+      expect(usePlaceStore.getState().selectedPlace).toMatchObject({ id: "style-poi:42" });
       expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.PLACE);
       expect(screen.queryByTestId("poi-hover-card")).toBeNull();
 

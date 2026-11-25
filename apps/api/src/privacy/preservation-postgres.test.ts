@@ -51,8 +51,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       auditRows.push(heldId, unrelatedId);
       const old = new Date(Date.now() - 10 * 86_400_000);
       await db.insert(adminAuditLog).values([
-        { id: heldId, actorId: userId, action: "fixture.held", createdAt: old },
-        { id: unrelatedId, targetId: randomUUID(), action: "fixture.unrelated", createdAt: old },
+        { id: heldId, actorUserId: userId, action: "cache.clear", createdAt: old },
+        { id: unrelatedId, targetId: randomUUID(), action: "cache.clear", createdAt: old },
       ]);
 
       await pruneAuditLog(1);

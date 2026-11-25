@@ -22,7 +22,6 @@
     }
   },
   "quality": "built-in",
-  "category": "Places",
   "dataSources": [
     {
       "sourceId": "osm-ambient-places",

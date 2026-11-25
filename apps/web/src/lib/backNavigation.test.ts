@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { HISTORY_STATE_KEY } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { settleHistory } from "@/test/history";
 import {
@@ -46,7 +47,7 @@ function location(): string {
 }
 
 function depth(): number {
-  return window.history.state?.omx?.depth ?? 0;
+  return window.history.state?.[HISTORY_STATE_KEY]?.depth ?? 0;
 }
 
 async function back(): Promise<void> {
@@ -134,7 +135,11 @@ describe("writeNavigation", () => {
   });
 
   it("does not take over an entry an earlier page load wrote", () => {
-    window.history.replaceState({ omx: { depth: 1, below: [], doc: "earlier-load" } }, "", "/");
+    window.history.replaceState(
+      { [HISTORY_STATE_KEY]: { depth: 1, below: [], doc: "earlier-load" } },
+      "",
+      "/",
+    );
     resetBackNavigationForTests();
     navigate("/?p=place:x");
     expect(depth()).toBe(2);

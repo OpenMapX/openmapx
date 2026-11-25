@@ -26,8 +26,8 @@ const RANDOM_PRIMARY_KEYS = [
   ["public", "saved_place"],
   ["public", "share_link"],
   ["public", "transit_credential_preview"],
-  ["data_manager", "job_stages"],
-  ["data_manager", "jobs"],
+  ["data_manager", "job_stage"],
+  ["data_manager", "job"],
 ] as const;
 
 type Fixture = Awaited<ReturnType<typeof createMigratedPostgresFixture>>;
@@ -75,15 +75,17 @@ integration("one id strategy", () => {
       WHERE table_schema IN ('public', 'data_manager')
         AND column_default LIKE 'nextval(%'`;
     expect(serials).toEqual([]);
-    const identities = await fixture.sql<{ table_name: string; identity_generation: string }[]>`
-      SELECT table_name, identity_generation
+    const identities = await fixture.sql<
+      { table_name: string; identity_generation: string; data_type: string }[]
+    >`
+      SELECT table_name, identity_generation, data_type
       FROM information_schema.columns
       WHERE table_schema = 'public' AND column_name = 'id'
-        AND table_name IN ('app_logs', 'health_history')
+        AND table_name IN ('app_log', 'health_history')
       ORDER BY table_name`;
     expect(identities).toEqual([
-      { table_name: "app_logs", identity_generation: "ALWAYS" },
-      { table_name: "health_history", identity_generation: "ALWAYS" },
+      { table_name: "app_log", identity_generation: "ALWAYS", data_type: "bigint" },
+      { table_name: "health_history", identity_generation: "ALWAYS", data_type: "bigint" },
     ]);
   });
 
@@ -122,7 +124,7 @@ integration("one id strategy", () => {
       fixture.sql`INSERT INTO health_history (id, service_id, status) VALUES (1000, 'a', 'healthy')`,
     ).rejects.toMatchObject({ code: "428C9" });
     const [job] = await fixture.sql<{ id: string; version: number }[]>`
-      INSERT INTO admin_job (type) VALUES ('test')
+      INSERT INTO admin_job (type) VALUES ('integration.reload')
       RETURNING id, uuid_extract_version(id) AS version`;
     expect(job?.version).toBe(7);
   });

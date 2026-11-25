@@ -67,7 +67,6 @@ export async function registerAdminComposeRoutes(
       await writeAuditLog({
         actorId: getAdminSession(request).user.id,
         action: "compose.render",
-        targetType: "configuration",
         targetId: request.body.expectedCurrentRevisionId,
         details: { jobId, coordinatorMode: "require-running" },
         request,

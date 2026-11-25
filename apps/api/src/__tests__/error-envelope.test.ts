@@ -100,17 +100,19 @@ function lacksEnvelope(expression: ts.Expression | undefined): boolean {
   );
 }
 
-/** Line numbers of error replies without the envelope in one source text. */
-function findNonEnvelopeErrors(fileName: string, source: string): number[] {
-  const sf = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
-  const lines = new Set<number>();
-  const report = (node: ts.Node) =>
-    lines.add(sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1);
-
+/**
+ * Calls `found` with each error reply's body in one source file, and the node
+ * a finding is reported at: a send chained to an error status, and what a
+ * block returns or sends after setting an error status.
+ */
+function visitErrorBodies(
+  sf: ts.SourceFile,
+  found: (body: ts.Expression | undefined, at: ts.Node) => void,
+): void {
   const visit = (node: ts.Node): void => {
     if (isSend(node)) {
       const status = chainedStatus(node);
-      if (status && isErrorStatus(status) && lacksEnvelope(node.arguments[0])) report(node);
+      if (status && isErrorStatus(status)) found(node.arguments[0], node);
     }
     if (ts.isBlock(node) || ts.isSourceFile(node)) {
       // A status set as its own statement applies to what the block returns or sends after it.
@@ -126,16 +128,150 @@ function findNonEnvelopeErrors(fileName: string, source: string): number[] {
         }
         if (errorStatus && ts.isReturnStatement(statement) && statement.expression) {
           const returned = unwrapped(statement.expression);
-          const body = isSend(returned) ? returned.arguments[0] : returned;
-          if (lacksEnvelope(body)) report(statement);
+          found(isSend(returned) ? returned.arguments[0] : returned, statement);
         }
       }
     }
     ts.forEachChild(node, visit);
   };
   visit(sf);
+}
+
+/** Line numbers of error replies without the envelope in one source text. */
+function findNonEnvelopeErrors(fileName: string, source: string): number[] {
+  const sf = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
+  const lines = new Set<number>();
+  visitErrorBodies(sf, (body, at) => {
+    if (lacksEnvelope(body)) lines.add(sf.getLineAndCharacterOfPosition(at.getStart(sf)).line + 1);
+  });
   return [...lines];
 }
+
+/** A machine token rather than text: one word in one case, or words joined by `_`, `-`, `.` or `:`. */
+const TOKEN_LIKE = /^(?:[a-z0-9]+(?:[_.:-][a-z0-9]+)*|[A-Z0-9]+(?:_[A-Z0-9]+)*)$/;
+const UPPER_SNAKE = /^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$/;
+
+/** The string literals an expression can be: a literal, a branch, or `z.literal`/`z.enum` arguments. */
+function literalStrings(expression: ts.Expression): ts.StringLiteralLike[] {
+  const node = unwrapped(expression);
+  if (ts.isStringLiteralLike(node)) return [node];
+  if (ts.isConditionalExpression(node))
+    return [...literalStrings(node.whenTrue), ...literalStrings(node.whenFalse)];
+  if (ts.isArrayLiteralExpression(node))
+    return node.elements.flatMap((element) =>
+      ts.isSpreadElement(element) ? [] : literalStrings(element),
+    );
+  if (
+    ts.isCallExpression(node) &&
+    ts.isPropertyAccessExpression(node.expression) &&
+    ["literal", "enum"].includes(node.expression.name.text)
+  )
+    return node.arguments.flatMap(literalStrings);
+  return [];
+}
+
+function property(body: ts.ObjectLiteralExpression, name: string) {
+  return body.properties.find(
+    (entry): entry is ts.PropertyAssignment =>
+      ts.isPropertyAssignment(entry) && propertyName(entry) === name,
+  );
+}
+
+/**
+ * Line numbers where an error envelope carries a token in `error` or a `code`
+ * that is not UPPER_SNAKE: in an error reply's literal body, and in any object
+ * literal with both `error` and `code` (a constant body or a contract schema).
+ * An OAuth error response (`error_description`) keeps the RFC 6749 tokens.
+ */
+function findVocabularyOffenders(
+  fileName: string,
+  source: string,
+  codeClasses: ReadonlyMap<string, number> = new Map(),
+): number[] {
+  const sf = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true);
+  const lines = new Set<number>();
+  const report = (node: ts.Node) =>
+    lines.add(sf.getLineAndCharacterOfPosition(node.getStart(sf)).line + 1);
+  const oauthRoute = fileName.replaceAll("\\", "/").endsWith(OAUTH_ROUTE);
+  const judge = (body: ts.ObjectLiteralExpression) => {
+    if (oauthRoute && property(body, "error_description")) return;
+    const error = property(body, "error");
+    for (const text of error ? literalStrings(error.initializer) : [])
+      if (TOKEN_LIKE.test(text.text)) report(text);
+    const code = property(body, "code");
+    for (const value of code ? literalStrings(code.initializer) : [])
+      if (!UPPER_SNAKE.test(value.text)) report(value);
+  };
+  visitErrorBodies(sf, (body) => {
+    const literal = body && unwrapped(body);
+    if (literal && ts.isObjectLiteralExpression(literal)) judge(literal);
+  });
+  const visit = (node: ts.Node): void => {
+    if (ts.isObjectLiteralExpression(node) && property(node, "error") && property(node, "code"))
+      judge(node);
+    // An error class that carries a code: the literal passed as its code.
+    if (ts.isNewExpression(node) && ts.isIdentifier(node.expression)) {
+      const index = codeClasses.get(node.expression.text);
+      const argument = index === undefined ? undefined : node.arguments?.[index];
+      for (const value of argument ? literalStrings(argument) : [])
+        if (!UPPER_SNAKE.test(value.text)) report(value);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sf);
+  return [...lines];
+}
+
+/**
+ * Classes whose constructor takes a `code` parameter, by name, with that
+ * parameter's position: their codes reach error replies, so a literal passed
+ * there is judged like a reply's `code`.
+ */
+function codeParameterClasses(sources: readonly { file: string; source: string }[]) {
+  const classes = new Map<string, number>();
+  for (const { file, source } of sources) {
+    if (!source.includes("code")) continue;
+    const sf = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
+    const visit = (node: ts.Node): void => {
+      if (ts.isClassDeclaration(node) && node.name) {
+        const declaration = node.members.find(ts.isConstructorDeclaration);
+        const index =
+          declaration?.parameters.findIndex(
+            (parameter) => ts.isIdentifier(parameter.name) && parameter.name.text === "code",
+          ) ?? -1;
+        if (index >= 0) classes.set(node.name.text, index);
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(sf);
+  }
+  return classes;
+}
+
+/**
+ * Error classes whose `code` a route sends as the reply's code. Classes whose
+ * code only classifies a failure internally (provider and transport errors)
+ * are not listed; a class a route starts sending a code of is added here.
+ */
+const REPLY_CODE_CLASSES = [
+  "AccountProvisioningError",
+  "AdminReauthenticationError",
+  "CatalogBumpError",
+  "CoverageHttpError",
+  "IntegrationBindingConflict",
+  "PrivacyRequestError",
+  "TransitSourceError",
+] as const;
+
+/** The one route that answers OAuth 2.0 errors, whose RFC 6749 `error` tokens stay as they are. */
+const OAUTH_ROUTE = "apps/api/src/routes/auth.ts";
+
+/** Error envelope schemas the API, data-manager and air quality declare for their clients. */
+const CONTRACTS = [
+  "packages/core/src/api/contracts",
+  "packages/core/src/services/data-manager/contracts",
+  "packages/air-quality/src",
+];
 
 describe("error envelope detection", () => {
   const offenders = (source: string) => findNonEnvelopeErrors("probe.ts", source);
@@ -208,5 +344,88 @@ describe("API error replies use the { error, code? } envelope", () => {
       offending,
       `Error replies must send { error, code? }; put the human-readable text in "error":\n${offending.join("\n")}`,
     ).toEqual([]);
+  });
+
+  it("has no machine token in error and no code outside UPPER_SNAKE", () => {
+    const offending: string[] = [];
+    const sources = [...files, ...CONTRACTS.flatMap((dir) => sourceFiles(join(REPO, dir)))].map(
+      (file) => ({ file, source: readFileSync(file, "utf8") }),
+    );
+    const declared = codeParameterClasses(sources);
+    // Every class whose code a route sends: each must still take a `code`.
+    const codeClasses = new Map(
+      REPLY_CODE_CLASSES.map((name) => {
+        const index = declared.get(name);
+        expect(index, `${name} takes no code parameter`).toBeTypeOf("number");
+        return [name, index as number];
+      }),
+    );
+    for (const { file, source } of sources) {
+      if (!/\b(error|code)\b/.test(source)) continue;
+      for (const line of findVocabularyOffenders(file, source, codeClasses))
+        offending.push(`${relative(REPO, file)}:${line}`);
+    }
+    expect(
+      offending,
+      `Put the reason in "code" as UPPER_SNAKE and text in "error":\n${offending.join("\n")}`,
+    ).toEqual([]);
+  });
+});
+
+describe("error envelope vocabulary detection", () => {
+  const offenders = (source: string) => findVocabularyOffenders("probe.ts", source);
+
+  it("refuses a machine token in error", () => {
+    expect(offenders(`reply.code(400).send({ error: "invalid_request" });`)).toEqual([1]);
+    expect(offenders(`reply.code(409).send({ error: "REAUTHENTICATION_FAILED" });`)).toEqual([1]);
+    expect(offenders(`reply.code(503).send({ error: "unavailable" });`)).toEqual([1]);
+    expect(offenders(`const BUSY = { error: "busy-now", code: "BUSY" };`)).toEqual([1]);
+    expect(offenders(`reply.code(403).send({ error: c ? "ok" : "Forbidden here" });`)).toEqual([1]);
+  });
+
+  it("refuses a code in another casing, also in a schema", () => {
+    expect(offenders(`reply.code(409).send({ error: "Taken", code: "name-taken" });`)).toEqual([1]);
+    expect(offenders(`reply.code(409).send({ error: "Taken", code: "name_taken" });`)).toEqual([1]);
+    expect(offenders(`reply.code(409).send({ error: "Taken", code: "NameTaken" });`)).toEqual([1]);
+    expect(
+      offenders(`const s = z.strictObject({ error: z.string(), code: z.enum(["A_B", "c-d"]) });`),
+    ).toEqual([1]);
+    expect(
+      offenders(`const s = z.strictObject({ error: z.string(), code: z.literal("in-flight") });`),
+    ).toEqual([1]);
+  });
+
+  it("accepts text in error, UPPER_SNAKE codes and OAuth error responses", () => {
+    expect(offenders(`reply.code(409).send({ error: "Name taken", code: "NAME_TAKEN" });`)).toEqual(
+      [],
+    );
+    expect(offenders(`reply.code(404).send({ error: "Conflict" });`)).toEqual([]);
+    expect(offenders(`reply.code(400).send({ error: message, code });`)).toEqual([]);
+    const oauth = `reply.code(400).send({ error: "invalid_request", error_description: "Use Basic" });`;
+    expect(findVocabularyOffenders(join(REPO, OAUTH_ROUTE), oauth)).toEqual([]);
+    // The exemption belongs to the OAuth route alone.
+    expect(offenders(oauth)).toEqual([1]);
+    expect(offenders(`ctx.addIssue({ code: "custom", message: "bad" });`)).toEqual([]);
+    expect(offenders(`reply.code(200).send({ error: "none" });`)).toEqual([]);
+  });
+
+  it("refuses a code in another casing passed to an error class that carries one", () => {
+    const classes = codeParameterClasses([
+      {
+        file: "classes.ts",
+        source: `class CoverageHttpError extends Error {
+          constructor(readonly status: number, readonly code: string, message: string) { super(message); }
+        }`,
+      },
+    ]);
+    expect(classes.get("CoverageHttpError")).toBe(1);
+    const thrown = (code: string) =>
+      findVocabularyOffenders(
+        "probe.ts",
+        `throw new CoverageHttpError(400, ${JSON.stringify(code)}, "Invalid");`,
+        classes,
+      );
+    expect(thrown("invalid_pagination")).toEqual([1]);
+    expect(thrown("INVALID_QUERY")).toEqual([]);
   });
 });

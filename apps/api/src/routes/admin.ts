@@ -1,3 +1,4 @@
+import type { AuditAction, AuditTargetType } from "@openmapx/core/api-contracts";
 import { and, count, desc, eq } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db";
@@ -12,8 +13,8 @@ import { adminOverviewRoute } from "./admin-overview";
 import { registerServiceAdminRoute } from "./admin-service-contract";
 
 interface AuditFilters {
-  action?: string;
-  targetType?: string;
+  action?: AuditAction;
+  targetType?: AuditTargetType;
   targetId?: string;
   actorId?: string;
 }
@@ -28,7 +29,7 @@ function buildAuditQuery(filters: AuditFilters) {
   if (filters.action) conditions.push(eq(adminAuditLog.action, filters.action));
   if (filters.targetType) conditions.push(eq(adminAuditLog.targetType, filters.targetType));
   if (filters.targetId) conditions.push(eq(adminAuditLog.targetId, filters.targetId));
-  if (filters.actorId) conditions.push(eq(adminAuditLog.actorId, filters.actorId));
+  if (filters.actorId) conditions.push(eq(adminAuditLog.actorUserId, filters.actorId));
   return conditions.length ? and(...conditions) : undefined;
 }
 
@@ -73,11 +74,11 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
         .offset(Number(offset)),
       db.select({ total: count() }).from(adminAuditLog).where(where),
     ]);
-    const actors = await resolveActors(entries.map((e) => e.actorId));
+    const actors = await resolveActors(entries.map((e) => e.actorUserId));
     return {
       entries: entries.map((e) => ({
         ...adminAuditEntry(e),
-        actor: e.actorId ? (actors.get(e.actorId) ?? null) : null,
+        actor: e.actorUserId ? (actors.get(e.actorUserId) ?? null) : null,
       })),
       total: countRow?.total ?? 0,
     };
@@ -106,16 +107,19 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
     if (isCsv) {
       const header = AUDIT_CSV_COLUMNS.join(",");
       const body = entries
-        .map((e) => AUDIT_CSV_COLUMNS.map((col) => csvField(e[col])).join(","))
+        .map((e) => {
+          const entry = adminAuditEntry(e);
+          return AUDIT_CSV_COLUMNS.map((col) => csvField(entry[col])).join(",");
+        })
         .join("\n");
       reply.header("Content-Type", "text/csv; charset=utf-8");
       return reply.send(body ? `${header}\n${body}` : header);
     }
 
-    const actors = await resolveActors(entries.map((e) => e.actorId));
+    const actors = await resolveActors(entries.map((e) => e.actorUserId));
     const enriched = entries.map((e) => ({
       ...adminAuditEntry(e),
-      actor: e.actorId ? (actors.get(e.actorId) ?? null) : null,
+      actor: e.actorUserId ? (actors.get(e.actorUserId) ?? null) : null,
     }));
     reply.header("Content-Type", "application/json; charset=utf-8");
     return reply.send(JSON.stringify(enriched));

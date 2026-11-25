@@ -10,6 +10,7 @@ import {
 } from "../catalog-pins/proposal-schemas";
 import { catalogRuntimeInputsSchema } from "../catalog-pins/review-schemas";
 import { catalogPinSetSchema } from "../catalog-pins/schemas";
+import { BACKUP_FORMAT_VERSION } from "../services/backup-format";
 import { CORE_RESTART_SERVICE_IDS, RELEASE_PINNED_SERVICE_IDS } from "../services/core-service-ids";
 import { platformConfigurationSchema } from "../services/platform-configuration";
 import {
@@ -39,9 +40,13 @@ import {
   CONFIGURATION_RELEASE_IMAGE_NAMES,
   configurationReleaseSelectionSchema,
 } from "./configuration-release-downloads";
-import { configurationApplyResultSchema } from "./configuration-result-records";
+import {
+  configurationApplyResultSchema,
+  missingServiceSettingsSchema,
+} from "./configuration-result-records";
 import { dataInspectionResultSchema } from "./data-inventory-records";
 import { dataWorkflowReceiptSchema } from "./job-evidence";
+import { type OpsSettlement, opsSettlementSchema } from "./journal-settlement";
 import { leaseOperationSchemas, leaseResultSchemas } from "./lease-records";
 import {
   standaloneIntegrationOperationSchemas,
@@ -79,7 +84,7 @@ import { opsFailureResultSchema, processDiagnosticsSchema } from "./job-evidence
 import { servicePullOperationSchema, servicePullResultSchema } from "./service-operation-records";
 import { hardlinkApplySummarySchema, serviceActionsSchema } from "./service-results";
 
-export const OPS_PROTOCOL_VERSION = 2 as const;
+export const OPS_PROTOCOL_VERSION = 1 as const;
 export const OPS_MAX_LOG_TAIL = 1_000;
 export const OPS_MAX_EVENT_MESSAGE_BYTES = 4_096;
 export const OPS_MAX_EVENT_BATCH = 100;
@@ -794,6 +799,8 @@ export type OpsErrorClass =
   | "host_update_required"
   | "configuration_prerequisite"
   | "unsupported_peer"
+  | "other_release"
+  | "release_state_epoch"
   | "runtime";
 export const OPS_PUBLIC_ERROR_MESSAGES: Record<OpsErrorClass, string> = {
   authentication: "Request authentication failed",
@@ -814,6 +821,10 @@ export const OPS_PUBLIC_ERROR_MESSAGES: Record<OpsErrorClass, string> = {
     "Host update required: the operations agent or its backup helper could not be verified or updated. Inspect Activity and host diagnostics, then follow the upgrading guide to resolve the prerequisite. Retrying the candidate through the CLI does not repair the host. Preserve the current release selection.",
   unsupported_peer:
     "The operations agent and its caller use different protocol versions. Run both from the same release.",
+  other_release:
+    "Another release recorded this operation in a form this release cannot read. Its outcome is unknown here; inspect the host before retrying with a new operation.",
+  release_state_epoch:
+    "This release uses another installation state epoch and cannot be applied in place. Follow its release notes to install it fresh.",
   runtime: "Operation failed",
 };
 export class OpsContractError extends Error {
@@ -994,13 +1005,14 @@ const backupInventoryEntry = z
     backupId: backupIdSchema,
     createdAt: timestampSchema,
     expiresAt: timestampSchema.optional(),
-    platformVersion: z.string().min(1).max(64).optional(),
+    /** The release the installation had applied when the backup was taken; null when it pinned none. */
+    release: stableIdSchema.nullable().optional(),
     /** Present when the agent could authenticate the exact manifest bytes. */
     manifestDigest: z
       .string()
       .regex(/^[a-f0-9]{64}$/)
       .optional(),
-    formatVersion: z.literal(2).optional(),
+    formatVersion: z.literal(BACKUP_FORMAT_VERSION).optional(),
     /** True only when every file declared by the current manifest was re-hashed. */
     verified: z.boolean().optional(),
     volumes: z
@@ -1027,7 +1039,8 @@ const backupInventoryEntry = z
   .superRefine((entry, context) => {
     if (entry.corrupt === true) return;
     if (
-      entry.formatVersion !== 2 ||
+      entry.formatVersion !== BACKUP_FORMAT_VERSION ||
+      entry.release === undefined ||
       entry.verified === undefined ||
       entry.manifestDigest === undefined ||
       entry.volumes === undefined ||
@@ -1035,7 +1048,8 @@ const backupInventoryEntry = z
     ) {
       context.addIssue({
         code: "custom",
-        message: "Usable backup inventory entries require a verified format-2 manifest",
+        message:
+          "Usable backup inventory entries require a verified manifest in the current backup format",
       });
     }
   });
@@ -1049,6 +1063,8 @@ const repositoryPending = z.strictObject({
 export {
   type ConfigurationApplyResult,
   configurationApplyResultSchema,
+  type MissingServiceSettingsList,
+  missingServiceSettingsSchema,
 } from "./configuration-result-records";
 
 const revision = configurationApplyResultSchema;
@@ -1130,6 +1146,8 @@ export const OPS_RESULT_SCHEMAS = {
   "configuration.failure.inspect": z.strictObject({
     attemptedRevisionId: configurationGenerationRevisionSchema,
     problem: z.string().min(1).max(4_096).nullable(),
+    /** The enabled services' required settings that had no value, when that was the failure. */
+    missingSettings: missingServiceSettingsSchema.nullable(),
   }),
   "configuration.inspect": z.strictObject({
     revisionId: configurationGenerationRevisionSchema.nullable(),
@@ -1684,7 +1702,8 @@ export interface OpsErrorEnvelope {
   version: 1;
   requestId: string;
   ok: false;
-  error: { class: OpsErrorClass; message: string };
+  /** An `other_release` refusal of a finished row carries the row's settlement. */
+  error: { class: OpsErrorClass; message: string; settlement?: OpsSettlement };
 }
 export type OpsResponseEnvelope<TResult = unknown> = OpsSuccessEnvelope<TResult> | OpsErrorEnvelope;
 export function opsSuccess<TResult>(
@@ -1719,6 +1738,10 @@ export function redactedOpsError(
   cause?: unknown,
 ): OpsErrorEnvelope {
   const holder = (cause as { busyHolder?: unknown } | undefined)?.busyHolder;
+  const settlement =
+    errorClassValue === "other_release"
+      ? opsSettlementSchema.safeParse((cause as { settlement?: unknown } | undefined)?.settlement)
+      : undefined;
   return {
     version: 1,
     requestId,
@@ -1729,6 +1752,7 @@ export function redactedOpsError(
         errorClassValue === "busy" && isOpsBusyHolderMessage(holder)
           ? holder
           : OPS_PUBLIC_ERROR_MESSAGES[errorClassValue],
+      ...(settlement?.success ? { settlement: settlement.data } : {}),
     },
   };
 }

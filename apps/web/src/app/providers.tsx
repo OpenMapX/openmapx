@@ -23,7 +23,6 @@ import { appTheme } from "../lib/appTheme";
 import { CarDestinationsPublisher } from "../lib/mobile/CarDestinationsPublisher";
 import { MobileRuntimeProvider } from "../lib/mobile/MobileRuntimeProvider";
 import {
-  PERSONAL_TIMELINE_CACHE_BUSTER,
   removePersonalTimelineMutations,
   shouldDehydrateOpenMapXMutation,
 } from "../lib/personalTimelineCachePolicy";
@@ -33,6 +32,7 @@ import { RecentMapDataQueryProvider } from "../lib/RecentMapDataQueryProvider";
 import {
   enforceRecentMapDataCachePreference,
   isRecentMapDataQueryKey,
+  QUERY_CACHE_BUSTER,
   QUERY_CACHE_KEY,
 } from "../lib/recentMapDataCache";
 import { localStorageAdapter } from "../lib/storage";
@@ -133,7 +133,7 @@ function PhoneProviders({ children }: { children: React.ReactNode }) {
         persistOptions={{
           persister,
           maxAge: 24 * 60 * 60 * 1000,
-          buster: PERSONAL_TIMELINE_CACHE_BUSTER,
+          buster: QUERY_CACHE_BUSTER,
           dehydrateOptions: {
             shouldDehydrateMutation: shouldDehydrateOpenMapXMutation,
             shouldDehydrateQuery: (q) =>

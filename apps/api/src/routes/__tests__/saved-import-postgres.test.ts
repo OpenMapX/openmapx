@@ -172,6 +172,39 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         vi.unstubAllGlobals();
       }
     });
+    it("finds a saved session-local place, which stores no id, by its coordinate id", async () => {
+      const list = await app.inject({
+        method: "POST",
+        url: "/api/saved/lists",
+        payload: { name: "Pins" },
+      });
+      const listId = list.json().id as string;
+      const pin = { name: "Pin", lat: 48.1234568, lng: 11.5678904, placeId: null };
+      await app.inject({ method: "POST", url: `/api/saved/lists/${listId}/places`, payload: pin });
+      await app.inject({
+        method: "POST",
+        url: `/api/saved/lists/${listId}/places`,
+        payload: { ...pin, lat: 48.1234581, placeId: "osm:node/9" },
+      });
+      const check = async (placeId: string) =>
+        (
+          await app.inject({
+            method: "GET",
+            url: `/api/saved/check?placeId=${encodeURIComponent(placeId)}`,
+          })
+        ).json();
+
+      expect(await check("coordinate:48.123457,11.567890")).toEqual({ listIds: [listId] });
+      // A row with an id is matched only by that id, even at the same position.
+      expect(await check("osm:node/9")).toEqual({ listIds: [listId] });
+      expect(await check("coordinate:48.123458,11.567890")).toEqual({ listIds: [] });
+      const refused = await app.inject({
+        method: "GET",
+        url: `/api/saved/check?placeId=${encodeURIComponent("style-poi:42")}`,
+      });
+      expect(refused.statusCode).toBe(400);
+    });
+
     it("answers 409 for duplicate list names on create and rename", async () => {
       const create = (name: string) =>
         app.inject({ method: "POST", url: "/api/saved/lists", payload: { name } });

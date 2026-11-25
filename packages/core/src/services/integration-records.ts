@@ -9,6 +9,7 @@ import {
   readFileSync,
 } from "node:fs";
 import { join } from "node:path";
+import { COMPONENT_ID_PATTERN } from "../component-id";
 import { agentStatePaths } from "./agent-state";
 import { canonicalExtensionLocator } from "./extension-schema";
 
@@ -27,7 +28,7 @@ const MAX_RECORDS = 256;
 export const MAX_RECORDED_FILES = 128;
 /** Files all installed integrations together may hold, so one inspection reports them all. */
 export const MAX_TOTAL_RECORDED_FILES = 4_096;
-const ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
+const ID = COMPONENT_ID_PATTERN;
 const SHA256 = /^[a-f0-9]{64}$/;
 const TRANSACTION = /^itx1_[a-f0-9]{24}$/;
 const RECORD_FILE = /^([a-z0-9][a-z0-9-]{0,63})\.json$/;

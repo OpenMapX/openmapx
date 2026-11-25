@@ -15,6 +15,10 @@ import {
   selectOvertureAddress,
   selectOvertureStrings,
 } from "@openmapx/core";
+import {
+  currentOvertureSnapshot,
+  OVERTURE_PLACES_SCHEMA_VERSION,
+} from "@openmapx/core/published-data";
 import type { DatabaseClient, IntegrationContext } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
@@ -114,8 +118,10 @@ export async function resolveGers(
     const parsed = parseOsmRef(osmRef);
     if (parsed) {
       const linkRows = await database.execute<SpatialRow[]>(
-        `SELECT gers_id FROM overture_places.poi_conflation_link WHERE osm_type=$1 AND osm_id=$2 LIMIT 1`,
-        [parsed.type, parsed.id],
+        `SELECT gers_id FROM overture_places.poi_conflation_link AS link
+          WHERE link.osm_type=$1 AND link.osm_id=$2 AND ${currentOvertureSnapshot("link", 3)}
+          LIMIT 1`,
+        [parsed.type, parsed.id, OVERTURE_PLACES_SCHEMA_VERSION],
       );
       const [link] = Array.isArray(linkRows) ? linkRows : [];
       if (link) return link.gers_id;
@@ -162,10 +168,11 @@ export async function resolveGers(
           OR taxonomy_alternates && $3::TEXT[]
         )
         AND (operating_status IS NULL OR operating_status = 'open')
+        AND ${currentOvertureSnapshot("places", 4)}
       ORDER BY geom <-> ST_SetSRID(ST_MakePoint($1, $2), 4326)
       LIMIT 5
     `;
-    params = [lng, lat, concepts];
+    params = [lng, lat, concepts, OVERTURE_PLACES_SCHEMA_VERSION];
   } else {
     sql = `
       SELECT gers_id, name
@@ -182,10 +189,11 @@ export async function resolveGers(
           150
         )
         AND (operating_status IS NULL OR operating_status = 'open')
+        AND ${currentOvertureSnapshot("places", 3)}
       ORDER BY geom <-> ST_SetSRID(ST_MakePoint($1, $2), 4326)
       LIMIT 5
     `;
-    params = [lng, lat];
+    params = [lng, lat, OVERTURE_PLACES_SCHEMA_VERSION];
   }
 
   const rows = await database.execute<SpatialRow[]>(sql, params);
@@ -210,11 +218,11 @@ async function fetchOverturePlaceByGers(
            sources, state.sources_catalogue, places.release
     FROM overture_places.places
     JOIN overture_places.conflation_state AS state
-      ON state.singleton = 1 AND state.release = places.release
+      ON state.singleton = 1 AND state.release = places.release AND state.schema_version = $2
     WHERE gers_id = $1
     LIMIT 1
     `,
-    [gersId],
+    [gersId, OVERTURE_PLACES_SCHEMA_VERSION],
   );
   if (!Array.isArray(rows)) return null;
   return rows[0] ?? null;

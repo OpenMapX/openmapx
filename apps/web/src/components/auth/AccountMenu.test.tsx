@@ -16,10 +16,10 @@ vi.mock("@openmapx/core", () => ({
 }));
 vi.mock("@openmapx/mangrove-react", () => ({
   useMangroveSigner: () => ({ controller: { disconnect } }),
-  clearMangroveSignerStorage: () => {},
   MANGROVE_KEYPAIR_QUERY_KEY: ["mangrove-keypair"],
   useKeypairStore: { getState: () => ({ clear: clearKeypair }) },
 }));
+vi.mock("@/lib/signOutStorage", () => ({ clearSignOutWebStorage: () => {} }));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ removeQueries }),
 }));

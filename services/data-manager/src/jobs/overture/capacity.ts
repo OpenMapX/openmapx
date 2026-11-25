@@ -8,7 +8,6 @@ const GIB = 1024 ** 3;
 const DEFAULT_RESERVE_BYTES = 5 * GIB;
 const DEFAULT_FIRST_PULL_BYTES = 2 * GIB;
 const DEFAULT_INGEST_BYTES_PER_ROW = 4 * 1024;
-export const POSTGIS_CONTAINER = "postgis";
 
 function positiveBytesFromEnv(name: string, fallback: number): number {
   const raw = process.env[name];

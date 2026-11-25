@@ -18,7 +18,7 @@ import {
   type PersonalTimelineRequestLabels,
   recordPersonalTimelineRequest,
 } from "../metrics/index.js";
-import { decrypt, encrypt } from "../secrets.js";
+import { decrypt, encrypt, secretAad } from "../secrets.js";
 import { DawarichClient, DawarichClientError, type DawarichClientOptions } from "./client.js";
 import {
   type ManagedDawarichResolver,
@@ -96,9 +96,10 @@ export class DrizzleTimelineConnectionStore implements TimelineConnectionStore {
             mode: row.mode,
             publicOrigin: row.publicOrigin,
             displayName: row.displayName,
-            encryptedApiKey: row.encryptedApiKey,
-            encryptionIv: row.encryptionIv,
-            encryptionTag: row.encryptionTag,
+            apiKeyCiphertext: row.apiKeyCiphertext,
+            apiKeyIv: row.apiKeyIv,
+            apiKeyTag: row.apiKeyTag,
+            apiKeyKeyVersion: row.apiKeyKeyVersion,
             upstreamUserId: row.upstreamUserId,
             upstreamEmail: row.upstreamEmail,
             upstreamTimeZone: row.upstreamTimeZone,
@@ -128,7 +129,7 @@ export class DrizzleTimelineConnectionStore implements TimelineConnectionStore {
         expectedEncryptedApiKey
           ? and(
               eq(personalTimelineConnection.userId, userId),
-              eq(personalTimelineConnection.encryptedApiKey, expectedEncryptedApiKey),
+              eq(personalTimelineConnection.apiKeyCiphertext, expectedEncryptedApiKey),
             )
           : eq(personalTimelineConnection.userId, userId),
       )
@@ -161,7 +162,7 @@ export class DrizzleTimelineConnectionStore implements TimelineConnectionStore {
       .where(
         and(
           eq(personalTimelineConnection.userId, userId),
-          eq(personalTimelineConnection.encryptedApiKey, expectedEncryptedApiKey),
+          eq(personalTimelineConnection.apiKeyCiphertext, expectedEncryptedApiKey),
         ),
       )
       .returning();
@@ -180,7 +181,7 @@ export class DrizzleTimelineConnectionStore implements TimelineConnectionStore {
         and(
           eq(personalTimelineConnection.userId, userId),
           eq(personalTimelineConnection.id, snapshot.id),
-          eq(personalTimelineConnection.encryptedApiKey, snapshot.credentialGeneration),
+          eq(personalTimelineConnection.apiKeyCiphertext, snapshot.credentialGeneration),
         ),
       )
       .returning();
@@ -209,7 +210,7 @@ export class DrizzleTimelineConnectionStore implements TimelineConnectionStore {
         and(
           eq(personalTimelineConnection.userId, userId),
           eq(personalTimelineConnection.id, snapshot.id),
-          eq(personalTimelineConnection.encryptedApiKey, snapshot.credentialGeneration),
+          eq(personalTimelineConnection.apiKeyCiphertext, snapshot.credentialGeneration),
         ),
       )
       .returning();
@@ -423,7 +424,7 @@ export class TimelineConnectionService {
       candidate = await this.resolveCandidate(request);
       auditContext = candidate;
       const metadata = await this.validate(candidate);
-      const encrypted = encrypt(candidate.apiKey);
+      const encrypted = encrypt(candidate.apiKey, secretAad.personalTimelineConnection(userId));
       const now = this.now();
       await this.store.replaceForUser({
         id: previous?.id ?? this.id(),
@@ -431,9 +432,10 @@ export class TimelineConnectionService {
         mode: candidate.mode,
         publicOrigin: candidate.publicOrigin,
         displayName: candidate.displayName,
-        encryptedApiKey: encrypted.ciphertext,
-        encryptionIv: encrypted.iv,
-        encryptionTag: encrypted.tag,
+        apiKeyCiphertext: encrypted.ciphertext,
+        apiKeyIv: encrypted.iv,
+        apiKeyTag: encrypted.tag,
+        apiKeyKeyVersion: encrypted.keyVersion,
         upstreamUserId: metadata.upstreamUserId,
         upstreamEmail: metadata.upstreamEmail,
         upstreamTimeZone: metadata.upstreamTimeZone,
@@ -518,7 +520,7 @@ export class TimelineConnectionService {
           validatedAt: now,
           updatedAt: now,
         },
-        row.encryptedApiKey,
+        row.apiKeyCiphertext,
       );
       await this.recordDisclosure?.({
         userId,
@@ -537,7 +539,7 @@ export class TimelineConnectionService {
       if (safeError.code !== "TIMELINE_MANAGED_DISABLED") {
         await this.store.recordFailureForUser(
           userId,
-          row.encryptedApiKey,
+          row.apiKeyCiphertext,
           safeError.code === "TIMELINE_CREDENTIAL_INVALID" ? "credential_invalid" : "transient",
           this.now(),
         );
@@ -566,11 +568,19 @@ export class TimelineConnectionService {
       publicOrigin: row.publicOrigin,
       upstreamBaseUrl,
       hostname: strictOrigin(row.publicOrigin, "https:").hostname,
-      apiKey: decrypt(row.encryptedApiKey, row.encryptionIv, row.encryptionTag),
+      apiKey: decrypt(
+        {
+          ciphertext: row.apiKeyCiphertext,
+          iv: row.apiKeyIv,
+          tag: row.apiKeyTag,
+          keyVersion: row.apiKeyKeyVersion,
+        },
+        secretAad.personalTimelineConnection(row.userId),
+      ),
       timeZone: row.upstreamTimeZone,
       distanceUnit: row.distanceUnit,
       allowPrivateHosts,
-      connectionSnapshot: { id: row.id, credentialGeneration: row.encryptedApiKey },
+      connectionSnapshot: { id: row.id, credentialGeneration: row.apiKeyCiphertext },
     };
   }
 
@@ -612,7 +622,7 @@ export class TimelineConnectionService {
       distanceUnit: metadata.distanceUnit,
       updatedAt: now,
     });
-    return row ? { id: row.id, credentialGeneration: row.encryptedApiKey } : null;
+    return row ? { id: row.id, credentialGeneration: row.apiKeyCiphertext } : null;
   }
 
   async recordReadFailure(
@@ -750,13 +760,12 @@ export class TimelineConnectionService {
 
   private writeLifecycleAudit(
     userId: string,
-    action: string,
+    action: "timeline.connect" | "timeline.switch" | "timeline.test" | "timeline.disconnect",
     candidate: LifecycleAuditContext | null,
     outcome: "success" | "failure",
   ): Promise<void> {
     return this.audit({
       actorId: userId,
-      targetType: "personal_timeline_connection",
       targetId: userId,
       action,
       details: {

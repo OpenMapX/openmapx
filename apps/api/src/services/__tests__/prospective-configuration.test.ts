@@ -52,7 +52,7 @@ vi.mock("../service-registry", () => ({
 }));
 
 const { buildConfigurationInput } = await import("../trusted-config-operations");
-const { encrypt } = await import("../secrets");
+const { encrypt, secretAad } = await import("../secrets");
 const { withAdministrativeConfigurationRead } = await import(
   "../administrative-configuration-writer"
 );
@@ -81,7 +81,13 @@ it("counts retained orphan feed credentials in UTF-8 before publishing a full sn
   );
   expect(value.length).toBeLessThan(65536);
   expect(Buffer.byteLength(value)).toBeGreaterThan(65536);
-  state.vaultRows = [{ serviceId: "data-manager", key: "TRANSITOUS_API_KEYS", ...encrypt(value) }];
+  state.vaultRows = [
+    {
+      serviceId: "data-manager",
+      key: "TRANSITOUS_API_KEYS",
+      ...encrypt(value, secretAad.serviceSecret("data-manager", "TRANSITOUS_API_KEYS")),
+    },
+  ];
   await expect(buildConfigurationInput()).rejects.toThrow();
 });
 

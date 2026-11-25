@@ -9,7 +9,7 @@ export async function pruneTransitCredentialPreviews(
   connection: Pick<typeof db, "delete">,
   now = new Date(),
 ) {
-  const matchingJob = sql`${adminJob.payload}->>'operationKey' = ${preview.operationKey} AND ${adminJob.protocol}->'immediate'->>'actorId' = ${preview.actorId}`;
+  const matchingJob = sql`${adminJob.payload}->>'operationKey' = ${preview.operationKey} AND ${adminJob.protocol}->'immediate'->>'actorId' = ${preview.actorUserId}`;
   const rows = await connection
     .delete(preview)
     .where(
@@ -18,11 +18,11 @@ export async function pruneTransitCredentialPreviews(
         preservationAllowsDeletion({
           registrationId: "secret-update-attribution",
           candidateTimestamp: preview.createdAt,
-          subjectIds: [preview.actorId],
+          subjectIds: [preview.actorUserId],
         }),
         or(
           sql`${preview.consumedAt} IS NULL AND NOT EXISTS (SELECT 1 FROM ${adminJob} WHERE ${matchingJob})`,
-          sql`EXISTS (SELECT 1 FROM ${adminJob} WHERE ${matchingJob} AND ${adminJob.status} IN ('success','failed','canceled') AND ${adminJob.finishedAt} < ${new Date(now.getTime() - 72 * 3600000).toISOString()}::timestamptz AND ${noUnsettledManagedOperation()} AND (${preview.consumedAt} IS NULL OR (${adminJob.protocol}->'candidate'->>'candidateId' = ${preview.candidateId}::text AND ${adminJob.result}->'transitCredentials'->>'credentialsRevision' = ${preview.credentialsRevision})))`,
+          sql`EXISTS (SELECT 1 FROM ${adminJob} WHERE ${matchingJob} AND ${adminJob.status} IN ('succeeded','failed','cancelled') AND ${adminJob.finishedAt} < ${new Date(now.getTime() - 72 * 3600000).toISOString()}::timestamptz AND ${noUnsettledManagedOperation()} AND (${preview.consumedAt} IS NULL OR (${adminJob.protocol}->'candidate'->>'candidateId' = ${preview.candidateId}::text AND ${adminJob.result}->'transitCredentials'->>'credentialsRevision' = ${preview.credentialsRevision})))`,
         ),
       ),
     )

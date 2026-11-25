@@ -7,6 +7,7 @@ import {
   productVersionPattern,
   readProductReleaseConfig,
 } from "./product-release-config.mjs";
+import { recordReleasedMigrations } from "./released-migrations.mjs";
 export function prepareReleaseRecord(root, version, fragments = []) {
   assert(productVersionPattern.test(version), "Use an unprefixed alpha/beta/rc version");
   try {
@@ -52,6 +53,9 @@ export function prepareReleaseRecord(root, version, fragments = []) {
       "Notes already exist; incorporate selected fragments deliberately without duplicating them",
     );
   }
+  // The release ships every committed API migration; from now on the drift
+  // gate keeps them unchanged and later migrations newer than them.
+  recordReleasedMigrations(root);
   writeFileSync(path, `${JSON.stringify(next, null, 2)}\n`);
   return next;
 }

@@ -10,7 +10,7 @@ On first start, Dawarich migrates its database and then runs long background job
 
 Dawarich 1.18 adds geofencing webhooks: a user can make Dawarich send arrival and departure events to a URL of their choice. Because the managed bundle runs Dawarich in self-hosted mode, such URLs, like the Immich and PhotoPrism URLs before them, may name private addresses. The managed Dawarich containers therefore leave the shared `openmapx` Docker network. They run on two private networks: one for the app, worker, database and Redis, and one through which only Traefik and the OpenMapX API reach the web app. Webhooks and photo URLs can no longer reach OpenMapX's database, Redis or other platform services. Outbound internet access is unchanged.
 
-The privacy subject export now covers geofence events, webhooks and their delivery state, legacy area-to-place mappings and point/track revision counters. Webhook signing secrets, the path and query of webhook URLs, and webhook response bodies and error messages are never exported. Backups now record the `dawarich-1.19.0` schema contract; the backup subject export refuses a backup taken on 1.15.3.
+The privacy subject export now covers geofence events, webhooks and their delivery state, legacy area-to-place mappings and point/track revision counters. Webhook signing secrets, the path and query of webhook URLs, and webhook response bodies and error messages are never exported.
 
 ## Who is affected
 

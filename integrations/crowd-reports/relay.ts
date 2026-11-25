@@ -43,15 +43,39 @@ export function contributionsBaseUrl(env: NodeJS.ProcessEnv = process.env): stri
   return (raw && raw.length > 0 ? raw : DEFAULT_CONTRIBUTIONS_URL).replace(/\/+$/, "");
 }
 
+/** The shortest relay token contributions-api accepts; a shorter one refuses to start. */
+export const RELAY_TOKEN_MIN_LENGTH = 32;
+
+/**
+ * The bearer token that identifies this server to contributions-api as the
+ * trusted relay, from `OPENCONDITIONS_RELAY_TOKEN` (the same name and value on
+ * both sides). Unset or empty means no token. A set but shorter token throws,
+ * so the integration refuses to start rather than relay with a weak secret.
+ */
+export function relayToken(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const raw = env.OPENCONDITIONS_RELAY_TOKEN?.trim();
+  if (!raw) return undefined;
+  if (raw.length < RELAY_TOKEN_MIN_LENGTH) {
+    throw new Error(
+      `OPENCONDITIONS_RELAY_TOKEN must be at least ${RELAY_TOKEN_MIN_LENGTH} characters`,
+    );
+  }
+  return raw;
+}
+
 export interface RelayOptions {
   body?: unknown;
   base?: string;
+  /** Sent as `Authorization: Bearer <token>` when set. */
+  token?: string;
   timeoutMs?: number;
 }
 
 /**
  * Forward one request to the contributions-api and return its status + JSON body
  * unchanged. `path` must be an absolute path beginning with `/contrib/…`.
+ * Only the body and, when configured, the relay token are sent: the caller's
+ * address and browser headers are never forwarded.
  * A redirect, a non-JSON answer or an oversized body rejects, which the routes
  * report as an unavailable contributions service.
  */
@@ -63,7 +87,10 @@ export async function relayContribution(
 ): Promise<RelayResult> {
   const url = `${opts.base ?? contributionsBaseUrl()}${path}`;
   const options: ResponseOptions = {
-    headers: { Accept: "application/json" },
+    headers: {
+      Accept: "application/json",
+      ...(opts.token ? { Authorization: `Bearer ${opts.token}` } : {}),
+    },
     timeoutMs: opts.timeoutMs ?? 10_000,
     maxBytes: RELAY_MAX_BYTES,
     contentTypes: ["application/json"],

@@ -79,7 +79,7 @@ const runtime = createDataExecutionRuntime({
     context.signal.throwIfAborted();
     return {
       kind: input.kind,
-      finalStatus: "ok",
+      finalStatus: "succeeded",
       countries: input.countries,
       sourceRevision: "public-fixture",
     };

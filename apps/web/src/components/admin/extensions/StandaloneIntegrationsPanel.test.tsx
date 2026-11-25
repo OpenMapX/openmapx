@@ -52,7 +52,7 @@ beforeEach(() => {
       return Response.json(
         job({
           id: jobId,
-          status: "success",
+          status: "succeeded",
           cancelable: false,
           result: {
             operationId,

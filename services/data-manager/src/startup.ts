@@ -4,6 +4,8 @@ import type { DataManagerReadiness } from "./readiness.js";
 
 export interface RequiredStartupDependencies {
   readiness: DataManagerReadiness;
+  /** Resolves once the API has applied the migrations this build expects. */
+  waitForDatabaseSchema: () => Promise<void>;
   initializeOfflineStorage: () => Promise<void>;
   /** Reconciles the data executions a previous process left unsettled. */
   reconcileJobs: () => Promise<void>;
@@ -24,6 +26,9 @@ export async function initializeRequiredSubsystems(
 ): Promise<RequiredStartupResult> {
   let stopControlPrune: (() => Promise<void>) | undefined;
   try {
+    dependencies.readiness.setPhase("database-schema");
+    await dependencies.waitForDatabaseSchema();
+
     dependencies.readiness.setPhase("offline-storage");
     await dependencies.initializeOfflineStorage();
 

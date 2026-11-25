@@ -34,7 +34,6 @@
     "urlTemplate": "${endpoint:nominatim}/status"
   },
   "quality": "built-in",
-  "category": "Geocoding",
   "dataSources": [
     {
       "sourceId": "nominatim",

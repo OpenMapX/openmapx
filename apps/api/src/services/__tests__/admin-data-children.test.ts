@@ -186,7 +186,7 @@ it("discovers the exact fixed CLI descendant from its durable DM row before canc
         admittedAt: at,
         deadlineAt: deadline,
         kind: owned.kind,
-        status: canceled ? "canceled" : "running",
+        status: canceled ? "cancelled" : "running",
         cancellationRequestedAt: canceled ? new Date().toISOString() : null,
         progress: null,
         diagnostics: { tail: [], truncated: false },

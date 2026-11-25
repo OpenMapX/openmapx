@@ -14,11 +14,9 @@
  * elsewhere in the host checkout, where the configuration renderer runs with
  * write access.
  *
- * The accepted shape is the union of the three key conventions already in use:
- * SCREAMING_SNAKE service keys (`NY_511_API_KEY`), camelCase integration keys
- * (`apiKey`), and the lowercase hyphenated `<sourceId>-<field>` credential keys
- * that `scripts/check-credential-keys.ts` enforces
- * (`de-nw-mobidrom-scooter-client-id`). It excludes `.`, `/`, `\\`, `%`, NUL and
+ * The accepted shape covers both config key conventions: UPPER_SNAKE service
+ * keys (`NY_511_API_KEY`) and lowerCamel integration keys (`apiKey`,
+ * `deNwMobidromScooterClientId`). It excludes `.`, `/`, `\\`, `%`, NUL and
  * whitespace, so no accepted key can traverse a directory or name a hidden
  * file, and it bounds the length so a key cannot blow past filesystem limits.
  */

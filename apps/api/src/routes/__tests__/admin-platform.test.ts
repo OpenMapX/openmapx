@@ -35,7 +35,6 @@ let client: ReturnType<typeof createApiClient>;
 const request = { expectedCurrentRevisionId: null, changes: { version: 1 as const } };
 let preview: ReturnType<typeof services.buildPlatformConfigurationPreview>;
 beforeEach(async () => {
-  vi.stubEnv("OPENMAPX_DISABLE_LOCALHOST_AUTH", "1");
   vi.clearAllMocks();
   mocks.session = mockAdminSession();
   preview = services.buildPlatformConfigurationPreview({
@@ -107,10 +106,9 @@ it.each([
   expect(result.statusCode).toBe(session ? 403 : 401);
   expect(mocks.inspect).not.toHaveBeenCalled();
 });
-it.each(["loopback", "impersonated"])("refuses %s preview authority", async (kind) => {
+it("refuses impersonated preview authority", async () => {
   const actor = mockAdminSession();
-  if (kind === "loopback") actor.user.id = "loopback";
-  else actor.session.impersonatedBy = "other";
+  actor.session.impersonatedBy = "other";
   mocks.session = actor;
   const result = await app.inject({
     method: "POST",
@@ -200,7 +198,7 @@ it("requires the bound HttpOnly nonce for a domain proof and forwards it private
 });
 it("reports a changed retained mutation as a conflict without exposing internal failure details", async () => {
   mocks.apply.mockRejectedValue(
-    new AdminJobFailure("private internal context", { errorCode: "conflict" }),
+    new AdminJobFailure("private internal context", { errorCode: "CONFLICT" }),
   );
   const result = await app.inject({
     method: "POST",
@@ -248,7 +246,6 @@ it("transports a checked-release preview identity without accepting caller image
 });
 
 it("accepts the CLI's real-session release-only headers and bodies on the public routes", async () => {
-  vi.stubEnv("OPENMAPX_LOCAL_ADMIN_TOKEN", "not-a-client-credential");
   const address = app.server.address();
   if (!address || typeof address === "string") throw Error("Fixture address unavailable");
   const base = `http://127.0.0.1:${address.port}`;

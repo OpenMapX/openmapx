@@ -5,11 +5,11 @@ export type PrepareOfflinePackage503Code =
   (typeof PrepareOfflinePackage503Code)[keyof typeof PrepareOfflinePackage503Code];
 
 export const PrepareOfflinePackage503Code = {
-  "invalid-principal": "invalid-principal",
-  "invalid-request": "invalid-request",
-  capacity: "capacity",
-  "principal-quota": "principal-quota",
-  "source-unavailable": "source-unavailable",
-  "generation-failed": "generation-failed",
-  expired: "expired",
+  INVALID_PRINCIPAL: "INVALID_PRINCIPAL",
+  INVALID_REQUEST: "INVALID_REQUEST",
+  CAPACITY: "CAPACITY",
+  PRINCIPAL_QUOTA: "PRINCIPAL_QUOTA",
+  SOURCE_UNAVAILABLE: "SOURCE_UNAVAILABLE",
+  GENERATION_FAILED: "GENERATION_FAILED",
+  EXPIRED: "EXPIRED",
 } as const;

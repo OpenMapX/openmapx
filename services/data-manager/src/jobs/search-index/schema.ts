@@ -52,7 +52,8 @@ CREATE TABLE "${schema}".index_state (
     CHECK (status IN ('building','ready','failed')),
   place_count BIGINT NOT NULL DEFAULT 0,
   term_count BIGINT NOT NULL DEFAULT 0,
-  ambient_source_version INTEGER NOT NULL DEFAULT 2,
+  schema_version INTEGER NOT NULL CONSTRAINT index_state_schema_version_check
+    CHECK (schema_version > 0),
   source_file_identity TEXT,
   started_at TIMESTAMPTZ NOT NULL,
   published_at TIMESTAMPTZ,

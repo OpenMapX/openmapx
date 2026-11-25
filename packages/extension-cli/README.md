@@ -25,7 +25,7 @@ Scaffold a new integration directory from the built-in template:
 openmapx-ext scaffold integration my-weather --domain weather --out ./integrations
 ```
 
-Creates `integrations/my-weather/` with `manifest.json`, `package.json`, localized strings and companion-response/attribution authoring examples. The generated package uses the public CLI as a development tool and has `validate` and `package` scripts; it has no private workspace dependencies. Run `npm install` after a matching CLI version is published, or install the candidate tarball with `npm install --save-dev /path/to/extension-cli.tgz` during local qualification. Then run `npm run validate`. Executable behavior belongs in a companion service; community runtime entry points are rejected until a dedicated isolation boundary exists.
+Creates `integrations/my-weather/` with `manifest.json`, `package.json`, localized strings and companion-response/attribution authoring examples. The manifest declares `"platform": "1.0"` and version `1.0.0`; the package is named `openmapx-integration-<id>`, outside the `@openmapx` npm scope. Ids are lowercase slugs of at most 48 characters that start with a letter. The generated package uses the public CLI as a development tool and has `validate` and `package` scripts; it has no private workspace dependencies. Run `npm install` after a matching CLI version is published, or install the candidate tarball with `npm install --save-dev /path/to/extension-cli.tgz` during local qualification. Then run `npm run validate`. Executable behavior belongs in a companion service; community runtime entry points are rejected until a dedicated isolation boundary exists.
 
 The generated README explains lockfile setup and a repository-relative candidate tarball for use before publication. The included `.github/workflows/validate.yml` runs `npm ci --ignore-scripts`, validation and packaging, then retains the artifact for inspection without publishing or deploying it. It assumes the generated directory is the repository root; the README explains how to adapt nested projects. Commit the lockfile and any referenced candidate tarball before enabling it.
 
@@ -39,7 +39,8 @@ Scaffold a `service.json` for a new community service:
 openmapx-ext scaffold service my-data-service --out ./services/my-data-service
 ```
 
-Creates `service.json` with the id and owned-schema name substituted. Fill in
+Creates `service.json` with the id and owned-schema name substituted and
+`"platform": "1.0"`, version `1.0.0` and `quality: "community"` declared. Fill in
 the service definition, validate it as a community service, then reference it
 from an extension bundle. Scaffolding does not install or register the service
 in a running host.
@@ -60,7 +61,7 @@ openmapx-ext validate ./extension.json --kind extension
 openmapx-ext validate ./contributors.json --kind contributors
 ```
 
-Contributor input is an array of canonical captured receipts, including an explicit `[]` when no external credit is owed. Service validation always uses community provenance and rejects host-only privileges. Extension validation also checks compatibility with this CLI’s extension protocol version.
+Contributor input is an array of canonical captured receipts, including an explicit `[]` when no external credit is owed. Service validation always uses community provenance and rejects host-only privileges. Service and extension validation also check compatibility with this CLI’s extension protocol version.
 
 Invalid input exits non-zero with diagnostics. These checks do not prove download access, host configuration, runtime readiness or trust. The installing host still applies its own checks.
 
@@ -88,8 +89,9 @@ openmapx-ext bundle \
 ```
 
 `--service` and `--integration` are repeatable. Their values are respectively
-`repository,ref,serviceId` and `artifactUrl,sha256,integrationId`. Optional
-bundle metadata includes `--description`, `--license`, and `--homepage`.
+`repository,ref,serviceId` and `artifactUrl,sha256,integrationId`. `--version`
+must be a semantic version; `--platform` defaults to this CLI's extension
+protocol. Optional bundle metadata includes `--description`, `--license`, and `--homepage`.
 
 Integration artifacts are declarative. Put executable behavior and its types in
 the companion service rather than depending on an in-process host SDK.

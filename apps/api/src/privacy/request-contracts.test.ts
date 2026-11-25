@@ -1,17 +1,17 @@
 import {
-  ACTIVE_REQUEST_STATES,
+  ACTIVE_REQUEST_STATUSES,
   acceptsCaseDecision,
   acceptsManualIdentityVerification,
   acceptsSelfServiceExport,
   acceptsTaskResolution,
   acceptsWithdrawal,
   canExtendDeadline,
-  isActiveRequestState,
-  isTerminalRequestState,
+  isActiveRequestStatus,
+  isTerminalRequestStatus,
   isValidRequestTransition,
-  REQUEST_STATES,
-  type RequestState,
-  TERMINAL_REQUEST_STATES,
+  REQUEST_STATUSES,
+  type RequestStatus,
+  TERMINAL_REQUEST_STATUSES,
 } from "@openmapx/core/privacy";
 import { describe, expect, it } from "vitest";
 import { PrivacyRequestError } from "./errors.js";
@@ -34,7 +34,7 @@ const ALLOWED = new Set([
   "waiting_on_requester->completed",
 ]);
 
-const pairs = REQUEST_STATES.flatMap((from) => REQUEST_STATES.map((to) => [from, to] as const));
+const pairs = REQUEST_STATUSES.flatMap((from) => REQUEST_STATUSES.map((to) => [from, to] as const));
 
 describe("privacy request transition table", () => {
   it.each(pairs.filter(([from, to]) => ALLOWED.has(`${from}->${to}`)))(
@@ -68,15 +68,15 @@ describe("privacy request transition table", () => {
   });
 });
 
-describe("named state predicates", () => {
-  const states = (predicate: (state: RequestState) => boolean) =>
-    REQUEST_STATES.filter((state) => predicate(state));
+describe("named status predicates", () => {
+  const states = (predicate: (status: RequestStatus) => boolean) =>
+    REQUEST_STATUSES.filter((status) => predicate(status));
 
-  it("splits the states into active and terminal sets", () => {
-    expect(states(isActiveRequestState)).toEqual([...ACTIVE_REQUEST_STATES]);
-    expect(states(isTerminalRequestState)).toEqual([...TERMINAL_REQUEST_STATES]);
-    for (const state of TERMINAL_REQUEST_STATES)
-      expect(REQUEST_STATES.some((to) => isValidRequestTransition(state, to))).toBe(false);
+  it("splits the statuses into active and terminal sets", () => {
+    expect(states(isActiveRequestStatus)).toEqual([...ACTIVE_REQUEST_STATUSES]);
+    expect(states(isTerminalRequestStatus)).toEqual([...TERMINAL_REQUEST_STATUSES]);
+    for (const status of TERMINAL_REQUEST_STATUSES)
+      expect(REQUEST_STATUSES.some((to) => isValidRequestTransition(status, to))).toBe(false);
   });
 
   it("allows case work only on active requests", () => {
@@ -86,7 +86,7 @@ describe("named state predicates", () => {
       acceptsTaskResolution,
       acceptsSelfServiceExport,
     ])
-      expect(states(predicate)).toEqual([...ACTIVE_REQUEST_STATES]);
+      expect(states(predicate)).toEqual([...ACTIVE_REQUEST_STATUSES]);
   });
 
   it("allows a manual identity check before work starts", () => {

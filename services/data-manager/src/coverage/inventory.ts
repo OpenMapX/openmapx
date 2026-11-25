@@ -12,6 +12,7 @@ export interface SearchPublicationRow {
   published_at: Date | string | null;
   updated_at: Date | string | null;
   last_error: string | null;
+  schema_version: number;
 }
 
 export interface OverturePublicationRow {
@@ -21,6 +22,7 @@ export interface OverturePublicationRow {
   status: string;
   places_published_at: Date | string | null;
   updated_at: Date | string | null;
+  schema_version: number;
 }
 
 export interface OvertureReleaseRow {
@@ -73,7 +75,8 @@ export async function readSearchPublication(
   const rows = await boundedQuery<SearchPublicationRow[]>(
     sql,
     `SELECT region, source_fingerprint, current_fingerprint, epoch, status,
-            place_count, term_count, started_at, published_at, updated_at, last_error
+            place_count, term_count, started_at, published_at, updated_at, last_error,
+            schema_version
        FROM osm_search.index_state
       WHERE singleton = 1
       LIMIT 1`,
@@ -91,7 +94,7 @@ export async function readOverturePublication(
   if (!exists[0]?.exists) return { exists: false, row: null };
   const rows = await boundedQuery<OverturePublicationRow[]>(
     sql,
-    `SELECT release, region, place_count, status, places_published_at, updated_at
+    `SELECT release, region, place_count, status, places_published_at, updated_at, schema_version
        FROM overture_places.conflation_state
       WHERE singleton = 1
        LIMIT 1`,

@@ -64,6 +64,8 @@ describe("serialized data-manager job projections", () => {
         public: limiter.preHandler(),
         unmatched: unexpectedTier,
         typeahead: unexpectedTier,
+        contribution: unexpectedTier,
+        enrollment: unexpectedTier,
         routing: unexpectedTier,
       }),
     );
@@ -137,10 +139,11 @@ describe("serialized data-manager job projections", () => {
         {
           id: jobId,
           kind: "transit-sync",
-          status: "error",
+          status: "failed",
           admittedAt: date,
           finishedAt: date,
-          triggeredBy: "user:admin",
+          trigger: "api",
+          triggeredByUserId: "admin",
           idempotencyKey: null,
           metadata,
         },
@@ -149,7 +152,7 @@ describe("serialized data-manager job projections", () => {
         {
           id: "22222222-2222-4222-8222-222222222222",
           stage: "fetch",
-          status: "error",
+          status: "failed",
           startedAt: date,
           finishedAt: date,
           durationMs: 0,
@@ -170,6 +173,8 @@ describe("serialized data-manager job projections", () => {
       expect(result.status).toBe(200);
       if (result.status !== 200) throw new Error("Expected job details");
       expect(result.data).toMatchObject({
+        trigger: "api",
+        triggeredByUserId: "admin",
         startedAt: date.toISOString(),
         finishedAt: date.toISOString(),
         metadata,

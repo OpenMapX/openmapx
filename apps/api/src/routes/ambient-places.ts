@@ -4,7 +4,7 @@ import {
   readAmbientTile,
   validAmbientTile,
 } from "@openmapx/core/ambient-places-server";
-import { dataManagerAdminOperations } from "@openmapx/core/api-contracts";
+import { type AuditAction, dataManagerAdminOperations } from "@openmapx/core/api-contracts";
 import * as dm from "@openmapx/core/data-manager-sdk";
 import { envString } from "@openmapx/core/server-env";
 import { readDataManagerToken } from "@openmapx/core/service-secret-files";
@@ -150,6 +150,13 @@ export async function ambientPlacesRoute(
       resume: "postApiAdminAmbientPlacesResume",
       discard: "postApiAdminAmbientPlacesDiscard",
     } as const;
+    const audited = {
+      build: "ambient_places.build",
+      enabled: "ambient_places.enabled.set",
+      rollback: "ambient_places.rollback",
+      resume: "ambient_places.resume",
+      discard: "ambient_places.discard",
+    } as const satisfies Record<Exclude<AmbientAction, "status">, AuditAction>;
     for (const action of Object.keys(operations) as AmbientAction[]) {
       registerDataManagerAdminRoute(
         admin,
@@ -161,8 +168,7 @@ export async function ambientPlacesRoute(
             if (action !== "status")
               await writeAuditLog({
                 actorId: getAdminSession(request).user.id,
-                action: `ambient-places.${action}`,
-                targetType: "ambient-places",
+                action: audited[action],
                 details: { status: result.status },
                 request,
               });

@@ -6,6 +6,7 @@ import FormControlLabel from "@mui/material/FormControlLabel";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import { prefixedStorageKey } from "@openmapx/core";
 import {
   applyAdminConfigurationMigration,
   exportAdminConfigurationMigration,
@@ -56,7 +57,10 @@ export function ConfigurationMigrationPanel() {
     [platformReauth, setPlatformReauth] = useState(false),
     controller = useRef<AbortController | null>(null),
     epoch = useRef(0);
-  const storageKey = `openmapx-configuration-migration-preview:${JSON.stringify([apiUrl, actorId])}`;
+  const storageKey = prefixedStorageKey(
+    "adminConfigurationMigrationPreview",
+    JSON.stringify([apiUrl, actorId]),
+  );
   const remember = (value: ConfigurationMigrationPreview) => {
     const metadata = configurationMigrationPreviewSchema.parse(value);
     setPreview(metadata);

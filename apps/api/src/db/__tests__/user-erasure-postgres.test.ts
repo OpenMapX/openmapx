@@ -19,9 +19,7 @@ import {
   USER_ID_COLUMNS_WITHOUT_USER_FOREIGN_KEY,
 } from "../../../../../scripts/check-subject-data";
 import { withAccountMutation } from "../../account/account-mutations";
-import { PrivacyRequestService } from "../../privacy/request-service";
 import { deriveOfflinePackagePrincipal } from "../../services/offline-package-principal";
-import { saveSystemSettings } from "../../services/settings";
 import { userErasureHooks } from "../../services/user-erasure";
 import {
   API_MIGRATIONS,
@@ -31,12 +29,10 @@ import {
 } from "../../test/production-postgis";
 import { db } from "../index";
 import {
-  dataManagerOfflinePackageArtifactReferences,
-  dataManagerOfflinePackageJobOwners,
-  dataManagerOfflinePackageJobs,
+  dataManagerOfflinePackageArtifactReference,
+  dataManagerOfflinePackageJob,
+  dataManagerOfflinePackageJobOwner,
   dataSubjectRequest,
-  dataSubjectRequestEvent,
-  systemSettings,
   user,
 } from "../schema";
 
@@ -54,12 +50,14 @@ function columnKey(schema: string, table: string, column: string): string {
 describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => {
   it("keeps every direct user foreign key on an explicit erase-safe action", async () => {
     const result = await db.execute(sql`
-      SELECT child.relname AS table_name,
+      SELECT child_ns.nspname AS schema_name,
+             child.relname AS table_name,
              child_column.attname AS column_name,
              fk.confdeltype AS delete_action
       FROM pg_constraint fk
       JOIN pg_class parent ON parent.oid = fk.confrelid
       JOIN pg_class child ON child.oid = fk.conrelid
+      JOIN pg_namespace child_ns ON child_ns.oid = child.relnamespace
       JOIN pg_attribute child_column
         ON child_column.attrelid = child.oid
        AND child_column.attnum = fk.conkey[1]
@@ -69,32 +67,34 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
     `);
 
     const rows = Array.from(result as Iterable<Record<string, unknown>>).map(
-      (row) => `${row.table_name}.${row.column_name}:${row.delete_action}`,
+      (row) =>
+        `${columnKey(String(row.schema_name), String(row.table_name), String(row.column_name))}:${row.delete_action}`,
     );
     expect(rows.map((row) => row.split(":")[0]).sort()).toEqual(
       Object.keys(DIRECT_USER_FK_CLASSIFICATIONS).sort(),
     );
     expect(rows).toEqual([
       "account.user_id:c",
-      "account_action_receipt.actor_id:n",
-      "account_action_receipt.target_id:n",
+      "account_action_receipt.actor_user_id:n",
+      "account_action_receipt.target_user_id:n",
       "account_mail_outbox.user_id:c",
-      "admin_action_reauthentication.actor_id:c",
-      "admin_audit_log.actor_id:n",
+      "admin_action_reauthentication.actor_user_id:c",
+      "admin_audit_log.actor_user_id:n",
       "admin_audit_log.target_user_id:n",
-      "admin_job.created_by:n",
-      "auth_policy_application.actor_id:n",
-      "auth_policy_state.activated_by:n",
-      "configuration_migration_preview.actor_id:c",
+      "admin_job.created_by_user_id:n",
+      "auth_policy_application.actor_user_id:n",
+      "auth_policy_state.activated_by_user_id:n",
+      "configuration_migration_preview.actor_user_id:c",
       "data_disclosure_event.user_id:n",
       "data_subject_request.actor_user_id:n",
       "data_subject_request.user_id:n",
       "data_subject_request_event.actor_user_id:n",
       "data_subject_request_notification.recipient_user_id:n",
-      "installed_extension.installed_by:n",
-      "installed_integration.installed_by:n",
-      "integration_application_receipt.actor_id:n",
-      "integration_secret.updated_by:n",
+      "installed_extension.installed_by_user_id:n",
+      "installed_integration.installed_by_user_id:n",
+      "integration_application_receipt.actor_user_id:n",
+      "integration_secret.updated_by_user_id:n",
+      "data_manager.job.triggered_by_user_id:n",
       "labeled_place.user_id:c",
       "mangrove_keypair.user_id:c",
       "mobile_auth_handoff.user_id:c",
@@ -106,15 +106,15 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
       "passkey.user_id:c",
       "personal_timeline_connection.user_id:c",
       "personal_vehicle.user_id:c",
-      "platform_configuration_preview.actor_id:c",
+      "platform_configuration_preview.actor_user_id:c",
       "saved_list.user_id:c",
-      "service_secret.updated_by:n",
+      "service_secret.updated_by_user_id:n",
       "session.user_id:c",
       "session_auth_assurance.user_id:n",
       "share_link.user_id:c",
-      "system_secret.updated_by:n",
-      "system_settings.updated_by:n",
-      "transit_credential_preview.actor_id:c",
+      "system_secret.updated_by_user_id:n",
+      "system_setting.updated_by_user_id:n",
+      "transit_credential_preview.actor_user_id:c",
       "two_factor.user_id:c",
     ]);
   });
@@ -138,8 +138,8 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
     const requests = await db
       .insert(dataSubjectRequest)
       .values([
-        { ...requestBase, state: "completed" },
-        { ...requestBase, kind: "portability", state: "in_progress" },
+        { ...requestBase, status: "completed" },
+        { ...requestBase, kind: "portability", status: "in_progress" },
       ])
       .returning({ id: dataSubjectRequest.id });
     const ids = requests.map((request) => request.id);
@@ -148,7 +148,7 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
 
       const after = await db
         .select({
-          state: dataSubjectRequest.state,
+          status: dataSubjectRequest.status,
           accountState: dataSubjectRequest.accountState,
           userId: dataSubjectRequest.userId,
           version: dataSubjectRequest.version,
@@ -157,63 +157,13 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
         .where(inArray(dataSubjectRequest.id, ids));
       expect(after).toEqual(
         expect.arrayContaining([
-          { state: "completed", accountState: "deleted", userId: null, version: 2 },
-          { state: "in_progress", accountState: "deleted", userId: null, version: 2 },
+          { status: "completed", accountState: "deleted", userId: null, version: 2 },
+          { status: "in_progress", accountState: "deleted", userId: null, version: 2 },
         ]),
       );
     } finally {
       await db.delete(dataSubjectRequest).where(inArray(dataSubjectRequest.id, ids));
       await db.delete(user).where(eq(user.id, userId));
-    }
-  });
-
-  it("a loopback admin can save a setting and act on a privacy case", async () => {
-    const key = `erasure-loopback-${randomUUID()}`;
-    const [request] = await db
-      .insert(dataSubjectRequest)
-      .values({
-        kind: "access",
-        channel: "email",
-        locatorType: "other_reference",
-        receivedAt: new Date(),
-        dueAt: new Date(Date.now() + 86_400_000),
-      })
-      .returning({ id: dataSubjectRequest.id });
-    if (!request) throw new Error("The privacy case was not created");
-    try {
-      await saveSystemSettings([{ key, value: "set over loopback" }], "loopback");
-      const service = new PrivacyRequestService();
-      await service.verifyIdentity({
-        requestId: request.id,
-        version: 1,
-        reasonCode: "document-checked",
-        actorId: "loopback",
-        idempotencyKey: `loopback-verify-${randomUUID()}`,
-      });
-      await service.recordExportFailure(request.id, "export-failed");
-
-      expect(
-        await db
-          .select({ updatedBy: systemSettings.updatedBy })
-          .from(systemSettings)
-          .where(eq(systemSettings.key, key)),
-      ).toEqual([{ updatedBy: null }]);
-      const events = await db
-        .select({
-          actorKind: dataSubjectRequestEvent.actorKind,
-          actorUserId: dataSubjectRequestEvent.actorUserId,
-        })
-        .from(dataSubjectRequestEvent)
-        .where(eq(dataSubjectRequestEvent.requestId, request.id));
-      expect(events).toEqual(
-        expect.arrayContaining([
-          { actorKind: "admin", actorUserId: null },
-          { actorKind: "system", actorUserId: null },
-        ]),
-      );
-    } finally {
-      await db.delete(dataSubjectRequest).where(eq(dataSubjectRequest.id, request.id));
-      await db.delete(systemSettings).where(eq(systemSettings.key, key));
     }
   });
 
@@ -238,7 +188,7 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
     const jobId = randomUUID();
     const packageId = `erasure-package-${randomUUID()}`;
     await db.insert(user).values({ id: userId, name: "Offline", email: `${userId}@example.test` });
-    await db.insert(dataManagerOfflinePackageJobs).values({
+    await db.insert(dataManagerOfflinePackageJob).values({
       id: jobId,
       requestKey: `request-${jobId}`,
       packageId,
@@ -247,14 +197,14 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-    await db.insert(dataManagerOfflinePackageJobOwners).values(
+    await db.insert(dataManagerOfflinePackageJobOwner).values(
       [principal, otherPrincipal].map((owner) => ({
         jobId,
         principal: owner,
         createdAt: new Date(),
       })),
     );
-    await db.insert(dataManagerOfflinePackageArtifactReferences).values(
+    await db.insert(dataManagerOfflinePackageArtifactReference).values(
       [principal, otherPrincipal].map((owner) => ({
         principal: owner,
         packageId,
@@ -285,23 +235,23 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
       );
       expect(
         await db
-          .select({ principal: dataManagerOfflinePackageJobOwners.principal })
-          .from(dataManagerOfflinePackageJobOwners)
-          .where(eq(dataManagerOfflinePackageJobOwners.jobId, jobId)),
+          .select({ principal: dataManagerOfflinePackageJobOwner.principal })
+          .from(dataManagerOfflinePackageJobOwner)
+          .where(eq(dataManagerOfflinePackageJobOwner.jobId, jobId)),
       ).toEqual([{ principal: otherPrincipal }]);
       expect(
         await db
-          .select({ principal: dataManagerOfflinePackageArtifactReferences.principal })
-          .from(dataManagerOfflinePackageArtifactReferences)
-          .where(eq(dataManagerOfflinePackageArtifactReferences.packageId, packageId)),
+          .select({ principal: dataManagerOfflinePackageArtifactReference.principal })
+          .from(dataManagerOfflinePackageArtifactReference)
+          .where(eq(dataManagerOfflinePackageArtifactReference.packageId, packageId)),
       ).toEqual([{ principal: otherPrincipal }]);
     } finally {
       await db
-        .delete(dataManagerOfflinePackageArtifactReferences)
-        .where(eq(dataManagerOfflinePackageArtifactReferences.packageId, packageId));
+        .delete(dataManagerOfflinePackageArtifactReference)
+        .where(eq(dataManagerOfflinePackageArtifactReference.packageId, packageId));
       await db
-        .delete(dataManagerOfflinePackageJobs)
-        .where(eq(dataManagerOfflinePackageJobs.id, jobId));
+        .delete(dataManagerOfflinePackageJob)
+        .where(eq(dataManagerOfflinePackageJob.id, jobId));
       await db.delete(user).where(eq(user.id, userId));
       vi.unstubAllEnvs();
       rmSync(files, { recursive: true, force: true });
@@ -386,7 +336,7 @@ describe.skipIf(skipDatabase)("user erasure as the API role", () => {
     await insertUser(userId, email);
     await insertUser(otherId, otherEmail);
     const [request] = await api<{ id: string }[]>`
-      INSERT INTO data_subject_request (kind, channel, user_id, actor_user_id, state,
+      INSERT INTO data_subject_request (kind, channel, user_id, actor_user_id, status,
         received_at, due_at, identity_method, identity_verified_at)
       VALUES ('access', 'self_service', ${userId}, ${userId}, 'in_progress', now(),
         now() + interval '30 days', 'account_session', now())
@@ -435,49 +385,53 @@ describe.skipIf(skipDatabase)("user erasure as the API role", () => {
     for (const [id, identifier, value] of verificationRows)
       await api`INSERT INTO verification (id, identifier, value, expires_at, created_at, updated_at)
         VALUES (${`${id}-${suffix}`}, ${identifier}, ${value}, now() + interval '1 hour', now(), now())`;
-    await api`INSERT INTO system_settings (key, value, updated_by)
-      VALUES (${`setting-${suffix}`}, '"value"', ${userId})`;
-    await api`INSERT INTO system_secret (key, ciphertext, iv, tag, updated_by)
-      VALUES (${`secret-${suffix}`}, 'c', 'i', 't', ${userId})`;
+    await api`INSERT INTO system_setting (key, value, updated_by_user_id)
+      VALUES ('legal.hosting.locations', '"value"', ${userId})
+      ON CONFLICT (key) DO UPDATE SET updated_by_user_id = EXCLUDED.updated_by_user_id`;
+    await api`INSERT INTO system_secret (key, ciphertext, iv, tag, key_version, updated_by_user_id)
+      VALUES ('lettermint.apiToken', 'c', 'i', 't', 1, ${userId})
+      ON CONFLICT (key) DO UPDATE SET updated_by_user_id = EXCLUDED.updated_by_user_id`;
     const [audit] = await api<{ id: string }[]>`
-      INSERT INTO admin_audit_log (actor_id, target_id, target_type, target_user_id, action,
+      INSERT INTO admin_audit_log (actor_user_id, target_id, target_type, target_user_id, action,
         details, ip_address, user_agent)
-      VALUES (${userId}, ${userId}, 'user', ${userId}, 'erasure.fixture',
+      VALUES (${userId}, ${userId}, 'user', ${userId}, 'user.ban',
         ${JSON.stringify({ contact: email.toLowerCase() })}::jsonb, '192.0.2.1', 'fixture-agent')
       RETURNING id`;
     const [targetAudit] = await api<{ id: string }[]>`
-      INSERT INTO admin_audit_log (actor_id, target_id, target_type, target_user_id, action)
-      VALUES (${otherId}, ${userId}, 'user', ${userId}, 'erasure.target') RETURNING id`;
+      INSERT INTO admin_audit_log (actor_user_id, target_id, target_type, target_user_id, action)
+      VALUES (${otherId}, ${userId}, 'user', ${userId}, 'user.unban') RETURNING id`;
     const [mention] = await api<{ id: string }[]>`
-      INSERT INTO admin_audit_log (actor_id, action, details, ip_address)
-      VALUES (${otherId}, 'erasure.mention', ${JSON.stringify({ about: userId })}::jsonb, '192.0.2.2')
+      INSERT INTO admin_audit_log (actor_user_id, action, details, ip_address)
+      VALUES (${otherId}, 'cache.clear', ${JSON.stringify({ about: userId })}::jsonb, '192.0.2.2')
       RETURNING id`;
-    await api`INSERT INTO app_logs (level, source, msg, metadata)
+    await api`INSERT INTO app_log (level, source, message, metadata)
       VALUES ('warn', ${`erased-${suffix}`}, ${`failure for ${email.toUpperCase()}`}, NULL),
              ('warn', ${`erased-${suffix}`}, 'no identifier', ${JSON.stringify({ subject: userId })}::jsonb),
              ('warn', ${`kept-${suffix}`}, ${`failure for ${otherEmail}`}, NULL)`;
-    const finishedJob = (triggeredBy: string) => api<{ id: string }[]>`
-      INSERT INTO data_manager.jobs (kind, status, triggered_by, finished_at, operation_key,
-        operation_fingerprint, execution_fingerprint, admitted_at, deadline_at, execution_input,
-        execution_state, execution_ref)
-      VALUES ('erasure-fixture', 'ok', ${triggeredBy}, now(),
+    const finishedJob = (trigger: string, triggeredByUserId: string | null) => api<
+      { id: string }[]
+    >`
+      INSERT INTO data_manager.job (kind, status, trigger, triggered_by_user_id, finished_at,
+        operation_key, operation_fingerprint, execution_fingerprint, admitted_at, deadline_at,
+        execution_input, execution_state, execution_ref)
+      VALUES ('erasure-fixture', 'succeeded', ${trigger}, ${triggeredByUserId}, now(),
         ${`opk1_erasure_${randomUUID().replaceAll("-", "")}`}, ${"a".repeat(64)}, ${"b".repeat(64)},
         now(), now() + interval '1 hour', '{}', '{}', '{}') RETURNING id`;
-    const [job] = await finishedJob(`api:user:${userId}`);
-    const [cronJob] = await finishedJob("cron:data-manager-cron");
-    await api`INSERT INTO admin_action_reauthentication (actor_id, starting_session_id, purpose,
+    const [job] = await finishedJob("api", userId);
+    const [otherJob] = await finishedJob("api", otherId);
+    await api`INSERT INTO admin_action_reauthentication (actor_user_id, starting_session_id, purpose,
         target_id, nonce_digest, expires_at)
-      VALUES (${otherId}, 'session', 'account.verify', ${userId}, ${`nonce-a-${suffix}`}, now() + interval '5 minutes'),
-             (${otherId}, 'session', 'account.verify', ${otherId}, ${`nonce-b-${suffix}`}, now() + interval '5 minutes')`;
+      VALUES (${otherId}, 'session', 'user.email.verify', ${userId}, ${`nonce-a-${suffix}`}, now() + interval '5 minutes'),
+             (${otherId}, 'session', 'user.email.verify', ${otherId}, ${`nonce-b-${suffix}`}, now() + interval '5 minutes')`;
 
     await api`DELETE FROM "user" WHERE id = ${userId}`;
 
     expect(
-      await api`SELECT state, account_state, user_id, actor_user_id, version
+      await api`SELECT status, account_state, user_id, actor_user_id, version
         FROM data_subject_request WHERE id = ${request.id}`,
     ).toEqual([
       {
-        state: "in_progress",
+        status: "in_progress",
         account_state: "deleted",
         user_id: null,
         actor_user_id: null,
@@ -499,17 +453,17 @@ describe.skipIf(skipDatabase)("user erasure as the API role", () => {
         .sort(),
     );
     expect(
-      await api`SELECT updated_by FROM system_settings WHERE key = ${`setting-${suffix}`}`,
-    ).toEqual([{ updated_by: null }]);
+      await api`SELECT updated_by_user_id FROM system_setting WHERE key = 'legal.hosting.locations'`,
+    ).toEqual([{ updated_by_user_id: null }]);
     expect(
-      await api`SELECT updated_by FROM system_secret WHERE key = ${`secret-${suffix}`}`,
-    ).toEqual([{ updated_by: null }]);
+      await api`SELECT updated_by_user_id FROM system_secret WHERE key = 'lettermint.apiToken'`,
+    ).toEqual([{ updated_by_user_id: null }]);
     expect(
-      await api`SELECT actor_id, target_id, target_user_id, details, ip_address, user_agent
+      await api`SELECT actor_user_id, target_id, target_user_id, details, ip_address, user_agent
         FROM admin_audit_log WHERE id = ${audit?.id ?? ""}`,
     ).toEqual([
       {
-        actor_id: null,
+        actor_user_id: null,
         target_id: null,
         target_user_id: null,
         details: null,
@@ -518,30 +472,29 @@ describe.skipIf(skipDatabase)("user erasure as the API role", () => {
       },
     ]);
     expect(
-      await api`SELECT actor_id, target_id, target_user_id FROM admin_audit_log
+      await api`SELECT actor_user_id, target_id, target_user_id FROM admin_audit_log
         WHERE id = ${targetAudit?.id ?? ""}`,
-    ).toEqual([{ actor_id: otherId, target_id: null, target_user_id: null }]);
+    ).toEqual([{ actor_user_id: otherId, target_id: null, target_user_id: null }]);
     expect(
-      await api`SELECT actor_id, details, ip_address FROM admin_audit_log
+      await api`SELECT actor_user_id, details, ip_address FROM admin_audit_log
         WHERE id = ${mention?.id ?? ""}`,
-    ).toEqual([{ actor_id: otherId, details: null, ip_address: "192.0.2.2" }]);
+    ).toEqual([{ actor_user_id: otherId, details: null, ip_address: "192.0.2.2" }]);
     expect(
-      await count(
-        api`SELECT count(*)::int AS n FROM app_logs WHERE source = ${`erased-${suffix}`}`,
-      ),
+      await count(api`SELECT count(*)::int AS n FROM app_log WHERE source = ${`erased-${suffix}`}`),
     ).toBe(0);
     expect(
-      await count(api`SELECT count(*)::int AS n FROM app_logs WHERE source = ${`kept-${suffix}`}`),
+      await count(api`SELECT count(*)::int AS n FROM app_log WHERE source = ${`kept-${suffix}`}`),
     ).toBe(1);
     expect(
-      await api`SELECT id, triggered_by FROM data_manager.jobs
-        WHERE id IN (${job?.id ?? ""}, ${cronJob?.id ?? ""}) ORDER BY triggered_by NULLS FIRST`,
+      await api`SELECT id, trigger, triggered_by_user_id FROM data_manager.job
+        WHERE id IN (${job?.id ?? ""}, ${otherJob?.id ?? ""})
+        ORDER BY triggered_by_user_id NULLS FIRST`,
     ).toEqual([
-      { id: job?.id, triggered_by: null },
-      { id: cronJob?.id, triggered_by: "cron:data-manager-cron" },
+      { id: job?.id, trigger: "api", triggered_by_user_id: null },
+      { id: otherJob?.id, trigger: "api", triggered_by_user_id: otherId },
     ]);
     expect(
-      await api`SELECT target_id FROM admin_action_reauthentication WHERE actor_id = ${otherId}`,
+      await api`SELECT target_id FROM admin_action_reauthentication WHERE actor_user_id = ${otherId}`,
     ).toEqual([{ target_id: otherId }]);
   });
 
@@ -557,25 +510,25 @@ describe.skipIf(skipDatabase)("user erasure as the API role", () => {
       longerDomain: "mail to bob@example.com.evil",
     };
     for (const [name, text] of Object.entries(mentions)) {
-      await api`INSERT INTO app_logs (level, source, msg, metadata)
+      await api`INSERT INTO app_log (level, source, message, metadata)
         VALUES ('info', ${tag}, ${`${name}: ${text}`}, NULL)`;
-      await api`INSERT INTO admin_audit_log (action, details)
-        VALUES (${`${tag}:${name}`}, ${JSON.stringify({ note: text })}::jsonb)`;
+      await api`INSERT INTO admin_audit_log (action, target_id, details)
+        VALUES ('cache.clear', ${`${tag}:${name}`}, ${JSON.stringify({ note: text })}::jsonb)`;
     }
 
     await api`DELETE FROM "user" WHERE id = ${userId}`;
 
-    const remainingLogs = await api<{ msg: string }[]>`
-      SELECT msg FROM app_logs WHERE source = ${tag} ORDER BY msg`;
-    expect(remainingLogs.map((row) => row.msg.split(":")[0])).toEqual([
+    const remainingLogs = await api<{ message: string }[]>`
+      SELECT message FROM app_log WHERE source = ${tag} ORDER BY message`;
+    expect(remainingLogs.map((row) => row.message.split(":")[0])).toEqual([
       "longerDomain",
       "longerLocalPart",
     ]);
-    const audits = await api<{ action: string; scrubbed: boolean }[]>`
-      SELECT action, details IS NULL AS scrubbed FROM admin_audit_log
-      WHERE action LIKE ${`${tag}:%`} ORDER BY action`;
+    const audits = await api<{ target: string; scrubbed: boolean }[]>`
+      SELECT target_id AS target, details IS NULL AS scrubbed FROM admin_audit_log
+      WHERE target_id LIKE ${`${tag}:%`} ORDER BY target_id`;
     expect(
-      Object.fromEntries(audits.map((row) => [row.action.split(":")[1], row.scrubbed])),
+      Object.fromEntries(audits.map((row) => [row.target.split(":")[1], row.scrubbed])),
     ).toEqual({
       inJsonLine: true,
       longerDomain: false,

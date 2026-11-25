@@ -15,8 +15,8 @@ import type {
  * Run Transitous's `src/fetch.py` for every selected feed file. Captures
  * per-feed failures and snapshots pre-fetch mtimes so failure
  * bookkeeping can identify which archives were freshly written. The status
- * is `"ok"` only if every desired source succeeded. Any missing desired
- * source makes the candidate incomplete and therefore returns `"error"`.
+ * is `"succeeded"` only if every desired source succeeded. Any missing desired
+ * source makes the candidate incomplete and therefore returns `"failed"`.
  */
 export const run: StageFn = async (ctx) => {
   const startedAt = ctx.now();
@@ -59,7 +59,7 @@ export const run: StageFn = async (ctx) => {
     // when every selected source failed, partial when only some did.
     const selectedCount = ctx.state.selectedCount ?? 0;
     const fetchedCount = Math.max(0, selectedCount - failures.length);
-    const status: StageStatus = failures.length > 0 ? "error" : "ok";
+    const status: StageStatus = failures.length > 0 ? "failed" : "succeeded";
 
     const finishedAt = ctx.now();
     return {
@@ -81,7 +81,7 @@ export const run: StageFn = async (ctx) => {
     const err = error as Error;
     return {
       stage: "fetch",
-      status: "error",
+      status: "failed",
       startedAt,
       finishedAt: ctx.now(),
       durationMs: Date.now() - start,

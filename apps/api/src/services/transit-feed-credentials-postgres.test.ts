@@ -44,8 +44,12 @@ import { AdminActionReauthentication } from "../account/admin-reauthentication";
 import * as schema from "../db/schema";
 import { dataManagerTokenFile } from "../test/data-manager-token";
 import { jobRunner } from "./job-runner";
-import { decrypt, encrypt } from "./secrets";
+import { decrypt, encrypt, secretAad } from "./secrets";
 import { bindTransitCredentialAuthorization } from "./transit-credential-authorization";
+
+const FEED_AAD = secretAad.serviceSecret("data-manager", "TRANSITOUS_API_KEYS");
+const ORDINARY_AAD = secretAad.serviceSecret("data-manager", "ORDINARY_TOKEN");
+
 import { transitCredentialRevision } from "./transit-credential-revision";
 import { inspectFeedCredentials, previewFeedCredentialChanges } from "./transit-feed-credentials";
 
@@ -134,7 +138,7 @@ describe.skipIf(!enabled)(
         serviceIds: host.loaded.map((service) => service.manifest.id),
       });
       await installPinnedCredentialCatalog(host.root, installation);
-      journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs-v1.json"));
+      journal = await openOpsJobJournal(join(host.infraDir, "state/ops-agent/jobs.json"));
       agent = buildOpsAgentServer({
         tokens: {
           api: host.token,
@@ -340,7 +344,7 @@ describe.skipIf(!enabled)(
       const prior = {
         serviceId: "data-manager",
         key: "TRANSITOUS_API_KEYS",
-        ...encrypt('{"orphan":" untouched "}'),
+        ...encrypt('{"orphan":" untouched "}', FEED_AAD),
         createdAt: new Date(),
         updatedAt: new Date(),
         updatedBy: null,
@@ -359,7 +363,7 @@ describe.skipIf(!enabled)(
         challenge = await reauth.start({
           actorId: actor,
           startingSessionId: old.id,
-          purpose: "transit.credentials",
+          purpose: "transit.credential.update",
           targetId: catalog,
           intentFingerprint: preview.intentFingerprint,
         });
@@ -400,6 +404,7 @@ describe.skipIf(!enabled)(
                 retained: "existing",
                 unselected: "preserved orphan",
               }),
+              FEED_AAD,
             ),
           )
           .where(eq(schema.serviceSecret.serviceId, "data-manager"));
@@ -412,12 +417,12 @@ describe.skipIf(!enabled)(
         vi.stubEnv("OPENMAPX_SECRETS_KEY", Buffer.alloc(32, 0x92).toString("base64url"));
         await state.fixture.db
           .update(schema.serviceSecret)
-          .set(encrypt(importedMap))
+          .set(encrypt(importedMap, FEED_AAD))
           .where(eq(schema.serviceSecret.key, "TRANSITOUS_API_KEYS"));
         await state.fixture.db.insert(schema.serviceSecret).values({
           serviceId: "data-manager",
           key: "ORDINARY_TOKEN",
-          ...encrypt("synthetic ordinary credential"),
+          ...encrypt("synthetic ordinary credential", ORDINARY_AAD),
         });
         const { exportCredentialSelection } = await import(
           "./configuration-migration/credential-preview"
@@ -441,6 +446,7 @@ describe.skipIf(!enabled)(
               retained: "existing",
               unselected: "preserved orphan",
             }),
+            FEED_AAD,
           ),
         });
         const [prior] = await state.fixture.db.select().from(schema.serviceSecret);
@@ -471,14 +477,14 @@ describe.skipIf(!enabled)(
           importProof = await reauth.start({
             actorId: initial.actorId,
             startingSessionId: sessionId,
-            purpose: "credentials.import",
+            purpose: "credential.import",
             targetId: preview.previewId,
             intentFingerprint: preview.intentFingerprint,
           }),
           transitProof = await reauth.start({
             actorId: initial.actorId,
             startingSessionId: sessionId,
-            purpose: "transit.credentials",
+            purpose: "transit.credential.update",
             targetId: catalog,
             intentFingerprint: preview.intentFingerprint,
             nonce: importProof.nonce,
@@ -545,22 +551,18 @@ describe.skipIf(!enabled)(
         const rows = await state.fixture.db.select().from(schema.serviceSecret),
           ordinary = rows.find((r) => r.key === "ORDINARY_TOKEN"),
           managed = rows.find((r) => r.key === "TRANSITOUS_API_KEYS");
-        expect(ordinary && decrypt(ordinary.ciphertext, ordinary.iv, ordinary.tag)).toBe(
-          "synthetic ordinary credential",
-        );
-        expect(managed && JSON.parse(decrypt(managed.ciphertext, managed.iv, managed.tag))).toEqual(
-          {
-            "de/A": "a".repeat(7000),
-            orphan: "b".repeat(7000),
-            retained: "c".repeat(7000),
-            unselected: "preserved orphan",
-          },
-        );
+        expect(ordinary && decrypt(ordinary, ORDINARY_AAD)).toBe("synthetic ordinary credential");
+        expect(managed && JSON.parse(decrypt(managed, FEED_AAD))).toEqual({
+          "de/A": "a".repeat(7000),
+          orphan: "b".repeat(7000),
+          retained: "c".repeat(7000),
+          unselected: "preserved orphan",
+        });
         const proofs = await state.fixture.db.select().from(schema.adminActionReauthentication);
         expect(
           proofs
             .filter((p) => [importProof.challengeId, transitProof.challengeId].includes(p.id))
-            .map((p) => p.state),
+            .map((p) => p.status),
         ).toEqual(["consumed", "consumed"]);
         expect(dm.preparePosts).toBe(1);
         expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(1);
@@ -582,7 +584,10 @@ describe.skipIf(!enabled)(
             format: "openmapx-configuration",
             version: 1,
             exportedAt: new Date().toISOString(),
-            settings: { instanceName: "Synthetic migrated instance", passwordMinLength: 12 },
+            settings: {
+              "legal.hosting.locations": "Synthetic migrated locations",
+              "auth.passwordMinLength": 12,
+            },
             platform: { version: 1, backupRetentionDays: { source: "database", value: 60 } },
             integrations: [],
             serviceConfigs: [],
@@ -612,12 +617,12 @@ describe.skipIf(!enabled)(
           },
         });
         expect(result.outcome).toBe("partial");
-        expect(result.steps.find((s) => s.id === "passwordMinLength")).toMatchObject({
+        expect(result.steps.find((s) => s.id === "auth.passwordMinLength")).toMatchObject({
           scope: "pending-auth",
           status: "pending",
         });
-        const settings = await state.fixture.db.select().from(schema.systemSettings);
-        expect(settings.find((r) => r.key === "passwordMinLength")?.value).toBe(12);
+        const settings = await state.fixture.db.select().from(schema.systemSetting);
+        expect(settings.find((r) => r.key === "auth.passwordMinLength")?.value).toBe(12);
         await expect(
           (await import("../account/auth-policy")).loadAuthPolicy(state.fixture.db),
         ).resolves.toMatchObject({ passwordMinLength: 8 });
@@ -645,10 +650,10 @@ describe.skipIf(!enabled)(
           .select()
           .from(schema.adminActionReauthentication)
           .where(eq(schema.adminActionReauthentication.id, competing.challenge.challengeId));
-        expect(unusedProof?.state).toBe("completed");
+        expect(unusedProof?.status).toBe("completed");
         expect(result.configuration).toMatchObject({ outcome: "committed", followUp: "complete" });
         const row = itemAt(await state.fixture.db.select().from(schema.serviceSecret), 0);
-        expect(JSON.parse(decrypt(row.ciphertext, row.iv, row.tag))).toEqual({
+        expect(JSON.parse(decrypt(row, FEED_AAD))).toEqual({
           orphan: " untouched ",
           "de/A": "synthetic-private-key",
         });
@@ -657,7 +662,7 @@ describe.skipIf(!enabled)(
           .select()
           .from(schema.adminActionReauthentication)
           .where(eq(schema.adminActionReauthentication.id, challenge.challengeId));
-        expect(proof?.state).toBe("consumed");
+        expect(proof?.status).toBe("consumed");
         // The first prepare reply is lost; the agent repeats the same body.
         expect(dm.preparePosts).toBe(2);
         // So is the first /link answer: the agent asks again under the same key and
@@ -665,9 +670,9 @@ describe.skipIf(!enabled)(
         // lease, beside its prepared fence.
         expect(dm.posts).toBe(2);
         const links = await state.fixture
-          .sql`SELECT status, execution_input FROM data_manager.jobs WHERE kind = 'generation-link' AND admitted_at >= ${new Date(startedAt).toISOString()}::text::timestamptz`;
+          .sql`SELECT status, execution_input FROM data_manager.job WHERE kind = 'generation-link' AND admitted_at >= ${new Date(startedAt).toISOString()}::text::timestamptz`;
         expect(links).toHaveLength(1);
-        expect(links[0]).toMatchObject({ status: "ok" });
+        expect(links[0]).toMatchObject({ status: "succeeded" });
         expect(itemAt(links, 0).execution_input.leaseId).toEqual(expect.any(String));
         expect(await dm.fenceStates()).toEqual(["settled"]);
         expect(dropped.size).toBe(3);
@@ -684,7 +689,7 @@ describe.skipIf(!enabled)(
         expect(await jobRunner.applyImmediateTransitCredentials(input)).toEqual(result);
         expect(dm.preparePosts).toBe(2);
         const [job] = await state.fixture.db.select().from(schema.adminJob);
-        expect(job?.status).toBe("success");
+        expect(job?.status).toBe("succeeded");
         const logs = await state.fixture.db.select().from(schema.adminJobLog),
           audit = await state.fixture.db.select().from(schema.adminAuditLog);
         expect(JSON.stringify({ logs, audit })).not.toContain("synthetic-private-key");
@@ -760,7 +765,7 @@ describe.skipIf(!enabled)(
           [proof] = await state.fixture.db.select().from(schema.adminActionReauthentication),
           [secret] = await state.fixture.db.select().from(schema.serviceSecret);
         assert.isDefined(before, "the credential job row is missing");
-        expect(proof?.state).toBe(phase === "rows_saved" ? "consumed" : "completed");
+        expect(proof?.status).toBe(phase === "rows_saved" ? "consumed" : "completed");
         expect((before.protocol as { candidate: { phase: string } }).candidate.phase).toBe(phase);
         first.child.kill("SIGKILL");
         await first.exited;
@@ -782,7 +787,7 @@ describe.skipIf(!enabled)(
           [afterSecret] = await state.fixture.db.select().from(schema.serviceSecret);
         assert.isDefined(after, "the credential job row is missing after recovery");
         expect(after.id).toBe(before.id);
-        expect(after.status).toBe(phase === "rows_saved" ? "success" : "failed");
+        expect(after.status).toBe(phase === "rows_saved" ? "succeeded" : "failed");
         expect(afterProof?.consumedAt).toEqual(proof?.consumedAt);
         expect(afterSecret).toEqual(secret);
         expect(dm.preparePosts).toBe(1);
@@ -825,7 +830,7 @@ describe.skipIf(!enabled)(
             .from(schema.adminActionReauthentication)
             .where(eq(schema.adminActionReauthentication.id, challenge.challengeId));
         expect(after).toEqual(before);
-        expect(proof?.state).toBe("completed");
+        expect(proof?.status).toBe("completed");
         expect(dm.preparePosts).toBe(0);
         expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(0);
       }, 90000);
@@ -840,7 +845,7 @@ describe.skipIf(!enabled)(
         authorizePreparedFeedCredentialPatch,
       } = await import("./transit-feed-credential-participant");
       const attempted = Promise.withResolvers<void>();
-      jobRunner.register("test.feed-credential-review", async (ctx) => {
+      jobRunner.register("integration.reload", async (ctx) => {
         try {
           await withAdministrativeConfigurationJob(ctx, () =>
             withAdministrativeConfigurationWriter(
@@ -875,7 +880,7 @@ describe.skipIf(!enabled)(
           throw error;
         }
       });
-      const id = await jobRunner.enqueue("test.feed-credential-review", {}, input.actorId);
+      const id = await jobRunner.enqueue("integration.reload", {}, input.actorId);
       const outcome = await attempted.promise.then(
         () => null,
         (error) => error,
@@ -885,7 +890,7 @@ describe.skipIf(!enabled)(
           .select()
           .from(schema.adminJob)
           .where(eq(schema.adminJob.id, id));
-        expect(["success", "failed"]).toContain(job?.status);
+        expect(["succeeded", "failed"]).toContain(job?.status);
       });
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(outcome).toBeInstanceOf(Error);
@@ -894,7 +899,7 @@ describe.skipIf(!enabled)(
         .select()
         .from(schema.adminActionReauthentication)
         .where(eq(schema.adminActionReauthentication.id, challenge.challengeId));
-      expect(proof?.state).toBe("completed");
+      expect(proof?.status).toBe("completed");
       expect(dm.preparePosts).toBe(0);
       expect(host.calls.filter((args) => args.includes("--force-recreate"))).toHaveLength(0);
     }, 90000);

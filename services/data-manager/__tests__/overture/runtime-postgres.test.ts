@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { OVERTURE_PLACES_SCHEMA_VERSION } from "@openmapx/core/published-data";
 import type { DatabaseClient } from "@openmapx/integration-framework";
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
 import type postgres from "postgres";
@@ -80,6 +81,22 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
     await pg.sql.unsafe(buildSchemaDDL("overture_places"));
   }, 120_000);
 
+  /** Runs `work` while the fixtures' release is the snapshot readers may serve. */
+  async function withPublishedRelease(work: () => Promise<void>): Promise<void> {
+    await pg.sql.unsafe(
+      `INSERT INTO overture_places.conflation_state
+         (release, region, place_count, status, sources_catalogue, schema_version)
+       VALUES ('2026-07-22.0', 'europe/germany/berlin', 1, 'completed',
+               '[{"sourceId":"overture","name":"Overture Maps"}]', $1)`,
+      [OVERTURE_PLACES_SCHEMA_VERSION],
+    );
+    try {
+      await work();
+    } finally {
+      await pg.sql.unsafe(`DELETE FROM overture_places.conflation_state`);
+    }
+  }
+
   afterAll(async () => {
     await dataManagerSql?.end({ timeout: 2 });
     await pg?.stop();
@@ -115,10 +132,10 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
     // Matching release exposes captured sources_catalogue receipts from conflation_state.
     await pg.sql.unsafe(
       `INSERT INTO overture_places.conflation_state
-         (release, region, place_count, status, sources_catalogue)
+         (release, region, place_count, status, sources_catalogue, schema_version)
        VALUES
          ('2026-07-22.0', 'europe/germany/berlin', 1, 'completed',
-          '[{"sourceId":"overture","name":"Overture Maps"},{"sourceId":"meta-places","name":"Meta Places"}]')`,
+          '[{"sourceId":"overture","name":"Overture Maps"},{"sourceId":"meta-places","name":"Meta Places"}]', 1)`,
     );
     const withState = await overtureProvider.search("cafes", bbox);
     const results = Array.isArray(withState) ? withState : withState.results;
@@ -161,16 +178,18 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
       execute: (query, params = []) => pg.sql.unsafe(query, params as never[]),
     } as DatabaseClient;
 
-    await expect(
-      resolveGers(
-        database,
-        { amenity: "cafe" },
-        {
-          coordinates: [6.0838, 50.7752],
-          name: "Cafe Aachen",
-        },
-      ),
-    ).resolves.toBe("gers-nearby");
+    await withPublishedRelease(() =>
+      expect(
+        resolveGers(
+          database,
+          { amenity: "cafe" },
+          {
+            coordinates: [6.0838, 50.7752],
+            name: "Cafe Aachen",
+          },
+        ),
+      ).resolves.toBe("gers-nearby"),
+    );
   });
 
   it("does not exclude east-west candidates inside 150 metres at European latitudes", async () => {
@@ -192,16 +211,18 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
       execute: (query, params = []) => pg.sql.unsafe(query, params as never[]),
     } as DatabaseClient;
 
-    await expect(
-      resolveGers(
-        database,
-        { amenity: "cafe" },
-        {
-          coordinates: [6.0838, 50.7752],
-          name: "Eastside Cafe",
-        },
-      ),
-    ).resolves.toBe("gers-east-120m");
+    await withPublishedRelease(() =>
+      expect(
+        resolveGers(
+          database,
+          { amenity: "cafe" },
+          {
+            coordinates: [6.0838, 50.7752],
+            name: "Eastside Cafe",
+          },
+        ),
+      ).resolves.toBe("gers-east-120m"),
+    );
   });
 
   it("persists a score crash, resumes from the durable phase, and invalidates on PBF change", async () => {
@@ -211,8 +232,8 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
     writeFileSync(join(osmDir, "europe-germany-berlin.osm.pbf"), "snapshot-one");
     await pg.sql.unsafe(
       `INSERT INTO overture_places.conflation_state
-         (release, region, place_count, status, sources_catalogue)
-       VALUES ('2026-07-22.0', 'europe/germany/berlin', 2, 'pending', '[{"sourceId":"overture","name":"Overture Maps"}]')`,
+         (release, region, place_count, status, sources_catalogue, schema_version)
+       VALUES ('2026-07-22.0', 'europe/germany/berlin', 2, 'pending', '[{"sourceId":"overture","name":"Overture Maps"}]', 1)`,
     );
 
     let fingerprint = "snapshot-one";
@@ -607,15 +628,15 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
     await pg.sql.unsafe(
       `INSERT INTO "${live}".conflation_state
          (release, region, place_count, status, phase, source_fingerprint,
-          emitted_count, extracted_count, sources_catalogue)
+          emitted_count, extracted_count, sources_catalogue, schema_version)
        VALUES ('2026-07-22.0', 'europe/germany/berlin', 2, 'completed', 'complete',
-               'same-pbf', 2, 1, '[{"sourceId":"overture","name":"Old Overture"}]')`,
+               'same-pbf', 2, 1, '[{"sourceId":"overture","name":"Old Overture"}]', 1)`,
     );
     await pg.sql.unsafe(
       `INSERT INTO "${staging}".conflation_state
-         (release, region, place_count, status, sources_catalogue)
+         (release, region, place_count, status, sources_catalogue, schema_version)
        VALUES ('2026-08-19.0', 'europe/germany/berlin', 3, 'pending',
-               '[{"sourceId":"overture","name":"New Overture"}]')`,
+               '[{"sourceId":"overture","name":"New Overture"}]', 1)`,
     );
 
     await ingestModule.activateOvertureStagingSchema(

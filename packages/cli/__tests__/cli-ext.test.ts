@@ -1,3 +1,6 @@
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { AdminExtensionInstallPreview } from "@openmapx/core/api-admin-sdk";
 import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -44,6 +47,7 @@ const catalogEntry = {
   platformVersion: "1",
   installed: true,
   installedVersion: "1",
+  installedCritical: null,
   hasUpdate: true,
   removed: null,
   critical: null,
@@ -63,6 +67,7 @@ const installed = {
   ],
   hasUpdate: true,
   latestVersion: "2",
+  critical: null,
 };
 let fetchMock: ReturnType<typeof vi.fn<typeof fetch>>;
 let savedExitCode: typeof process.exitCode;
@@ -74,7 +79,20 @@ function makeProgram(): Command {
   registerExtCommands(program);
   return program;
 }
-const run = (...args: string[]) => makeProgram().parseAsync(["ext", ...args], { from: "user" });
+const COOKIE = "better-auth.session_token=synthetic-session.signature";
+let sessionDir: string;
+let sessionFile: string;
+function writeSession(name: string, cookie: string, mode = 0o600): string {
+  const path = join(sessionDir, name);
+  writeFileSync(path, cookie, { mode });
+  chmodSync(path, mode);
+  return path;
+}
+/** Every action takes the administrator session file, as `system update` does. */
+const withSession = (args: string[]) =>
+  args.includes("--session-file") ? args : [...args, "--session-file", sessionFile];
+const run = (...args: string[]) =>
+  makeProgram().parseAsync(["ext", ...withSession(args)], { from: "user" });
 function request(index = 0): { url: string; init: RequestInit } {
   const call = fetchMock.mock.calls[index];
   if (!call) throw new Error(`Missing request ${index}`);
@@ -101,9 +119,9 @@ async function expectFailure(args: string[], calls = 1): Promise<void> {
 beforeEach(() => {
   savedExitCode = process.exitCode;
   process.exitCode = 0;
-  vi.stubEnv("API_URL", undefined);
-  vi.stubEnv("OPENMAPX_API_URL", undefined);
-  vi.stubEnv("OPENMAPX_LOCAL_ADMIN_TOKEN", undefined);
+  sessionDir = mkdtempSync(join(tmpdir(), "openmapx-cli-ext-"));
+  sessionFile = writeSession("admin-session", COOKIE);
+  vi.stubEnv("DOMAIN", "maps.example.test");
   fetchMock = vi.fn<typeof fetch>().mockResolvedValue(respond({ extensions: [] }));
   vi.stubGlobal("fetch", fetchMock);
   vi.spyOn(console, "log").mockImplementation(() => {});
@@ -113,6 +131,7 @@ beforeEach(() => {
   });
 });
 afterEach(() => {
+  rmSync(sessionDir, { recursive: true, force: true });
   process.exitCode = savedExitCode;
   vi.useRealTimers();
   vi.unstubAllGlobals();
@@ -138,7 +157,7 @@ describe("extension CLI through the final generated SDK", () => {
     );
     await run("browse", "-q", "map / %?#雪", "--trust", "community", "--type", "service");
     expect(request().url).toBe(
-      "http://localhost:3001/api/admin/extensions/catalog?q=map+%2F+%25%3F%23%E9%9B%AA&trust=community&type=service",
+      "https://maps.example.test/api/admin/extensions/catalog?q=map+%2F+%25%3F%23%E9%9B%AA&trust=community&type=service",
     );
     expect(request().init.method).toBe("GET");
     for (const value of [
@@ -162,7 +181,7 @@ describe("extension CLI through the final generated SDK", () => {
     await run("list");
     expect(stdout()).toContain("(catalog is empty)");
     expect(stdout()).toContain("(no extensions installed)");
-    expect(request().url).toBe("http://localhost:3001/api/admin/extensions/catalog");
+    expect(request().url).toBe("https://maps.example.test/api/admin/extensions/catalog");
   });
   it("preserves installed component labels and update arrows", async () => {
     fetchMock.mockResolvedValueOnce(
@@ -178,42 +197,59 @@ describe("extension CLI through the final generated SDK", () => {
     ])
       expect(stdout()).toContain(value);
   });
-  it("resolves API_URL then OPENMAPX_API_URL then localhost late per action", async () => {
-    const program = makeProgram();
-    vi.stubEnv("OPENMAPX_API_URL", "https://fallback.test");
-    vi.stubEnv("API_URL", "https://preferred.test/");
-    await program.parseAsync(["ext", "list"], { from: "user" });
-    vi.stubEnv("API_URL", undefined);
+  it("reaches the origin system update uses: https://DOMAIN, or --api-origin, late per action", async () => {
+    vi.stubEnv("OPENMAPX_API_URL", "https://ignored.test/");
     await run("list");
-    vi.stubEnv("OPENMAPX_API_URL", undefined);
+    vi.stubEnv("DOMAIN", "other.example.test");
     await run("list");
+    await run("list", "--api-origin", "https://admin.example.test");
     expect(fetchMock.mock.calls.map(([url]) => String(url))).toEqual([
-      "https://preferred.test/api/admin/extensions/installed",
-      "https://fallback.test/api/admin/extensions/installed",
-      "http://localhost:3001/api/admin/extensions/installed",
+      "https://maps.example.test/api/admin/extensions/installed",
+      "https://other.example.test/api/admin/extensions/installed",
+      "https://admin.example.test/api/admin/extensions/installed",
     ]);
   });
-  it("always sends the late trimmed local-admin header and omits credentials without cookies or Origin", async () => {
-    const program = makeProgram();
+  it("sends the session cookie and its origin, omits browser credentials and refuses redirects", async () => {
     await run("list");
-    vi.stubEnv("OPENMAPX_LOCAL_ADMIN_TOKEN", "  synthetic-token  \n");
-    await program.parseAsync(["ext", "list"], { from: "user" });
-    vi.stubEnv("OPENMAPX_LOCAL_ADMIN_TOKEN", "   ");
-    await run("list");
-    for (const [index, value] of ["", "synthetic-token", ""].entries()) {
-      const { init } = request(index);
-      const headers = new Headers(init.headers);
-      expect(headers.get("x-openmapx-local-admin")).toBe(value);
-      expect(init.credentials).toBe("omit");
-      for (const name of ["cookie", "origin", "authorization"])
-        expect(headers.has(name)).toBe(false);
-    }
-    expect(`${stdout()}${stderr()}`).not.toContain("synthetic-token");
+    const { init } = request();
+    const headers = new Headers(init.headers);
+    expect(headers.get("cookie")).toBe(COOKIE);
+    expect(headers.get("origin")).toBe("https://maps.example.test");
+    expect(headers.has("authorization")).toBe(false);
+    expect(init.credentials).toBe("omit");
+    expect(init.redirect).toBe("error");
+    expect(`${stdout()}${stderr()}`).not.toContain("synthetic-session");
+  });
+  it("requires --session-file before any request", async () => {
+    await expect(makeProgram().parseAsync(["ext", "list"], { from: "user" })).rejects.toMatchObject(
+      { code: "commander.missingMandatoryOptionValue" },
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it.each([
+    ["a session file others can read", () => writeSession("open", COOKIE, 0o644)],
+    ["a file that is not a session cookie", () => writeSession("other", "token=SECRET_SENTINEL")],
+  ])("refuses %s without sending anything", async (_label, write) => {
+    await run("list", "--session-file", write());
+    expect(process.exitCode).toBe(1);
+    expect(stderr()).toMatch(/Admin session file must contain only a Better Auth session cookie/);
+    expect(stderr()).not.toContain("SECRET_SENTINEL");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it("refuses a plain HTTP origin unless loopback HTTP is explicitly allowed", async () => {
+    await run("list", "--api-origin", "http://maps.example.test");
+    expect(process.exitCode).toBe(1);
+    expect(stderr()).toMatch(/Use an HTTPS API origin/);
+    expect(fetchMock).not.toHaveBeenCalled();
+    process.exitCode = 0;
+    await run("list", "--api-origin", "http://127.0.0.1:3001", "--allow-loopback-http");
+    expect(process.exitCode).toBe(0);
+    expect(request().url).toBe("http://127.0.0.1:3001/api/admin/extensions/installed");
   });
   it("prints the complete inspected preview, including IPv6/protocol/commit/security/provenance/fingerprint", async () => {
     fetchMock.mockResolvedValueOnce(respond(preview));
     await run("preview", "synthetic");
-    expect(request().url).toBe("http://localhost:3001/api/admin/extensions/install-preview");
+    expect(request().url).toBe("https://maps.example.test/api/admin/extensions/install-preview");
     expect(JSON.parse(String(request().init.body))).toEqual({ id: "synthetic" });
     const rendered = vi
       .mocked(console.log)
@@ -230,8 +266,8 @@ describe("extension CLI through the final generated SDK", () => {
       acceptedAfter();
       await run("install", selector);
       const body = selector.startsWith("https:") ? { manifestUrl: selector } : { id: selector };
-      expect(request().url).toBe("http://localhost:3001/api/admin/extensions/install-preview");
-      expect(request(1).url).toBe("http://localhost:3001/api/admin/extensions/install");
+      expect(request().url).toBe("https://maps.example.test/api/admin/extensions/install-preview");
+      expect(request(1).url).toBe("https://maps.example.test/api/admin/extensions/install");
       expect(JSON.parse(String(request().init.body))).toEqual(body);
       expect(JSON.parse(String(request(1).init.body))).toEqual(body);
       expect(request(1).init.method).toBe("POST");
@@ -278,7 +314,9 @@ describe("extension CLI through the final generated SDK", () => {
   it("does not offer a --yes host-port bypass", async () => {
     const program = makeProgram();
     await expect(
-      program.parseAsync(["ext", "install", "synthetic", "--yes"], { from: "user" }),
+      program.parseAsync(["ext", ...withSession(["install", "synthetic", "--yes"])], {
+        from: "user",
+      }),
     ).rejects.toMatchObject({ code: "commander.unknownOption", exitCode: 1 });
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -305,7 +343,7 @@ describe("extension CLI through the final generated SDK", () => {
     await run("update", "space % / ? # 雪");
     expect(JSON.parse(String(request().init.body))).toEqual({ id: "space % / ? # 雪" });
     expect(request(1).url).toBe(
-      "http://localhost:3001/api/admin/extensions/update/space%20%25%20%2F%20%3F%20%23%20%E9%9B%AA",
+      "https://maps.example.test/api/admin/extensions/update/space%20%25%20%2F%20%3F%20%23%20%E9%9B%AA",
     );
     expect(request(1).init.method).toBe("POST");
     expect(request(1).init.body).toBeUndefined();
@@ -316,7 +354,7 @@ describe("extension CLI through the final generated SDK", () => {
     fetchMock.mockResolvedValueOnce(respond({ jobId: "job-synthetic-1" }, 202));
     await run("remove", "space % / ? # 雪");
     expect(request().url).toBe(
-      "http://localhost:3001/api/admin/extensions/space%20%25%20%2F%20%3F%20%23%20%E9%9B%AA",
+      "https://maps.example.test/api/admin/extensions/space%20%25%20%2F%20%3F%20%23%20%E9%9B%AA",
     );
     expect(request().init.method).toBe("DELETE");
     expect(request().init.body).toBeUndefined();
@@ -356,9 +394,8 @@ describe("extension CLI through the final generated SDK", () => {
     await expectFailure(["update", "synthetic", "--host-port-confirmation", "c".repeat(64)]);
   });
   it.each(["browse", "list", "preview", "install", "update", "remove"])(
-    "%s sends local-admin auth without browser credentials on every request",
+    "%s sends the administrator session without browser credentials on every request",
     async (action) => {
-      vi.stubEnv("OPENMAPX_LOCAL_ADMIN_TOKEN", "  synthetic-token  ");
       if (action === "browse")
         fetchMock.mockResolvedValueOnce(
           respond({ entries: [], total: 0, revocationDataStale: false }),
@@ -372,16 +409,15 @@ describe("extension CLI through the final generated SDK", () => {
       for (const [, init] of fetchMock.mock.calls) {
         const headers = new Headers(init?.headers);
         expect(init?.credentials).toBe("omit");
-        expect(headers.get("x-openmapx-local-admin")).toBe("synthetic-token");
-        for (const name of ["cookie", "origin", "authorization"])
-          expect(headers.has(name)).toBe(false);
+        expect(init?.redirect).toBe("error");
+        expect(headers.get("cookie")).toBe(COOKIE);
+        expect(headers.get("origin")).toBe("https://maps.example.test");
       }
-      expect(`${stdout()}${stderr()}`).not.toContain("synthetic-token");
+      expect(`${stdout()}${stderr()}`).not.toContain("synthetic-session");
     },
   );
-  it("retains the invocation origin and selector across preview while another action changes environment", async () => {
-    vi.stubEnv("API_URL", "https://first.test");
-    vi.stubEnv("OPENMAPX_LOCAL_ADMIN_TOKEN", "  first-token  ");
+  it("retains the invocation origin, session and selector across preview while another action runs", async () => {
+    vi.stubEnv("DOMAIN", "first.test");
     let release!: (response: Response) => void;
     fetchMock.mockImplementationOnce(
       () =>
@@ -390,9 +426,12 @@ describe("extension CLI through the final generated SDK", () => {
         }),
     );
     const install = run("install", "synthetic");
-    vi.stubEnv("API_URL", "https://second.test");
-    vi.stubEnv("OPENMAPX_LOCAL_ADMIN_TOKEN", "  second-token  ");
-    await run("list");
+    vi.stubEnv("DOMAIN", "second.test");
+    await run(
+      "list",
+      "--session-file",
+      writeSession("second", "better-auth.session_token=second-session"),
+    );
     fetchMock.mockResolvedValueOnce(respond({ jobId: "job-synthetic-1" }, 202));
     release(respond(noPorts));
     await install;
@@ -402,7 +441,11 @@ describe("extension CLI through the final generated SDK", () => {
       "https://first.test/api/admin/extensions/install",
     ]);
     expect(JSON.parse(String(request(2).init.body))).toEqual({ id: "synthetic" });
-    expect(new Headers(request().init.headers).get("x-openmapx-local-admin")).toBe("first-token");
+    expect(new Headers(request(2).init.headers).get("cookie")).toBe(COOKIE);
+    expect(new Headers(request(2).init.headers).get("origin")).toBe("https://first.test");
+    expect(new Headers(request(1).init.headers).get("cookie")).toBe(
+      "better-auth.session_token=second-session",
+    );
   });
 });
 
@@ -506,7 +549,7 @@ describe("safe finite CLI failures without retry", () => {
       respond({ error: "SECRET_SENTINEL", retryAfter: 30 }, 429, { "Retry-After": "30" }),
     );
     await expectFailure(["install", "synthetic", "--host-port-confirmation", fingerprint], 2);
-    expect(request(1).url).toBe("http://localhost:3001/api/admin/extensions/install-preview");
+    expect(request(1).url).toBe("https://maps.example.test/api/admin/extensions/install-preview");
     expect(stderr()).toContain("Retry-After (30s)");
   });
   it("does not reflect a malformed Retry-After header", async () => {
@@ -517,8 +560,8 @@ describe("safe finite CLI failures without retry", () => {
     );
     await expectFailure(["remove", "synthetic"]);
   });
-  it("does not expose fetch exceptions or token values", async () => {
-    vi.stubEnv("OPENMAPX_LOCAL_ADMIN_TOKEN", "SECRET_SENTINEL");
+  it("does not expose fetch exceptions or the session cookie", async () => {
+    sessionFile = writeSession("sentinel", "better-auth.session_token=SECRET_SENTINEL");
     fetchMock.mockRejectedValueOnce(new Error("SECRET_SENTINEL private path"));
     await expectFailure(["remove", "synthetic"]);
   });

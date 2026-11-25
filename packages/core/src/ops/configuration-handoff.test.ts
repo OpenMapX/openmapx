@@ -79,7 +79,7 @@ it("bounds private platform intent without admitting plaintext recovery credenti
   expect(
     platformConfigurationIntentSchema.safeParse({
       ...value,
-      authorization: { ciphertext: "a".repeat(8193), iv: "x", tag: "x" },
+      authorization: { ciphertext: "a".repeat(8193), iv: "x", tag: "x", keyVersion: 1 },
     }).success,
   ).toBe(false);
 });

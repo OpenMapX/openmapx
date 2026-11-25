@@ -295,7 +295,7 @@ describe("promote stage", () => {
     it("stops primary then staging before activating the candidate", async () => {
       const { ctx } = readyFixture(layout);
       const result = await promoteRun(ctx);
-      expect(result.status).toBe("ok");
+      expect(result.status).toBe("succeeded");
       expect(opsCalls.map(({ kind }) => kind)).toEqual([
         "motis.primary.stop",
         "motis.staging.stop",
@@ -310,7 +310,7 @@ describe("promote stage", () => {
       const { ctx } = readyFixture(layout);
       opsBehaviour.stopResult = stopResult;
       const result = await promoteRun(ctx);
-      expect(result.status).toBe("ok");
+      expect(result.status).toBe("succeeded");
       expect(opsCalls.map(({ kind }) => kind)).toEqual([
         "motis.primary.stop",
         "motis.staging.stop",
@@ -327,7 +327,7 @@ describe("promote stage", () => {
       const before = directorySnapshot(fx.dataDir);
       opsBehaviour.stopResult = stopResult;
       const result = await promoteRun(ctx);
-      expect(result.status).toBe("error");
+      expect(result.status).toBe("failed");
       expect(result.message).toMatch(/primary.*stop.*confirm/i);
       expect(opsCalls.map(({ kind }) => kind)).toEqual(["motis.primary.stop"]);
       expect(directorySnapshot(fx.dataDir)).toEqual(before);
@@ -341,7 +341,7 @@ describe("promote stage", () => {
         const before = directorySnapshot(fx.dataDir);
         opsBehaviour.stopFailure = { kind: "motis.primary.stop", message };
         const result = await promoteRun(ctx);
-        expect(result.status).toBe("error");
+        expect(result.status).toBe("failed");
         expect(result.message).toContain(message);
         expect(opsCalls.map(({ kind }) => kind)).toEqual(["motis.primary.stop"]);
         expect(directorySnapshot(fx.dataDir)).toEqual(before);
@@ -354,7 +354,7 @@ describe("promote stage", () => {
       const before = directorySnapshot(fx.dataDir);
       opsBehaviour.stopFailure = { kind: "motis.staging.stop", message: "staging stop timed out" };
       const result = await promoteRun(ctx);
-      expect(result.status).toBe("error");
+      expect(result.status).toBe("failed");
       expect(result.message).toContain("staging stop timed out");
       expect(result.message).toContain("old primary restart acknowledged on unchanged live data");
       expect(opsCalls.map(({ kind }) => kind)).toEqual([
@@ -374,7 +374,7 @@ describe("promote stage", () => {
         opsBehaviour.stopResult = { changed: false, state };
         opsBehaviour.stopFailure = { kind: "motis.staging.stop", message: "staging stop failed" };
         const result = await promoteRun(ctx);
-        expect(result.status).toBe("error");
+        expect(result.status).toBe("failed");
         expect(result.message).toContain("staging stop failed");
         expect(opsCalls.map(({ kind }) => kind)).toEqual([
           "motis.primary.stop",
@@ -420,7 +420,7 @@ describe("promote stage", () => {
         return { changed: true, state: "stopped" };
       });
       const result = await promoteRun(ctx);
-      expect(result.status).toBe("error");
+      expect(result.status).toBe("failed");
       expect(result.message).toMatch(/identity changed/);
       expect(opsCalls.map(({ kind }) => kind)).toEqual([
         "motis.primary.stop",
@@ -444,7 +444,7 @@ describe("promote stage", () => {
         return { changed: true, state: "stopped" };
       });
       const result = await promoteRun(ctx);
-      expect(result.status).toBe("error");
+      expect(result.status).toBe("failed");
       expect(result.message).toContain("staging stop timed out");
       expect(result.message).not.toContain(
         "old primary restart acknowledged on unchanged live data",
@@ -463,7 +463,7 @@ describe("promote stage", () => {
       opsBehaviour.stopFailure = { kind: "motis.staging.stop", message: "staging stop timed out" };
       opsBehaviour.failRestart = true;
       const result = await promoteRun(ctx);
-      expect(result.status).toBe("error");
+      expect(result.status).toBe("failed");
       expect(result.message).toContain("staging stop timed out");
       expect(result.message).not.toContain(
         "old primary restart acknowledged on unchanged live data",
@@ -504,7 +504,7 @@ describe("promote stage", () => {
         },
       }),
     );
-    expect(result.status).toBe("error");
+    expect(result.status).toBe("failed");
     expect(recordPromotedSource).not.toHaveBeenCalled();
     expect(result.message).toMatch(/staging probe "health" failed/);
     expect(opsCalls).toEqual([]);
@@ -531,7 +531,7 @@ describe("promote stage", () => {
       },
     });
     const result = await promoteRun(ctx);
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(recordPromotedSource).toHaveBeenCalledWith(
       expect.objectContaining({ sourceId: "catalog:de:demo" }),
     );
@@ -565,7 +565,7 @@ describe("promote stage", () => {
     chmodSync(fx.stagingDir, 0o777);
     const runner = vi.fn(async () => {});
     const result = await promoteRun(makeCtx({ dataDir: fx.dataDir, runner }));
-    expect(result.status).toBe("error");
+    expect(result.status).toBe("failed");
     expect(runner).not.toHaveBeenCalled();
     expect(opsCalls).toEqual([]);
   });
@@ -581,7 +581,7 @@ describe("promote stage", () => {
         },
       }),
     );
-    expect(result.status).toBe("error");
+    expect(result.status).toBe("failed");
     expect(result.message).toMatch(/duplicates the active dataset epoch/);
     expect(recordPromotedSource).not.toHaveBeenCalled();
   });
@@ -614,7 +614,7 @@ describe("promote stage", () => {
 
     const result = await promoteRun(ctx);
 
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(ctx.slotLayout.record.datasetEpoch).toBe("test-epoch");
     expect(aliasSlot(ctx.slotLayout, "live")).toBe("B");
     expect(aliasSlot(ctx.slotLayout, "staging")).toBe("A");
@@ -636,7 +636,7 @@ describe("promote stage", () => {
 
     const result = await promoteRun(ctx);
 
-    expect(result.status).toBe("error");
+    expect(result.status).toBe("failed");
     expect(result.message).toMatch(/duplicates the active dataset epoch/);
     expect(aliasSlot(ctx.slotLayout, "live")).toBe("A");
     expect(aliasSlot(ctx.slotLayout, "staging")).toBe("B");
@@ -669,7 +669,7 @@ describe("promote stage", () => {
       await vi.waitFor(() => expect(primaryHealthCalls).toBe(1));
       await vi.advanceTimersByTimeAsync(10_000);
       const result = await promotion;
-      expect(result.status).toBe("ok");
+      expect(result.status).toBe("succeeded");
       // The readiness poll kept going past the 400s (>=3 = two 400s + the 200
       // that opened the gate), proving it gated on /health rather than bailing
       // to the smoke test after a single premature /map/initial 200.
@@ -692,7 +692,7 @@ describe("promote stage", () => {
     const result = await promoteRun(ctx).finally(() => {
       opsBehaviour.failPromote = false;
     });
-    expect(result.status).toBe("error");
+    expect(result.status).toBe("failed");
     // The retained recovery phase restarts the original primary, never replays promotion.
     expect(opsCalls.filter((call) => call.kind === "motis.primary.promote")).toHaveLength(1);
     expect(opsCalls.filter((call) => call.kind === "motis.primary.restart")).toHaveLength(1);
@@ -731,7 +731,7 @@ describe("promote stage", () => {
 
     const result = await promoteRun(ctx);
 
-    expect(result.status).toBe("error");
+    expect(result.status).toBe("failed");
     expect(result.message).toMatch(/slot B restart failed.*rollback ok/);
     expect(promoteCalls).toBe(1);
     expect(opsCalls.filter((call) => call.kind === "motis.primary.restart")).toHaveLength(1);
@@ -757,7 +757,7 @@ describe("promote stage", () => {
       runner: async () => {},
     });
     const result = await promoteRun(ctx);
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(existsSync(join(fx.currentDir, "data", "tt.bin"))).toBe(true);
     expect(existsSync(fx.previousDir)).toBe(false);
   });
@@ -790,7 +790,7 @@ describe("promote stage", () => {
       runner: async () => {},
     });
     const result = await promoteRun(ctx);
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(existsSync(join(fx.currentDir, "data", "tt.bin"))).toBe(true);
   });
 });

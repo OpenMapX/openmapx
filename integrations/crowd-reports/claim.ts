@@ -1,4 +1,9 @@
-import type { Effect, Fuzziness, SituationClaim } from "@openmapx/openconditions-contrib-client";
+import {
+  CLAIM_VERSION,
+  type Effect,
+  type Fuzziness,
+  type SituationClaim,
+} from "@openmapx/openconditions-contrib-client";
 
 /**
  * The crowd-report categories offered in the report dialog. `police` is
@@ -177,6 +182,7 @@ export interface BuildReportClaimInput {
 export function buildReportClaim(input: BuildReportClaimInput): SituationClaim {
   const { kind, type, subtype, effects, details } = situationForCategory(input.category);
   const claim: SituationClaim = {
+    v: CLAIM_VERSION,
     claimClass: "situation",
     kind,
     type,

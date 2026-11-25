@@ -67,7 +67,6 @@ const key = () =>
     nonce: crypto.getRandomValues(new Uint8Array(16)),
   });
 beforeEach(async () => {
-  vi.stubEnv("OPENMAPX_DISABLE_LOCALHOST_AUTH", "1");
   vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile("component-service-token"));
   state.session = mockAdminSession();
   state.audit.mockReset();

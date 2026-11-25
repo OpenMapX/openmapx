@@ -41,7 +41,7 @@ export interface ObservedAdminJob {
 }
 const Registration = createContext<RegisterAdminJob | null>(null);
 const ObservedJobs = createContext<ObservedAdminJob[]>([]);
-const terminal = new Set(["success", "failed", "canceled"]);
+const terminal = new Set(["succeeded", "failed", "cancelled"]);
 type Entry = AcceptedAdminJob & {
   owner: ReturnType<typeof useAdminMutationOwner>;
   callbacks: Set<AcceptedAdminJob["onSettled"]>;

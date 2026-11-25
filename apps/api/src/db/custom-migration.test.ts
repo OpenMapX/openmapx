@@ -24,6 +24,12 @@ const allowedKinds: { kind: string; pattern: RegExp }[] = [
     kind: "account role check",
     pattern: /^ALTER\s+TABLE\s+"user"\s+ADD\s+CONSTRAINT\s+\S+\s+CHECK\s*\(\s*role\s/i,
   },
+  {
+    // The data_manager schema package cannot reference the API's "user" table.
+    kind: "data job actor foreign key",
+    pattern:
+      /^ALTER\s+TABLE\s+"data_manager"\."job"\s+ADD\s+CONSTRAINT\s+job_triggered_by_user_id_fkey\s+FOREIGN\s+KEY\s+\("triggered_by_user_id"\)\s+REFERENCES\s+"user"\("id"\)\s+ON\s+DELETE\s+SET\s+NULL;?$/i,
+  },
 ];
 
 /** Masks dollar-quoted bodies, keeping the statement shape. */

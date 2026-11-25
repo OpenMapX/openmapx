@@ -41,7 +41,7 @@ it("loads metadata only on open and navigates by keyboard without executing an o
               settings: [
                 {
                   group: "email",
-                  key: "smtpHost",
+                  key: "smtp.host",
                   label: "SMTP host",
                   type: "string",
                   secret: false,
@@ -63,13 +63,13 @@ it("loads metadata only on open and navigates by keyboard without executing an o
   fireEvent.keyDown(window, { key: "k", ctrlKey: true });
   const input = await screen.findByRole("combobox");
   // The catalogue names a known setting; the server's English label is only a fallback.
-  fireEvent.change(input, { target: { value: "smtpHost" } });
+  fireEvent.change(input, { target: { value: "smtp.host" } });
   await screen.findByRole("option", { name: /^Host/ });
   expect(screen.queryByRole("option", { name: /SMTP host/ })).toBeNull();
   fireEvent.keyDown(input, { key: "ArrowDown" });
   fireEvent.keyDown(input, { key: "Enter" });
   await waitFor(() =>
-    expect(navigate).toHaveBeenCalledWith("/admin/settings/email?field=smtpHost"),
+    expect(navigate).toHaveBeenCalledWith("/admin/settings/email?field=smtp.host"),
   );
   expect(fetch.mock.calls.every(([, init]) => init?.method !== "POST")).toBe(true);
   expect(screen.queryByText("private-host")).toBeNull();

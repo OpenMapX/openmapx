@@ -25,7 +25,6 @@
     }
   ],
   "quality": "built-in",
-  "category": "Map Overlays",
   "dataSources": [
     {
       "sourceId": "open-landmarks",

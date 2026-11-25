@@ -296,6 +296,37 @@ describe("GET /admin/overview", () => {
     );
   });
 
+  it("does not raise an interrupted job, which is still recovering, as failed", async () => {
+    mockListActivityJobs.mockResolvedValueOnce({
+      total: 1,
+      jobs: [
+        {
+          source: "data-manager",
+          id: "0193e4a0-0000-7000-8001-000000000003",
+          type: "transit-sync",
+          payload: {},
+          progress: null,
+          createdBy: null,
+          actorLabel: "System",
+          actor: null,
+          createdAt: new Date("2026-10-20T00:00:00Z"),
+          startedAt: new Date("2026-10-20T00:00:01Z"),
+          finishedAt: null,
+          cancelable: false,
+          status: "interrupted",
+          error: null,
+        },
+      ],
+    });
+
+    const res = await app.inject({ method: "GET", url: "/admin/overview" });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().attention).not.toContainEqual(
+      expect.objectContaining({ type: "job_failed" }),
+    );
+  });
+
   it("points an unavailable service inventory at the canonical services page", async () => {
     vi.stubEnv("OPS_AGENT_URL", "http://ops-agent.invalid");
     mockInventoryAcquisition = { state: "unavailable", reason: "ops_unavailable" };
@@ -473,7 +504,7 @@ describe("POST /admin/integrations/:id/enable", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json().ok).toBe(true);
     expect(mockWriteAuditLog).toHaveBeenCalledWith(
-      expect.objectContaining({ action: "integration.enabled", targetId: "geocoding-maptiler" }),
+      expect.objectContaining({ action: "integration.enable", targetId: "geocoding-maptiler" }),
     );
     expect(res.json()).toMatchObject({ reloaded: 1, enabled: 1 });
     expect(mockReloadIntegrations).not.toHaveBeenCalled();
@@ -624,9 +655,13 @@ describe("GET /admin/audit", () => {
       createdAt: new Date("2026-06-17T12:00:00.000Z"),
     };
     // Entries as the table returns them, their count, then the actor lookup.
-    // The target account column stays out of the strict response.
+    // The target account column stays out of the strict response, and the
+    // acting account's column is `actorId` in it.
+    const { actorId, ...stored } = row;
     mockDbSelect
-      .mockImplementationOnce(() => makeSelectChain([{ ...row, targetUserId: "user-99" }]))
+      .mockImplementationOnce(() =>
+        makeSelectChain([{ ...stored, actorUserId: actorId, targetUserId: "user-99" }]),
+      )
       .mockImplementationOnce(() => makeSelectChain([{ total: 7 }]))
       .mockImplementationOnce(() =>
         makeSelectChain([{ id: "user-1", name: "Ada", email: "ada@example.test" }]),
@@ -771,7 +806,7 @@ describe("POST /admin/integrations/reload", () => {
       fakeSession.user.id,
     );
     expect(mockWriteAuditLog).toHaveBeenCalledWith(
-      expect.objectContaining({ action: "integration.reload.all" }),
+      expect.objectContaining({ action: "integration.reload_all" }),
     );
   });
 });
@@ -874,7 +909,7 @@ describe("integration contract tightening", () => {
   it("reports the resolved winning source independently of stored vault audit", async () => {
     mockGetSecretFields.mockReturnValueOnce([{ key: "key", title: "Key" }]);
     mockListSecrets.mockResolvedValueOnce([
-      { key: "key", updatedAt: new Date("2026-10-20T00:00:00Z"), updatedBy: "actor" },
+      { key: "key", updatedAt: new Date("2026-10-20T00:00:00Z"), updatedByUserId: "actor" },
     ]);
     mockResolveConfigWithSources.mockResolvedValueOnce({
       key: { value: "synthetic", source: "config.json" },

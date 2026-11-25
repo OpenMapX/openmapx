@@ -90,7 +90,7 @@ export interface OfflinePackageJob {
   status: OfflinePackageJobStatus;
   packageId?: string;
   manifest?: OfflineMapPackageManifest;
-  errorCode?: "invalid-request" | "capacity" | "generation-failed" | "expired";
+  errorCode?: "INVALID_REQUEST" | "CAPACITY" | "GENERATION_FAILED" | "EXPIRED";
   errorMessage?: string;
 }
 
@@ -337,7 +337,7 @@ export function canonicalizeOfflinePackageRequest(
 
 export function offlinePackageRequestKey(canonical: CanonicalOfflinePackageRequest): string {
   return JSON.stringify({
-    version: 3,
+    version: 1,
     provider: canonical.request.provider,
     source: {
       datasetId: canonical.source.datasetId,

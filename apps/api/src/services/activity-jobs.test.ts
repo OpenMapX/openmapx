@@ -1,26 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { normalizeDataManagerJobStatus, parseDataManagerActor } from "./activity-jobs.js";
+import { dataManagerActor } from "./activity-jobs.js";
 
-describe("activity job normalization", () => {
+describe("data-manager job actor", () => {
   it.each([
-    ["ok", "success"],
-    ["error", "failed"],
-    ["running", "running"],
-    ["partial", "partial"],
-    ["interrupted", "interrupted"],
-  ])("normalizes data-manager status %s to %s", (input, expected) => {
-    expect(normalizeDataManagerJobStatus(input)).toBe(expected);
-  });
-
-  it.each([
-    ["api:user:user-1", "user-1", "Administrator"],
-    ["manual:admin:user-2", "user-2", "Administrator"],
-    ["cron:data-manager-cron", null, "Scheduled"],
-    ["bootstrap", null, "Bootstrap"],
-    ["cron:data-manager-auto-bump", null, "Automatic version bump"],
-    ["data-manager-auto-bump", null, "Automatic version bump"],
-    [null, null, "System"],
-  ])("parses data-manager actor %s", (triggeredBy, userId, label) => {
-    expect(parseDataManagerActor(triggeredBy)).toEqual({ userId, label });
+    ["api", "user-1", "user-1", "Administrator"],
+    ["api", null, null, "API"],
+    ["agent", null, null, "Operations agent"],
+    ["cli", null, null, "Host CLI"],
+    ["cron", null, null, "Scheduled"],
+    ["bootstrap", null, null, "Bootstrap"],
+  ] as const)("names a %s job started for %s", (trigger, triggeredByUserId, userId, label) => {
+    expect(dataManagerActor(trigger, triggeredByUserId)).toEqual({ userId, label });
   });
 });

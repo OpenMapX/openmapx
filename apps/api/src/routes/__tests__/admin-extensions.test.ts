@@ -96,6 +96,7 @@ const MANIFEST = {
   id: "openconditions",
   name: "OpenConditions",
   version: "1.0.0",
+  platform: "1.0",
   services: [{ repo: "https://github.com/openconditions/openconditions", service: "oc-ingest" }],
 };
 
@@ -104,6 +105,7 @@ const mockGetEntry = vi.fn().mockResolvedValue(ENTRY);
 const mockResolveManifest = vi.fn().mockResolvedValue(MANIFEST);
 const emptyKill = { removed: new Map(), critical: new Map(), stale: false };
 const mockKillSwitch = vi.fn().mockResolvedValue(emptyKill);
+const mockListInstalled = vi.fn().mockResolvedValue([]);
 
 vi.mock("../../services/extension-store.js", () => ({
   getExtensionCatalog: (...a: unknown[]) => mockGetCatalog(...a),
@@ -113,7 +115,7 @@ vi.mock("../../services/extension-store.js", () => ({
   resolveDirectExtensionManifest: (...a: unknown[]) => mockResolveManifest(...a),
   isExtensionCompatible: vi.fn().mockReturnValue(true),
   listExtensionSources: vi.fn().mockResolvedValue([]),
-  listInstalledExtensions: vi.fn().mockResolvedValue([]),
+  listInstalledExtensions: (...a: unknown[]) => mockListInstalled(...a),
   addExtensionSource: vi.fn().mockResolvedValue(undefined),
   removeExtensionSource: vi.fn().mockResolvedValue(undefined),
   normalizeExtensionLocator: (url: string) => url,
@@ -165,6 +167,75 @@ describe("GET /admin/extensions/catalog", () => {
     const body = res.json();
     expect(body.entries[0]).toMatchObject({ status: "stale-revocation-data" });
     expect(body.revocationDataStale).toBe(true);
+  });
+
+  describe("an advisory that covers the installed version but not the offered one", () => {
+    const fixedIn = { reason: "Fixed in 1.1.0", maxVersion: "1.0.5" };
+    const installedRow = {
+      id: "openconditions",
+      name: "OpenConditions",
+      sourceTrust: "verified",
+      installedVersion: "1.0.0",
+      sourceUrl: null,
+      installedAt: new Date("2026-11-01T00:00:00Z"),
+      updatedAt: new Date("2026-11-01T00:00:00Z"),
+      components: [],
+    };
+
+    it("revokes the catalog entry and names the installed advisory", async () => {
+      mockGetCatalog.mockResolvedValueOnce([{ ...ENTRY, version: "1.1.0" }]);
+      mockListInstalled.mockResolvedValueOnce([installedRow]);
+      mockKillSwitch.mockResolvedValueOnce({
+        removed: new Map(),
+        critical: new Map([["openconditions", fixedIn]]),
+        stale: false,
+      });
+
+      const res = await app.inject({ method: "GET", url: "/admin/extensions/catalog" });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().entries[0]).toMatchObject({
+        installedVersion: "1.0.0",
+        version: "1.1.0",
+        critical: null,
+        installedCritical: fixedIn,
+        hasUpdate: true,
+        status: "revoked",
+      });
+    });
+
+    it("reports the advisory on the installed list", async () => {
+      mockGetCatalog.mockResolvedValueOnce([{ ...ENTRY, version: "1.1.0" }]);
+      mockListInstalled.mockResolvedValueOnce([installedRow]);
+      mockKillSwitch.mockResolvedValueOnce({
+        removed: new Map(),
+        critical: new Map([["openconditions", fixedIn]]),
+        stale: false,
+      });
+
+      const res = await app.inject({ method: "GET", url: "/admin/extensions/installed" });
+
+      expect(res.statusCode).toBe(200);
+      expect(res.json().extensions[0]).toMatchObject({
+        installedVersion: "1.0.0",
+        latestVersion: "1.1.0",
+        hasUpdate: true,
+        critical: fixedIn,
+      });
+    });
+
+    it("leaves an installed version above the bound unflagged", async () => {
+      mockListInstalled.mockResolvedValueOnce([{ ...installedRow, installedVersion: "1.1.0" }]);
+      mockKillSwitch.mockResolvedValueOnce({
+        removed: new Map(),
+        critical: new Map([["openconditions", fixedIn]]),
+        stale: false,
+      });
+
+      const res = await app.inject({ method: "GET", url: "/admin/extensions/installed" });
+
+      expect(res.json().extensions[0].critical).toBeNull();
+    });
   });
 });
 
@@ -256,7 +327,7 @@ describe("extension source audit details", () => {
     });
     expect(auditEntries).toEqual([
       expect.objectContaining({
-        action: "extension.add_source",
+        action: "extension.source.add",
         details: {
           sourceUrl: {
             host: "sources.example.test",
@@ -266,7 +337,7 @@ describe("extension source audit details", () => {
         },
       }),
       expect.objectContaining({
-        action: "extension.remove_source",
+        action: "extension.source.remove",
         details: {
           sourceUrl: {
             host: "sources.example.test",

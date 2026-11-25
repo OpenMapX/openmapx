@@ -1,6 +1,7 @@
 /** One finite managed-map adapter in the existing configuration writer/transaction. */
 
 import { AsyncLocalStorage } from "node:async_hooks";
+import { auditEntry } from "@openmapx/core/api-contracts";
 import { itemAt } from "@openmapx/core/item-at";
 import { canonicalJson } from "@openmapx/core/ops";
 import {
@@ -25,7 +26,7 @@ import type {
   ProspectiveConfigurationOverlay,
   ValidatedConfigurationCandidate,
 } from "./prospective-configuration";
-import { decrypt } from "./secrets";
+import { decrypt, secretAad } from "./secrets";
 import {
   type FeedCredentialChangePreview,
   readFeedCredentialPreview,
@@ -86,7 +87,9 @@ function rowFrom(read: { serviceSecretRows: readonly (typeof serviceSecret.$infe
   return read.serviceSecretRows.find((row) => row.serviceId === SERVICE && row.key === KEY);
 }
 function values(row: typeof serviceSecret.$inferSelect | undefined) {
-  return row ? parseFeedCredentialMapJson(decrypt(row.ciphertext, row.iv, row.tag)) : {};
+  return row
+    ? parseFeedCredentialMapJson(decrypt(row, secretAad.serviceSecret(row.serviceId, row.key)))
+    : {};
 }
 export async function inspectFeedCredentials(input: {
   catalogRevisionId: string;
@@ -272,7 +275,7 @@ function proofInput(state: PatchState) {
     throw new TransitCredentialConflict("TRANSIT_CREDENTIALS_PROOF_REQUIRED");
   const transit = {
     challengeId: authorization.transitProofToken,
-    purpose: "transit.credentials" as const,
+    purpose: "transit.credential.update" as const,
     targetId: state.input.catalogRevisionId,
     intentFingerprint:
       authorization.kind === "credential-import"
@@ -289,7 +292,7 @@ function proofInput(state: PatchState) {
             transit,
             {
               challengeId: authorization.importProofToken,
-              purpose: "credentials.import" as const,
+              purpose: "credential.import" as const,
               targetId: authorization.importPreviewId,
               intentFingerprint: authorization.importFingerprint,
             },
@@ -475,7 +478,8 @@ export async function persistPreparedFeedCredentialRow(input: {
     !next ||
     transitCredentialRevision(before) !== input.patch.expectedCredentialsRevision ||
     input.patch.overlayChange.action !== "set" ||
-    decrypt(next.ciphertext, next.iv, next.tag) !== input.patch.overlayChange.value ||
+    decrypt(next, secretAad.serviceSecret(next.serviceId, next.key)) !==
+      input.patch.overlayChange.value ||
     candidate.payload.transitCredentialsRevision !== transitCredentialRevision(next) ||
     !candidate.overlay.changes.some(
       (change) => canonicalJson(change) === canonicalJson(input.patch.overlayChange),
@@ -492,7 +496,8 @@ export async function persistPreparedFeedCredentialRow(input: {
           ciphertext: next.ciphertext,
           iv: next.iv,
           tag: next.tag,
-          updatedBy: input.writer.actorId,
+          keyVersion: next.keyVersion,
+          updatedByUserId: input.writer.actorId,
           updatedAt: new Date(),
         })
         .where(
@@ -505,7 +510,7 @@ export async function persistPreparedFeedCredentialRow(input: {
         .returning({ key: serviceSecret.key })
     : await tx
         .insert(serviceSecret)
-        .values({ ...next, updatedBy: input.writer.actorId })
+        .values({ ...next, updatedByUserId: input.writer.actorId })
         .onConflictDoNothing()
         .returning({ key: serviceSecret.key });
   if (changed.length !== 1) throw new TransitCredentialConflict();
@@ -521,7 +526,7 @@ export async function persistPreparedFeedCredentialRow(input: {
     .where(
       and(
         eq(transitCredentialPreview.id, preview.previewId),
-        eq(transitCredentialPreview.actorId, input.writer.actorId),
+        eq(transitCredentialPreview.actorUserId, input.writer.actorId),
         eq(transitCredentialPreview.intentFingerprint, preview.intentFingerprint),
         sql`${transitCredentialPreview.consumedAt} is null`,
         sql`${transitCredentialPreview.expiresAt} > now()`,
@@ -530,9 +535,8 @@ export async function persistPreparedFeedCredentialRow(input: {
     .returning({ id: transitCredentialPreview.id });
   if (marked.length !== 1) throw new TransitCredentialConflict();
   await tx.insert(adminAuditLog).values({
-    action: "transit.credentials.update",
-    actorId: input.writer.actorId,
-    targetType: "transit.credentials",
+    ...auditEntry("transit.credential.update"),
+    actorUserId: input.writer.actorId,
     targetId: state.input.catalogRevisionId,
     details: { changes: state.input.changes.map(({ key, action }) => ({ key, action })) },
   });

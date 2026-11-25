@@ -149,7 +149,7 @@ describe("mirror-mode pipeline", () => {
       "mirror",
       "fetch-operator",
     ]);
-    expect(results.find((r) => r.stage === "mirror")?.status).toBe("ok");
+    expect(results.find((r) => r.stage === "mirror")?.status).toBe("succeeded");
     expect(results.find((r) => r.stage === "fetch-operator")?.status).toBe("skipped");
     // Direct per-file download against the published artifact base, NOT a
     // recursive autoindex crawl.
@@ -183,7 +183,7 @@ describe("mirror-mode pipeline", () => {
     expect(downloadUrls.some((url) => url.includes("evil"))).toBe(false);
     expect(downloadTargets.some((target) => target.includes("evil"))).toBe(false);
     expect(existsSync(join(fx.gtfsDir, "de_BVG.gtfs.zip"))).toBe(true);
-    expect(results.find((result) => result.stage === "mirror")?.status).toBe("ok");
+    expect(results.find((result) => result.stage === "mirror")?.status).toBe("succeeded");
   });
 
   it("unifies mirrored catalog and pinned-fetcher operator artifacts", async () => {
@@ -192,7 +192,7 @@ describe("mirror-mode pipeline", () => {
     writeFileSync(
       overlayPath,
       JSON.stringify({
-        version: 3,
+        version: 1,
         sources: [
           {
             spec: "gtfs",
@@ -267,7 +267,7 @@ describe("mirror-mode pipeline", () => {
     });
 
     const { results } = await runTransitousPipeline(ctx, { stopAt: "fetch-operator" });
-    expect(results.find((result) => result.stage === "fetch-operator")?.status).toBe("ok");
+    expect(results.find((result) => result.stage === "fetch-operator")?.status).toBe("succeeded");
     const [metadataPath] = fetchMetadata;
     expect(fetchMetadata).toHaveLength(1);
     assert.isDefined(metadataPath, "the operator fetch was given no metadata path");
@@ -313,7 +313,7 @@ describe("mirror-mode pipeline", () => {
     writeFileSync(
       overlayPath,
       JSON.stringify({
-        version: 3,
+        version: 1,
         sources: [
           {
             spec: "gtfs",
@@ -377,7 +377,7 @@ describe("mirror-mode pipeline", () => {
     await expect(runTransitousPipeline(ctx, { stopAt: "fetch-operator" })).rejects.toThrow(
       /Failed to acquire 1 desired transit source/,
     );
-    expect(completed).toContain("fetch-operator:error");
+    expect(completed).toContain("fetch-operator:failed");
     expect(completed.some((entry) => entry.startsWith("validate:"))).toBe(false);
     expect(existsSync(join(fx.gtfsDir, "de_operator-feed.gtfs.zip"))).toBe(false);
     const failedResult = completed.join("\n");
@@ -409,7 +409,7 @@ describe("mirror-mode pipeline", () => {
     });
 
     const { results } = await runTransitousPipeline(ctx, { stopAt: "mirror" });
-    expect(results.find((r) => r.stage === "mirror")?.status).toBe("ok");
+    expect(results.find((r) => r.stage === "mirror")?.status).toBe("succeeded");
     expect(tried).toEqual([
       "https://api.transitous.org/gtfs/de_NX.gtfs.zip",
       "https://api.transitous.org/gtfs/de_NX.netex.zip",
@@ -440,7 +440,7 @@ describe("mirror-mode pipeline", () => {
     await expect(runTransitousPipeline(ctx, { stopAt: "fetch-operator" })).rejects.toThrow(
       /Failed to acquire 1 desired transit source/,
     );
-    expect(completed).toContain("mirror:partial");
-    expect(completed).toContain("fetch-operator:error");
+    expect(completed).toContain("mirror:partially_succeeded");
+    expect(completed).toContain("fetch-operator:failed");
   });
 });

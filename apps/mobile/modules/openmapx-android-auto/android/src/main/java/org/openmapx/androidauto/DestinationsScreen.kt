@@ -85,6 +85,7 @@ class DestinationsScreen(context: CarContext, private val search: Boolean = fals
       list.setNoItemsMessage(
         carContext.carString(
           when {
+            result.optString("error") == "update-required" -> R.string.car_update_required
             result.has("error") -> R.string.car_search_unavailable
             result.has("results") -> R.string.car_search_none
             else -> R.string.car_search_hint
@@ -272,6 +273,7 @@ object CarErrors {
       "location-unavailable" -> R.string.car_location_unavailable
       "no-route" -> R.string.car_no_route
       "network" -> R.string.car_network
+      "update-required" -> R.string.car_update_required
       else -> R.string.car_unavailable
     }
 }

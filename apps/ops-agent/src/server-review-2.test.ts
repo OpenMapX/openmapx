@@ -36,7 +36,7 @@ afterEach(() => {
 
 function request(operation: OpsOperation, requestId: string, operationKey: string) {
   return {
-    version: 2,
+    version: 1,
     requestId,
     operationKey,
     execution: { requestedDeadlineAt: deadlineAt },
@@ -47,7 +47,7 @@ function request(operation: OpsOperation, requestId: string, operationKey: strin
 }
 
 function auth() {
-  return { authorization: `Bearer ${apiToken}`, "x-ops-protocol-version": "2" };
+  return { authorization: `Bearer ${apiToken}`, "x-ops-protocol-version": "1" };
 }
 
 const allow: OpsResourceClaimer = {
@@ -91,7 +91,11 @@ describe("reviewed durable admission boundary", () => {
     const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourceClaimer: allow,
-      journal: { records: () => [tombstone], replace: async () => undefined },
+      journal: {
+        records: () => [tombstone],
+        foreignRecords: () => [],
+        replace: async () => undefined,
+      },
       maxJobEntries: 1,
       jobRetentionMs: 1,
       now: () => new Date(baseTime + 10_000),
@@ -125,6 +129,7 @@ describe("reviewed durable admission boundary", () => {
     let persistedServiceIds: readonly string[] | undefined;
     const journal: OpsJobJournal = {
       records: () => [],
+      foreignRecords: () => [],
       replace: async (records) => {
         if (sourceReference?.kind === "backup.restore") {
           try {
@@ -191,6 +196,7 @@ describe("reviewed durable admission boundary", () => {
     let writes = 0;
     const journal: OpsJobJournal = {
       records: () => [],
+      foreignRecords: () => [],
       replace: async () => {
         writes += 1;
         if (writes === 2) throw new Error("disk unavailable");
@@ -232,6 +238,7 @@ describe("reviewed durable admission boundary", () => {
     let writes = 0;
     const journal: OpsJobJournal = {
       records: () => [],
+      foreignRecords: () => [],
       replace: async () => {
         writes += 1;
         // Admission, its execution row, the running state and the effect
@@ -293,7 +300,7 @@ describe("reviewed durable admission boundary", () => {
   it("serializes admission and terminal full snapshots so neither durable key is lost", async () => {
     const root = mkdtempSync(join(tmpdir(), "openmapx-ops-interleave-"));
     roots.push(root);
-    const path = join(root, "journal", "jobs-v1.json");
+    const path = join(root, "journal", "jobs.json");
     const durable = await openOpsJobJournal(path);
     let blockAdmission = false;
     let entered!: () => void;
@@ -302,6 +309,7 @@ describe("reviewed durable admission boundary", () => {
     const admissionBlocked = new Promise<void>((resolve) => (unblock = resolve));
     const journal: OpsJobJournal = {
       records: () => durable.records(),
+      foreignRecords: () => durable.foreignRecords(),
       replace: async (records) => {
         if (blockAdmission && records.some((record) => record.operation.kind === "service.stop")) {
           blockAdmission = false;
@@ -503,7 +511,7 @@ describe("reviewed durable admission boundary", () => {
     const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourceClaimer: allow,
-      journal: { records: () => records, replace: async () => undefined },
+      journal: { records: () => records, foreignRecords: () => [], replace: async () => undefined },
       now: () => new Date(baseTime),
       dispatch: vi.fn(),
     });
@@ -527,7 +535,7 @@ describe("reviewed durable admission boundary", () => {
   it("restores an interrupted key as recovery-required and never reruns it", async () => {
     const root = mkdtempSync(join(tmpdir(), "openmapx-ops-restart-"));
     roots.push(root);
-    const path = join(root, "journal", "jobs-v1.json");
+    const path = join(root, "journal", "jobs.json");
     const before = await openOpsJobJournal(path);
     const operation = {
       kind: "service.pull",
@@ -599,7 +607,11 @@ describe("reviewed durable admission boundary", () => {
     const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourceClaimer: allow,
-      journal: { records: () => [existing], replace: async () => undefined },
+      journal: {
+        records: () => [existing],
+        foreignRecords: () => [],
+        replace: async () => undefined,
+      },
       now: () => new Date(baseTime),
       randomBytes: () => bytes,
       dispatch: vi.fn(),
@@ -909,7 +921,11 @@ describe("operation context for configuration helper drain", () => {
       releaseFirst = resolve;
     });
     const counts: number[] = [];
-    const journal: OpsJobJournal = { records: () => [], replace: async () => {} };
+    const journal: OpsJobJournal = {
+      records: () => [],
+      foreignRecords: () => [],
+      replace: async () => {},
+    };
     const app = await buildOpsAgentServer({
       tokens: { api: apiToken, "data-manager": dataManagerToken },
       resourceClaimer: allow,

@@ -9,6 +9,7 @@ import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
 import {
   buildLicensingHtml,
+  coordinateId,
   createPlace,
   type LngLat,
   PANEL,
@@ -82,8 +83,8 @@ export function StreetLevelInfoCard({
       flyTo(debouncedLngLat, 17);
       setSelectedPlace(
         createPlace({
-          primaryScheme: "streetLevel",
-          ids: { streetLevel: `${debouncedLngLat[0]},${debouncedLngLat[1]}` },
+          primaryScheme: "coordinate",
+          ids: { coordinate: coordinateId(debouncedLngLat) },
           name: label,
           address,
           coordinates: debouncedLngLat,

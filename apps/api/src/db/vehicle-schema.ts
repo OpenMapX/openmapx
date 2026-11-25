@@ -8,15 +8,28 @@ import {
   index,
   jsonb,
   pgTable,
+  smallint,
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 /** Unique per account; a write that repeats a vehicle name raises this constraint. */
 export const PERSONAL_VEHICLE_NAME_UNIQUE = "personal_vehicle_user_id_name_key";
+
+/** The format `ev` is written in. */
+export const EV_SPEC_VERSION = 1;
+
+/** The `ev` columns for a write: the spec and, exactly when it is set, its format. */
+export function evSpecColumns(ev: EvVehicleSpec | null | undefined): {
+  ev: EvVehicleSpec | null;
+  evVersion: number | null;
+} {
+  return ev ? { ev, evVersion: EV_SPEC_VERSION } : { ev: null, evVersion: null };
+}
 
 /**
  * A user's small garage. The EV spec is one JSON value rather than seven
@@ -34,6 +47,7 @@ export const personalVehicle = pgTable(
     isDefault: boolean("is_default").default(false).notNull(),
     presetId: text("preset_id"),
     ev: jsonb("ev").$type<EvVehicleSpec | null>(),
+    evVersion: smallint("ev_version"),
     fuelConsumptionLPer100Km: doublePrecision("fuel_consumption_l_per_100km"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
@@ -48,10 +62,19 @@ export const personalVehicle = pgTable(
       foreignColumns: [user.id],
     }).onDelete("cascade"),
     unique(PERSONAL_VEHICLE_NAME_UNIQUE).on(table.userId, table.name),
+    // One default vehicle per account. The garage routes serialise writers
+    // and clear the old default first; this holds whatever writes the row.
+    uniqueIndex("personal_vehicle_user_id_default_key")
+      .on(table.userId)
+      .where(sql`${table.isDefault}`),
     check("personal_vehicle_kind_check", sql`${table.kind} in ('car','motorcycle','bicycle')`),
     check(
       "personal_vehicle_powertrain_check",
       sql`${table.powertrain} in ('electric','plugin_hybrid','hybrid','petrol','diesel','other')`,
+    ),
+    check(
+      "personal_vehicle_ev_version_check",
+      sql`(${table.ev} is null) = (${table.evVersion} is null) and (${table.evVersion} is null or ${table.evVersion} = 1)`,
     ),
   ],
 );
@@ -104,6 +127,8 @@ export const parkedLocation = pgTable(
       .on(table.expiresAt)
       .where(sql`${table.expiresAt} is not null`),
     check("parked_location_source_check", sql`${table.source} in ('device','manual','arrival')`),
+    check("parked_location_lat_check", sql`${table.lat} between -90 and 90`),
+    check("parked_location_lng_check", sql`${table.lng} between -180 and 180`),
   ],
 );
 

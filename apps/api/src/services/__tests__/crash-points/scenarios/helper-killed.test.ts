@@ -22,7 +22,7 @@ crashScenario({
     // The helper's Compose client died with it: the recreate never happens.
     apiRecreate.fail("context canceled");
     const job = await host.settledJob(submitted.jobId as string, 120_000);
-    expect(job.status).not.toBe("success");
+    expect(job.status).not.toBe("succeeded");
     expect(host.dockerEffects({ caller: "helper", since: killedAt })).toEqual([]);
     expect(host.dockerEffects({ command: "run", caller: "agent", since: killedAt })).toEqual([]);
     const recreated = host

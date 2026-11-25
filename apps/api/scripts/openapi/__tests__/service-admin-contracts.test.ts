@@ -110,10 +110,42 @@ it("collects exactly 67 actual service producers with complete statuses, media, 
               type: "object",
               properties: {
                 error: { type: "string" },
+                code: { type: "string", pattern: "^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$" },
                 message: { type: "string" },
                 jobId: { type: "string" },
               },
               required: ["error"],
+              additionalProperties: false,
+            },
+            {
+              type: "object",
+              properties: {
+                error: { type: "string" },
+                code: { type: "string", enum: ["REQUIRED_SETTINGS_MISSING"] },
+                missingSettings: {
+                  minItems: 1,
+                  maxItems: 256,
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      serviceId: {
+                        type: "string",
+                        pattern: "^(?=.{1,48}$)[a-z0-9]+(?:-[a-z0-9]+)*$",
+                      },
+                      keys: {
+                        minItems: 1,
+                        maxItems: 64,
+                        type: "array",
+                        items: { type: "string", minLength: 1, maxLength: 128 },
+                      },
+                    },
+                    required: ["serviceId", "keys"],
+                    additionalProperties: false,
+                  },
+                },
+              },
+              required: ["error", "code", "missingSettings"],
               additionalProperties: false,
             },
             {

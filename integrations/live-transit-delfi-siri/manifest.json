@@ -4,7 +4,6 @@
   "author": "OpenMapX",
   "license": "AGPL-3.0-or-later",
   "quality": "built-in",
-  "category": "Transit",
   "documentation": "https://www.govdata.de/suche/daten/delfi-realtime-siri-et-rhein-ruhr",
   "domains": ["live-transit"],
   "backend": {

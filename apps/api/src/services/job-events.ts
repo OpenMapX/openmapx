@@ -8,11 +8,12 @@
  */
 
 import type { AdminJobStreamEvents, AdminJobStreamMetrics } from "@openmapx/core/api-contracts";
+import { type JobStatus, TERMINAL_JOB_STATUSES as TERMINAL } from "@openmapx/core/jobs";
 import { publicAdminJobResult } from "./admin-job-failure";
 
 /** Producer-domain fields are wider until the route validates the serialized JSON boundary. */
 export type JobStatusEvent = Omit<AdminJobStreamEvents["status"], "status" | "result"> & {
-  status: string;
+  status: JobStatus;
   result?: Record<string, unknown> | null;
 };
 export type JobProgressEvent = AdminJobStreamEvents["progress"];
@@ -28,11 +29,7 @@ export interface StoredJobEvent {
 
 export type JobStreamMetrics = AdminJobStreamMetrics;
 
-export const TERMINAL_JOB_STATUSES: ReadonlySet<string> = new Set([
-  "success",
-  "failed",
-  "canceled",
-]);
+export const TERMINAL_JOB_STATUSES: ReadonlySet<string> = new Set(TERMINAL);
 
 type Listener = (stored: StoredJobEvent) => void;
 

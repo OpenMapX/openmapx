@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   assertTrustedConfigurationSchema,
+  missingRequiredConfiguration,
   validateTrustedConfigurationValues,
 } from "../configuration-schema";
 
@@ -95,10 +96,41 @@ describe("ops-agent trusted configuration schema", () => {
       ),
     ).toBe(true);
     expect(
-      validateTrustedConfigurationValues(
-        { "bidirectional-alternates": true },
-        valhalla.configSchema,
-      ),
+      validateTrustedConfigurationValues({ bidirectionalAlternates: true }, valhalla.configSchema),
     ).toBe(true);
+  });
+});
+
+describe("required configuration", () => {
+  const schema = {
+    type: "object",
+    required: ["INSTANCE_ID", "API_TOKEN"],
+    properties: {
+      INSTANCE_ID: { type: "string" },
+      API_TOKEN: { type: "string", "x-openmapx-secret": true },
+      NOTE: { type: "string" },
+    },
+  };
+
+  it("leaves a required key out of value validation", () => {
+    expect(validateTrustedConfigurationValues({ NOTE: "x" }, schema)).toBe(true);
+    expect(validateTrustedConfigurationValues({ INSTANCE_ID: 4 }, schema)).toBe(false);
+  });
+
+  it("names each required key without a value, a stored secret or an environment value", () => {
+    expect(missingRequiredConfiguration(schema, { values: { INSTANCE_ID: "" } })).toEqual([
+      "INSTANCE_ID",
+      "API_TOKEN",
+    ]);
+    expect(
+      missingRequiredConfiguration(schema, {
+        values: {},
+        secretKeys: ["API_TOKEN"],
+        envKeys: ["INSTANCE_ID"],
+      }),
+    ).toEqual([]);
+    expect(
+      missingRequiredConfiguration({ type: "object", properties: {} }, { values: {} }),
+    ).toEqual([]);
   });
 });

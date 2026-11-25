@@ -1,5 +1,7 @@
 import { z } from "zod";
+import { MAP_INTENT_PARAMS, MAP_LINK_PARAMS } from "../deep-links/mapLinkParams";
 import { parseSharedTravelPlan, type TravelPlanParseResult } from "../travel-plans";
+import { coordinateId } from "../types/placeIds";
 
 export const MAX_INTAKE_FILE_BYTES = 5 * 1024 * 1024;
 export const MAX_INTAKE_TEXT_BYTES = 8192;
@@ -81,7 +83,7 @@ function queryIntent(params: URLSearchParams, summary: string): SharedTextIntent
     : { kind: "unsupported", reason: "too-large" };
 }
 function search(text: string): SharedTextIntent {
-  return queryIntent(new URLSearchParams({ q: text }), text);
+  return queryIntent(new URLSearchParams({ [MAP_INTENT_PARAMS.query]: text }), text);
 }
 function point(text: string, name = ""): SharedTextIntent | null {
   const m =
@@ -97,11 +99,11 @@ function point(text: string, name = ""): SharedTextIntent | null {
   const label = name || m[3] || coords;
   return queryIntent(
     new URLSearchParams({
-      map: `${coords},16,0,0`,
-      panel: "place",
-      place: `geo:${coords}`,
-      at: coords,
-      name: label,
+      [MAP_LINK_PARAMS.camera]: `${coords},16,0,0`,
+      [MAP_LINK_PARAMS.panel]: "place",
+      [MAP_LINK_PARAMS.place]: `coordinate:${coordinateId([lng, lat])}`,
+      [MAP_LINK_PARAMS.placeLocation]: coords,
+      [MAP_LINK_PARAMS.placeName]: label,
     }),
     label,
   );
@@ -163,7 +165,9 @@ export function classifySharedText(raw: string, config: Config): SharedTextInten
     if (url.origin === origin && url.pathname === "/")
       return queryIntent(
         url.searchParams,
-        url.searchParams.get("name") || url.searchParams.get("q") || "OpenMapX",
+        url.searchParams.get(MAP_LINK_PARAMS.placeName) ||
+          url.searchParams.get(MAP_INTENT_PARAMS.query) ||
+          "OpenMapX",
       );
     if (url.port) return { kind: "unsupported", reason: "unsupported" };
     if (url.hostname === "maps.apple.com") {

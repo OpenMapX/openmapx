@@ -18,7 +18,7 @@ import { readDataManagerToken } from "@openmapx/core/service-secret-files";
 import { eq } from "drizzle-orm";
 import z from "zod/v4";
 import { db } from "../db";
-import { dataManagerJobs } from "../db/schema";
+import { dataManagerJob } from "../db/schema";
 import { JobObservationPending } from "./admin-job-failure";
 import type { JobContext } from "./job-runner";
 
@@ -94,8 +94,8 @@ export async function cancelAdminDataChildren(
     for (const { parentKey: cliKey, operationKey: key } of addresses) {
       const rows = await db
         .select()
-        .from(dataManagerJobs)
-        .where(eq(dataManagerJobs.operationKey, key))
+        .from(dataManagerJob)
+        .where(eq(dataManagerJob.operationKey, key))
         .limit(2);
       if (rows.length > 1) throw new JobObservationPending("invalid_identity");
       const row = rows[0];
@@ -231,9 +231,9 @@ export async function cancelAdminDataChildren(
     });
     await persist();
     outcomes.push(
-      status.status === "ok"
+      status.status === "succeeded"
         ? "succeeded"
-        : status.status === "canceled"
+        : status.status === "cancelled"
           ? "contained"
           : "already_terminal",
     );

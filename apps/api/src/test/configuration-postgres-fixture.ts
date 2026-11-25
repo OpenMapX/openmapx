@@ -30,7 +30,7 @@ export async function createConfigurationPostgresFixture(
       ...(options.withConfigurationMigration
         ? [
             "configuration_migration_preview",
-            "system_settings",
+            "system_setting",
             "system_secret",
             "platform_configuration_preview",
           ]

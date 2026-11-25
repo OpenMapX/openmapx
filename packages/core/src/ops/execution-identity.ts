@@ -103,8 +103,8 @@ export function executionFingerprint(input: {
   parent?: RetainedParentExecution;
 }): string {
   return createHash("sha256")
-    .update("openmapx-execution-v2\0")
-    .update(canonicalJson({ version: 2, ...input }))
+    .update("openmapx-execution-v1\0")
+    .update(canonicalJson({ version: 1, ...input }))
     .digest("hex");
 }
 function epoch(value: number): boolean {
@@ -204,7 +204,7 @@ export function verifyApiJobParentExecution(
 }
 
 export interface RetainedExecutionAdmission {
-  executionVersion: 2;
+  executionVersion: 1;
   admittedAt: number;
   deadlineAt: number;
   operationFingerprint: string;
@@ -222,7 +222,7 @@ export function validateRetainedExecutionAdmission(
   const parent =
     input.parent === undefined ? undefined : retainedParentExecutionSchema.parse(input.parent);
   if (
-    input.executionVersion !== 2 ||
+    input.executionVersion !== 1 ||
     !epoch(input.admittedAt) ||
     !epoch(input.deadlineAt) ||
     !Number.isSafeInteger(input.deploymentBudgetMs) ||

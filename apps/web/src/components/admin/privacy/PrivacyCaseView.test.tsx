@@ -53,4 +53,35 @@ describe("privacy case view", () => {
       await screen.findByText(/privacyAdmin\.workflows\.identityRequired/),
     ).toBeInTheDocument();
   });
+
+  it("shows which status a status change reached", () => {
+    const detail = privacyDetail();
+    detail.events = [
+      {
+        eventType: "status_changed",
+        actorKind: "admin",
+        createdAt: "2026-11-24T10:00:00.000Z",
+        payload: { from: "in_progress", to: "refused", reasonCode: "manifestly-unfounded" },
+      },
+    ];
+    const api = createApiClient({ baseUrl: "http://privacy.test", credentials: "include" });
+    render(
+      <QueryClientProvider client={createTestQueryClient()}>
+        <PrivacyCaseView
+          detail={detail}
+          binding={{
+            client: api,
+            apiOrigin: "http://privacy.test",
+            actorId: "synthetic-worker",
+            queries: privacyAdminQueries(api, "http://privacy.test", "synthetic-worker"),
+          }}
+          section="events"
+          onSectionChange={() => {}}
+          onRefresh={() => {}}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText(/status_changed in_progress → refused/)).toBeInTheDocument();
+  });
 });

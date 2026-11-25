@@ -52,7 +52,7 @@ function fixture() {
     },
     sourceId = "operator:de:local";
   writeFeedOverlayAtomic(overlayPath, {
-    version: 3,
+    version: 1,
     sources: [source],
     patches: [{ sourceId, skip: true }],
     quarantine: [],
@@ -87,7 +87,7 @@ it("removes an operator source together with its patches and quarantine, leaving
   });
   prepareRemoveTransitSource(fx).persist();
   expect(readFeedOverlay(fx.overlayPath)).toEqual({
-    version: 3,
+    version: 1,
     sources: [],
     patches: [{ sourceId: "catalog:de:catalog", skip: false }],
     quarantine: [],
@@ -171,7 +171,7 @@ it("keeps a quarantined colliding operator visible and removable without materia
     source = { ...fx.source, name: "catalog", url: "https://catalog.example.test/feed.zip" },
     sourceId = "operator:de:catalog";
   writeFeedOverlayAtomic(fx.overlayPath, {
-    version: 3,
+    version: 1,
     sources: [source],
     patches: [],
     quarantine: [

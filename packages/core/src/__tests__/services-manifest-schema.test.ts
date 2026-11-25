@@ -5,6 +5,7 @@ const validMinimal = {
   id: "valhalla",
   name: "Valhalla",
   version: "1.0.0",
+  platform: "1.0",
   quality: "built-in",
   container: {
     image: "ghcr.io/valhalla/valhalla-scripted",
@@ -193,28 +194,6 @@ describe("validateServiceManifest", () => {
     expect(result.errors.join(" ")).toMatch(/id/);
   });
 
-  it("accepts a containerName (including a single-char Docker name)", () => {
-    const multi = validateFirstParty({
-      ...validMinimal,
-      container: { ...validMinimal.container, containerName: "motis-staging" },
-    });
-    expect(multi.valid).toBe(true);
-    const single = validateFirstParty({
-      ...validMinimal,
-      container: { ...validMinimal.container, containerName: "m" },
-    });
-    expect(single.valid).toBe(true);
-  });
-
-  it("rejects a containerName with illegal characters", () => {
-    const result = validateFirstParty({
-      ...validMinimal,
-      container: { ...validMinimal.container, containerName: "bad/name" },
-    });
-    expect(result.valid).toBe(false);
-    expect(result.errors.join(" ")).toMatch(/container/i);
-  });
-
   it("rejects image containing a colon (tag must be separate)", () => {
     const result = validateFirstParty({
       ...validMinimal,
@@ -239,6 +218,15 @@ describe("validateServiceManifest", () => {
     });
     expect(malformed.valid).toBe(false);
     expect(malformed.errors.join(" ")).toMatch(/digest/i);
+  });
+
+  it("refuses a container name, which OpenMapX derives from the service id", () => {
+    const result = validateFirstParty({
+      ...validMinimal,
+      container: { ...validMinimal.container, containerName: "valhalla" },
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.join(" ")).toMatch(/containerName/);
   });
 
   it("rejects image with uppercase characters", () => {
@@ -337,17 +325,18 @@ describe("validateServiceManifest", () => {
     });
     expect(firstParty.valid).toBe(true);
 
-    for (const quality of ["community", "community-verified", "built-in"] as const) {
-      const external = validateExternal({
-        ...validMinimal,
-        quality,
-        communityNetworkAccess: ["weather-feed"],
-      });
-      expect(external.valid).toBe(false);
-      expect(external.errors).toContain(
-        "community_network_access_forbidden: communityNetworkAccess is reserved for audited first-party services",
-      );
-    }
+    const external = validateExternal({
+      ...validMinimal,
+      quality: "community",
+      communityNetworkAccess: ["weather-feed"],
+    });
+    expect(external.valid).toBe(false);
+    expect(external.errors).toContain(
+      "community_network_access_forbidden: communityNetworkAccess is reserved for audited first-party services",
+    );
+    expect(
+      validateExternal({ ...validMinimal, communityNetworkAccess: ["weather-feed"] }).valid,
+    ).toBe(false);
   });
 
   it("rejects even an empty communityNetworkAccess declaration from community provenance", () => {
@@ -466,18 +455,6 @@ describe("validateServiceManifest", () => {
     },
   );
 
-  it("rejects relative-path bindMounts for community-verified services", () => {
-    const result = validateExternal({
-      ...validMinimal,
-      quality: "community-verified",
-      bindMounts: [{ source: "config/settings.yml", target: "/app/settings.yml" }],
-    });
-    expect(result.valid).toBe(false);
-    expect(result.errors).toContain(
-      "community_bind_mount_forbidden: bindMounts are not allowed for community services",
-    );
-  });
-
   it("accepts @service:<slug>:<path> bindMount source for built-in services", () => {
     const result = validateFirstParty({
       ...validMinimal,
@@ -583,20 +560,11 @@ describe("validateServiceManifest", () => {
     expect(result.valid).toBe(false);
   });
 
-  describe("community / community-verified capability and device gating", () => {
+  describe("community capability and device gating", () => {
     it("accepts community service with NET_BIND_SERVICE in capAdd", () => {
       const result = validateExternal({
         ...validMinimal,
         quality: "community",
-        container: { ...validMinimal.container, capAdd: ["NET_BIND_SERVICE"] },
-      });
-      expect(result.valid).toBe(true);
-    });
-
-    it("accepts community-verified service with NET_BIND_SERVICE in capAdd", () => {
-      const result = validateExternal({
-        ...validMinimal,
-        quality: "community-verified",
         container: { ...validMinimal.container, capAdd: ["NET_BIND_SERVICE"] },
       });
       expect(result.valid).toBe(true);
@@ -680,25 +648,9 @@ describe("validateServiceManifest", () => {
   describe("privileged fields are authorized by provenance, not by tier labels", () => {
     const cases = [
       { name: "first-party built-in", firstParty: true, quality: "built-in", allowed: true },
-      {
-        name: "first-party community-verified",
-        firstParty: true,
-        quality: "community-verified",
-        allowed: false,
-      },
       { name: "first-party community", firstParty: true, quality: "community", allowed: false },
-      {
-        name: "external built-in",
-        firstParty: false,
-        quality: "built-in",
-        allowed: false,
-      },
-      {
-        name: "external community-verified",
-        firstParty: false,
-        quality: "community-verified",
-        allowed: false,
-      },
+      // The community schema already refuses the label, before the sandbox runs.
+      { name: "external built-in", firstParty: false, quality: "built-in", allowed: false },
       { name: "external community", firstParty: false, quality: "community", allowed: false },
     ] as const;
     const privilegedFields = [
@@ -749,24 +701,10 @@ describe("validateServiceManifest", () => {
           expect(result.valid, `${candidate.name} / ${field.name}`).toBe(candidate.allowed);
           if (!candidate.allowed && candidate.firstParty === false) {
             expect(result.errors.join(" "), `${candidate.name} / ${field.name}`).toMatch(
-              field.error,
+              candidate.quality === "built-in" ? /quality/ : field.error,
             );
           }
         }
-
-        const verified = validateExternal({
-          ...validMinimal,
-          quality: "community-verified",
-          container: { ...validMinimal.container, ...field.container },
-          ...(field.bindMounts ? { bindMounts: field.bindMounts } : {}),
-        });
-        const community = validateExternal({
-          ...validMinimal,
-          quality: "community",
-          container: { ...validMinimal.container, ...field.container },
-          ...(field.bindMounts ? { bindMounts: field.bindMounts } : {}),
-        });
-        expect(verified.errors).toEqual(community.errors);
       });
     }
   });
@@ -776,7 +714,6 @@ describe("validateServiceManifest", () => {
       const result = validateExternal(validMinimal);
       expect(result.valid).toBe(false);
       expect(result.errors.join(" ")).toMatch(/quality/);
-      expect(result.errors.join(" ")).toMatch(/reserved for services shipped/);
     });
 
     it("still accepts an honest community manifest without elevated privileges", () => {

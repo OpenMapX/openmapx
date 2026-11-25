@@ -16,7 +16,7 @@ export const platformConfigurationPreview = pgTable(
   "platform_configuration_preview",
   {
     id: uuid("id").primaryKey().default(sql`uuidv7()`),
-    actorId: text("actor_id").notNull(),
+    actorUserId: text("actor_user_id").notNull(),
     operationKey: text("operation_key").notNull(),
     requestFingerprint: text("request_fingerprint").notNull(),
     previewFingerprint: text("preview_fingerprint").notNull(),
@@ -32,12 +32,12 @@ export const platformConfigurationPreview = pgTable(
   },
   (t) => [
     foreignKey({
-      name: "platform_configuration_preview_actor_id_fkey",
-      columns: [t.actorId],
+      name: "platform_configuration_preview_actor_user_id_fkey",
+      columns: [t.actorUserId],
       foreignColumns: [user.id],
     }).onDelete("cascade"),
-    uniqueIndex("platform_configuration_preview_actor_id_operation_key_key").on(
-      t.actorId,
+    uniqueIndex("platform_configuration_preview_actor_user_id_operation_key_key").on(
+      t.actorUserId,
       t.operationKey,
     ),
     uniqueIndex("platform_configuration_preview_preview_fingerprint_key").on(t.previewFingerprint),

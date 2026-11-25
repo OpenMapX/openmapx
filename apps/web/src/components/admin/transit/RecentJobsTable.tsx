@@ -111,7 +111,9 @@ function JobDetailDrawer({ jobId, onClose }: { jobId: string; onClose: () => voi
               <JobStatusChip status={data.status} />
               <Chip
                 size="small"
-                label={t("triggeredByActor", { actor: data.triggeredBy ?? "—" })}
+                label={t("triggeredByActor", {
+                  actor: t("jobTrigger", { trigger: data.trigger }),
+                })}
                 variant="outlined"
               />
               <Chip
@@ -215,7 +217,7 @@ export function RecentJobsTable() {
                         color: "text.secondary",
                       }}
                     >
-                      {job.triggeredBy ?? "—"}
+                      {t("jobTrigger", { trigger: job.trigger })}
                     </Typography>
                   </TableCell>
                   <TableCell align="right">

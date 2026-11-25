@@ -27,13 +27,19 @@ function parsePagination(query: Record<string, string | string[] | undefined>): 
  * index hasn't been initialised — the index is created during host startup,
  * so a 503 indicates a misconfigured boot, not a transient outage.
  */
+const INDEX_UNAVAILABLE = {
+  error: "Attribution index unavailable",
+  code: "ATTRIBUTION_INDEX_UNAVAILABLE",
+} as const;
+const NOT_FOUND = { error: "Attribution not found", code: "NOT_FOUND" } as const;
+
 export const attributionRoute: FastifyPluginAsync = async (fastify) => {
   declareRouteAuth(fastify, "public");
 
   fastify.get("/attribution/health", async (_req, reply) => {
     const idx = getAttributionIndex();
     if (!idx) {
-      return reply.status(503).send({ error: "attribution_index_unavailable" });
+      return reply.status(503).send(INDEX_UNAVAILABLE);
     }
     reply.header("Cache-Control", CACHE_HEADER);
     return reply.send(idx.health());
@@ -44,7 +50,7 @@ export const attributionRoute: FastifyPluginAsync = async (fastify) => {
     async (req, reply) => {
       const idx = getAttributionIndex();
       if (!idx) {
-        return reply.status(503).send({ error: "attribution_index_unavailable" });
+        return reply.status(503).send(INDEX_UNAVAILABLE);
       }
       const { limit, offset } = parsePagination(req.query);
       const all = idx.list();
@@ -64,11 +70,11 @@ export const attributionRoute: FastifyPluginAsync = async (fastify) => {
     async (req, reply) => {
       const idx = getAttributionIndex();
       if (!idx) {
-        return reply.status(503).send({ error: "attribution_index_unavailable" });
+        return reply.status(503).send(INDEX_UNAVAILABLE);
       }
       const attr = idx.getForMotisFile(req.params.filename);
       if (!attr) {
-        return reply.status(404).send({ error: "not_found" });
+        return reply.status(404).send(NOT_FOUND);
       }
       reply.header("Cache-Control", CACHE_HEADER);
       return reply.send(attr);
@@ -78,11 +84,11 @@ export const attributionRoute: FastifyPluginAsync = async (fastify) => {
   fastify.get<{ Params: { sourceId: string } }>("/attribution/:sourceId", async (req, reply) => {
     const idx = getAttributionIndex();
     if (!idx) {
-      return reply.status(503).send({ error: "attribution_index_unavailable" });
+      return reply.status(503).send(INDEX_UNAVAILABLE);
     }
     const attr = idx.getById(req.params.sourceId);
     if (!attr) {
-      return reply.status(404).send({ error: "not_found" });
+      return reply.status(404).send(NOT_FOUND);
     }
     reply.header("Cache-Control", CACHE_HEADER);
     return reply.send(attr);

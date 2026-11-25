@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   CREDENTIAL_KEYED_INTEGRATIONS,
   checkCredentialKey,
+  credentialKey,
   credentialKeysOf,
   loadManifest,
 } from "../../scripts/check-credential-keys";
@@ -40,24 +41,26 @@ describe("credential-key consistency", () => {
     expect(checked).toBeGreaterThanOrEqual(12);
   });
 
-  it("rejects a key that only shares a hyphenated prefix with a sourceId instead of composing exactly", () => {
-    // "dot-gaa-api-key" is NOT the exact composition dot-ga + "-" + api-key,
-    // even though it shares the "dot-ga" prefix. A startsWith-based (rather
-    // than exact-composition) check would wrongly accept this.
+  it("rejects a key that only shares a prefix with a sourceId instead of composing exactly", () => {
+    // "dotGaaApiKey" is NOT the exact composition of dot-ga and api-key, even
+    // though it shares the "dotGa" prefix. A startsWith-based (rather than
+    // exact-composition) check would wrongly accept this.
     const sourceIds = new Set(["dot-ga"]);
-    expect(checkCredentialKey("bike-sharing", "dot-gaa-api-key", sourceIds)).toBeDefined();
-    expect(checkCredentialKey("bike-sharing", "dot-ga-api-key", sourceIds)).toBeUndefined();
+    expect(checkCredentialKey("bike-sharing", "dotGaaApiKey", sourceIds)).toBeDefined();
+    expect(checkCredentialKey("bike-sharing", "dotGaApiKey", sourceIds)).toBeUndefined();
+    expect(credentialKey("gofs-custom-1", "api-key")).toBe("gofsCustom1ApiKey");
   });
 
   it("rejects a credential key with disallowed characters or casing", () => {
     const sourceIds = new Set(["dot-ga"]);
     expect(checkCredentialKey("bike-sharing", "dot_ga_api_key", sourceIds)).toBeDefined();
-    expect(checkCredentialKey("bike-sharing", "dotGaApiKey", sourceIds)).toBeDefined();
+    expect(checkCredentialKey("bike-sharing", "dot-ga-api-key", sourceIds)).toBeDefined();
+    expect(checkCredentialKey("bike-sharing", "DotGaApiKey", sourceIds)).toBeDefined();
   });
 
   it("rejects a credential key composed with a field outside the allowed set", () => {
     const sourceIds = new Set(["dot-ga"]);
-    expect(checkCredentialKey("bike-sharing", "dot-ga-secret", sourceIds)).toBeDefined();
+    expect(checkCredentialKey("bike-sharing", "dotGaSecret", sourceIds)).toBeDefined();
   });
 
   it("ignores exempt single-provider integrations, even though their bare keys would fail the governed-integration rule", () => {

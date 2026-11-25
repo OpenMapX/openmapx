@@ -73,21 +73,21 @@ as unset. The environment must reach the API process: adding a line to
 process can read it.
 
 The environment-variable name follows a fixed pattern: `INTEGRATION_`, then the
-integration's id, then `_`, then the config key. Both the id and the key are
-hyphen-normalized (hyphens become underscores) and upper-cased. A camelCase
-schema key like `apiKey` has no hyphens to normalize, so it is set by
-`INTEGRATION_<ID>_APIKEY`:
+integration's id, then `_`, then the config key. The id's hyphens become
+underscores, the lowerCamel key's words are joined with underscores, and both
+are upper-cased. The schema key `apiKey` is set by `INTEGRATION_<ID>_API_KEY`:
 
 ```bash
 # infra/docker/.env — overrides the `apiKey` setting of the `geocoding-maptiler` integration
-INTEGRATION_GEOCODING_MAPTILER_APIKEY=your-key-here
+INTEGRATION_GEOCODING_MAPTILER_API_KEY=your-key-here
 ```
 
-Hyphenated keys are normalized the same way. For example, the
-`db-bike-api-key` config key of the `bike-sharing` integration is set by:
+Config keys are lowerCamel, and each word becomes its own part of the name. For
+example, the `dbBikeApiKey` config key of the `bike-sharing` integration is set
+by:
 
 ```bash
-# infra/docker/.env — overrides the `db-bike-api-key` setting of the `bike-sharing` integration
+# infra/docker/.env — overrides the `dbBikeApiKey` setting of the `bike-sharing` integration
 INTEGRATION_BIKE_SHARING_DB_BIKE_API_KEY=your-key-here
 ```
 
@@ -211,8 +211,8 @@ OpenMapX lets an operator gate the two restrictive classes:
   are merely undocumented.
 
 Both are allowed by default. Review the terms for your deployment and disallow either class from
-`/admin/settings/data-use`, or with the `OPENMAPX_ALLOW_NONCOMMERCIAL` /
-`OPENMAPX_ALLOW_GREY_AREA` environment variables (environment takes precedence). The policy cache refreshes at a 30-second
+`/admin/settings/data-use`, or with the `DATA_USE_ALLOW_NON_COMMERCIAL` /
+`DATA_USE_ALLOW_GREY_AREA` environment variables (environment takes precedence). The policy cache refreshes at a 30-second
 interval and is invalidated by relevant settings changes. Orchestrators use the
 excluded provider/source sets, and the response filter removes tagged excluded
 data. Mixed-source integrations need source-level handling; these controls are

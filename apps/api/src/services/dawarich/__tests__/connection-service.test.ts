@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { user } from "../../../db/auth-schema.js";
 import type { PersonalTimelineConnectionRow } from "../../../db/timeline-connection-schema.js";
 import { personalTimelineConnection } from "../../../db/timeline-connection-schema.js";
-import { encrypt } from "../../secrets.js";
+import { encrypt, secretAad } from "../../secrets.js";
 import { currentUserFixture, settingsFixture } from "../__fixtures__/timeline-day.js";
 import { DawarichClientError, type DawarichClientOptions } from "../client.js";
 import {
@@ -27,9 +27,10 @@ function connectionRow(
     mode: "external",
     publicOrigin: "https://old.example",
     displayName: "Old timeline",
-    encryptedApiKey: "old-ciphertext",
-    encryptionIv: "old-iv",
-    encryptionTag: "old-tag",
+    apiKeyCiphertext: "old-ciphertext",
+    apiKeyIv: "old-iv",
+    apiKeyTag: "old-tag",
+    apiKeyKeyVersion: 1,
     upstreamUserId: null,
     upstreamEmail: "old@example.invalid",
     upstreamTimeZone: "Etc/UTC",
@@ -65,7 +66,8 @@ class MemoryConnectionStore implements TimelineConnectionStore {
   ) {
     const current = this.rows.get(userId);
     if (!current) return null;
-    if (expectedEncryptedApiKey && current.encryptedApiKey !== expectedEncryptedApiKey) return null;
+    if (expectedEncryptedApiKey && current.apiKeyCiphertext !== expectedEncryptedApiKey)
+      return null;
     const next = { ...current, ...updates, userId: current.userId };
     this.rows.set(userId, next);
     return next;
@@ -78,7 +80,7 @@ class MemoryConnectionStore implements TimelineConnectionStore {
     updatedAt: Date,
   ) {
     const current = this.rows.get(userId);
-    if (!current || current.encryptedApiKey !== expectedEncryptedApiKey) return null;
+    if (!current || current.apiKeyCiphertext !== expectedEncryptedApiKey) return null;
     const consecutiveFailures = current.consecutiveFailures + 1;
     const status =
       failureKind === "credential_invalid"
@@ -147,9 +149,10 @@ describe("personal timeline connection schema", () => {
       "mode",
       "public_origin",
       "display_name",
-      "encrypted_api_key",
-      "encryption_iv",
-      "encryption_tag",
+      "api_key_ciphertext",
+      "api_key_iv",
+      "api_key_tag",
+      "api_key_key_version",
       "upstream_user_id",
       "upstream_email",
       "upstream_time_zone",
@@ -172,7 +175,12 @@ describe("personal timeline connection schema", () => {
     expect(reference?.foreignColumns.map((column) => column.name)).toEqual(["id"]);
     expect(reference?.foreignTable).toBe(user);
     expect(foreignKey?.onDelete).toBe("cascade");
-    for (const secretColumn of ["encrypted_api_key", "encryption_iv", "encryption_tag"]) {
+    for (const secretColumn of [
+      "api_key_ciphertext",
+      "api_key_iv",
+      "api_key_tag",
+      "api_key_key_version",
+    ]) {
       expect(config.columns.find((column) => column.name === secretColumn)?.notNull).toBe(true);
     }
     expect(config.columns.find((column) => column.name === "status")?.default).toBe("connected");
@@ -286,9 +294,10 @@ describe("TimelineConnectionService", () => {
       status: "connected",
       consecutiveFailures: 0,
     });
-    expect(stored?.encryptedApiKey).not.toContain("top-secret-key");
-    expect(stored?.encryptionIv).not.toBe("");
-    expect(stored?.encryptionTag).not.toBe("");
+    expect(stored?.apiKeyCiphertext).not.toContain("top-secret-key");
+    expect(stored?.apiKeyIv).not.toBe("");
+    expect(stored?.apiKeyTag).not.toBe("");
+    expect(stored?.apiKeyKeyVersion).toBe(1);
     await expect(service.decryptConnectionCredential(USER_ID)).resolves.toMatchObject({
       apiKey: "top-secret-key",
       upstreamBaseUrl: "https://dawarich.example.test",
@@ -450,11 +459,12 @@ describe("TimelineConnectionService", () => {
 
   it("writes only safe audit dimensions on a rejected switch and manual test", async () => {
     const store = new MemoryConnectionStore();
-    const encrypted = encrypt("stored-key");
+    const encrypted = encrypt("stored-key", secretAad.personalTimelineConnection(USER_ID));
     const encryptedKey = {
-      encryptedApiKey: encrypted.ciphertext,
-      encryptionIv: encrypted.iv,
-      encryptionTag: encrypted.tag,
+      apiKeyCiphertext: encrypted.ciphertext,
+      apiKeyIv: encrypted.iv,
+      apiKeyTag: encrypted.tag,
+      apiKeyKeyVersion: encrypted.keyVersion,
     };
     store.rows.set(USER_ID, connectionRow({ ...encryptedKey }));
     const audits: Array<Record<string, unknown>> = [];

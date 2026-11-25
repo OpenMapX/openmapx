@@ -20,7 +20,7 @@ import { resolveOperationsProfile } from "../../src/jobs/transitous/operations-p
 export async function installDisposableDataAdmission(
   sql: postgres.Sql,
 ): Promise<() => Promise<void>> {
-  const existing = await sql.unsafe("SELECT to_regclass('data_manager.jobs') AS table_name");
+  const existing = await sql.unsafe("SELECT to_regclass('data_manager.job') AS table_name");
   if (existing[0]?.table_name) throw Error("Admission fixture requires its new disposable schema");
   // Only the baseline's data_manager statements: the disposable schema has no
   // API tables, and the custom migration's grants name roles it lacks.

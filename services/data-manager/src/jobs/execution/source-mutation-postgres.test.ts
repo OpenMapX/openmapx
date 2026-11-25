@@ -29,7 +29,7 @@ it.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     mkdirSync(join(dataRoot, "overrides"));
     writeFileSync(join(catalogDir, "feeds/de.json"), JSON.stringify({ sources: [] }));
     writeFeedOverlayAtomic(overlayPath, {
-      version: 3,
+      version: 1,
       sources: [
         {
           spec: "gtfs",
@@ -101,7 +101,7 @@ it.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           kind: "transit-sync",
           sourceRevision: "synthetic-pinned-catalog",
           countries: ["de"],
-          finalStatus: "ok",
+          finalStatus: "succeeded",
         };
       },
     });
@@ -115,37 +115,48 @@ it.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       keys.push(fontKey, blockedKey);
       const competing = await runtime.admit(
         { kind: "download-fonts" },
-        { operationKey: fontKey, requestedDeadlineAt: deadline },
+        { operationKey: fontKey, requestedDeadlineAt: deadline, trigger: "cli" },
       );
       await started.promise;
       const originalBytes = readFileSync(overlayPath);
       await expect(
-        runtime.admit(input, { operationKey: blockedKey, requestedDeadlineAt: deadline }),
+        runtime.admit(input, {
+          operationKey: blockedKey,
+          requestedDeadlineAt: deadline,
+          trigger: "cli",
+        }),
       ).rejects.toThrow();
       expect(writes).toBe(0);
       expect(readFileSync(overlayPath)).toEqual(originalBytes);
       held.resolve();
       await expect
         .poll(async () => (await runtime.inspect(competing.id))?.status, { timeout: 15000 })
-        .toBe("ok");
+        .toBe("succeeded");
       const admitted = await runtime.admit(input, {
         operationKey: key,
         requestedDeadlineAt: deadline,
+        trigger: "cli",
       });
       id = admitted.id;
       await expect
         .poll(async () => (await runtime.inspect(admitted.id))?.status, { timeout: 15000 })
-        .toBe("ok");
+        .toBe("succeeded");
       expect(readFeedOverlay(overlayPath)?.patches).toEqual([
         { sourceId: "operator:de:local", skip: true },
       ]);
       // The sync is the only row the mutation wrote.
       expect(
-        await sql`SELECT kind FROM data_manager.jobs WHERE kind LIKE 'transit-source-%'`,
+        await sql`SELECT kind FROM data_manager.job WHERE kind LIKE 'transit-source-%'`,
       ).toHaveLength(0);
       const bytes = readFileSync(overlayPath);
       expect(
-        (await runtime.admit(input, { operationKey: key, requestedDeadlineAt: deadline })).id,
+        (
+          await runtime.admit(input, {
+            operationKey: key,
+            requestedDeadlineAt: deadline,
+            trigger: "cli",
+          })
+        ).id,
       ).toBe(id);
       expect(writes).toBe(1);
       expect(readFileSync(overlayPath)).toEqual(bytes);
@@ -166,10 +177,11 @@ it.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const status = await runtime.admit(next, {
           operationKey: nextKey,
           requestedDeadlineAt: deadline,
+          trigger: "cli",
         });
         await expect
           .poll(async () => (await runtime.inspect(status.id))?.status, { timeout: 15000 })
-          .toBe("ok");
+          .toBe("succeeded");
         const observed = await store.inspect(status.id);
         expect(observed?.input).toEqual(next);
         if (action === "enable")
@@ -184,7 +196,7 @@ it.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           });
         else
           expect(readFeedOverlay(overlayPath)).toEqual({
-            version: 3,
+            version: 1,
             sources: [],
             patches: [],
             quarantine: [],
@@ -194,7 +206,7 @@ it.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     } finally {
       held.resolve();
       await runtime.close();
-      await sql`DELETE FROM data_manager.jobs WHERE operation_key IN ${sql(keys)}`;
+      await sql`DELETE FROM data_manager.job WHERE operation_key IN ${sql(keys)}`;
       control.closeControlInstallation(installation);
       await sql.end();
       rmSync(root, { recursive: true, force: true });

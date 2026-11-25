@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://openmapx.example/privacy/portable-profile-v1",
+  "$id": "urn:openmapx:privacy:portable-profile:1",
   "type": "array",
   "items": {
     "type": "object",

@@ -148,7 +148,7 @@ describe("application administration contract registration", () => {
   it("validates before database work and accepts a real typed conflict", async () => {
     const CONFLICT = {
       error: "Another data job is running. Try again when it finishes.",
-      code: "in-flight",
+      code: "IN_FLIGHT",
       existingJobId: null,
     };
     const app = Fastify();

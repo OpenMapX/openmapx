@@ -85,7 +85,7 @@ export function captureEnrichedPlaceContributors(
     if (base.ids[scheme] === value) {
       fields[key] = contributorsForField(base, key);
     } else {
-      const externalKey = scheme === "googleMaps" ? "google_maps" : scheme;
+      const externalKey = scheme === "google-maps" ? "google_maps" : scheme;
       const fromKnowledge = knowledge.externalIds?.[externalKey] === value;
       fields[key] = contributorsForField(
         fromKnowledge ? knowledge : base,

@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -238,6 +239,77 @@ describe("configuration generations", () => {
     });
   });
 
+  describe("required settings", () => {
+    const strict = () => {
+      const ingest = service("ingest");
+      ingest.isBuiltIn = false;
+      ingest.manifest.quality = "community";
+      ingest.manifest.container.memory = "512m";
+      ingest.manifest.configSchema = {
+        type: "object",
+        required: ["INSTANCE_ID", "API_TOKEN", "REGION"],
+        properties: {
+          INSTANCE_ID: { type: "string", default: "" },
+          API_TOKEN: { type: "string", "x-openmapx-secret": true },
+          REGION: { type: "string" },
+        },
+      };
+      return ingest;
+    };
+
+    it("names the enabled service and each required key that has no value", () => {
+      const { infraDir } = checkout();
+      expect(() =>
+        renderConfiguration({
+          infraDir,
+          services: [strict(), ...services],
+          input: input({
+            selectedRoots: ["ingest"],
+            serviceConfigs: [{ serviceId: "ingest", values: { INSTANCE_ID: "" } }],
+          }),
+        }),
+      ).toThrow(
+        /Required service settings have no value: ingest \(INSTANCE_ID, API_TOKEN, REGION\)/,
+      );
+    });
+
+    it("accepts a value, a stored secret or an environment value", () => {
+      const { infraDir } = checkout();
+      const { rendered } = renderConfiguration({
+        infraDir,
+        services: [strict(), ...services],
+        input: input({
+          selectedRoots: ["ingest"],
+          serviceConfigs: [
+            {
+              serviceId: "ingest",
+              values: { INSTANCE_ID: "maps.example.test" },
+              envKeys: ["REGION"],
+            },
+          ],
+          serviceSecrets: [{ serviceId: "ingest", values: { API_TOKEN: "t".repeat(32) } }],
+        }),
+      });
+      expect(rendered.composeYaml).toContain("INSTANCE_ID: maps.example.test");
+    });
+
+    it("does not hold services that are not enabled, or saved values, to it", () => {
+      const { infraDir } = checkout();
+      // A saved partial configuration of a service that is not enabled is
+      // still a well-formed configuration.
+      expect(() =>
+        renderConfiguration({
+          infraDir,
+          services: [strict(), ...services],
+          input: input({
+            selectedRoots: ["alpha"],
+            serviceConfigs: [{ serviceId: "ingest", values: { REGION: "eu" } }],
+          }),
+        }),
+      ).not.toThrow();
+    });
+  });
+
   it("refuses configuration of a service it does not know", async () => {
     const { infraDir } = checkout();
     await expect(
@@ -387,7 +459,23 @@ it("retains closed platform ownership through a generation without exporting sec
     readFileSync(join(infraDir, CURRENT_CONFIGURATION, "resolved-config.generated.json"), "utf8"),
   );
   expect(config.platform).toEqual(platform);
+  expect(config.version).toBe(1);
   expect(config).not.toHaveProperty("serviceSecrets");
+});
+
+it("refuses a resolved configuration of another format version", async () => {
+  const { infraDir } = checkout();
+  await commitConfigurationGeneration({ infraDir, services, input: input() });
+  const path = realpathSync(
+    join(infraDir, CURRENT_CONFIGURATION, "resolved-config.generated.json"),
+  );
+  const config = JSON.parse(readFileSync(path, "utf8"));
+  chmodSync(path, 0o600);
+  writeFileSync(path, JSON.stringify({ ...config, version: 2 }));
+  chmodSync(path, 0o400);
+  expect(() => readAppliedConfiguration(infraDir)).toThrow(
+    "resolved-config.generated.json is not a version 1 resolved configuration",
+  );
 });
 
 it("keeps host-owned Compose interpolation equivalent to legacy generations", () => {
@@ -413,7 +501,7 @@ it("applied selector and retention follow the current generation and explicit re
   const { readAppliedPlatformValues, readAppliedReleaseSelection } = await import(
     "../configuration-generation"
   );
-  const env = { OPENMAPX_RELEASE: "main", BACKUP_RETENTION_DAYS: "30" };
+  const env = { OPENMAPX_RELEASE: "main", RETENTION_BACKUP_DAYS: "30" };
   await commitConfigurationGeneration({
     infraDir,
     services,
@@ -440,7 +528,7 @@ it("applied selector and retention follow the current generation and explicit re
   });
   expect(readAppliedReleaseSelection(infraDir, env)).toMatchObject({ kind: "main" });
   expect(
-    readAppliedPlatformValues(infraDir, { ...env, BACKUP_RETENTION_DAYS: "45" })
+    readAppliedPlatformValues(infraDir, { ...env, RETENTION_BACKUP_DAYS: "45" })
       .backupRetentionDays,
   ).toBe(45);
 });
@@ -507,6 +595,28 @@ describe("release pins in the generation", () => {
     expect(
       readFileSync(join(infraDir, CURRENT_CONFIGURATION, "release-manifest.json"), "utf8"),
     ).toBe(canonicalReleaseManifest(first));
+  });
+
+  it("reports the pinned release's version unless the operator sets OPENMAPX_VERSION", () => {
+    const { infraDir } = checkout();
+    const api = service("api");
+    api.manifest.container.environment = { OPENMAPX_VERSION: "${OPENMAPX_VERSION:-1.0}" };
+    const render = (release: ReleaseManifest | null) =>
+      (
+        parseYaml(
+          renderConfiguration({
+            infraDir,
+            services: [api],
+            input: input({ selectedRoots: ["api"] }),
+            release,
+          }).rendered.composeYaml,
+        ) as { services: { api: { environment: Record<string, string> } } }
+      ).services.api.environment.OPENMAPX_VERSION;
+    expect(render(manifest("release-7", "7"))).toBe("${OPENMAPX_VERSION:-release-7}");
+    expect(
+      render({ ...manifest("v1.2.0", "7"), product: { version: "1.2.0" } } as ReleaseManifest),
+    ).toBe("${OPENMAPX_VERSION:-1.2.0}");
+    expect(render(null)).toBe("${OPENMAPX_VERSION:-1.0}");
   });
 
   it("keeps the applied pins when a render names no release, and drops them on null", async () => {

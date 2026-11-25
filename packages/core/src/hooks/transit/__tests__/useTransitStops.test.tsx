@@ -25,7 +25,9 @@ describe("useTransitStops recovery", () => {
   it("surfaces an oversized-area error after one request", async () => {
     const get = vi
       .spyOn(apiClient, "get")
-      .mockRejectedValue(new ApiClientError(422, { error: "area_too_large" }, null));
+      .mockRejectedValue(
+        new ApiClientError(422, { error: "Area too large", code: "AREA_TOO_LARGE" }, null),
+      );
 
     const { result } = renderHook(() => useTransitStops(bbox), {
       wrapper: productionQueryWrapper(),

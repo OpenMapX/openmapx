@@ -208,7 +208,6 @@ describe("POST /admin/cache/clear", () => {
     expect(mockWriteAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
         action: "cache.clear",
-        targetType: "cache",
         details: { namespace: "geocoding", patterns: ["int:geocoding:*"] },
       }),
     );

@@ -12,7 +12,7 @@ import {
   serviceOwnershipSnapshot,
 } from "../configuration-ownership-view";
 import type { ProspectiveConfigurationOverlay } from "../prospective-configuration";
-import { decrypt } from "../secrets";
+import { decrypt, secretAad } from "../secrets";
 import type { FeedCredentialChangePreview } from "../transit-credential-preview";
 import { previewFeedCredentialChanges } from "../transit-feed-credential-participant";
 import {
@@ -78,7 +78,11 @@ export async function exportCredentialSelection(input: {
             )
           : read.serviceSecretRows.find((r) => r.serviceId === field.id && r.key === field.key);
       if (!row) throw new MigrationConflict();
-      entries.push({ ...field, value: decrypt(row.ciphertext, row.iv, row.tag) });
+      const aad =
+        field.scope === "integration"
+          ? secretAad.integrationSecret(field.id, field.key)
+          : secretAad.serviceSecret(field.id, field.key);
+      entries.push({ ...field, value: decrypt(row, aad) });
     }
     return { version: 1 as const, entries };
   });

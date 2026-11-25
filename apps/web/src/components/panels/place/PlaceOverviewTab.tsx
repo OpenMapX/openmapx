@@ -41,8 +41,11 @@ import {
   isFoodPlace,
   isLodging,
   isSystemSavedList,
+  persistablePlaceId,
   plusCodeUrl,
   safeHref,
+  savedPlaceKey,
+  savedRowKey,
   shortenPlusCode,
   useDeleteLabel,
   useIsSaved,
@@ -356,13 +359,14 @@ export function PlaceOverviewTab({
   const updateLabelMutation = useUpdateLabel();
   const deleteLabelMutation = useDeleteLabel();
   const isAuthenticated = Boolean(session?.user);
-  const { data: savedInListIds } = useIsSaved(isAuthenticated ? place.id : null);
+  const placeKey = savedPlaceKey(place);
+  const { data: savedInListIds } = useIsSaved(isAuthenticated ? placeKey : null);
   const { data: allLists } = useSavedLists();
   const { data: labeledPlaces } = useLabeledPlaces();
 
   const savedInLists = allLists?.filter((l) => savedInListIds?.includes(l.id)) ?? [];
   const [firstSavedList, secondSavedList] = savedInLists;
-  const existingLabel = labeledPlaces?.find((lp) => lp.placeId === place.id);
+  const existingLabel = labeledPlaces?.find((lp) => savedRowKey(lp) === placeKey);
 
   const resolveListName = (name: string) =>
     isSystemSavedList(name) ? tSaved(name.slice(1)) : name;
@@ -388,7 +392,7 @@ export function PlaceOverviewTab({
       address: place.address ?? undefined,
       lat: place.coordinates[1],
       lng: place.coordinates[0],
-      placeId: place.id,
+      placeId: persistablePlaceId(place.id),
       fieldContributors: captureSavedPlaceContributors(place),
     });
     setLabelDialogOpen(false);

@@ -23,7 +23,7 @@ crashScenario({
     await host.restart("api");
     // The restarted API resumes the job once the dead owner's claim has lapsed.
     const job = await host.waitForJob(submitted.jobId as string, { timeoutMs: 300_000 });
-    expect(job.status).toBe("success");
+    expect(job.status).toBe("succeeded");
     expect(host.agentOperations("stack.render")).toHaveLength(1);
     const recreated = host
       .dockerEffects({ command: "compose up", caller: "helper", since: start })

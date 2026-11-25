@@ -2,7 +2,11 @@ import { extensionManifestSchema } from "@openmapx/extension-contracts/extension
 import z from "zod/v4";
 import { adminCountSchema, adminJsonValueSchema } from "../admin";
 import { adminJsonWire, preserveManifestJson } from "../manifest-json";
-import { adminExtensionComponentKindSchema, adminExtensionTrustSchema } from "./common";
+import {
+  adminExtensionComponentKindSchema,
+  adminExtensionCriticalAdvisorySchema,
+  adminExtensionTrustSchema,
+} from "./common";
 
 // Unknown scalar choices retain the producer's filtering/sorting fallback semantics.
 export const adminExtensionCatalogQuerySchema = z.strictObject({
@@ -49,7 +53,8 @@ const projection = {
   compatible: z.boolean(),
   platformVersion: z.string(),
   removed: z.string().nullable(),
-  critical: z.strictObject({ reason: z.string(), maxVersion: z.string().optional() }).nullable(),
+  /** The advisory that covers the version the catalog offers. */
+  critical: adminExtensionCriticalAdvisorySchema.nullable(),
 };
 export const adminExtensionCatalogStatusSchema = z.enum([
   "verified",
@@ -63,6 +68,8 @@ export const adminExtensionCatalogEntrySchema = adminJsonWire(
     components: z.strictObject({ services: adminCountSchema, integrations: adminCountSchema }),
     installed: z.boolean(),
     installedVersion: z.string().nullable(),
+    /** The advisory that covers the installed version, which may differ from `critical`. */
+    installedCritical: adminExtensionCriticalAdvisorySchema.nullable(),
     hasUpdate: z.boolean(),
     status: adminExtensionCatalogStatusSchema,
   }),

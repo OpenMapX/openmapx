@@ -282,7 +282,7 @@ describe("admin Dawarich provisioning routes", () => {
     expect(mockRotate).toHaveBeenCalledTimes(1);
     expect(mockWriteAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({
-        action: "dawarich.rotate_oidc_secret",
+        action: "dawarich.oidc_secret.rotate",
         details: expect.objectContaining({ rotated: true, outcome: "success" }),
       }),
     );

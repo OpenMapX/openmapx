@@ -114,7 +114,7 @@ describe("geocode", () => {
     expect(results[0]?.rawCategory).toBeUndefined();
   });
 
-  it("throws when MAPTILER_KEY is not set", async () => {
+  it("throws when MAPTILER_API_KEY is not set", async () => {
     const { maptilerGeocodingService } = await loadModule({ withApiKey: false });
 
     await expect(maptilerGeocodingService.geocode("Berlin")).rejects.toThrow(

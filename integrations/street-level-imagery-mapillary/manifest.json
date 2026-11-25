@@ -58,7 +58,6 @@
     "requiredConfigKeys": ["accessToken"]
   },
   "quality": "built-in",
-  "category": "Imagery",
   "dataSources": [
     {
       "sourceId": "mapillary",

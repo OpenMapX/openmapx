@@ -168,13 +168,7 @@ async function runTransitSync(
   }
 
   const result = dm.unwrapDataManagerResponse(
-    await dm.syncTransit(
-      {
-        countries: resolvedCountries.values,
-        triggeredBy: "openmapx-cli",
-      },
-      { transport },
-    ),
+    await dm.syncTransit({ countries: resolvedCountries.values }, { transport }),
   );
   log.info(
     `Transit sync queued: ${result.jobId}; inspect this execution in Activity or GET /executions/${result.jobId}`,

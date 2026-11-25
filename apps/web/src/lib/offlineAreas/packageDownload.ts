@@ -31,7 +31,7 @@ export function hasActiveOfflinePackageDownload(): boolean {
 
 function errorCode(error: unknown): string {
   if (error instanceof OfflinePackageApiError) return error.code;
-  if (error instanceof DOMException && error.name === "AbortError") return "aborted";
+  if (error instanceof DOMException && error.name === "AbortError") return "ABORTED";
   if (
     error &&
     typeof error === "object" &&
@@ -39,9 +39,9 @@ function errorCode(error: unknown): string {
       `${"name" in error ? String(error.name) : ""}${"message" in error ? String(error.message) : ""}`,
     )
   ) {
-    return "quota";
+    return "QUOTA";
   }
-  return "download-failed";
+  return "DOWNLOAD_FAILED";
 }
 
 function errorMessage(error: unknown): string {
@@ -184,7 +184,7 @@ async function downloadOfflinePackageImpl(
   const now = Date.now();
   if (
     record.bytesReceived === record.bytesTotal &&
-    (record.status === "ready" || record.lastError?.code === "offline-assets-unavailable")
+    (record.status === "ready" || record.lastError?.code === "OFFLINE_ASSETS_UNAVAILABLE")
   ) {
     let readyFile: Awaited<ReturnType<OfflinePackageStorage["openReady"]>> | undefined;
     let archiveValid = false;
@@ -217,7 +217,7 @@ async function downloadOfflinePackageImpl(
       if (archiveValid) {
         record.status = "error";
         record.lastError = {
-          code: "offline-assets-unavailable",
+          code: "OFFLINE_ASSETS_UNAVAILABLE",
           message: errorMessage(error),
         };
         record.updatedAt = Date.now();
@@ -307,7 +307,7 @@ async function downloadOfflinePackageImpl(
       ) {
         await response.body?.cancel();
         throw new OfflinePackageApiError(
-          `http-${response.status}`,
+          `HTTP_${response.status}`,
           response.status,
           `Archive download returned HTTP ${response.status}`,
         );
@@ -419,9 +419,9 @@ async function downloadOfflinePackageImpl(
         status: "paused",
         byteLength: manifest.archive.byteLength,
         durationMs: Date.now() - startedAt,
-        errorCode: "aborted",
+        errorCode: "ABORTED",
       });
-      report("paused", startedAt, { code: "aborted", message: "Download paused" });
+      report("paused", startedAt, { code: "ABORTED", message: "Download paused" });
       return record;
     }
     record.status = "error";
@@ -430,7 +430,7 @@ async function downloadOfflinePackageImpl(
     await storage.put(record);
     metric({
       event:
-        code === "quota"
+        code === "QUOTA"
           ? "quota"
           : /checksum/i.test(message)
             ? "checksum"

@@ -3,7 +3,7 @@
 import type { PreviewAdminConfigurationMigrationBodyServiceConfigsItemConfig } from "./previewAdminConfigurationMigrationBodyServiceConfigsItemConfig";
 
 export type PreviewAdminConfigurationMigrationBodyServiceConfigsItem = {
-  /** @pattern ^[a-z0-9][a-z0-9-]{0,63}$ */
+  /** @pattern ^(?=.{1,48}$)[a-z0-9]+(?:-[a-z0-9]+)*$ */
   serviceId: string;
   config: PreviewAdminConfigurationMigrationBodyServiceConfigsItemConfig;
 };

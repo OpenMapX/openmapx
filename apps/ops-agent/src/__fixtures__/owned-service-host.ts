@@ -272,6 +272,7 @@ export async function ownedServiceHost(options: { configurationReleaseMetadata?:
           id: "community-live",
           name: "Community",
           version: "1.0.0",
+          platform: "1.0",
           quality: "community",
           container: {
             image: "example/community-live",

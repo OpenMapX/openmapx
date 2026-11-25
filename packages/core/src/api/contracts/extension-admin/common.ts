@@ -23,6 +23,11 @@ export const adminExtensionSourceAddSchema = z.strictObject({
   label: z.string().min(1),
 });
 export const adminExtensionSourceRemoveSchema = z.strictObject({ url: z.string().min(1) });
+/** A critical advisory; without `maxVersion` it covers every version. */
+export const adminExtensionCriticalAdvisorySchema = z.strictObject({
+  reason: z.string(),
+  maxVersion: z.string().optional(),
+});
 export const adminExtensionSecurityRatingSchema = z.strictObject({
   score: z.number().int().min(1).max(8),
   requiresBuiltIn: z.boolean(),

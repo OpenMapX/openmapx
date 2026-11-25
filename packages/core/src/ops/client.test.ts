@@ -21,7 +21,7 @@ function tokenFile(contents = Buffer.alloc(32, 7).toString("base64url")): string
 
 // Existing operation tests use a negotiated v2 peer; negotiation itself is tested below.
 const identity = {
-  version: 2 as const,
+  version: 1 as const,
   admittedAt: 0,
   deadlineAt: 1000,
   fingerprint: "a".repeat(64),
@@ -45,7 +45,7 @@ class ProtocolTestClient extends OpsClient {
               version: 1,
               requestId: new Headers(init?.headers).get("x-ops-request-id"),
               ok: true,
-              result: { versions: [2] },
+              result: { versions: [1] },
             }),
           );
         return transport(url, init);
@@ -96,7 +96,7 @@ describe("ops client", () => {
     const fetch = vi.fn(async (_input: string | URL | Request, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
       expect(body).toMatchObject({
-        version: 2,
+        version: 1,
         requestId: "ops1_AQEBAQEBAQEBAQEBAQEBAQEB",
         operationKey: "opk1_AQEBAQEBAQEBAQEBAQEBAQEB",
         issuedAt: "2026-08-23T18:00:00.000Z",
@@ -310,7 +310,7 @@ describe("ops client", () => {
           requestId: body.requestId,
           ok: true,
           result: {
-            version: 2,
+            version: 1,
             admittedAt: 0,
             deadlineAt: 1000,
             fingerprint: "a".repeat(64),
@@ -414,7 +414,7 @@ describe("ops client", () => {
       );
       const fingerprint = new Headers(init?.headers).get("x-ops-body-fingerprint");
       expect(fingerprint).toMatch(/^[a-f0-9]{64}$/);
-      expect(new Headers(init?.headers).get("x-ops-protocol-version")).toBe("2");
+      expect(new Headers(init?.headers).get("x-ops-protocol-version")).toBe("1");
       fingerprints.push(fingerprint as string);
       const requestId = new Headers(init?.headers).get("x-ops-request-id");
       return new Response(
@@ -538,7 +538,7 @@ describe("ops client", () => {
             requestId: body.requestId,
             ok: true,
             result: {
-              version: 2,
+              version: 1,
               admittedAt: 0,
               deadlineAt: 1000,
               fingerprint: "a".repeat(64),
@@ -615,6 +615,45 @@ describe("ops client", () => {
     });
   });
 
+  it.each([
+    [
+      "other_release",
+      { outcome: "not_committed", summary: { reason: "busy", cleanupFailed: false } },
+      true,
+    ],
+    ["other_release", { outcome: "committed", summary: {} }, false],
+    [
+      "conflict",
+      { outcome: "not_committed", summary: { reason: "busy", cleanupFailed: false } },
+      false,
+    ],
+  ])(
+    "reads the settlement of a %s refusal only in its own shape",
+    async (errorClass, settlement, read) => {
+      const client = new ProtocolTestClient({
+        baseUrl: "http://openmapx-ops-agent:4300",
+        tokenFile: tokenFile(),
+        fetch: async (_input, init) =>
+          new Response(
+            JSON.stringify({
+              version: 1,
+              requestId: new Headers(init?.headers).get("x-ops-request-id"),
+              ok: false,
+              error: {
+                class: errorClass,
+                message: OPS_PUBLIC_ERROR_MESSAGES[errorClass as "other_release"],
+                settlement,
+              },
+            }),
+            { status: 409 },
+          ),
+      });
+      await expect(client.status("vault.apply", "job1_retainedOperation0")).rejects.toMatchObject(
+        read ? { errorClass, settlement } : { errorClass: "runtime" },
+      );
+    },
+  );
+
   it("rejects retained responses for another operation and incoherent event cursors", async () => {
     let eventId = "job1_anotherOperation00",
       nextCursor = 3;
@@ -660,7 +699,7 @@ describe("ops client", () => {
   });
 });
 
-it("fix1 refuses an older agent before any version2 mutation admission", async () => {
+it("refuses an agent of another protocol version before any mutation admission", async () => {
   let posts = 0;
   const client = new OpsClient({
     baseUrl: "http://openmapx-ops-agent:4300",

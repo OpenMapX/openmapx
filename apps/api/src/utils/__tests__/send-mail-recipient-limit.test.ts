@@ -16,7 +16,17 @@ const mocks = vi.hoisted(() => {
     },
   };
 });
-vi.mock("../../db", () => ({ db: { select: () => ({ from: async () => [] }) } }));
+vi.mock("../../db", () => ({
+  db: {
+    select: () => ({
+      from: () => ({
+        where: async () => [],
+        // biome-ignore lint/suspicious/noThenProperty: drizzle builders are thenable; the stub mirrors that.
+        then: (resolve: (rows: unknown[]) => unknown) => Promise.resolve([]).then(resolve),
+      }),
+    }),
+  },
+}));
 vi.mock("../../redis", () => ({ redis: mocks.store }));
 vi.mock("../../privacy/disclosures.js", () => ({
   recordDataDisclosureBestEffort: mocks.disclosure,

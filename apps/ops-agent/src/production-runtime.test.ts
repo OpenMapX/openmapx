@@ -224,14 +224,14 @@ describe("assembled production service authority", () => {
       expectedConfigurationRevisionId: host.initial.revisionId,
     } as const;
     const requestedDeadlineAt = Date.now() + 90000,
-      headers = { authorization: `Bearer ${host.token}`, "x-ops-protocol-version": "2" };
+      headers = { authorization: `Bearer ${host.token}`, "x-ops-protocol-version": "1" };
     try {
       const submitted = await app.inject({
         method: "POST",
         url: "/v1/operations",
         headers,
         payload: {
-          version: 2,
+          version: 1,
           requestId: "ops1_productionUpdate0000001",
           operationKey: createControlRootOperationKey({
             notAfter: requestedDeadlineAt,
@@ -340,14 +340,14 @@ describe("assembled production service authority", () => {
         controlInstallation: installation,
       }),
       deadline = Date.now() + 60000,
-      headers = { authorization: `Bearer ${host.token}`, "x-ops-protocol-version": "2" };
+      headers = { authorization: `Bearer ${host.token}`, "x-ops-protocol-version": "1" };
     try {
       const submitted = await app.inject({
         method: "POST",
         url: "/v1/operations",
         headers,
         payload: {
-          version: 2,
+          version: 1,
           requestId: "ops1_indirectCoordinator0001",
           operationKey: createControlRootOperationKey({
             notAfter: deadline,
@@ -455,7 +455,7 @@ describe("assembled production service authority", () => {
       journal,
       controlInstallation: installation,
     });
-    const headers = { authorization: `Bearer ${host.token}`, "x-ops-protocol-version": "2" };
+    const headers = { authorization: `Bearer ${host.token}`, "x-ops-protocol-version": "1" };
     const requestedDeadlineAt = Date.now() + 60_000;
     let count = 0;
     const submit = (operation: OpsOperation) =>
@@ -464,7 +464,7 @@ describe("assembled production service authority", () => {
         url: "/v1/operations",
         headers,
         payload: {
-          version: 2,
+          version: 1,
           requestId: `ops1_cleanupHttp${String(++count).padStart(12, "0")}`,
           operationKey: createControlRootOperationKey({
             notAfter: requestedDeadlineAt,
@@ -642,7 +642,7 @@ describe("assembled production service authority", () => {
       resourceClaimer: host.claimer,
     });
     const payload = {
-      version: 2,
+      version: 1,
       requestId: "ops1_inspectionRole0000",
       operationKey: "opk1_inspectionRole0000",
       issuedAt: new Date().toISOString(),
@@ -657,7 +657,7 @@ describe("assembled production service authority", () => {
           url: "/v1/operations",
           payload,
           headers: {
-            "x-ops-protocol-version": "2",
+            "x-ops-protocol-version": "1",
             ...(token ? { authorization: `Bearer ${token}` } : {}),
           },
         });
@@ -668,7 +668,7 @@ describe("assembled production service authority", () => {
         method: "POST",
         url: "/v1/operations",
         payload,
-        headers: { "x-ops-protocol-version": "2", authorization: `Bearer ${api}` },
+        headers: { "x-ops-protocol-version": "1", authorization: `Bearer ${api}` },
       });
       expect(result.statusCode).toBe(200);
       expect(result.json().result.value.services).toHaveLength(host.loaded.length);

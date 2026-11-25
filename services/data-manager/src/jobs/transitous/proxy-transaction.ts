@@ -228,7 +228,7 @@ export const run: StageFn = async (ctx) => {
         `feed-proxy activation failed and previous routing was restored: ${(error as Error).message}`,
       );
     }
-    return finish("ok", `staged feed-proxy union for candidate ${manifest.epoch}`, {
+    return finish("succeeded", `staged feed-proxy union for candidate ${manifest.epoch}`, {
       candidateEpoch: manifest.epoch,
       previousEntries: Object.keys(current).length,
       candidateEntries: Object.keys(candidate).length,
@@ -236,6 +236,6 @@ export const run: StageFn = async (ctx) => {
     });
   } catch (error) {
     preserveTransitPending(ctx, error);
-    return finish("error", (error as Error).message, { rollback: true });
+    return finish("failed", (error as Error).message, { rollback: true });
   }
 };

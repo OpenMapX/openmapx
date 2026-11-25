@@ -37,7 +37,7 @@ describe("categoryPlaceToPlace", () => {
   it("falls back to a coordinate identity for a malformed provider id", () => {
     const place = categoryPlaceToPlace(makePlace({ id: "opaque-id" }));
 
-    expect(place.id).toBe("coordinate:50.770000-6.080000");
+    expect(place.id).toBe("coordinate:50.770000,6.080000");
     expect(place.primaryScheme).toBe("coordinate");
   });
 

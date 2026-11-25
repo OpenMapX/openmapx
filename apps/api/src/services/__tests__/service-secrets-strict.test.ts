@@ -11,6 +11,9 @@ vi.mock("../secrets.js", () => ({
   decrypt: (...args: unknown[]) => mockDecrypt(...args),
   encrypt: vi.fn(),
   isSecretsConfigured: vi.fn(() => true),
+  secretAad: {
+    serviceSecret: (serviceId: string, key: string) => `service_secret:${serviceId}:${key}`,
+  },
 }));
 
 import { getServiceSecretStrict } from "../service-secrets.js";
@@ -23,13 +26,14 @@ describe("getServiceSecretStrict", () => {
   });
 
   it("returns the decrypted secret when the exact row exists", async () => {
-    mockLimit.mockResolvedValueOnce([{ ciphertext: "cipher", iv: "iv", tag: "tag" }]);
+    const row = { ciphertext: "cipher", iv: "iv", tag: "tag", keyVersion: 1 };
+    mockLimit.mockResolvedValueOnce([row]);
     mockDecrypt.mockReturnValueOnce("plain");
 
     await expect(getServiceSecretStrict("dawarich-app", "OIDC_CLIENT_SECRET")).resolves.toBe(
       "plain",
     );
-    expect(mockDecrypt).toHaveBeenCalledWith("cipher", "iv", "tag");
+    expect(mockDecrypt).toHaveBeenCalledWith(row, "service_secret:dawarich-app:OIDC_CLIENT_SECRET");
   });
 
   it("returns null only when the row is absent", async () => {
@@ -43,7 +47,9 @@ describe("getServiceSecretStrict", () => {
       "database unavailable",
     );
 
-    mockLimit.mockResolvedValueOnce([{ ciphertext: "cipher", iv: "iv", tag: "tag" }]);
+    mockLimit.mockResolvedValueOnce([
+      { ciphertext: "cipher", iv: "iv", tag: "tag", keyVersion: 1 },
+    ]);
     mockDecrypt.mockImplementationOnce(() => {
       throw new Error("decrypt failed");
     });

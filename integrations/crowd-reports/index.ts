@@ -5,6 +5,7 @@ import {
   isSubClaimAction,
   type RelayResult,
   relayContribution,
+  relayToken,
 } from "./relay.js";
 
 const ISSUER_KEYS_CACHE_KEY = "crowd-reports:issuer-keys";
@@ -16,81 +17,118 @@ const ISSUER_KEYS_TTL_SECONDS = 300;
  * device key (see `@openmapx/openconditions-contrib-client`) and POSTs the
  * envelope here; these handlers forward the body verbatim and pass the upstream
  * status + JSON straight back. All verification happens in the contributions-api
- * — this side adds no auth (reports are pseudonymous) and never inspects the
- * signed payload.
+ * — this side adds no user auth (reports are pseudonymous) and never inspects
+ * the signed payload.
+ *
+ * Every relayed request carries `OPENCONDITIONS_RELAY_TOKEN` as a bearer token,
+ * so contributions-api treats this server as the trusted relay rather than as
+ * one address. The client's address is never forwarded; instead reports, votes
+ * and token exchanges are limited per client address here, in the host's
+ * `contribution` bucket, and enrollments in the tighter `enrollment` bucket, at
+ * the contributions-api's own per-address enrollment limit.
  *
  * Egress target: `OPENCONDITIONS_CONTRIBUTIONS_URL` (operator-configured,
  * default `http://localhost:4200`) — see `relay.ts` for the trust model.
  */
 export function setup(ctx: IntegrationContext): void {
+  const token = relayToken();
+  if (!token) {
+    ctx.log.warn(
+      "crowd-reports: OPENCONDITIONS_RELAY_TOKEN is not set, so contributions-api limits every reporter as one address",
+    );
+  }
+
   // POST /reports → /contrib/reports (signed SignedReport envelope in the body).
-  ctx.registerRoute("POST", "/reports", async (req, reply) => {
-    try {
-      const result = await relayContribution(ctx.http, "POST", "/contrib/reports", {
-        body: req.body,
-      });
-      reply.status(result.status).send(result.body);
-    } catch (err) {
-      ctx.log.error("crowd-reports relay POST /reports failed", err);
-      reply.status(502).send({ error: "contributions service unavailable" });
-    }
-  });
+  ctx.registerRoute(
+    "POST",
+    "/reports",
+    async (req, reply) => {
+      try {
+        const result = await relayContribution(ctx.http, "POST", "/contrib/reports", {
+          body: req.body,
+          token,
+        });
+        reply.status(result.status).send(result.body);
+      } catch (err) {
+        ctx.log.error("crowd-reports relay POST /reports failed", err);
+        reply.status(502).send({ error: "contributions service unavailable" });
+      }
+    },
+    { rateLimitTier: "contribution" },
+  );
 
   // POST /reports/:class/:id/:action[?component=] → /contrib/reports/:class/:id/:action
   // (confirm/negate/flag on a record; a component names part of a feature).
-  ctx.registerRoute("POST", "/reports/:class/:id/:action", async (req, reply) => {
-    const recordClass = req.params.class ?? "";
-    const id = req.params.id ?? "";
-    const action = req.params.action ?? "";
-    const component = req.query.component;
-    if (!isRecordClass(recordClass) || !isSafeReportId(id) || !isSubClaimAction(action)) {
-      reply.status(400).send({ error: "invalid record class, id or action" });
-      return;
-    }
-    if (component !== undefined && (typeof component !== "string" || component.length === 0)) {
-      reply.status(400).send({ error: "component must appear once and be non-empty" });
-      return;
-    }
-    const query = component === undefined ? "" : `?component=${encodeURIComponent(component)}`;
-    try {
-      const result = await relayContribution(
-        ctx.http,
-        "POST",
-        `/contrib/reports/${recordClass}/${encodeURIComponent(id)}/${action}${query}`,
-        { body: req.body },
-      );
-      reply.status(result.status).send(result.body);
-    } catch (err) {
-      ctx.log.error("crowd-reports relay POST /reports/:class/:id/:action failed", err);
-      reply.status(502).send({ error: "contributions service unavailable" });
-    }
-  });
+  ctx.registerRoute(
+    "POST",
+    "/reports/:class/:id/:action",
+    async (req, reply) => {
+      const recordClass = req.params.class ?? "";
+      const id = req.params.id ?? "";
+      const action = req.params.action ?? "";
+      const component = req.query.component;
+      if (!isRecordClass(recordClass) || !isSafeReportId(id) || !isSubClaimAction(action)) {
+        reply.status(400).send({ error: "invalid record class, id or action" });
+        return;
+      }
+      if (component !== undefined && (typeof component !== "string" || component.length === 0)) {
+        reply.status(400).send({ error: "component must appear once and be non-empty" });
+        return;
+      }
+      const query = component === undefined ? "" : `?component=${encodeURIComponent(component)}`;
+      try {
+        const result = await relayContribution(
+          ctx.http,
+          "POST",
+          `/contrib/reports/${recordClass}/${encodeURIComponent(id)}/${action}${query}`,
+          { body: req.body, token },
+        );
+        reply.status(result.status).send(result.body);
+      } catch (err) {
+        ctx.log.error("crowd-reports relay POST /reports/:class/:id/:action failed", err);
+        reply.status(502).send({ error: "contributions service unavailable" });
+      }
+    },
+    { rateLimitTier: "contribution" },
+  );
 
   // POST /enroll → /contrib/enroll (device-key enrollment for reporting grants).
-  ctx.registerRoute("POST", "/enroll", async (req, reply) => {
-    try {
-      const result = await relayContribution(ctx.http, "POST", "/contrib/enroll", {
-        body: req.body,
-      });
-      reply.status(result.status).send(result.body);
-    } catch (err) {
-      ctx.log.error("crowd-reports relay POST /enroll failed", err);
-      reply.status(502).send({ error: "contributions service unavailable" });
-    }
-  });
+  ctx.registerRoute(
+    "POST",
+    "/enroll",
+    async (req, reply) => {
+      try {
+        const result = await relayContribution(ctx.http, "POST", "/contrib/enroll", {
+          body: req.body,
+          token,
+        });
+        reply.status(result.status).send(result.body);
+      } catch (err) {
+        ctx.log.error("crowd-reports relay POST /enroll failed", err);
+        reply.status(502).send({ error: "contributions service unavailable" });
+      }
+    },
+    { rateLimitTier: "enrollment" },
+  );
 
   // POST /tokens → /contrib/tokens (exchange an enrollment for reporting tokens).
-  ctx.registerRoute("POST", "/tokens", async (req, reply) => {
-    try {
-      const result = await relayContribution(ctx.http, "POST", "/contrib/tokens", {
-        body: req.body,
-      });
-      reply.status(result.status).send(result.body);
-    } catch (err) {
-      ctx.log.error("crowd-reports relay POST /tokens failed", err);
-      reply.status(502).send({ error: "contributions service unavailable" });
-    }
-  });
+  ctx.registerRoute(
+    "POST",
+    "/tokens",
+    async (req, reply) => {
+      try {
+        const result = await relayContribution(ctx.http, "POST", "/contrib/tokens", {
+          body: req.body,
+          token,
+        });
+        reply.status(result.status).send(result.body);
+      } catch (err) {
+        ctx.log.error("crowd-reports relay POST /tokens failed", err);
+        reply.status(502).send({ error: "contributions service unavailable" });
+      }
+    },
+    { rateLimitTier: "contribution" },
+  );
 
   // GET /issuer-keys → /contrib/issuer-keys (public issuer keys; cached briefly).
   // Only successful (2xx) upstream responses are cached — caching a transient
@@ -104,7 +142,7 @@ export function setup(ctx: IntegrationContext): void {
         return;
       }
       const writer = await captureCacheWriter(ctx.cache);
-      const result = await relayContribution(ctx.http, "GET", "/contrib/issuer-keys");
+      const result = await relayContribution(ctx.http, "GET", "/contrib/issuer-keys", { token });
       if (result.status >= 200 && result.status < 300) {
         await writer.set(ISSUER_KEYS_CACHE_KEY, result, ISSUER_KEYS_TTL_SECONDS);
         reply.header("Cache-Control", `public, max-age=${ISSUER_KEYS_TTL_SECONDS}`);

@@ -8,8 +8,8 @@ import type { ListAdminServices200ServicesItemStatus } from "./listAdminServices
 
 export type ListAdminServices200ServicesItem = {
   /**
-   * @minLength 1
-   * @pattern ^[a-z0-9][a-z0-9-]*$
+   * @maxLength 48
+   * @pattern ^[a-z0-9]+(-[a-z0-9]+)*$
    */
   id: string;
   /** @minLength 1 */

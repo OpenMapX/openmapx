@@ -7,7 +7,6 @@ import {
   assertOvertureDiskCapacity,
   estimateOvertureIngestBytes,
   estimateOverturePullBytes,
-  POSTGIS_CONTAINER,
 } from "../../src/jobs/overture/capacity.js";
 
 describe("Overture capacity preflight", () => {
@@ -52,15 +51,6 @@ describe("Overture capacity preflight", () => {
     expect(estimateOvertureIngestBytes(100_000, 0)).toBe(4 * 1024 ** 3);
     expect(estimateOvertureIngestBytes(3_000_000, 2_000_000_000)).toBe(3_000_000 * 4096);
     expect(estimateOvertureIngestBytes(1_000_000, 8_000_000_000)).toBe(12_000_000_000);
-  });
-
-  it("pins the PostGIS container name used by the capacity probe", () => {
-    const here = dirname(fileURLToPath(import.meta.url));
-    const repoRoot = resolve(here, "..", "..", "..", "..");
-    const manifest = JSON.parse(
-      readFileSync(join(repoRoot, "services", "postgis", "service.json"), "utf8"),
-    ) as { container?: { containerName?: string } };
-    expect(manifest.container?.containerName).toBe(POSTGIS_CONTAINER);
   });
 
   it("supports overriding the per-row ingest allowance via OVERTURE_INGEST_BYTES_PER_ROW", () => {

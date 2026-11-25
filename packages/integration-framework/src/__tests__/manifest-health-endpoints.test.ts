@@ -1,13 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { validateManifest } from "../manifest";
 
+const builtIn = { firstParty: true };
+
 function withHealthCheck(healthCheck: unknown) {
-  return validateManifest({
-    id: "poi-overpass",
-    name: "Overpass POI Search",
-    domains: ["poi-search"],
-    healthCheck,
-  });
+  return validateManifest(
+    {
+      id: "poi-overpass",
+      name: "Overpass POI Search",
+      domains: ["poi-search"],
+      healthCheck,
+    },
+    builtIn,
+  );
 }
 
 describe("integration manifest health-check endpoints", () => {
@@ -60,24 +65,30 @@ describe("integration manifest health-check endpoints", () => {
   });
 
   it("accepts endpoint settings naming declared configSchema properties", () => {
-    const result = validateManifest({
-      id: "transit-motis",
-      name: "MOTIS",
-      domains: ["transit"],
-      configSchema: { type: "object", properties: { endpoint: { type: "string" } } },
-      endpointConfigKeys: { motis: "endpoint" },
-    });
+    const result = validateManifest(
+      {
+        id: "transit-motis",
+        name: "MOTIS",
+        domains: ["transit"],
+        configSchema: { type: "object", properties: { endpoint: { type: "string" } } },
+        endpointConfigKeys: { motis: "endpoint" },
+      },
+      builtIn,
+    );
     expect(result.valid).toBe(true);
   });
 
   it("rejects an endpoint setting for an unknown endpoint or an undeclared property", () => {
-    const result = validateManifest({
-      id: "transit-motis",
-      name: "MOTIS",
-      domains: ["transit"],
-      configSchema: { type: "object", properties: { endpoint: { type: "string" } } },
-      endpointConfigKeys: { geoserver: "endpoint", motis: "motisUrl" },
-    });
+    const result = validateManifest(
+      {
+        id: "transit-motis",
+        name: "MOTIS",
+        domains: ["transit"],
+        configSchema: { type: "object", properties: { endpoint: { type: "string" } } },
+        endpointConfigKeys: { geoserver: "endpoint", motis: "motisUrl" },
+      },
+      builtIn,
+    );
     expect(result.errors).toEqual([
       'manifest.endpointConfigKeys: unknown endpoint "geoserver" (known: overpass, nominatim, photon, pelias, osrm, valhalla, motis, transitous)',
       'manifest.endpointConfigKeys.motis: "motisUrl" is not a configSchema property',

@@ -8,7 +8,6 @@
     "routes": true
   },
   "quality": "built-in",
-  "category": "Navigation",
   "frontend": {
     "mapLayer": true,
     "legend": true,

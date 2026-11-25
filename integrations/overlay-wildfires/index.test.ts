@@ -559,7 +559,7 @@ describe("GET /perimeters/nifc", () => {
       zoom: "5",
     });
     expect(down.status).toBe(503);
-    expect(down.body).toEqual({ error: "Wildfire layer unavailable", code: "nifc_unavailable" });
+    expect(down.body).toEqual({ error: "Wildfire layer unavailable", code: "NIFC_UNAVAILABLE" });
     const bad = await call("/perimeters/nifc", [provider()], { ...VIEW, south: "50" });
     expect(bad.status).toBe(400);
   });
@@ -672,7 +672,7 @@ describe("GET /smoke/noaa", () => {
     expect(sent.status).toBe(503);
     expect(sent.body).toEqual({
       error: "Wildfire layer unavailable",
-      code: "noaa_hms_unavailable",
+      code: "NOAA_HMS_UNAVAILABLE",
     });
   });
 });

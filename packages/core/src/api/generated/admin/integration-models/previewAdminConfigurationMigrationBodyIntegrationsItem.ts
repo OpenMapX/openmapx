@@ -3,7 +3,7 @@
 import type { PreviewAdminConfigurationMigrationBodyIntegrationsItemConfig } from "./previewAdminConfigurationMigrationBodyIntegrationsItemConfig";
 
 export type PreviewAdminConfigurationMigrationBodyIntegrationsItem = {
-  /** @pattern ^[a-z0-9][a-z0-9-]{0,63}$ */
+  /** @pattern ^(?=.{1,48}$)[a-z0-9]+(?:-[a-z0-9]+)*$ */
   integrationId: string;
   config: PreviewAdminConfigurationMigrationBodyIntegrationsItemConfig;
 };

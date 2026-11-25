@@ -2,6 +2,7 @@
  * production admission/store may turn one into original owner authority. */
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import { COMPONENT_ID_PATTERN } from "../component-id";
 import {
   type ConfigurationHandoffIntent,
   configurationHandoffIntentSchema,
@@ -39,7 +40,7 @@ import {
 } from "./lease-store";
 
 const ids = z
-  .array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/))
+  .array(z.string().regex(COMPONENT_ID_PATTERN))
   .min(1)
   .max(256)
   .refine(strictlyAscending);

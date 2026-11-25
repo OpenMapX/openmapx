@@ -27,8 +27,7 @@ The bare names are no longer accepted where hosts are allow-listed:
 MOTIS feed proxy is gone; MOTIS configurations point at
 `http://openmapx-motis-feed-proxy`.
 
-Service IDs, network aliases and container names may not start with
-`openmapx-`. An installed community service may not reach a built-in service
+Service IDs and network aliases may not start with `openmapx-`. An installed community service may not reach a built-in service
 by its bare ID: inspecting or installing a repository whose service names, for
 example, `postgis` or `overpass` as a host in its environment, command,
 healthcheck or configuration defaults fails with

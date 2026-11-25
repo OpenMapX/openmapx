@@ -12,7 +12,7 @@ export function unitDataCommandResult(kind: DataExecutionInput["kind"]) {
     admittedAt: 1,
     deadlineAt: 4102444800000,
     kind,
-    status: "ok",
+    status: "succeeded",
     publication: "committed",
     cancellationRequestedAt: null,
     progress: 1,

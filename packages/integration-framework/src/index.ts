@@ -355,10 +355,10 @@ export type {
   ManifestValidationResult,
 } from "./manifest";
 export {
+  communityIntegrationManifestSchema,
   createManifestAttribution,
   credentialSetupSchema,
   dataSourceToAttribution,
-  INTEGRATION_ID_REGEX,
   integrationManifestSchema,
   readCredentialSetup,
   validateDataSource,

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { closeSync, constants, fstatSync, mkdirSync, openSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
+import { COMPONENT_ID_PATTERN } from "../component-id";
 import { canonicalJson } from "../ops/canonical-json";
 import { opsBusyHolderMessage } from "../ops/contract";
 import { type ExecutionRef, executionRefSchema } from "../ops/execution-ref";
@@ -304,7 +305,7 @@ export const controlChildReservationSchema: z.ZodType<ControlChildReservation> =
     kind: z.string().min(1).max(128),
     recipient: z.enum(["fixed-cli", "data-manager", "ops-agent", "configuration-helper"]),
     serviceIds: z
-      .array(z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/))
+      .array(z.string().regex(COMPONENT_ID_PATTERN))
       .min(1)
       .max(256)
       .refine((a) => a.every((v, i) => i === 0 || (a[i - 1] ?? v) < v)),

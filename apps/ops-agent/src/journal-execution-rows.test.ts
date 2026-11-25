@@ -54,6 +54,7 @@ function holdable(journal: OpsJobJournal): OpsJobJournal {
   let tail = Promise.resolve();
   return {
     records: () => journal.records(),
+    foreignRecords: () => journal.foreignRecords(),
     replace: (rows) => {
       const snapshot = structuredClone(rows),
         hold = held;
@@ -103,7 +104,7 @@ beforeEach(async () => {
   root = mkdtempSync(join(tmpdir(), "omx-journal-rows-"));
   mkdirSync(join(root, "data"), { mode: 0o700 });
   await provisionControlDirectories(root);
-  journalPath = join(root, "state/ops-agent/jobs-v1.json");
+  journalPath = join(root, "state/ops-agent/jobs.json");
   await start();
 });
 afterEach(() => {
@@ -327,14 +328,23 @@ it("lets another process read the agent's rows from its journal, never write the
   await expect(rows.update(job.operationKey, () => undefined)).rejects.toThrow(/Only the agent/);
 });
 
-it("refuses a journal row another process reads when its operation fields are damaged", async () => {
+it("offers no row another process cannot read, so its readers find it missing", async () => {
   const { job } = await admit();
   const file = JSON.parse(readFileSync(journalPath, "utf8")) as {
-    jobs: { operationKey: string; parent?: unknown }[];
+    jobs: { operationKey: string; parent?: unknown; execution?: Record<string, unknown> }[];
   };
   const row = file.jobs.find((entry) => entry.operationKey === job.operationKey);
   if (!row) throw Error("Row missing");
   row.parent = { executionId: 7 };
   writeFileSync(journalPath, JSON.stringify(file));
+  const rows = journalFileRows(root);
+  expect(rows.owns(job.operationKey)).toBe(false);
+  await expect(rows.read(job.operationKey)).resolves.toBeUndefined();
+  delete row.parent;
+  row.execution = { ...row.execution, epoch: 2 };
+  writeFileSync(journalPath, JSON.stringify(file));
+  await expect(journalFileRows(root).read(job.operationKey)).resolves.toBeUndefined();
+  // The envelope is still read strictly.
+  writeFileSync(journalPath, JSON.stringify({ ...file, version: 2 }));
   await expect(journalFileRows(root).read(job.operationKey)).rejects.toThrow();
 });

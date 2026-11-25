@@ -10,27 +10,33 @@ import {
 } from "@openmapx/core/build-artifacts";
 import {
   canonicalJson,
+  configurationApplyResultSchema,
+  isTrustedConfigurationApplyOperation,
   OPS_KIND_POLICIES,
-  OPS_PROTOCOL_VERSION,
   OPS_PUBLIC_ERROR_MESSAGES,
   type OpsErrorClass,
   type OpsFailureResult,
   type OpsJobState,
   type OpsOperation,
   type OpsRole,
+  type OpsSettlement,
   opsFailureResultSchema,
   opsOperationFingerprint,
   opsOperationSchema,
   opsResourceId,
+  opsSettlementSchema,
   type ProcessDiagnostics,
   parseBoundedOpsResult,
   processDiagnosticsSchema,
   type RetainedExecutionAdmission,
+  settlementOfConfigurationApply,
   validateRetainedExecutionAdmission,
 } from "@openmapx/core/ops";
+import { services } from "@openmapx/core/server";
 
-/** The file keeps its jobs-v1.json name; its contents are format version 2. */
-const JOURNAL_FILE_VERSION = 2;
+const { OPS_JOB_JOURNAL_FILE, OPS_JOB_JOURNAL_VERSION } = services;
+/** The version of a row's execution identity fields. */
+export const JOURNAL_EXECUTION_VERSION = 1;
 // Twice the server capacity: new work and entries needing recovery each have half.
 const OPS_JOB_JOURNAL_MAX_ENTRIES = 512;
 const OPS_JOB_JOURNAL_MAX_BYTES = 24 * 1024 * 1024;
@@ -46,6 +52,8 @@ const JOB_STATES = new Set<OpsJobState>([
   "termination_pending",
   "timed_out",
 ]);
+type TerminalJobState = "succeeded" | "failed" | "timed_out";
+const TERMINAL_STATES = new Set<OpsJobState>(["succeeded", "failed", "timed_out"]);
 const ERROR_CLASSES = new Set<OpsErrorClass>(
   Object.keys(OPS_PUBLIC_ERROR_MESSAGES) as OpsErrorClass[],
 );
@@ -53,8 +61,9 @@ const ERROR_CLASSES = new Set<OpsErrorClass>(
 export interface PersistedOpsJob {
   /** A data-manager child: its row in the lease store, under data-manager's lease. */
   leaseChild?: LeaseChildRef;
-  executionVersion: 2;
-  requestVersion: typeof OPS_PROTOCOL_VERSION;
+  executionVersion: typeof JOURNAL_EXECUTION_VERSION;
+  /** The ops protocol version of the release that admitted the operation. */
+  requestVersion: number;
   admittedAt: number;
   deadlineAt: number;
   operationFingerprint: string;
@@ -89,9 +98,39 @@ export interface PersistedOpsJob {
   execution?: JournalExecution;
 }
 
+/**
+ * A finished row another release wrote, whose operation, result or execution
+ * this release's schemas do not read. Its identity is checked like any row's;
+ * the rest is kept as written until the row is pruned, and a read of it
+ * reports that another release recorded it.
+ */
+export interface ForeignOpsJob {
+  role: Exclude<OpsRole, "host-cli">;
+  operationId: string;
+  operationKey: string;
+  fingerprint: string;
+  resourceId: string;
+  requestVersion: number;
+  state: TerminalJobState;
+  submittedAt: string;
+  updatedAt: string;
+  terminalAt: string;
+  /** Kept until an operator retries with a new operation, like any such row. */
+  recoveryRequired: boolean;
+  /** What a succeeded configuration apply settled, readable by every release. */
+  settlement?: OpsSettlement;
+  /** The row as written, rewritten unchanged. */
+  row: Readonly<Record<string, unknown>>;
+}
+
 export interface OpsJobJournal {
   records(): readonly PersistedOpsJob[];
-  replace(records: readonly PersistedOpsJob[]): Promise<void>;
+  foreignRecords(): readonly ForeignOpsJob[];
+  /**
+   * Writes `records` and the retained foreign rows: those named in `foreign`
+   * by operation id, or all of them when it is omitted.
+   */
+  replace(records: readonly PersistedOpsJob[], foreign?: readonly string[]): Promise<void>;
 }
 export interface OpenOpsJobJournalOptions {
   now?: () => Date;
@@ -117,9 +156,108 @@ function iso(value: unknown): value is string {
   );
 }
 
-function parseJob(value: unknown): PersistedOpsJob {
+/**
+ * The settlement a succeeded row records beside its result: the outcome of a
+ * configuration apply, also of the one a maintenance apply committed.
+ */
+function settlementOf(job: {
+  operation: OpsOperation;
+  state: unknown;
+  result?: unknown;
+}): OpsSettlement | undefined {
+  if (job.state !== "succeeded") return undefined;
+  if (isTrustedConfigurationApplyOperation(job.operation))
+    return settlementOfConfigurationApply(configurationApplyResultSchema.parse(job.result));
+  if (job.operation.kind !== "configurationMaintenance.apply") return undefined;
+  const generation = (job.result as { generation?: unknown }).generation;
+  return generation
+    ? settlementOfConfigurationApply(configurationApplyResultSchema.parse(generation))
+    : undefined;
+}
+
+/** A row as written: the job and, when it has one, its settlement. */
+function rowOf(job: PersistedOpsJob): Record<string, unknown> {
+  const settlement = settlementOf(job);
+  return settlement ? { ...job, settlement } : { ...job };
+}
+
+/**
+ * A row's identity: its ids, keys, role, state, timestamps and settlement.
+ * Every row must have one this release reads, whichever release wrote it, or
+ * the journal is refused. The writer's protocol version is data, not a
+ * requirement.
+ */
+function parseIdentity(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid");
   const raw = value as Record<string, unknown>;
+  const terminal = TERMINAL_STATES.has(raw.state as OpsJobState);
+  if (
+    !Number.isSafeInteger(raw.requestVersion) ||
+    (raw.requestVersion as number) < 1 ||
+    (raw.role !== "api" && raw.role !== "data-manager") ||
+    typeof raw.operationId !== "string" ||
+    !OPERATION_ID.test(raw.operationId) ||
+    typeof raw.operationKey !== "string" ||
+    !OPERATION_KEY.test(raw.operationKey) ||
+    typeof raw.fingerprint !== "string" ||
+    !FINGERPRINT.test(raw.fingerprint) ||
+    typeof raw.resourceId !== "string" ||
+    typeof raw.state !== "string" ||
+    !JOB_STATES.has(raw.state as OpsJobState) ||
+    !iso(raw.submittedAt) ||
+    !iso(raw.updatedAt) ||
+    raw.admittedAt !== Date.parse(raw.submittedAt as string) ||
+    !Number.isSafeInteger(raw.deadlineAt) ||
+    (terminal ? !iso(raw.terminalAt) : raw.terminalAt !== undefined) ||
+    (raw.terminationRequestedAt !== undefined && !iso(raw.terminationRequestedAt)) ||
+    (raw.settlement !== undefined &&
+      (raw.state !== "succeeded" || !opsSettlementSchema.safeParse(raw.settlement).success))
+  ) {
+    throw new Error("invalid");
+  }
+  return raw;
+}
+
+/** Keeps a row this release's schemas do not read. One that had not finished
+ * fails as needing recovery, as an interrupted row of this release does. */
+function foreignJob(identity: Record<string, unknown>, now: () => Date): ForeignOpsJob {
+  let row = identity;
+  if (!TERMINAL_STATES.has(identity.state as OpsJobState)) {
+    const timestamp = now().toISOString();
+    const { progressResult, result: _result, ...rest } = identity;
+    row = {
+      ...rest,
+      ...(progressResult !== undefined ? { failureResult: progressResult } : {}),
+      state: "failed",
+      errorClass: "recovery_required",
+      updatedAt: timestamp,
+      terminalAt: timestamp,
+      interrupted: true,
+    };
+  }
+  return {
+    role: row.role as ForeignOpsJob["role"],
+    operationId: row.operationId as string,
+    operationKey: row.operationKey as string,
+    fingerprint: row.fingerprint as string,
+    resourceId: row.resourceId as string,
+    requestVersion: row.requestVersion as number,
+    state: row.state as TerminalJobState,
+    submittedAt: row.submittedAt as string,
+    updatedAt: row.updatedAt as string,
+    terminalAt: row.terminalAt as string,
+    recoveryRequired: row.state === "failed" && row.errorClass === "recovery_required",
+    ...(row.settlement !== undefined
+      ? { settlement: opsSettlementSchema.parse(row.settlement) }
+      : {}),
+    row,
+  };
+}
+
+/** A row this release reads whole: its identity, and its operation, result
+ * and execution under the current schemas. */
+function parseJob(value: unknown): PersistedOpsJob {
+  const raw = parseIdentity(value);
   if (
     !exactKeys(raw, [
       "executionVersion",
@@ -149,23 +287,9 @@ function parseJob(value: unknown): PersistedOpsJob {
       "terminationRequestedAt",
       "interrupted",
       "execution",
+      "settlement",
     ]) ||
-    raw.executionVersion !== 2 ||
-    raw.requestVersion !== OPS_PROTOCOL_VERSION ||
-    (raw.role !== "api" && raw.role !== "data-manager") ||
-    typeof raw.operationId !== "string" ||
-    !OPERATION_ID.test(raw.operationId) ||
-    typeof raw.operationKey !== "string" ||
-    !OPERATION_KEY.test(raw.operationKey) ||
-    typeof raw.fingerprint !== "string" ||
-    !FINGERPRINT.test(raw.fingerprint) ||
-    typeof raw.resourceId !== "string" ||
-    typeof raw.state !== "string" ||
-    !JOB_STATES.has(raw.state as OpsJobState) ||
-    !iso(raw.submittedAt) ||
-    !iso(raw.updatedAt) ||
-    (raw.terminalAt !== undefined && !iso(raw.terminalAt)) ||
-    (raw.terminationRequestedAt !== undefined && !iso(raw.terminationRequestedAt)) ||
+    raw.executionVersion !== JOURNAL_EXECUTION_VERSION ||
     (raw.interrupted !== undefined && (raw.interrupted !== true || raw.state !== "failed")) ||
     (raw.errorClass !== undefined &&
       (typeof raw.errorClass !== "string" || !ERROR_CLASSES.has(raw.errorClass as OpsErrorClass)))
@@ -182,7 +306,6 @@ function parseJob(value: unknown): PersistedOpsJob {
     throw new Error("invalid");
   }
   validateRetainedExecutionAdmission(operation.kind, raw as unknown as RetainedExecutionAdmission);
-  if (raw.admittedAt !== Date.parse(raw.submittedAt as string)) throw new Error("invalid");
   if (raw.diagnostics !== undefined) processDiagnosticsSchema.parse(raw.diagnostics);
   if (raw.progressResult !== undefined) {
     const progress = opsFailureResultSchema.parse(raw.progressResult);
@@ -223,28 +346,57 @@ function parseJob(value: unknown): PersistedOpsJob {
   ) {
     throw new Error("invalid");
   }
+  // The settlement restates the result; a row whose settlement differs is not
+  // one this release wrote.
+  if (
+    canonicalJson(raw.settlement ?? null) !==
+    canonicalJson(settlementOf({ operation, state, result: raw.result }) ?? null)
+  )
+    throw new Error("invalid");
+  delete raw.settlement;
   if (raw.progressResult === undefined) delete raw.progressResult;
   return raw as unknown as PersistedOpsJob;
 }
 
-function parseFile(bytes: Uint8Array, maxEntries: number): PersistedOpsJob[] {
+function uniqueIdentities(
+  rows: readonly { operationId: string; operationKey: string; role: string }[],
+): boolean {
+  const ids = new Set(rows.map((entry) => entry.operationId));
+  const keys = new Set(rows.map((entry) => `${entry.role}:${entry.operationKey}`));
+  return ids.size === rows.length && keys.size === rows.length;
+}
+
+function parseFile(
+  bytes: Uint8Array,
+  maxEntries: number,
+  now: () => Date,
+): { jobs: PersistedOpsJob[]; foreign: ForeignOpsJob[] } {
   const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   const decoded = JSON.parse(text) as unknown;
   if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) throw new Error("invalid");
   const raw = decoded as Record<string, unknown>;
   if (
     Object.keys(raw).sort().join(",") !== "jobs,version" ||
-    raw.version !== JOURNAL_FILE_VERSION ||
+    raw.version !== OPS_JOB_JOURNAL_VERSION ||
     !Array.isArray(raw.jobs) ||
     raw.jobs.length > maxEntries
   ) {
     throw new Error("invalid");
   }
-  const jobs = raw.jobs.map(parseJob);
-  const ids = new Set(jobs.map((entry) => entry.operationId));
-  const keys = new Set(jobs.map((entry) => `${entry.role}:${entry.operationKey}`));
-  if (ids.size !== jobs.length || keys.size !== jobs.length) throw new Error("invalid");
-  return jobs;
+  const jobs: PersistedOpsJob[] = [];
+  const foreign: ForeignOpsJob[] = [];
+  for (const entry of raw.jobs) {
+    const identity = parseIdentity(entry);
+    let job: PersistedOpsJob | undefined;
+    try {
+      job = parseJob(structuredClone(identity));
+    } catch {
+      foreign.push(foreignJob(identity, now));
+    }
+    if (job) jobs.push(job);
+  }
+  if (!uniqueIdentities([...jobs, ...foreign])) throw new Error("invalid");
+  return { jobs, foreign };
 }
 
 async function syncDirectory(directory: string): Promise<void> {
@@ -264,11 +416,11 @@ async function syncDirectory(directory: string): Promise<void> {
 }
 
 async function prepareJournalDirectory(path: string): Promise<void> {
-  if (basename(path) !== "jobs-v1.json") throw new Error("invalid journal path");
+  if (basename(path) !== OPS_JOB_JOURNAL_FILE) throw new Error("invalid journal path");
   const directory = dirname(path);
   await mkdir(directory, { recursive: true, mode: 0o700 });
   await syncDirectory(directory);
-  const orphanPattern = /^\.jobs-v1\.json\.[a-f0-9]{24}\.tmp$/;
+  const orphanPattern = /^\.jobs\.json\.[a-f0-9]{24}\.tmp$/;
   const orphans: string[] = [];
   const entries = await opendir(directory);
   for await (const entry of entries) {
@@ -337,18 +489,31 @@ export async function openOpsJobJournal(
   }
   const now = options.now ?? (() => new Date());
   let current: PersistedOpsJob[] = [];
+  let foreign: ForeignOpsJob[] = [];
   try {
     await prepareJournalDirectory(path);
     const bytes = await safeRead(path, maxBytes);
-    if (bytes) current = parseFile(bytes, maxEntries);
+    if (bytes) ({ jobs: current, foreign } = parseFile(bytes, maxEntries, now));
   } catch {
     throw new Error("Ops job journal is unavailable");
   }
   let chain = Promise.resolve();
 
-  const writeSnapshot = async (records: readonly PersistedOpsJob[]): Promise<void> => {
-    const validated = records.map(parseJob);
-    if (validated.length > maxEntries) throw new Error("Ops job journal capacity exceeded");
+  const writeSnapshot = async (
+    records: readonly PersistedOpsJob[],
+    keep: readonly string[] | undefined,
+  ): Promise<void> => {
+    const validated = records.map((record) => parseJob(rowOf(record)));
+    const retainedForeign =
+      keep === undefined
+        ? foreign
+        : keep.map((operationId) => {
+            const row = foreign.find((entry) => entry.operationId === operationId);
+            if (!row) throw Error("Unknown foreign journal row");
+            return row;
+          });
+    if (validated.length + retainedForeign.length > maxEntries)
+      throw new Error("Ops job journal capacity exceeded");
     for (const record of validated) {
       const retained = current.find(
         (prior) =>
@@ -373,13 +538,14 @@ export async function openOpsJobJournal(
       )
         throw Error("Retained execution identity is immutable");
     }
-    const ids = new Set(validated.map((entry) => entry.operationId));
-    const keys = new Set(validated.map((entry) => `${entry.role}:${entry.operationKey}`));
-    if (ids.size !== validated.length || keys.size !== validated.length) {
+    if (!uniqueIdentities([...validated, ...retainedForeign])) {
       throw new Error("Ops job journal contains duplicate identity");
     }
     const bytes = Buffer.from(
-      JSON.stringify({ version: JOURNAL_FILE_VERSION, jobs: validated }),
+      JSON.stringify({
+        version: OPS_JOB_JOURNAL_VERSION,
+        jobs: [...validated.map(rowOf), ...retainedForeign.map((entry) => entry.row)],
+      }),
       "utf8",
     );
     if (bytes.byteLength > maxBytes) throw new Error("Ops job journal capacity exceeded");
@@ -401,6 +567,7 @@ export async function openOpsJobJournal(
       renamed = true;
       await syncDirectory(directory);
       current = validated.map((entry) => structuredClone(entry));
+      foreign = retainedForeign;
     } finally {
       await file?.close().catch(() => undefined);
       if (!renamed) await unlink(temporary).catch(() => undefined);
@@ -409,9 +576,11 @@ export async function openOpsJobJournal(
 
   const journal: OpsJobJournal = {
     records: () => current.map((entry) => structuredClone(entry)),
-    replace: (records) => {
+    foreignRecords: () => foreign.map((entry) => structuredClone(entry)),
+    replace: (records, keep) => {
       const snapshot = records.map((entry) => structuredClone(entry));
-      const next = chain.then(() => writeSnapshot(snapshot));
+      const kept = keep === undefined ? undefined : [...keep];
+      const next = chain.then(() => writeSnapshot(snapshot, kept));
       chain = next.catch(() => undefined);
       return next;
     },

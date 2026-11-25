@@ -10,7 +10,7 @@ crashScenario({
   run: async (host) => {
     const stopped = await host.serviceAction("web", "stop");
     expect(stopped.status).toBe(200);
-    expect((await host.waitForJob(stopped.jobId as string)).status).toBe("success");
+    expect((await host.waitForJob(stopped.jobId as string)).status).toBe("succeeded");
 
     const start = host.mark();
     const effect = host.blockDocker({
@@ -35,7 +35,7 @@ crashScenario({
     const job = await host.waitForJob(started.jobId as string, {
       until: (view) => view.terminal || view.status === "cancel_pending",
     });
-    expect(job.status).not.toBe("success");
+    expect(job.status).not.toBe("succeeded");
     // Exactly one Compose effect on web: the one in flight when the agent died.
     expect(host.dockerEffects({ command: "compose", service: "web", since: start })).toHaveLength(
       1,

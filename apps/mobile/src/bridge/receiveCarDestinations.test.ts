@@ -1,5 +1,6 @@
 import { carDestinationsSchema } from "@openmapx/core/navigation";
 import { getDatabase } from "../storage/database";
+import { migrateSessionSchema } from "../storage/migrations";
 import { openTestDatabase } from "../storage/testing/nodeSqliteDatabase";
 import { readCarDestinations, receiveCarDestinations } from "./receiveCarDestinations";
 
@@ -7,6 +8,7 @@ jest.mock("../storage/database", () => ({ getDatabase: jest.fn() }));
 jest.mock("../car/nativeCar", () => ({ nativeCar: () => null }));
 it("persists minimal scoped places, replaces accounts, clears on logout and instance changes", async () => {
   const database = openTestDatabase();
+  await migrateSessionSchema(database, 1_000);
   (getDatabase as jest.Mock).mockResolvedValue(database);
   const payload = carDestinationsSchema.parse({
     account: "a",

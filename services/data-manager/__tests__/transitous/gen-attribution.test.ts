@@ -48,7 +48,7 @@ describe("gen-attribution", () => {
       );
     };
     const result = await genAttributionRun(ctxFor(fx.dataDir, fx.catalogDir, runScript));
-    expect(result.status).toBe("ok");
+    expect(result.status).toBe("succeeded");
     expect(result.artifacts).toMatchObject({ licenseEntries: 3 });
     expect(String(result.artifacts?.attributionFilePath)).toMatch(/out\/license\.json$/);
   });
@@ -59,7 +59,7 @@ describe("gen-attribution", () => {
       /* script ran but wrote nothing */
     };
     const result = await genAttributionRun(ctxFor(fx.dataDir, fx.catalogDir, runScript));
-    expect(result.status).toBe("error");
+    expect(result.status).toBe("failed");
     expect(result.message).toMatch(/did not produce/i);
   });
 
@@ -67,7 +67,7 @@ describe("gen-attribution", () => {
     const fx = setupCatalog(false);
     writeFileSync(join(fx.outDir, "config.yml"), "timetable: {}\n");
     const result = await genAttributionRun(ctxFor(fx.dataDir, fx.catalogDir, async () => {}));
-    expect(result.status).toBe("error");
+    expect(result.status).toBe("failed");
     expect(result.message).toContain("candidate attribution is required");
   });
 });

@@ -1,6 +1,7 @@
 {
   "id": "alpha",
   "version": "1.0.0",
+  "platform": "1.0",
   "author": "Test",
   "license": "MIT",
   "domains": ["knowledge"],

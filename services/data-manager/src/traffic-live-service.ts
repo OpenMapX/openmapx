@@ -315,7 +315,9 @@ export function createTrafficLiveService(deps: TrafficLiveServiceDeps) {
     }
     trafficLiveRunning = true;
     try {
-      await runLocalDataExecution({ kind: "traffic-live" }, runTrafficLiveCycle);
+      await runLocalDataExecution({ kind: "traffic-live" }, runTrafficLiveCycle, {
+        trigger: "cron",
+      });
     } catch (err) {
       log.error("traffic-live: cycle did not run", { err: (err as Error).message });
     } finally {

@@ -1,18 +1,15 @@
-import { envString } from "@openmapx/core/server-env";
 import type { FastifyInstance } from "fastify";
-import { db } from "../db";
-import { systemSettings } from "../db/schema";
 import { appLogger } from "../services/app-logger";
 import { invalidateDataUsePolicy, refreshDataUsePolicy } from "../services/data-use-policy";
 import { assertSecretsConfigured } from "../services/secrets";
 import {
   isSecretSetting,
+  isSetInEnvironment,
   matchesDeclaredType,
-  parseEnvValue,
-  resolveSettings,
   SETTING_DEFS,
   SecretSettingUnreadableError,
   saveSystemSettings,
+  settingsView,
 } from "../services/settings";
 import { writeAuditLog } from "../utils/audit-log";
 import { loadEmailConfig, sendViaEmailLabs, sendViaLettermint, sendViaSmtp } from "../utils/email";
@@ -20,7 +17,6 @@ import { invalidateMapSettings } from "../utils/map-settings";
 import { emailTestLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
 import { declareRouteAuth } from "../utils/route-auth";
-import { resolveSettingPrecedence } from "../utils/settings-resolution";
 import { registerServiceAdminRoute } from "./admin-service-contract";
 
 export async function adminSettingsRoute(app: FastifyInstance) {
@@ -31,7 +27,7 @@ export async function adminSettingsRoute(app: FastifyInstance) {
   });
 
   registerServiceAdminRoute(app, "getAdminSettings", async () => {
-    const groups = await resolveSettings();
+    const groups = await settingsView();
     return { groups };
   });
 
@@ -39,19 +35,9 @@ export async function adminSettingsRoute(app: FastifyInstance) {
     const adminSession = getAdminSession(request);
     const updates = request.body;
 
+    // The environment's value wins, and a setting only it sets is never stored.
     const allowedKeys = new Set(
-      SETTING_DEFS.filter((d) => {
-        // Match GET's validated effective source: malformed env values do not lock the editor.
-        return (
-          resolveSettingPrecedence({
-            envValue: d.env ? process.env[d.env] : undefined,
-            databaseValue: undefined,
-            defaultValue: d.default,
-            parseEnv: (raw) => parseEnvValue(raw, d),
-            validate: (candidate): candidate is unknown => matchesDeclaredType(d, candidate),
-          }).source !== "env"
-        );
-      }).map((d) => d.key),
+      SETTING_DEFS.filter((d) => !d.envOnly && !isSetInEnvironment(d)).map((d) => d.key),
     );
 
     const defsByKey = new Map(SETTING_DEFS.map((d) => [d.key, d]));
@@ -86,9 +72,8 @@ export async function adminSettingsRoute(app: FastifyInstance) {
 
     await writeAuditLog({
       actorId: adminSession.user.id,
-      targetType: "settings",
       targetId: "system",
-      action: "settings.update",
+      action: "setting.update",
       details: { keys: toWrite.map((t) => t.key) },
       request,
     });
@@ -102,7 +87,7 @@ export async function adminSettingsRoute(app: FastifyInstance) {
     invalidateDataUsePolicy();
     await refreshDataUsePolicy();
 
-    const groups = await resolveSettings();
+    const groups = await settingsView();
     return {
       ok: true,
       groups,
@@ -144,14 +129,10 @@ export async function adminSettingsRoute(app: FastifyInstance) {
         return reply.status(400).send({ error: "Your account has no email address" });
       }
 
-      const rows = await db.select().from(systemSettings);
-      const dbMap = Object.fromEntries(rows.map((r) => [r.key, r.value]));
-      const instanceName = envString("INSTANCE_NAME", (dbMap.instanceName ?? "OpenMapX") as string);
-
-      const subject = `[${instanceName}] Test Email`;
+      const subject = "[OpenMapX] Test Email";
       const sentAt = new Date().toISOString();
-      const text = `This is a test email from ${instanceName}.\n\nIf you received this, your ${config.provider} settings are configured correctly.\n\nSent at: ${sentAt}`;
-      const html = `<p>This is a test email from <strong>${instanceName}</strong>.</p><p>If you received this, your ${config.provider} settings are configured correctly.</p><p><small>Sent at: ${sentAt}</small></p>`;
+      const text = `This is a test email from OpenMapX.\n\nIf you received this, your ${config.provider} settings are configured correctly.\n\nSent at: ${sentAt}`;
+      const html = `<p>This is a test email from <strong>OpenMapX</strong>.</p><p>If you received this, your ${config.provider} settings are configured correctly.</p><p><small>Sent at: ${sentAt}</small></p>`;
 
       try {
         switch (config.provider) {
@@ -168,9 +149,8 @@ export async function adminSettingsRoute(app: FastifyInstance) {
 
         await writeAuditLog({
           actorId: adminSession.user.id,
-          targetType: "settings",
           targetId: "email",
-          action: "settings.test_email",
+          action: "setting.test_email.send",
           details: { recipient: recipientEmail, provider: config.provider, status: "sent" },
           request,
         });
@@ -184,9 +164,8 @@ export async function adminSettingsRoute(app: FastifyInstance) {
 
         await writeAuditLog({
           actorId: adminSession.user.id,
-          targetType: "settings",
           targetId: "email",
-          action: "settings.test_email",
+          action: "setting.test_email.send",
           details: {
             recipient: recipientEmail,
             provider: config.provider,

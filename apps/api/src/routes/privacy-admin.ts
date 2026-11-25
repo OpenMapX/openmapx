@@ -1,18 +1,19 @@
 import { Readable } from "node:stream";
 import {
-  ACTIVE_REQUEST_STATES,
+  ACTIVE_REQUEST_STATUSES,
   acceptsCaseDecision,
   acceptsManualIdentityVerification,
   acceptsTaskResolution,
   canExtendDeadline,
+  type PrivacyActorKind,
+  type PrivacyEventType,
   privacyCaseDecisionSchema,
   privacyCaseExtensionSchema,
   privacyIdentityVerificationSchema,
   privacyTaskResolutionSchema,
 } from "@openmapx/core/privacy";
-import { httpError } from "@openmapx/integration-framework";
 import { asc, eq, inArray } from "drizzle-orm";
-import type { FastifyPluginAsync, FastifyRequest } from "fastify";
+import type { FastifyPluginAsync } from "fastify";
 import { AdminActionReauthentication } from "../account/admin-reauthentication.js";
 import { db } from "../db/index.js";
 import {
@@ -44,8 +45,8 @@ export interface PrivacyAdminRouteOptions {
 }
 
 function eventProjection(row: {
-  eventType: string;
-  actorKind: string;
+  eventType: PrivacyEventType;
+  actorKind: PrivacyActorKind;
   createdAt: Date;
   payload: unknown;
 }) {
@@ -54,7 +55,7 @@ function eventProjection(row: {
       ? (row.payload as Record<string, unknown>)
       : {};
   const safe: Record<string, string> = {};
-  for (const key of ["reasonCode", "kind", "channel", "from"]) {
+  for (const key of ["reasonCode", "kind", "channel", "from", "to"]) {
     const value = payload[key];
     if (typeof value === "string" && value.length <= 128) safe[key] = value;
   }
@@ -64,14 +65,6 @@ function eventProjection(row: {
     createdAt: row.createdAt,
     ...(Object.keys(safe).length ? { payload: safe } : {}),
   };
-}
-
-/** Privacy decisions need an attributable account, so the loopback CLI
- * session that `requireAdmin` admits is refused here. */
-async function requirePrivacyCaseAdmin(request: FastifyRequest) {
-  const session = await requireAdmin(request);
-  if (session.user.id === "loopback") throw httpError(403, "Administrator account required");
-  return session;
 }
 
 /** Why an assisted case's subject cannot be exported, if anything. An
@@ -105,7 +98,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
 ) => {
   declareRouteAuth(fastify, "admin");
   fastify.addHook("onRequest", async (request) => {
-    request.adminSession = await requirePrivacyCaseAdmin(request);
+    request.adminSession = await requireAdmin(request);
   });
   fastify.addHook("onSend", async (_request, reply, payload) => {
     reply.header("Cache-Control", "private, no-store");
@@ -123,7 +116,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
       const rows = await database
         .select()
         .from(dataSubjectRequest)
-        .where(inArray(dataSubjectRequest.state, [...ACTIVE_REQUEST_STATES]))
+        .where(inArray(dataSubjectRequest.status, [...ACTIVE_REQUEST_STATUSES]))
         .orderBy(asc(dataSubjectRequest.dueAt));
       return reply.send({
         requests: rows.map((row) => projection(row as unknown as Record<string, unknown>)),
@@ -165,7 +158,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
             .where(eq(dataSubjectRequestEvent.requestId, row.id))
             .orderBy(asc(dataSubjectRequestEvent.createdAt))
         ).map(eventProjection);
-        const active = acceptsCaseDecision(row.state);
+        const active = acceptsCaseDecision(row.status);
         const exportReason =
           row.channel === "self_service"
             ? "self-service-request"
@@ -181,10 +174,10 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
           tasks,
           events,
           capabilities: {
-            verifyIdentity: !row.identityMethod && acceptsManualIdentityVerification(row.state),
+            verifyIdentity: !row.identityMethod && acceptsManualIdentityVerification(row.status),
             resolveTasks:
-              acceptsTaskResolution(row.state) && tasks.some((task) => task.status === "open"),
-            extendDeadline: canExtendDeadline(row.state),
+              acceptsTaskResolution(row.status) && tasks.some((task) => task.status === "open"),
+            extendDeadline: canExtendDeadline(row.status),
             caseDecision: active,
             export: exportReason === undefined,
             reasons: {

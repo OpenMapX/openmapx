@@ -85,7 +85,7 @@ describe("job runner restart initialization", () => {
 
     expect(dbMock.updates).toContainEqual(
       expect.objectContaining({
-        status: "success",
+        status: "succeeded",
         progress: 100,
         result: expect.objectContaining({ phase: "complete", completedAfterRestart: true }),
       }),
@@ -107,7 +107,7 @@ describe("job runner restart initialization", () => {
         error: "Update replaced the API, but database migrations did not complete",
       }),
     );
-    expect(dbMock.updates).not.toContainEqual(expect.objectContaining({ status: "success" }));
+    expect(dbMock.updates).not.toContainEqual(expect.objectContaining({ status: "succeeded" }));
   });
 
   it("fails a checkpointed update when the replacement image does not match", async () => {
@@ -125,7 +125,7 @@ describe("job runner restart initialization", () => {
         error: "Update restarted the API with an unexpected container identity or image",
       }),
     );
-    expect(dbMock.updates).not.toContainEqual(expect.objectContaining({ status: "success" }));
+    expect(dbMock.updates).not.toContainEqual(expect.objectContaining({ status: "succeeded" }));
   });
 
   it("records a failed update when the helper restored the previous image", async () => {
@@ -146,7 +146,7 @@ describe("job runner restart initialization", () => {
         error: "Update failed; the previous API image was restored",
       }),
     );
-    expect(dbMock.updates).not.toContainEqual(expect.objectContaining({ status: "success" }));
+    expect(dbMock.updates).not.toContainEqual(expect.objectContaining({ status: "succeeded" }));
   });
 
   it("does not accept the former phase-only checkpoint", async () => {
@@ -159,6 +159,6 @@ describe("job runner restart initialization", () => {
     });
 
     expect(dbMock.updates).not.toContainEqual(expect.objectContaining({ status: "failed" }));
-    expect(dbMock.updates).not.toContainEqual(expect.objectContaining({ status: "success" }));
+    expect(dbMock.updates).not.toContainEqual(expect.objectContaining({ status: "succeeded" }));
   });
 });

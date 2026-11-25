@@ -1,3 +1,4 @@
+import { OVERTURE_PLACES_SCHEMA_VERSION } from "@openmapx/core/published-data";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { integrationManifestSchema } from "@openmapx/integration-framework";
 import { installHostCapabilities } from "@openmapx/integration-framework/testing";
@@ -102,7 +103,12 @@ describe("knowledge-overture setup", () => {
     setup(ctx);
     const check = vi.mocked(ctx.registerHealthCheck).mock.calls[0]?.[0];
     if (!check) throw new Error("Health check not registered");
+    db.execute.mockResolvedValueOnce([{ "?column?": 1 }]);
     await expect(check()).resolves.toEqual({ status: "up" });
+    expect(db.execute.mock.calls[0]?.[0]).toContain("current_snapshot.schema_version = $1");
+    expect(db.execute.mock.calls[0]?.[1]).toEqual([OVERTURE_PLACES_SCHEMA_VERSION]);
+    // Places of another layout, or none, are not served.
+    await expect(check()).resolves.toMatchObject({ status: "down" });
     db.execute.mockRejectedValueOnce(new Error("missing relation"));
     await expect(check()).resolves.toEqual({
       status: "down",
@@ -159,10 +165,13 @@ describe("knowledge-overture provider lookup", () => {
         "JOIN overture_places.conflation_state AS state",
       );
       expect(db.execute.mock.calls[0]?.[0]).toContain(
-        "ON state.singleton = 1 AND state.release = places.release",
+        "ON state.singleton = 1 AND state.release = places.release AND state.schema_version = $2",
       );
       expect(db.execute.mock.calls[0]?.[0]).toContain("WHERE gers_id = $1");
-      expect(db.execute.mock.calls[0]?.[1]).toEqual(["overture-abc-123"]);
+      expect(db.execute.mock.calls[0]?.[1]).toEqual([
+        "overture-abc-123",
+        OVERTURE_PLACES_SCHEMA_VERSION,
+      ]);
     },
   );
 
@@ -274,10 +283,13 @@ describe("knowledge-overture provider lookup", () => {
     const spatialCall = db.execute.mock.calls.find(([sql]) => String(sql).includes("ST_DWithin"));
     expect(spatialCall?.[0]).toContain("taxonomy_hierarchy && $3::TEXT[]");
     expect(spatialCall?.[0]).toContain("(operating_status IS NULL OR operating_status = 'open')");
+    // Candidates come only from the snapshot the detail lookup serves.
+    expect(spatialCall?.[0]).toContain("current_snapshot.schema_version = $4");
     expect(spatialCall?.[1]).toEqual([
       13.4,
       52.5,
       ["cafe", "coffee_shop", "tea_room", "tea_house"],
+      OVERTURE_PLACES_SCHEMA_VERSION,
     ]);
   });
 

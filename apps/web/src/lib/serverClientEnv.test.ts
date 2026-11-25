@@ -43,7 +43,7 @@ describe("server map bootstrap", () => {
   );
   it("keeps unknown self-hosted availability local if the API cannot be reached", async () => {
     process.env.NEXT_PUBLIC_TILES_URL = "";
-    process.env.MAPTILER_KEY = "";
+    process.env.MAPTILER_API_KEY = "";
     process.env.BASEMAP_PROVIDER = "";
     vi.stubGlobal("fetch", async () => {
       throw new Error("timeout");

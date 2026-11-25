@@ -92,8 +92,8 @@ the shipped manifest when reproducing the complete service:
     "digest": "sha256:6238809f9dc3057743d70a20efd3911ec38e458bfa13a0601909b58f68dfd956",
     "expose": [8002],
     "environment": {
-      "serve_tiles": "True",
-      "build_elevation": "True"
+      "SERVE_TILES": "True",
+      "BUILD_ELEVATION": "True"
     },
     "memory": "16g",
     "restart": "unless-stopped",
@@ -117,8 +117,8 @@ the shipped manifest when reproducing the complete service:
   "configSchema": {
     "type": "object",
     "properties": {
-      "build_elevation": { "type": "boolean", "default": true, "title": "Build elevation data" },
-      "build_admins": { "type": "boolean", "default": true, "title": "Build admin boundaries" }
+      "BUILD_ELEVATION": { "type": "boolean", "default": true, "title": "Build elevation data" },
+      "BUILD_ADMINS": { "type": "boolean", "default": true, "title": "Build admin boundaries" }
     }
   },
 
@@ -139,21 +139,21 @@ configuration schema accepted by the trusted renderer.
 
 The top-level descriptive fields.
 
-| Field                    | Type         | Required | Notes                                                                                                                                                                                                                                                                                                         |
-| :----------------------- | :----------- | :------: | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `id`                     | string       |   yes    | Must match `^[a-z0-9][a-z0-9-]*$`. Becomes the compose service name and must equal the directory slug.                                                                                                                                                                                                        |
-| `name`                   | string       |   yes    | Human-readable label shown in the admin UI.                                                                                                                                                                                                                                                                   |
-| `version`                | string       |   yes    | Free-form, semver by convention.                                                                                                                                                                                                                                                                              |
-| `description`            | string       |    no    | Short tagline surfaced in the catalog and admin detail page.                                                                                                                                                                                                                                                  |
-| `author`                 | string       |    no    | Free-form attribution.                                                                                                                                                                                                                                                                                        |
-| `license`                | string       |    no    | SPDX identifier by convention (`MIT`, `Apache-2.0`).                                                                                                                                                                                                                                                          |
-| `homepage`               | URL          |    no    | Project homepage; validated as a URL.                                                                                                                                                                                                                                                                         |
-| `documentation`          | URL          |    no    | API/docs URL; validated as a URL.                                                                                                                                                                                                                                                                             |
-| `quality`                | enum         |   yes    | `built-in`, `community-verified`, or `community`. Display/catalog label only; the sandbox uses where the manifest was loaded from (see [Quality tiers](#quality-tiers)).                                                                                                                                      |
-| `platform`               | string       |    no    | Descriptive service field. Extension bundle and integration manifests enforce the separate `major.minor` protocol requirement; this service schema accepts a string.                                                                                                                                          |
-| `communityNetworkAccess` | service id[] |    no    | Audited first-party capability only. Explicitly attaches a built-in bridge service to the named community services' isolated networks while retaining `openmapx`. Rejected from community provenance at validation and render boundaries. Start with no entries; this is not a platform-network escape hatch. |
-| `privateNetworks`        | name[]       |    no    | Audited first-party capability only. Names reviewed private networks (`openmapx-private-<name>`) the service joins, so a multi-container bundle can keep its traffic off `openmapx`. See [Private bundle networks](#private-bundle-networks).                                                                 |
-| `platformNetwork`        | boolean      |    no    | Audited first-party capability only. `false` keeps the service off `openmapx`; it then needs at least one `privateNetworks` entry. Defaults to joining `openmapx`.                                                                                                                                            |
+| Field                    | Type         | Required  | Notes                                                                                                                                                                                                                                                                                                         |
+| :----------------------- | :----------- | :-------: | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `id`                     | string       |    yes    | Must match `^[a-z0-9]+(-[a-z0-9]+)*$`, at most 48 characters, so `openmapx-<id>` fits one DNS label. Becomes the compose service name and must equal the directory slug.                                                                                                                                      |
+| `name`                   | string       |    yes    | Human-readable label shown in the admin UI.                                                                                                                                                                                                                                                                   |
+| `version`                | string       |    yes    | A [semantic version](https://semver.org/) such as `1.0.0` for a community service; any non-empty string for a built-in one.                                                                                                                                                                                   |
+| `description`            | string       |    no     | Short tagline surfaced in the catalog and admin detail page.                                                                                                                                                                                                                                                  |
+| `author`                 | string       |    no     | Free-form attribution.                                                                                                                                                                                                                                                                                        |
+| `license`                | string       |    no     | SPDX identifier by convention (`MIT`, `Apache-2.0`).                                                                                                                                                                                                                                                          |
+| `homepage`               | URL          |    no     | Project homepage; validated as a URL.                                                                                                                                                                                                                                                                         |
+| `documentation`          | URL          |    no     | API/docs URL; validated as a URL.                                                                                                                                                                                                                                                                             |
+| `quality`                | enum         |    yes    | `built-in` or `community`. Display label only; the sandbox uses where the manifest was loaded from (see [Quality tiers](#quality-tiers)).                                                                                                                                                                     |
+| `platform`               | string       | community | The `major.minor` extension protocol the service is written for, such as `"1.0"`. Required for a community service, which the host refuses when it does not support that protocol; optional for a built-in one.                                                                                               |
+| `communityNetworkAccess` | service id[] |    no     | Audited first-party capability only. Explicitly attaches a built-in bridge service to the named community services' isolated networks while retaining `openmapx`. Rejected from community provenance at validation and render boundaries. Start with no entries; this is not a platform-network escape hatch. |
+| `privateNetworks`        | name[]       |    no     | Audited first-party capability only. Names reviewed private networks (`openmapx-private-<name>`) the service joins, so a multi-container bundle can keep its traffic off `openmapx`. See [Private bundle networks](#private-bundle-networks).                                                                 |
+| `platformNetwork`        | boolean      |    no     | Audited first-party capability only. `false` keeps the service off `openmapx`; it then needs at least one `privateNetworks` entry. Defaults to joining `openmapx`.                                                                                                                                            |
 
 ## `container`
 
@@ -165,7 +165,6 @@ service keys; the renderer copies them through.
 | `image`           | string                 | **Required.** Lowercase, no tag suffix: matches `^[a-z0-9]([a-z0-9._\-/])*$`. Put the version in `tag`.                                                                                                                                                                                                                                                                                            |
 | `tag`             | string                 | **Required.** The image tag (`latest`, `2.10.2`, `v3.6`); matches `^[a-zA-Z0-9._-]+$`.                                                                                                                                                                                                                                                                                                             |
 | `digest`          | string                 | OCI manifest pin, `sha256:` followed by 64 lowercase hex digits. Optional in the portable schema; mandatory for installed community services. When present, the renderer uses `image:tag@digest`; `tag` remains required metadata.                                                                                                                                                                 |
-| `containerName`   | string                 | Pin the compose container to a fixed name (`container_name`) instead of the derived `<project>-<service>-<n>`. Required only when the operations agent addresses the container by bare name over the Docker CLI (for example `postgis` and `motis-feed-proxy`); data-manager reaches those effects only through typed operations-agent operations. It blocks scaling, so use it sparingly.         |
 | `expose`          | number[]               | Container ports exposed to the service's attached Compose network. Required if `exposure.proxy.enabled` is `true`.                                                                                                                                                                                                                                                                                 |
 | `networkAliases`  | string[]               | Extra DNS aliases on the service's home network (`openmapx` for built-ins, its isolated network for community services), next to the `openmapx-<service-id>` name every service gets (see [Network names](#network-names)). Each must be a valid DNS label, may not start with `openmapx-` and may not collide with another service id or alias. Aliasing the service's own id is harmless.        |
 | `command`         | string \| string[]     | Container command. First-party services may use Compose interpolation; community services render `$` literally.                                                                                                                                                                                                                                                                                    |
@@ -195,15 +194,19 @@ it joins: `openmapx-postgis`, `openmapx-data-manager`, `openmapx-api`, and a
 community service `weather-feed` as `openmapx-weather-feed`. Internal URLs,
 host settings and host allow-lists use only these names, for example
 `postgresql://openmapx_api@openmapx-postgis:5432/openmapx` or
-`http://openmapx-valhalla:8002`. Docker Compose also registers the bare service
+`http://openmapx-valhalla:8002`. The renderer gives every service the same
+string as its `container_name`, so `docker exec openmapx-postgis …` reaches it;
+code derives such targets from `serviceContainerName` in
+`packages/core/src/services/core-service-ids.ts`, and a manifest cannot choose
+another name. Docker Compose also registers the bare service
 ID on every network, but nothing in OpenMapX relies on it: behind an
 operator-run reverse proxy (`OPENMAPX_PROXY_NETWORK`), a routed service also
 joins the proxy's shared network, and Docker can resolve a bare ID such as
 `redis` there to another project's container. The `openmapx-` name is never
 attached to that shared network.
 
-The prefix is reserved: validation refuses a service ID, a declared
-`networkAliases` entry or a `containerName` that starts with `openmapx-`. An
+The prefix is reserved: validation refuses a service ID or a declared
+`networkAliases` entry that starts with `openmapx-`. An
 installed community service is refused when its environment, command,
 healthcheck or configuration defaults reach a built-in service by its bare ID:
 in a URL (`http://overpass:80`), a host setting (`DB_HOST=postgis`) or a
@@ -351,12 +354,12 @@ is reserved for future runtime layers; the platform does not read it today.
 
 Well-known capabilities: `routing-engine`, `transit-engine`,
 `transit-engine-staging`, `geocoder`, `tile-server`, `osm-query`, `database`,
-`cache`, `proxy`, and the data-delivery roles `osm-data`, `gtfs-data`,
-`tile-asset-data`. A community service may introduce new capabilities, but it
-should namespace them as `<vendor>/<name>` (for example `acme/routing-engine`).
-Non-conforming strings produce a non-blocking validation **warning**, not an
-error: the manifest still loads, and the flag shows up in the admin UI and in
-`pnpm openmapx services capabilities`.
+`cache`, `proxy`, `timeline`, `llm-inference`, and the data-delivery roles
+`osm-data`, `gtfs-data`, `tile-asset-data`. A community service may introduce
+new capabilities, but it must namespace them as `<vendor>/<name>` (for example
+`acme/routing-engine`). A community manifest with any other capability or
+`produces`/`consumes` data type fails validation; `pnpm openmapx services
+capabilities` lists which names are well-known or namespaced.
 
 ### Selection dependencies
 
@@ -570,8 +573,8 @@ as environment variables.
 "configSchema": {
   "type": "object",
   "properties": {
-    "build_elevation": { "type": "boolean", "default": true, "title": "Build elevation data" },
-    "build_admins": { "type": "boolean", "default": true, "title": "Build admin boundaries" }
+    "BUILD_ELEVATION": { "type": "boolean", "default": true, "title": "Build elevation data" },
+    "BUILD_ADMINS": { "type": "boolean", "default": true, "title": "Build admin boundaries" }
   }
 }
 ```
@@ -579,6 +582,19 @@ as environment variables.
 The form supports `boolean` (switch), `enum` (select), `string`/`number`/
 `integer` (text input), and `format: "url"`. A `default` populates the form when
 no value is persisted.
+
+The schema's root `required` list names settings the operator must supply
+before the service runs, for example an instance id or an upstream API key. A
+required key needs a non-empty value from the form or the environment, or, for a
+secret, a stored credential. Applying a configuration that enables the service
+without one is refused with an error naming the service and each missing key:
+the agent logs it, `openmapx compose render` prints it, and the admin panel
+shows it in the administrator's language (the API answers 409 with code
+`REQUIRED_SETTINGS_MISSING` and a `missingSettings` list of service ids and
+keys).
+A service that is not enabled is not held to its `required` list, and the list
+is not part of the value check, so a partly configured service does not make
+other configuration invalid. A schema default of `""` does not satisfy it.
 
 A property may also carry `"x-openmapx-secret": true` to mark it as sensitive.
 Secret keys are excluded from the env/database cascade below; instead the admin
@@ -615,9 +631,10 @@ priority first:
 |    2     | Database             | the admin panel's per-service config form   |
 |    1     | Schema default       | `configSchema.properties.<key>.default`     |
 
-The env-var name is `SERVICE_` + the uppercased service id (hyphens become
-underscores) + `_` + the uppercased config key: for `valhalla` and key
-`memory_limit`, that's `SERVICE_VALHALLA_MEMORY_LIMIT`. Nonempty environment overrides win. Empty values are treated as unset.
+Config keys are UPPER_SNAKE; manifest validation refuses others. The env-var
+name is `SERVICE_` + the uppercased service id (hyphens become underscores) +
+`_` + the config key as is: for `valhalla` and key `BUILD_ELEVATION`, that's
+`SERVICE_VALHALLA_BUILD_ELEVATION`. Nonempty environment overrides win. Empty values are treated as unset.
 A schema default does not overwrite an existing `container.environment` default
 for the same key; explicit database or environment settings still do. Because the cascade runs
 at render time, a changed value takes effect only after a re-render and apply;
@@ -748,14 +765,15 @@ for manifests shipped in this repository's `services/` tree, and
 operations agent validates before it installs a repository and again whenever
 it reads the tree.
 The validator enforces the invariant in both directions: a first-party
-manifest must declare `quality: "built-in"`, and a third-party manifest may not
-declare it. A manifest cannot grant itself first-party privileges by changing
-this field.
+manifest must declare `quality: "built-in"`, and a third-party manifest must
+declare `quality: "community"`. A manifest cannot grant itself first-party
+privileges by changing this field, and there is no self-declared "verified"
+label: verified trust is a store tier the host derives from digest pins.
 
-| Origin                                                                                  | Sandbox                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| :-------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| First-party (`services/`, `quality: "built-in"`)                                        | May use first-party-only host privileges and special sources such as `@docker-socket`, `@service:`, `@infra:`, host networking, privileged mode, and narrowly reviewed `communityNetworkAccess`.                                                                                                                                                                                                                                                                                           |
-| Third-party (agent's community store, `quality: "community"` or `"community-verified"`) | Identical sandbox for both labels: one isolated per-service network; no `communityNetworkAccess`, bind mounts of any kind, host networking, privileged mode, devices, escape-class capabilities, deployment `envFile`, Compose-variable bind paths, or Traefik proxy routes; named volumes must use `openmapx-<serviceId>-<suffix>`, and network aliases may not collide. Every community container also has a required memory limit, a process limit and `no-new-privileges` (see below). |
+| Origin                                                        | Sandbox                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| :------------------------------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| First-party (`services/`, `quality: "built-in"`)              | May use first-party-only host privileges and special sources such as `@docker-socket`, `@service:`, `@infra:`, host networking, privileged mode, and narrowly reviewed `communityNetworkAccess`.                                                                                                                                                                                                                                                        |
+| Third-party (agent's community store, `quality: "community"`) | One isolated per-service network; no `communityNetworkAccess`, bind mounts of any kind, host networking, privileged mode, devices, escape-class capabilities, deployment `envFile`, Compose-variable bind paths, or Traefik proxy routes; named volumes must use `openmapx-<serviceId>-<suffix>`, and network aliases may not collide. Every community container also has a required memory limit, a process limit and `no-new-privileges` (see below). |
 
 The third-party rules apply at validation and again at render time. Community
 services must migrate persistent state to a namespaced named volume; operator
@@ -803,7 +821,9 @@ is covered too.
 
 The schema enforces, among other rules:
 
-- `id` matches `^[a-z0-9][a-z0-9-]*$` and equals the directory slug.
+- `id` matches `^[a-z0-9]+(-[a-z0-9]+)*$`, is at most 48 characters, and equals the directory slug.
+- Unknown top-level keys are refused.
+- A third-party manifest declares `platform` (a `major.minor` protocol this host supports), a semantic `version`, and `quality: "community"`.
 - `image` matches `^[a-z0-9]([a-z0-9._\-/])*$` (no tag suffix); `tag` matches `^[a-zA-Z0-9._-]+$`.
 - Volume names match `^openmapx-[a-z0-9-]+$`.
 - Every `mountAt` and `target` is absolute and free of `..`.
@@ -817,8 +837,8 @@ The schema enforces, among other rules:
 - Third-party services must declare `container.memory` as a literal size of at least `6m` (`k`, `m` or `g` unit); a Compose reference is rejected.
 - Third-party services may not use bind mounts, host networking, privileged mode, host device pass-through, escape-class capabilities, deployment `envFile`, a `logging` block, a writable `consumes` mount (`readOnly: false`), Compose-variable bind paths, platform proxy routes, or deployment-variable interpolation anywhere in their rendered Compose entry. Their `consumes` mounts are always read-only, and their volume names and network aliases are isolated from platform-owned names.
 
-Capability and data-type strings that are neither well-known nor namespaced
-produce warnings rather than errors, so the manifest still loads.
+In a third-party manifest, a capability or data-type string that is neither
+well-known nor namespaced as `<vendor>/<name>` is an error.
 
 ## Configuration generation ownership and outcomes
 

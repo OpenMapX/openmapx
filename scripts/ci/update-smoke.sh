@@ -24,7 +24,13 @@
 # exactly as an operator's installation is:
 #
 #   happy      an authenticated `system update` to N+1 succeeds, every role runs
-#              the N+1 image and the operations agent is recreated last
+#              the N+1 image and the operations agent is recreated last. The
+#              agent's journal also holds two rows in an operation shape no
+#              release accepts, as rows of a release with another operation
+#              schema are: one finished configuration apply with the
+#              settlement every release reads, one the agent was stopped in.
+#              Both agents start on them, the finished row is kept as written
+#              and the other fails as needing recovery
 #   unhealthy  N+1's API image fails its health check: the update does not
 #              succeed, nothing after the API and not the agent is recreated
 #
@@ -182,6 +188,9 @@ publish_release() {
         sourceRevision: revision, runId: 1, runAttempt: 1, event: "push" },
       buildMetadata: { version: 1, images: Object.fromEntries(Object.keys(images).map((name) =>
         [name, { sourceRevision: revision, inputHash: "0".repeat(64), builtAt, coldRefreshedAt: builtAt }])) },
+      databaseMigrationHead: (({ tag, when }) => ({ tag, when }))(JSON.parse(require("node:fs")
+        .readFileSync("apps/api/src/db/migrations/meta/_journal.json", "utf8")).entries.at(-1)),
+      stateEpoch: 1,
     };
     process.stdout.write(`${JSON.stringify(manifest, null, 2)}\n`);
   ' >"$work/manifest-$release/release-manifest.json"
@@ -303,9 +312,103 @@ recreate_order() {
     --format '{{index .Actor.Attributes "com.docker.compose.service"}}'
 }
 
+agent_journal_dir="$root/$infra/state/ops-agent"
+
+# Runs a Node script on the agent's journal directory, mounted at /journal, as
+# the journal's owner, on the image of the agent that runs now, or of the agent
+# container given as the second argument when it is stopped.
+with_agent_journal() {
+  local agent="${2:-}" image owner
+  [[ -n "$agent" ]] || agent="$(agent_container)"
+  [[ -n "$agent" ]] || fail "no operations agent runs"
+  image="$(docker inspect --format '{{.Image}}' "$agent")"
+  [[ -f "$agent_journal_dir/jobs.json" ]] || fail "the agent journal does not exist"
+  owner="$(stat -c %u:%g "$agent_journal_dir/jobs.json")"
+  docker run --rm --network none --user "$owner" --volume "$agent_journal_dir:/journal" \
+    --entrypoint node "$image" -e "$1"
+}
+
+# Adds two rows another release could have written: their identity is valid,
+# their operation is a shape the running release refuses. One finished, and one
+# was running when its agent stopped. The agent is stopped while they are
+# added and started again, so it starts on them.
+add_foreign_journal_rows() {
+  step "Add journal rows another release wrote"
+  local agent
+  agent="$(agent_container)"
+  [[ -n "$agent" ]] || fail "no operations agent runs"
+  docker stop --time 30 "$agent" >/dev/null || fail "could not stop the operations agent"
+  with_agent_journal '
+    const fs = require("node:fs");
+    const path = "/journal/jobs.json";
+    const file = JSON.parse(fs.readFileSync(path, "utf8"));
+    if (file.version !== 1) throw Error(`unexpected journal version ${file.version}`);
+    const at = new Date(Date.now() - 60_000).toISOString();
+    const row = (label, state, extra) => ({
+      executionVersion: 1,
+      requestVersion: 1,
+      admittedAt: Date.parse(at),
+      deadlineAt: Date.parse(at) + 3_600_000,
+      operationFingerprint: "e".repeat(64),
+      deploymentBudgetMs: 3_600_000,
+      role: "api",
+      operation: { kind: "service.pull", serviceId: "redis", pullPolicy: "always" },
+      operationId: `job1_updateSmokeForeign${label}`,
+      operationKey: `opk1_updateSmokeForeign${label}`,
+      fingerprint: "f".repeat(64),
+      resourceId: "redis",
+      state,
+      submittedAt: at,
+      updatedAt: at,
+      ...extra,
+    });
+    // The finished row is a configuration apply whose result no release reads;
+    // its settlement is in the form every release reads.
+    file.jobs.push(
+      row("Done", "succeeded", {
+        operation: { kind: "configurationMaintenance.apply", maintenanceId: "m", pullPolicy: "always" },
+        resourceId: "m",
+        result: { changed: true },
+        settlement: {
+          outcome: "not_committed",
+          summary: { reason: "failed", cleanupFailed: false },
+        },
+        terminalAt: at,
+      }),
+      row("Open", "running", {}),
+    );
+    fs.writeFileSync(`${path}.update-smoke`, JSON.stringify(file), { mode: 0o600 });
+    fs.renameSync(`${path}.update-smoke`, path);
+  ' "$agent" || fail "could not add the foreign journal rows"
+  docker start "$agent" >/dev/null || fail "could not start the operations agent again"
+  assert_stack_healthy
+  assert_foreign_journal_rows "release N"
+}
+
+# The rows add_foreign_journal_rows added are still in the journal: the
+# finished one as written, the other failed as needing recovery. The running
+# agent reported both at its start.
+assert_foreign_journal_rows() {
+  local when="$1" agent
+  with_agent_journal '
+    const file = JSON.parse(require("node:fs").readFileSync("/journal/jobs.json", "utf8"));
+    const find = (label) => file.jobs.find((job) => job.operationId === `job1_updateSmokeForeign${label}`);
+    const done = find("Done"), open = find("Open");
+    if (!done || done.state !== "succeeded" || done.operation.pullPolicy !== "always" ||
+        done.settlement?.outcome !== "not_committed")
+      throw Error(`the finished foreign row is not kept as written: ${JSON.stringify(done)}`);
+    if (!open || open.state !== "failed" || open.errorClass !== "recovery_required" || open.interrupted !== true)
+      throw Error(`the unfinished foreign row did not fail as needing recovery: ${JSON.stringify(open)}`);
+  ' || fail "the journal lost the foreign rows after $when"
+  agent="$(agent_container)"
+  docker logs "$agent" 2>&1 | grep -q "Kept 2 job journal row(s) that another release recorded" ||
+    fail "the operations agent of $when did not report the foreign journal rows"
+}
+
 case_happy() {
   step "Case: self-update to N+1"
   install_release_one
+  add_foreign_journal_rows
   publish_release
   read -r release digest < <(check_release)
   local since
@@ -319,6 +422,7 @@ case_happy() {
   done
   [[ "$(recreate_order "$since" | tail -1)" == ops-agent ]] ||
     fail "the operations agent was not recreated last: $(recreate_order "$since" | tr '\n' ' ')"
+  assert_foreign_journal_rows "the update to $release"
 }
 
 case_unhealthy() {

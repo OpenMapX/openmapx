@@ -4,7 +4,11 @@ import { currentAccountMutation } from "./account-context";
 import { AdminActionReauthentication } from "./admin-reauthentication";
 import { type AuthDatabase, currentAuthDatabase } from "./auth-database";
 
-type Purpose = "account.verify" | "account.password.set" | "account.reset.send" | "account.invite";
+type Purpose =
+  | "user.email.verify"
+  | "user.password.set"
+  | "user.password_reset.send"
+  | "user.invitation.send";
 const admitted = new AsyncLocalStorage<{
   actorId: string;
   targetId: string;

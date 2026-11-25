@@ -10,7 +10,7 @@ export function job(overrides: Partial<AdminActivityJobDetail> = {}): AdminActiv
   return adminActivityJobDetailSchema.parse({
     source: "application",
     id: "job-1",
-    type: "data.operation",
+    type: "data.operation.run",
     status: "running",
     payload: null,
     result: null,
@@ -36,7 +36,7 @@ export function stage(jobId: string): AdminActivityJobStage {
     id: "stage-1",
     jobId,
     stage: "validate",
-    status: "partial",
+    status: "partially_succeeded",
     startedAt: timestamp,
     finishedAt: timestamp,
     durationMs: 1250,

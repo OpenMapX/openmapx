@@ -8,6 +8,7 @@ import {
   updateAdminExtension,
 } from "@openmapx/core/api-admin-sdk";
 import type { Command } from "commander";
+import { type AdminSessionOptions, withAdminSessionOptions } from "../lib/admin-session";
 import {
   createExtensionAdminClient,
   EXTENSION_READ_TIMEOUT_MS,
@@ -27,15 +28,14 @@ export function registerExtCommands(program: Command): void {
     .command("ext")
     .description("Browse and manage extensions (the unified store: integrations + services)");
 
-  ext
-    .command("browse")
+  withAdminSessionOptions(ext.command("browse"))
     .description("List catalog extensions")
     .option("-q, --query <text>", "Filter by text")
     .option("--trust <tier>", "Filter by trust (verified|community)")
     .option("--type <kind>", "Filter by component type (service|integration)")
-    .action((opts: { query?: string; trust?: string; type?: string }) =>
+    .action((opts: AdminSessionOptions & { query?: string; trust?: string; type?: string }) =>
       runExtensionAction(async () => {
-        const client = createExtensionAdminClient();
+        const client = createExtensionAdminClient(opts);
         const { entries } = unwrapAdminResponse(
           await listAdminExtensionCatalog(
             { q: opts.query, trust: opts.trust, type: opts.type },
@@ -66,12 +66,11 @@ export function registerExtCommands(program: Command): void {
       }),
     );
 
-  ext
-    .command("list")
+  withAdminSessionOptions(ext.command("list"))
     .description("List installed extensions")
-    .action(() =>
+    .action((opts: AdminSessionOptions) =>
       runExtensionAction(async () => {
-        const client = createExtensionAdminClient();
+        const client = createExtensionAdminClient(opts);
         const { extensions } = unwrapAdminResponse(
           await listAdminInstalledExtensions({ client, timeoutMs: EXTENSION_READ_TIMEOUT_MS }),
         );
@@ -102,14 +101,13 @@ export function registerExtCommands(program: Command): void {
       }),
     );
 
-  ext
-    .command("preview <idOrUrl>")
+  withAdminSessionOptions(ext.command("preview <idOrUrl>"))
     .description(
       "Inspect the current extension snapshot, effective ports and confirmation fingerprint",
     )
-    .action((idOrUrl: string) =>
+    .action((idOrUrl: string, opts: AdminSessionOptions) =>
       runExtensionAction(async () => {
-        const client = createExtensionAdminClient();
+        const client = createExtensionAdminClient(opts);
         printExtensionPreview(
           unwrapAdminResponse(
             await previewAdminExtensionInstall(selector(idOrUrl), {
@@ -121,16 +119,15 @@ export function registerExtCommands(program: Command): void {
       }),
     );
 
-  ext
-    .command("install <idOrUrl>")
+  withAdminSessionOptions(ext.command("install <idOrUrl>"))
     .description("Preview then queue an extension install by catalog id or extension.json URL")
     .option(
       "--host-port-confirmation <fingerprint>",
       "Authorize the exact previously inspected host-port snapshot",
     )
-    .action((idOrUrl: string, opts: { hostPortConfirmation?: string }) =>
+    .action((idOrUrl: string, opts: AdminSessionOptions & { hostPortConfirmation?: string }) =>
       runExtensionAction(async () => {
-        const client = createExtensionAdminClient();
+        const client = createExtensionAdminClient(opts);
         const options = { client, timeoutMs: EXTENSION_RESOLUTION_TIMEOUT_MS };
         const target = selector(idOrUrl);
         const preview = unwrapAdminResponse(await previewAdminExtensionInstall(target, options));
@@ -150,8 +147,7 @@ export function registerExtCommands(program: Command): void {
       }),
     );
 
-  ext
-    .command("update <id>")
+  withAdminSessionOptions(ext.command("update <id>"))
     .description(
       "Preview then queue an installed extension update to the catalog's current version",
     )
@@ -159,9 +155,9 @@ export function registerExtCommands(program: Command): void {
       "--host-port-confirmation <fingerprint>",
       "Authorize the exact previously inspected host-port snapshot",
     )
-    .action((id: string, opts: { hostPortConfirmation?: string }) =>
+    .action((id: string, opts: AdminSessionOptions & { hostPortConfirmation?: string }) =>
       runExtensionAction(async () => {
-        const client = createExtensionAdminClient();
+        const client = createExtensionAdminClient(opts);
         const options = { client, timeoutMs: EXTENSION_RESOLUTION_TIMEOUT_MS };
         const preview = unwrapAdminResponse(await previewAdminExtensionInstall({ id }, options));
         requireHostPortReview(preview, opts.hostPortConfirmation);
@@ -178,12 +174,11 @@ export function registerExtCommands(program: Command): void {
       }),
     );
 
-  ext
-    .command("remove <id>")
+  withAdminSessionOptions(ext.command("remove <id>"))
     .description("Uninstall an extension (removes its services and integrations)")
-    .action((id: string) =>
+    .action((id: string, opts: AdminSessionOptions) =>
       runExtensionAction(async () => {
-        const client = createExtensionAdminClient();
+        const client = createExtensionAdminClient(opts);
         const { jobId } = unwrapAdminResponse(
           await removeAdminExtension(id, undefined, {
             client,

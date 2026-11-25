@@ -217,7 +217,7 @@ describe("admin job handlers", () => {
         const payload = enqueue.mock.calls[0]?.[1];
         expect(payload).toEqual({
           operation: id,
-          version: id === "overture-conflate" ? 2 : 1,
+          version: 1,
           input: raw,
         });
         const ctx = dataCtx(payload);
@@ -290,7 +290,7 @@ describe("admin job handlers", () => {
       runAdminOperationMock.mockClear();
       await expect(
         handleDataOperationJob(
-          dataCtx({ operation: "overture-conflate", version: 2, input: { region: "../etc" } }),
+          dataCtx({ operation: "overture-conflate", version: 1, input: { region: "../etc" } }),
         ),
       ).rejects.toThrow(/region/);
       await expect(
@@ -299,22 +299,22 @@ describe("admin job handlers", () => {
       expect(runAdminOperationMock).not.toHaveBeenCalled();
     });
 
-    it("rejects old conflation jobs and forwards both reviewed version2 modes exactly", async () => {
+    it("rejects conflation jobs of another catalog version and forwards both modes exactly", async () => {
       runAdminOperationMock.mockClear();
       await expect(
         handleDataOperationJob(
           dataCtx({
             operation: "overture-conflate",
-            version: 1,
+            version: 2,
             input: { region: "europe/germany", restart: true },
           }),
         ),
-      ).rejects.toThrow(/catalog version 1; current is 2/);
+      ).rejects.toThrow(/catalog version 2; current is 1/);
       expect(runAdminOperationMock).not.toHaveBeenCalled();
       for (const restart of [false, true]) {
         const ctx = dataCtx({
           operation: "overture-conflate",
-          version: 2,
+          version: 1,
           input: { region: "europe/germany", restart },
         });
         await handleDataOperationJob(ctx);

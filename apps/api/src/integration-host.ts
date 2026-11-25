@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { ID_SCHEME_PATTERN } from "@openmapx/core/place-ids";
 import {
   type ActivationTransactionScope,
   assertAirQualityProviderContract,
@@ -686,6 +687,11 @@ function buildIntegrationContext(args: {
       providers.set("live-transit", existing);
     },
     registerMobilityDataSource(provider) {
+      // The id is the scheme of the place ids its items open as.
+      if (!ID_SCHEME_PATTERN.test(provider.id))
+        throw new Error(
+          `Data source id "${provider.id}" must start with a letter and use only lower-case letters, digits and hyphens, because it names its places' id scheme`,
+        );
       const existing = providers.get("data-source") ?? [];
       existing.push(provider);
       providers.set("data-source", existing);
@@ -963,7 +969,7 @@ export async function initIntegrations(
   }
 
   for (const { manifest: raw, directory, isBuiltIn } of sorted) {
-    const validation = validateManifest(raw);
+    const validation = validateManifest(raw, { firstParty: isBuiltIn });
     if (!validation.valid) {
       fastify.log.warn(
         { id: raw.id, errors: validation.errors },
@@ -980,14 +986,12 @@ export async function initIntegrations(
       continue;
     }
 
-    // Enforce platform version compatibility for community integrations
-    if (!isBuiltIn && manifest.platform) {
-      if (!satisfiesPlatformVersion(manifest.platform)) {
-        fastify.log.warn(
-          `Skipping community integration ${id}: requires platform >=${manifest.platform}, current is ${PLATFORM_VERSION}`,
-        );
-        continue;
-      }
+    // A community manifest always states its protocol; validation requires it.
+    if (!isBuiltIn && !satisfiesPlatformVersion(manifest.platform ?? "")) {
+      fastify.log.warn(
+        `Skipping community integration ${id}: requires platform >=${manifest.platform}, current is ${PLATFORM_VERSION}`,
+      );
+      continue;
     }
 
     const config = await resolveConfig(manifest, directory);
@@ -1227,7 +1231,7 @@ export function getAllIntegrations(): LoadedIntegration[] {
  * regardless of whether its `setup()` succeeded. The places route uses this
  * to decide whether an unregistered resolver should 404 (the integration
  * owns the scheme but didn't boot) or fall through to the freeform name+
- * coord lookup (the scheme is a UI-side convention like `saved`/`stylePoi`,
+ * coord lookup (the scheme is a UI-side convention like `saved`/`style-poi`,
  * not an integration). Manifest discovery runs before `setup()`, so this
  * stays accurate even when an integration crashes during boot — which is
  * the failure mode this gate exists to catch.
@@ -1375,7 +1379,7 @@ async function doReloadIntegrations(
     }
 
     for (const { manifest: raw, directory, isBuiltIn } of sorted) {
-      const validation = validateManifest(raw);
+      const validation = validateManifest(raw, { firstParty: isBuiltIn });
       if (!validation.valid) {
         const replacesActiveIntegration = previousIntegrations.some(
           (integration) => integration.directory === directory,
@@ -1400,13 +1404,11 @@ async function doReloadIntegrations(
         continue;
       }
 
-      if (!isBuiltIn && manifest.platform) {
-        if (!satisfiesPlatformVersion(manifest.platform)) {
-          _fastify.log.warn(
-            `Skipping community integration ${id}: requires platform >=${manifest.platform}, current is ${PLATFORM_VERSION}`,
-          );
-          continue;
-        }
+      if (!isBuiltIn && !satisfiesPlatformVersion(manifest.platform ?? "")) {
+        _fastify.log.warn(
+          `Skipping community integration ${id}: requires platform >=${manifest.platform}, current is ${PLATFORM_VERSION}`,
+        );
+        continue;
       }
 
       const config = context

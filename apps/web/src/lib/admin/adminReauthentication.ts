@@ -1,5 +1,5 @@
 "use client";
-import { createApiClient } from "@openmapx/core";
+import { createApiClient, prefixedStorageKey } from "@openmapx/core";
 import {
   completeAdminReauthentication,
   startAdminReauthentication,
@@ -17,14 +17,14 @@ export type { AdminReauthIntent, StoredAdminReauth } from "@openmapx/core/api-co
 import { adminTabsForPath, safeAdminNavigationReturn } from "./adminNavigation";
 import { browserAdminApiBase } from "./browserAdminApiBase";
 export const adminReauthStorageKey = (apiUrl: string) =>
-  `openmapx-admin-reauth:${browserAdminApiBase(apiUrl)}`;
+  prefixedStorageKey("adminReauthentication", browserAdminApiBase(apiUrl));
 export function safeAdminReturnPath(path: string) {
   return safeAdminNavigationReturn(path) !== null;
 }
 function validRequests(requests: AdminReauthIntent[]) {
   if (requests.length === 2) {
     const purposes = new Set(requests.map((r) => r.purpose));
-    if (!purposes.has("credentials.import") || !purposes.has("transit.credentials"))
+    if (!purposes.has("credential.import") || !purposes.has("transit.credential.update"))
       throw Error("Invalid reauthentication group");
   }
 }

@@ -113,9 +113,9 @@ it.each(["catalog", "pins", "capacity", "expiry"])(
     if (change === "capacity")
       vi.mocked(fs.statfsSync).mockReturnValue({ bsize: 4096, bavail: 1, ffree: 1 } as fs.StatsFs);
     if (change === "expiry") vi.spyOn(Date, "now").mockReturnValue(Date.now() + 301000);
-    await expect(controller.verify(request)).rejects.toMatchObject({ code: "preflight_stale" });
+    await expect(controller.verify(request)).rejects.toMatchObject({ code: "PREFLIGHT_STALE" });
     await expect(verifyTransitPreflightBinding(options, ["de"], binding)).rejects.toMatchObject({
-      code: "preflight_stale",
+      code: "PREFLIGHT_STALE",
     });
   },
 );
@@ -133,7 +133,7 @@ it("blocks unknown filesystem capacity and rejects invented preview identities",
       preflightId: preview.preflightId,
       fingerprint: "0".repeat(64),
     }),
-  ).rejects.toMatchObject({ code: "preflight_stale" });
+  ).rejects.toMatchObject({ code: "PREFLIGHT_STALE" });
 });
 it("supports a country implied by a finite feed allow-list while retaining the feed constraint", async () => {
   const limited = resolveOperationsProfile({ countries: [], feedAllowList: ["de_catalog"] });

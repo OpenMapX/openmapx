@@ -13,10 +13,8 @@ const register = createAdminRouteRegistrar(accountAdminOperations, {
 });
 export async function adminAccountsRoute(app: FastifyInstance) {
   declareRouteAuth(app, "admin");
-  app.addHook("onRequest", async (request, reply) => {
+  app.addHook("onRequest", async (request) => {
     request.adminSession = await requireAdmin(request);
-    if (getAdminSession(request).user.id === "loopback")
-      return reply.code(403).send({ error: "A full administrator account session is required" });
   });
   await registerAccountActions(app);
   const failure = (error: unknown, reply: import("fastify").FastifyReply) => {
@@ -29,9 +27,11 @@ export async function adminAccountsRoute(app: FastifyInstance) {
             : error.code === "AUTH_POLICY_FORBIDDEN"
               ? 403
               : 503;
-      return reply.code(status).send({ error: error.code });
+      return reply.code(status).send({ error: "Sign-in policy refused", code: error.code });
     }
-    return reply.code(503).send({ error: "AUTH_POLICY_UNAVAILABLE" });
+    return reply
+      .code(503)
+      .send({ error: "Sign-in policy is unavailable", code: "AUTH_POLICY_UNAVAILABLE" });
   };
   register(app, "getAdminAuthPolicy", async (_request, reply) => {
     try {

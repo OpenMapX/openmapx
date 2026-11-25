@@ -19,7 +19,7 @@ vi.mock("@openmapx/core", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@openmapx/core")>()),
   useSession: () => auth.current,
 }));
-const { SavedPlacesMirror } = await import("./SavedPlacesMirror");
+const { SAVED_PLACES_MIRROR_KEY, SavedPlacesMirror } = await import("./SavedPlacesMirror");
 const { SessionAuthorityBoundary } = await import("@/providers/SessionAuthorityBoundary");
 
 const signedOut = (): SessionState => ({ data: null, isPending: false, error: null });
@@ -29,6 +29,7 @@ const signedIn = (userId: string, sessionId: string): SessionState => ({
   error: null,
 });
 const u1Mirror = () => ({
+  version: 1,
   userId: "u1",
   lists: [{ id: "u1-list" }],
   labels: [{ id: "u1-home", label: "home" }],
@@ -69,6 +70,7 @@ describe("saved-list mirror cleanup", () => {
     async (duringHydration) => {
       vi.useFakeTimers();
       const stored = {
+        version: 1,
         userId: "u1",
         lists: [{ id: "l1" }],
         listPlaces: { l1: [{ id: "p1" }] },
@@ -103,7 +105,7 @@ describe("saved-list mirror cleanup", () => {
         await vi.advanceTimersByTimeAsync(1000);
       });
       expect(storage.set).toHaveBeenCalledWith(
-        "omx-saved-mirror",
+        SAVED_PLACES_MIRROR_KEY,
         expect.objectContaining({ listPlaces: { l1: [{ id: "p1" }], l2: [{ id: "new-p2" }] } }),
       );
       view.unmount();
@@ -137,6 +139,7 @@ describe("saved-list mirror cleanup", () => {
       if (duringHydration) act(publishCurrent);
       await act(async () => {
         finishRead({
+          version: 1,
           userId: "u1",
           lists: [{ id: "l1" }, { id: "l2" }],
           labels: [{ id: "old-label" }],
@@ -150,7 +153,7 @@ describe("saved-list mirror cleanup", () => {
         await vi.advanceTimersByTimeAsync(1000);
       });
       expect(storage.set).toHaveBeenCalledWith(
-        "omx-saved-mirror",
+        SAVED_PLACES_MIRROR_KEY,
         expect.objectContaining({
           lists: [{ id: "l2" }],
           labels: [{ id: "fresh-label" }],
@@ -165,6 +168,7 @@ describe("saved-list mirror cleanup", () => {
   it("retains offline places when a still-existing list's query is evicted", async () => {
     vi.useFakeTimers();
     storage.get.mockResolvedValue({
+      version: 1,
       userId: "u1",
       lists: [{ id: "l1" }],
       listPlaces: { l1: [{ id: "p1" }] },
@@ -185,7 +189,7 @@ describe("saved-list mirror cleanup", () => {
       await vi.advanceTimersByTimeAsync(1000);
     });
     expect(storage.set).toHaveBeenCalledWith(
-      "omx-saved-mirror",
+      SAVED_PLACES_MIRROR_KEY,
       expect.objectContaining({ lists: [{ id: "l1" }], listPlaces: { l1: [{ id: "p1" }] } }),
     );
     view.unmount();
@@ -195,6 +199,7 @@ describe("saved-list mirror cleanup", () => {
   it("drops deleted-list places from the mirror while retaining another list and ignoring late results", async () => {
     vi.useFakeTimers();
     storage.get.mockResolvedValue({
+      version: 1,
       userId: "u1",
       lists: [{ id: "l1" }, { id: "l2" }],
       listPlaces: { l1: [{ id: "p1" }], l2: [{ id: "p2" }] },
@@ -219,7 +224,7 @@ describe("saved-list mirror cleanup", () => {
       await vi.advanceTimersByTimeAsync(1000);
     });
     expect(storage.set).toHaveBeenCalledWith(
-      "omx-saved-mirror",
+      SAVED_PLACES_MIRROR_KEY,
       expect.objectContaining({ lists: [{ id: "l2" }], listPlaces: { l2: [{ id: "p2" }] } }),
     );
     view.unmount();
@@ -238,6 +243,7 @@ it("hydrates and persists exact saved/label field receipts including authoritati
   const saved = { id: "saved-1", fieldContributors: fields };
   const label = { id: "label-1", fieldContributors: fields };
   storage.get.mockResolvedValue({
+    version: 1,
     userId: "u1",
     lists: [{ id: "l1" }],
     labels: [label],
@@ -259,7 +265,7 @@ it("hydrates and persists exact saved/label field receipts including authoritati
     await vi.advanceTimersByTimeAsync(1000);
   });
   expect(storage.set).toHaveBeenCalledWith(
-    "omx-saved-mirror",
+    SAVED_PLACES_MIRROR_KEY,
     expect.objectContaining({
       listPlaces: { l1: [{ ...saved, note: "My note" }] },
       labels: [label],
@@ -286,9 +292,39 @@ describe("saved-data ownership across sessions", () => {
     auth.current = signedOut();
     await rerender(view, client);
     expectNoSavedData(client);
-    expect(storage.remove).toHaveBeenCalledWith("omx-saved-mirror");
+    expect(storage.remove).toHaveBeenCalledWith(SAVED_PLACES_MIRROR_KEY);
     view.unmount();
     client.clear();
+  });
+
+  it("drops a stored mirror of another record version without seeding it", async () => {
+    storage.get.mockResolvedValue({ ...u1Mirror(), version: 2 });
+    const client = new QueryClient();
+    const view = render(tree(client));
+    await flush();
+    expectNoSavedData(client);
+    expect(storage.remove).toHaveBeenCalledWith(SAVED_PLACES_MIRROR_KEY);
+    view.unmount();
+    client.clear();
+  });
+
+  it("writes the mirror with its record version", async () => {
+    vi.useFakeTimers();
+    storage.get.mockResolvedValue(undefined);
+    const client = new QueryClient();
+    const view = render(tree(client));
+    await flush();
+    await act(async () => {
+      client.setQueryData(["savedLists"], [{ id: "l1" }]);
+      await vi.advanceTimersByTimeAsync(1000);
+    });
+    expect(storage.set).toHaveBeenCalledWith(
+      SAVED_PLACES_MIRROR_KEY,
+      expect.objectContaining({ version: 1, userId: "u1", lists: [{ id: "l1" }] }),
+    );
+    view.unmount();
+    client.clear();
+    vi.useRealTimers();
   });
 
   it("a confirmed signed-out start never seeds a stored mirror", async () => {
@@ -298,7 +334,7 @@ describe("saved-data ownership across sessions", () => {
     const view = render(tree(client));
     await flush();
     expectNoSavedData(client);
-    expect(storage.remove).toHaveBeenCalledWith("omx-saved-mirror");
+    expect(storage.remove).toHaveBeenCalledWith(SAVED_PLACES_MIRROR_KEY);
     view.unmount();
     client.clear();
   });
@@ -310,7 +346,7 @@ describe("saved-data ownership across sessions", () => {
     const view = render(tree(client));
     await flush();
     expectNoSavedData(client);
-    expect(storage.remove).toHaveBeenCalledWith("omx-saved-mirror");
+    expect(storage.remove).toHaveBeenCalledWith(SAVED_PLACES_MIRROR_KEY);
     view.unmount();
     client.clear();
   });
@@ -326,7 +362,7 @@ describe("saved-data ownership across sessions", () => {
     auth.current = signedOut();
     await rerender(view, client);
     expectNoSavedData(client);
-    expect(storage.remove).toHaveBeenCalledWith("omx-saved-mirror");
+    expect(storage.remove).toHaveBeenCalledWith(SAVED_PLACES_MIRROR_KEY);
     view.unmount();
     client.clear();
   });
@@ -364,7 +400,7 @@ describe("saved-data ownership across sessions", () => {
       });
       await flush();
       expectNoSavedData(client);
-      expect(storage.remove).toHaveBeenCalledWith("omx-saved-mirror");
+      expect(storage.remove).toHaveBeenCalledWith(SAVED_PLACES_MIRROR_KEY);
       view.unmount();
       client.clear();
     },
@@ -377,7 +413,7 @@ describe("saved-data ownership across sessions", () => {
     const view = render(tree(client));
     await flush();
     expectNoSavedData(client);
-    expect(storage.remove).toHaveBeenCalledWith("omx-saved-mirror");
+    expect(storage.remove).toHaveBeenCalledWith(SAVED_PLACES_MIRROR_KEY);
     view.unmount();
     client.clear();
   });

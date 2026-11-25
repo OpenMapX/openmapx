@@ -215,7 +215,7 @@ describe("App bridge channel", () => {
   const deepLinkAt = (message: { payload?: Record<string, unknown> } | undefined) => {
     const query = message?.payload?.query;
     if (typeof query !== "string") throw new Error("the delivered deep link has no query");
-    return new URLSearchParams(query).get("at");
+    return new URLSearchParams(query).get("placeLocation");
   };
 
   const post = async (nonce: string, message: Record<string, unknown>) => {
@@ -354,7 +354,7 @@ describe("App bridge channel", () => {
       type: "web.hello",
       payload: {
         webBuildId: "lifecycle-test",
-        minProtocolVersion: 3,
+        minProtocolVersion: 1,
         maxProtocolVersion: MOBILE_PROTOCOL_MAX,
       },
     });
@@ -391,7 +391,7 @@ describe("App bridge channel", () => {
       type: "web.hello",
       payload: {
         webBuildId: "reloaded",
-        minProtocolVersion: 3,
+        minProtocolVersion: 1,
         maxProtocolVersion: MOBILE_PROTOCOL_MAX,
       },
     });
@@ -430,7 +430,7 @@ describe("App bridge channel", () => {
         type: "web.hello",
         payload: {
           webBuildId: "replacement",
-          minProtocolVersion: 3,
+          minProtocolVersion: 1,
           maxProtocolVersion: MOBILE_PROTOCOL_MAX,
         },
       });
@@ -465,7 +465,7 @@ describe("App bridge channel", () => {
       type: "web.hello",
       payload: {
         webBuildId: "new-document",
-        minProtocolVersion: 3,
+        minProtocolVersion: 1,
         maxProtocolVersion: MOBILE_PROTOCOL_MAX,
       },
     });
@@ -491,7 +491,7 @@ describe("App bridge channel", () => {
       type: "web.hello",
       payload: {
         webBuildId: "stale-apk",
-        minProtocolVersion: 3,
+        minProtocolVersion: 1,
         maxProtocolVersion: MOBILE_PROTOCOL_MAX,
       },
     });

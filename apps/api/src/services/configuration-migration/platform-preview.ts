@@ -8,10 +8,11 @@ import { services } from "@openmapx/core/server";
 import { sql } from "drizzle-orm";
 import { loadAuthPolicy } from "../../account/auth-policy";
 import { db } from "../../db";
-import { systemSettings } from "../../db/schema";
+import { systemSetting } from "../../db/schema";
 import type { AdministrativeConfigurationReadContext } from "../administrative-configuration-writer-owner";
 import { serviceOwnershipSnapshot } from "../configuration-ownership-view";
 import { retainPlatformPreview } from "../platform-preview-store";
+import { PLATFORM_CONFIGURATION_SETTING } from "../setting-defs";
 export async function previewProtectedCredentialMigration(input: {
   actorId: string;
   read: AdministrativeConfigurationReadContext;
@@ -31,8 +32,8 @@ export async function previewProtectedCredentialMigration(input: {
   const policy = await loadAuthPolicy(db),
     [desired] = await db
       .select({ version: sql<string>`xmin::text` })
-      .from(systemSettings)
-      .where(sql`${systemSettings.key}='platformConfiguration'`);
+      .from(systemSetting)
+      .where(sql`${systemSetting.key}=${PLATFORM_CONFIGURATION_SETTING}`);
   const preview = adminPlatformPreviewSchema.parse(
     services.buildPlatformConfigurationPreview({
       actorId: input.actorId,

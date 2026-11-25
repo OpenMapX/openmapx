@@ -71,7 +71,7 @@ A request for data held in backups is answered manually with the
 
 ## Backups
 
-Keep `BACKUP_RETENTION_DAYS` aligned with the period disclosed in your privacy
+Keep `RETENTION_BACKUP_DAYS` aligned with the period disclosed in your privacy
 notice (default 30). The operations agent prunes at startup and daily, every
 successful backup also prunes, and restore refuses expired archives. Restore
 also verifies the journal/key binding, refuses a backup older than journal

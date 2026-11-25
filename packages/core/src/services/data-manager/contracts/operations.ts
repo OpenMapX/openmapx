@@ -47,7 +47,7 @@ const offlineErrors = {
 const principalRequestError = {
   headers: {
     error: "Exactly one valid offline package principal is required",
-    code: "invalid-principal",
+    code: "INVALID_PRINCIPAL",
   },
 } as const;
 const packageArchive = {

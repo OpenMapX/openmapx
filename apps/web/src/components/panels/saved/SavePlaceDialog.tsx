@@ -14,6 +14,9 @@ import type { Place } from "@openmapx/core";
 import {
   CALLER_SHOWS_ERRORS,
   isSystemSavedList,
+  persistablePlaceId,
+  savedPlaceKey,
+  savedRowKey,
   useCreateList,
   useIsSaved,
   useRemovePlace,
@@ -43,7 +46,9 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
   const resolveListName = (name: string) => (isSystemSavedList(name) ? t(name.slice(1)) : name);
 
   const { data: lists, isLoading: listsLoading } = useSavedLists();
-  const { data: savedInListIds } = useIsSaved(open ? place.id : null);
+  // Session-local places store no id; they are matched by their coordinates.
+  const placeKey = savedPlaceKey(place);
+  const { data: savedInListIds } = useIsSaved(open ? placeKey : null);
 
   const savePlaceMutation = useSavePlace(CALLER_SHOWS_ERRORS);
   const removePlaceMutation = useRemovePlace(CALLER_SHOWS_ERRORS);
@@ -69,8 +74,8 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
       }
     >(),
   );
-  const displayedPlace = useRef(place.id);
-  displayedPlace.current = place.id;
+  const displayedPlace = useRef(placeKey);
+  displayedPlace.current = placeKey;
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -82,23 +87,24 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
   useEffect(() => {
     const checked = new Set(savedInListIds ?? []);
     for (const [key, operation] of operations.current) {
-      if (operation.placeId !== place.id) continue;
+      if (operation.placeId !== placeKey) continue;
       if (!operation.running && checked.has(operation.listId) === operation.desired) {
         operations.current.delete(key);
       } else if (operation.desired) checked.add(operation.listId);
       else checked.delete(operation.listId);
     }
     setCheckedLists(checked);
-  }, [savedInListIds, place.id]);
+  }, [savedInListIds, placeKey]);
 
   const setMembership = useCallback(
     (listId: string, desired: boolean) => {
       const capturedPlace = place;
-      const key = JSON.stringify([place.id, listId]);
+      const capturedKey = placeKey;
+      const key = JSON.stringify([capturedKey, listId]);
       let operation = operations.current.get(key);
       if (!operation) {
         operation = {
-          placeId: place.id,
+          placeId: capturedKey,
           listId,
           desired,
           present: checkedLists.has(listId),
@@ -109,7 +115,7 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
       }
       operation.desired = desired;
       const updateCheckbox = (checked: boolean) => {
-        if (!mounted.current || displayedPlace.current !== capturedPlace.id) return;
+        if (!mounted.current || displayedPlace.current !== capturedKey) return;
         setCheckedLists((previous) => {
           const next = new Set(previous);
           if (checked) next.add(listId);
@@ -132,7 +138,7 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
                   address: capturedPlace.address || null,
                   lat: capturedPlace.coordinates[1],
                   lng: capturedPlace.coordinates[0],
-                  placeId: capturedPlace.id,
+                  placeId: persistablePlaceId(capturedPlace.id),
                   fieldContributors: captureSavedPlaceContributors(capturedPlace),
                 });
                 current.savedId = saved.id;
@@ -141,7 +147,7 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
                 if (!current.savedId) {
                   const response = unwrapSavedResponse(await listSavedListPlaces(listId));
                   current.savedId =
-                    response.places.find((p) => p.placeId === capturedPlace.id)?.id ?? null;
+                    response.places.find((p) => savedRowKey(p) === capturedKey)?.id ?? null;
                   if (!current.savedId) {
                     current.present = false;
                     continue;
@@ -156,11 +162,11 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
             }
             // Discard any membership response captured between the serialized writes.
             await queryClient.cancelQueries({
-              queryKey: ["savedCheck", capturedPlace.id],
+              queryKey: ["savedCheck", capturedKey],
               exact: true,
             });
             if (current.present !== current.desired) continue;
-            queryClient.setQueryData<string[]>(["savedCheck", capturedPlace.id], (previous) => {
+            queryClient.setQueryData<string[]>(["savedCheck", capturedKey], (previous) => {
               const next = new Set(previous ?? []);
               if (current.present) next.add(listId);
               else next.delete(listId);
@@ -174,29 +180,29 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
         } catch (error) {
           operations.current.delete(key);
           updateCheckbox(current.present);
-          if (mounted.current && displayedPlace.current === capturedPlace.id)
+          if (mounted.current && displayedPlace.current === capturedKey)
             setWriteError(savedWriteError(error));
         } finally {
           current.running = false;
           void queryClient.invalidateQueries({
-            queryKey: ["savedCheck", capturedPlace.id],
+            queryKey: ["savedCheck", capturedKey],
             exact: true,
           });
         }
       })();
     },
-    [checkedLists, place, queryClient, savePlaceMutation, removePlaceMutation],
+    [checkedLists, place, placeKey, queryClient, savePlaceMutation, removePlaceMutation],
   );
 
   const handleToggle = useCallback(
     (listId: string) => {
-      const pending = operations.current.get(JSON.stringify([place.id, listId]));
+      const pending = operations.current.get(JSON.stringify([placeKey, listId]));
       const desired = !(pending?.desired ?? checkedLists.has(listId));
       setWriteError(null);
       if (desired) haptics.success();
       setMembership(listId, desired);
     },
-    [place.id, checkedLists, setMembership],
+    [placeKey, checkedLists, setMembership],
   );
 
   const handleCreateStart = () => {

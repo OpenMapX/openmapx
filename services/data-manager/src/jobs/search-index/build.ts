@@ -4,6 +4,7 @@ import type {
   SearchIndexBuildResult as CanonicalSearchIndexBuildResult,
   SearchIndexBuildStage as CanonicalSearchIndexBuildStage,
 } from "@openmapx/core/data-manager-contracts";
+import { OSM_SEARCH_SCHEMA_VERSION } from "@openmapx/core/published-data";
 import type postgres from "postgres";
 import type { StateStore } from "../../state.js";
 import { scrubSecrets } from "../../utils/scrub-secrets.js";
@@ -158,9 +159,17 @@ export async function buildOsmSearchIndex(
       await opts.sql.unsafe(
         `INSERT INTO osm_search__staging.index_state
           (region, source_path, source_fingerprint, current_fingerprint, epoch, source_file_identity, status,
-           place_count, term_count, started_at, updated_at)
-         VALUES ($1,$2,$3,$3,$4,$6,'building',0,0,$5,$5)`,
-        [opts.region, dataset.path, sourceFingerprint, epoch, startedAt, fileIdentity],
+           place_count, term_count, schema_version, started_at, updated_at)
+         VALUES ($1,$2,$3,$3,$4,$6,'building',0,0,$7,$5,$5)`,
+        [
+          opts.region,
+          dataset.path,
+          sourceFingerprint,
+          epoch,
+          startedAt,
+          fileIdentity,
+          OSM_SEARCH_SCHEMA_VERSION,
+        ],
       );
       progress("extract", "Streaming named OSM features");
       const extract = opts.dependencies?.extract ?? extractSearchPlaces;

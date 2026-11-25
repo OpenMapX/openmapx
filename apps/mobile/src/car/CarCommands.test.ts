@@ -47,6 +47,7 @@ jest.mock("./CarRoutePlanner", () => ({
   })),
 }));
 
+import { MOBILE_PROTOCOL_MAX } from "@openmapx/core/navigation";
 import { AUTO_DRIVE_ORIGIN, CarCommands } from "./CarCommands";
 import type { NativeCar } from "./nativeCar";
 
@@ -172,6 +173,32 @@ test("biases search to the car's rounded position", async () => {
     const url = new URL(calls[0]?.[0] ?? "");
     expect(url.searchParams.get("lat")).toBe("50.78");
     expect(url.searchParams.get("lng")).toBe("6.08");
+  } finally {
+    globalThis.fetch = realFetch;
+    jest.useRealTimers();
+  }
+});
+
+test("names its protocol and shows an update request when the server refuses it", async () => {
+  jest.useFakeTimers();
+  const fetchMock = jest.fn(
+    async () =>
+      new Response(
+        JSON.stringify({ error: "Update the app.", code: "MOBILE_PROTOCOL_UNSUPPORTED" }),
+        { status: 426, headers: { "content-type": "application/json" } },
+      ),
+  );
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = fetchMock as unknown as typeof fetch;
+  try {
+    const { car, results } = native();
+    await commands(car).handle(`car:${JSON.stringify({ action: "search", query: "berlin" })}`);
+    await jest.advanceTimersByTimeAsync(400);
+    const calls = fetchMock.mock.calls as unknown as [string, RequestInit][];
+    const headers = new Headers(calls[0]?.[1]?.headers);
+    expect(headers.get("x-openmapx-mobile-protocol")).toBe(String(MOBILE_PROTOCOL_MAX));
+    expect(calls[0]?.[1]?.credentials).toBe("omit");
+    expect(results).toContainEqual({ error: "update-required" });
   } finally {
     globalThis.fetch = realFetch;
     jest.useRealTimers();

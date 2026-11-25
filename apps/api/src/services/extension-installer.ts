@@ -34,6 +34,7 @@ import {
   settleServiceRepository,
 } from "./community-repositories";
 import { assertComponentOwnership } from "./extension-component-ownership";
+import { criticalAdvisoryFor } from "./extension-critical-advisory";
 import { normalizeExtensionInstallPayload } from "./extension-install-payload";
 import { recoverInterruptedExtensionChanges, withExtensionChangeLock } from "./extension-recovery";
 import { getKillSwitch } from "./extension-store";
@@ -219,7 +220,7 @@ export async function previewExtensionInstall(
 ): Promise<ExtensionInstallPreview> {
   const normalized = normalizedInstallOptions(opts);
   await preflightExtensionInstall(normalized);
-  await assertNotRevoked(normalized.manifest.id);
+  await assertNotRevoked(normalized.manifest.id, normalized.manifest.version);
   const inspections = await inspectExtensionServiceRepos(normalized, {
     namespace: "extension.preview.inspect",
     identity: randomUUID(),
@@ -231,13 +232,13 @@ export async function previewExtensionInstall(
  * Revocation is authoritative at execution time, not at queue time. A denial
  * published while the job waited must still stop the install.
  */
-async function assertNotRevoked(extensionId: string): Promise<void> {
+async function assertNotRevoked(extensionId: string, version: string | undefined): Promise<void> {
   const kill = await getKillSwitch();
   const removed = kill.removed.get(extensionId);
   if (removed !== undefined) {
     throw new ExtensionPreflightError(`Extension "${extensionId}" is delisted: ${removed}`);
   }
-  const critical = kill.critical.get(extensionId);
+  const critical = criticalAdvisoryFor(kill, extensionId, version);
   if (critical) {
     throw new ExtensionPreflightError(
       `Extension "${extensionId}" is flagged critical: ${critical.reason}`,
@@ -253,7 +254,7 @@ export async function preflightExtensionInstall(
   opts: InstallExtensionOptions,
 ): Promise<ExtensionInstallPreflight> {
   const { manifest } = opts;
-  if (manifest.platform && !satisfiesPlatformVersion(manifest.platform)) {
+  if (!satisfiesPlatformVersion(manifest.platform)) {
     throw new ExtensionPreflightError(
       `Extension "${manifest.id}" requires platform >= ${manifest.platform} (this is ${PLATFORM_VERSION}).`,
     );
@@ -316,7 +317,8 @@ async function applySelectionRoots(
   });
 }
 
-function extensionEffects(workflow: ExtensionWorkflow, ctx: JobContext) {
+/** `extensionVersion` is the version being installed, which revocation is checked against. */
+function extensionEffects(workflow: ExtensionWorkflow, ctx: JobContext, extensionVersion?: string) {
   return {
     publishServiceRepository: (
       request: Parameters<typeof publishServiceRepository>[0],
@@ -324,7 +326,7 @@ function extensionEffects(workflow: ExtensionWorkflow, ctx: JobContext) {
     ) =>
       extensionStep(workflow, `repository.publish:${options.operationKey}`, request, async () => {
         if (!hasRetainedAdminJobOperation(ctx, options.operationKey))
-          await assertNotRevoked(request.extensionId);
+          await assertNotRevoked(request.extensionId, extensionVersion);
         return publishServiceRepository(request, options);
       }),
     settleServiceRepository: (
@@ -347,7 +349,7 @@ function extensionEffects(workflow: ExtensionWorkflow, ctx: JobContext) {
     ) =>
       extensionStep(workflow, `integration.publish:${options.operationKey}`, request, async () => {
         if (!hasRetainedAdminJobOperation(ctx, options.operationKey))
-          await assertNotRevoked(request.extensionId);
+          await assertNotRevoked(request.extensionId, extensionVersion);
         return publishIntegration(request, options);
       }),
     settleIntegration: (
@@ -431,7 +433,7 @@ async function installExtensionNow(
     dockerComposeAction,
     renderAndPersistCompose,
     serviceStart,
-  } = extensionEffects(workflow, ctx);
+  } = extensionEffects(workflow, ctx, opts.manifest.version);
   const rollback = completedExtensionStep<{ ledger: InstallLedger; message: string }>(
     workflow,
     "rollback.intent",
@@ -443,8 +445,7 @@ async function installExtensionNow(
     throw new Error(rollback.message);
   }
   const { manifest } = opts;
-  // Synthetic (loopback) actors have no user row → attribute to null.
-  const installedBy = actorUserIdOrNull(opts.actorId);
+  const installedByUserId = actorUserIdOrNull(opts.actorId);
 
   // Everything that can be decided without touching the deployment is decided
   // here, before the first mutation.
@@ -456,7 +457,7 @@ async function installExtensionNow(
   // immediately before the first mutation as well as at the end.
   let bookkeepingCommitted = completedExtensionStep(workflow, "bookkeeping") !== undefined;
   if (!bookkeepingCommitted && !hasExtensionPublications(workflow))
-    await assertNotRevoked(manifest.id);
+    await assertNotRevoked(manifest.id, manifest.version);
 
   const ledger: InstallLedger = {
     publishedRepositories: [],
@@ -707,7 +708,7 @@ async function installExtensionNow(
     const components = coreServices.extensionComponentSummary(manifest);
     // Last gate before the install becomes authoritative.
     if (!bookkeepingCommitted) {
-      await assertNotRevoked(manifest.id);
+      await assertNotRevoked(manifest.id, manifest.version);
       await assertComponentOwnership(manifest.id, components);
     }
     await extensionDatabaseStep(
@@ -738,7 +739,7 @@ async function installExtensionNow(
               sourceType: "registry",
               installedAt: now,
               updatedAt: now,
-              installedBy,
+              installedByUserId,
               lastTransactionId: row.transactionId,
             })
             .onConflictDoUpdate({
@@ -764,7 +765,7 @@ async function installExtensionNow(
             manifest: manifest as unknown as Record<string, unknown>,
             installedAt: now,
             updatedAt: now,
-            installedBy,
+            installedByUserId,
           })
           .onConflictDoUpdate({
             target: installedExtension.id,

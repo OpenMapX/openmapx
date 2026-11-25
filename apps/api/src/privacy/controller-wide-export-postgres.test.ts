@@ -192,9 +192,10 @@ async function seedSubject() {
     mode: "managed",
     publicOrigin: "https://timeline.example.test",
     displayName: "Managed timeline",
-    encryptedApiKey: "FORBIDDEN-MANAGED-API-KEY",
-    encryptionIv: "fixture-iv",
-    encryptionTag: "fixture-tag",
+    apiKeyCiphertext: "FORBIDDEN-MANAGED-API-KEY",
+    apiKeyIv: "fixture-iv",
+    apiKeyTag: "fixture-tag",
+    apiKeyKeyVersion: 1,
     upstreamUserId: "41",
     upstreamEmail: "subject@example.test",
     upstreamTimeZone: "UTC",
@@ -321,15 +322,15 @@ beforeEach(async () => {
   for (const [key, value] of Object.entries({
     TMPDIR: temporary,
     OPENMAPX_DEPLOYMENT_ID: "controller-acceptance",
-    LEGAL_NAME: "Controller Acceptance Test",
-    LEGAL_STREET: "Test Street 1",
-    LEGAL_POSTAL_CODE: "10115",
-    LEGAL_CITY: "Berlin",
-    LEGAL_COUNTRY: "Germany",
-    LEGAL_EMAIL: "privacy@example.test",
+    LEGAL_CONTROLLER_NAME: "Controller Acceptance Test",
+    LEGAL_CONTROLLER_STREET: "Test Street 1",
+    LEGAL_CONTROLLER_POSTAL_CODE: "10115",
+    LEGAL_CONTROLLER_CITY: "Berlin",
+    LEGAL_CONTROLLER_COUNTRY: "Germany",
+    LEGAL_CONTROLLER_EMAIL: "privacy@example.test",
     LEGAL_DATA_REQUEST_EMAIL: "privacy@example.test",
     LEGAL_DEPLOYMENT_JURISDICTION: "DE-BE",
-    LEGAL_SUPERVISORY_AUTHORITY: "Test Supervisory Authority",
+    LEGAL_SUPERVISORY_AUTHORITY_NAME: "Test Supervisory Authority",
     LEGAL_SUPERVISORY_AUTHORITY_URL: "https://authority.example.test/complaints",
     LEGAL_PRIVACY_SOURCES: "[]",
   }))
@@ -417,7 +418,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             ?.toString("utf8") ?? "null",
         );
         expect(information).toMatchObject({
-          version: 2,
+          version: 1,
           controller: { email: "privacy@example.test" },
           deployment: { supervisoryAuthority: "Test Supervisory Authority" },
           recipientSummary: { totalGroupCount: 1 },
@@ -458,14 +459,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         assert.isDefined(row, "no subject request was recorded");
         expect(row).toMatchObject({
           channel: "self_service",
-          state: "in_progress",
+          status: "in_progress",
           identityMethod: "account_session",
         });
         await vi.waitFor(async () =>
           expect(await eventTypes(row.id)).toEqual(
             expect.arrayContaining([
               "received",
-              "state_in_progress",
+              "status_changed",
               "export_started",
               "export_delivered",
             ]),
@@ -512,7 +513,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         locale: "en",
         timeZone: "UTC",
       });
-      expect(assisted).toMatchObject({ state: "open", identityMethod: null });
+      expect(assisted).toMatchObject({ status: "open", identityMethod: null });
       const app = await exportApp();
       try {
         await signInFreshly();
@@ -530,7 +531,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const row = await service.getById(assisted.id);
         expect(row).toMatchObject({
           channel: "post",
-          state: "in_progress",
+          status: "in_progress",
           identityMethod: "account_session",
         });
         expect(row.identityVerifiedAt).not.toBeNull();
@@ -545,8 +546,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           expect.arrayContaining([
             { eventType: "identity_verified", payload: { reasonCode: "account_session" } },
             {
-              eventType: "state_in_progress",
-              payload: { from: "open", reasonCode: "account_session" },
+              eventType: "status_changed",
+              payload: { from: "open", to: "in_progress", reasonCode: "account_session" },
             },
             { eventType: "export_started", payload: {} },
           ]),
@@ -589,7 +590,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         actorId: ADMIN_ID,
         idempotencyKey: `wait-${assisted.id}`,
       });
-      expect(waiting.state).toBe("waiting_on_requester");
+      expect(waiting.status).toBe("waiting_on_requester");
       const app = await exportApp();
       try {
         await signInFreshly();
@@ -600,11 +601,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         });
         expect(response.statusCode, response.body).toBe(200);
         expect(await service.getById(assisted.id)).toMatchObject({
-          state: "in_progress",
+          status: "in_progress",
           identityMethod: "account_session",
         });
         expect(await eventTypes(assisted.id)).toEqual(
-          expect.arrayContaining(["identity_verified", "state_in_progress"]),
+          expect.arrayContaining(["identity_verified", "status_changed"]),
         );
       } finally {
         await app.close();
@@ -647,8 +648,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         });
         const events = await eventTypes(row.id);
         expect(events).not.toContain("export_delivered");
-        expect(events).not.toContain("state_completed");
-        expect((await subjectRequest())?.state).toBe("in_progress");
+        expect((await subjectRequest())?.status).toBe("in_progress");
         expect(
           await db
             .select({ id: dataSubjectRequestEvent.id })

@@ -27,6 +27,7 @@ import {
   loadConfiguredResourceAuthority,
   pruneBackupRetention,
 } from "./administrative-runtime";
+import { classify } from "./admission";
 import { createUnavailableRuntime, dispatchOpsOperation, OpsExecutionFailure } from "./runtime";
 
 const temporaryRoots: string[] = [];
@@ -104,7 +105,7 @@ describe("default fixed CLI live output", () => {
 
 describe("administrative backup runtime", () => {
   it("refuses a stale scheduled retention value before dispatching the CLI", async () => {
-    vi.stubEnv("BACKUP_RETENTION_DAYS", "30");
+    vi.stubEnv("RETENTION_BACKUP_DAYS", "30");
     const run = vi.fn();
     await expect(pruneBackupRetention(temporaryRoot(), 5, run)).rejects.toThrow(
       /retention.*changed/i,
@@ -112,7 +113,7 @@ describe("administrative backup runtime", () => {
     expect(run).not.toHaveBeenCalled();
   });
   it("runs scheduled retention through the fixed CLI under validated bounds", async () => {
-    vi.stubEnv("BACKUP_RETENTION_DAYS", "30");
+    vi.stubEnv("RETENTION_BACKUP_DAYS", "30");
     const calls: string[][] = [];
     await pruneBackupRetention(temporaryRoot(), 30, async (args) => {
       calls.push([...args]);
@@ -130,10 +131,11 @@ describe("administrative backup runtime", () => {
     writeFileSync(
       join(backup, "manifest.json"),
       JSON.stringify({
-        formatVersion: 2,
+        formatVersion: 1,
         name: "nightly-20260823",
         createdAt: "2026-08-23T18:00:00.000Z",
-        openmapxVersion: "1.0.0",
+        release: null,
+        databaseMigration: null,
         services: [
           { id: "postgis", version: "1.0.0", volumes: [] },
           { id: "redis", version: "1.0.0", volumes: [] },
@@ -210,10 +212,11 @@ describe("administrative backup runtime", () => {
       writeFileSync(
         join(backup, "manifest.json"),
         JSON.stringify({
-          formatVersion: 2,
+          formatVersion: 1,
           name: "nightly-20260823",
           createdAt: "2026-08-23T18:00:00.000Z",
-          openmapxVersion: "1.0.0",
+          release: null,
+          databaseMigration: null,
           services: [],
         }),
         { mode: 0o600 },
@@ -246,10 +249,11 @@ describe("administrative backup runtime", () => {
       writeFileSync(
         join(valid, "manifest.json"),
         JSON.stringify({
-          formatVersion: 2,
+          formatVersion: 1,
           name: "nightly-20260823",
           createdAt: "2026-08-23T18:00:00.000Z",
-          openmapxVersion: "1.0.0",
+          release: { release: "2026.11.0", manifestDigest: "b".repeat(64) },
+          databaseMigration: { tag: "0001_database_objects", when: 1795494877369 },
           services: [
             {
               id: "postgis",
@@ -275,10 +279,12 @@ describe("administrative backup runtime", () => {
       writeFileSync(
         join(older, "manifest.json"),
         JSON.stringify({
-          formatVersion: 2,
+          formatVersion: 1,
           name: "nightly-20260822",
           createdAt: "2026-08-22T18:00:00.000Z",
-          openmapxVersion: "1.0.0",
+          release: null,
+          // A migration neither the release nor the journal names keeps only its time.
+          databaseMigration: { tag: null, when: 1795494877369 },
           services: [],
         }),
         { mode: 0o600 },
@@ -300,12 +306,14 @@ describe("administrative backup runtime", () => {
         backups: [
           expect.objectContaining({
             backupId: "nightly-20260823",
+            release: "2026.11.0",
             serviceCount: 1,
             volumeCount: 1,
             totalBytes: 42,
           }),
           expect.objectContaining({
             backupId: "nightly-20260822",
+            release: null,
             serviceCount: 0,
             volumeCount: 0,
             totalBytes: 0,
@@ -331,10 +339,11 @@ describe("administrative backup runtime", () => {
       writeFileSync(
         join(backup, "manifest.json"),
         JSON.stringify({
-          formatVersion: 2,
+          formatVersion: 1,
           name: "present",
           createdAt: "2026-08-23T18:00:00.000Z",
-          openmapxVersion: "1.0.0",
+          release: null,
+          databaseMigration: null,
           services: [],
         }),
         { mode: 0o600 },
@@ -353,13 +362,13 @@ describe("administrative backup runtime", () => {
   );
 
   it.runIf(process.platform === "linux")(
-    "flags omitted, legacy, and unknown backup formats as invalid inventory",
+    "flags omitted and unknown backup formats as invalid inventory",
     async () => {
       const rootDir = temporaryRoot();
       for (const [backupId, formatVersion] of [
         ["omitted", undefined],
-        ["legacy", 1],
-        ["unknown", 3],
+        ["zero", 0],
+        ["unknown", 2],
       ] as const) {
         const backup = join(rootDir, "infra", "docker", "backups", backupId);
         mkdirSync(backup, { mode: 0o700 });
@@ -369,7 +378,8 @@ describe("administrative backup runtime", () => {
             ...(formatVersion === undefined ? {} : { formatVersion }),
             name: backupId,
             createdAt: "2026-08-23T18:00:00.000Z",
-            openmapxVersion: "1.0.0",
+            release: null,
+            databaseMigration: null,
             services: [],
           }),
           { mode: 0o600 },
@@ -390,7 +400,7 @@ describe("administrative backup runtime", () => {
       expect(result.warningCount).toBe(3);
       expect(result.backups).toEqual(
         expect.arrayContaining(
-          ["omitted", "legacy", "unknown"].map((backupId) =>
+          ["omitted", "zero", "unknown"].map((backupId) =>
             expect.objectContaining({ backupId, corrupt: true, corruptReason: "invalid_manifest" }),
           ),
         ),
@@ -915,6 +925,19 @@ describe("administrative release runtime", () => {
       },
     });
     await expect(effects.resolve(context)).rejects.toThrow();
+
+    // A candidate of another state epoch is refused as such and never cached,
+    // so neither the update preview nor the apply can select it.
+    manifestText = JSON.stringify({
+      ...makeManifest("6"),
+      release: "next-epoch",
+      stateEpoch: services.RELEASE_STATE_EPOCH + 1,
+    });
+    const refused = await effects.resolve(context).catch((error: unknown) => error);
+    expect(refused).toBeInstanceOf(services.ReleaseStateEpochError);
+    expect(classify(refused)).toEqual({ errorClass: "release_state_epoch", statusCode: 409 });
+    expect(services.cachedReleases(infraDir, "ghcr.io/openmapx")).toHaveLength(2);
+    expect(inspectReleaseAuthority(rootDir, "next-epoch")).toBe(false);
   });
 
   it("refuses a release cache its group or others could reach", async () => {

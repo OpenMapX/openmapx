@@ -1,19 +1,25 @@
 "use client";
 
-import { configureOfflineQueryRetention } from "@openmapx/core";
+import { CACHE_STORAGE_NAMES, configureOfflineQueryRetention, STORAGE_KEYS } from "@openmapx/core";
 import { idbDelete, idbGet } from "./idbStore";
 
-export const RECENT_MAP_DATA_CACHE_ENABLED_KEY = "openmapx-recent-map-data-cache-enabled";
-export const QUERY_CACHE_KEY = "openmapx-query-cache";
+export const RECENT_MAP_DATA_CACHE_ENABLED_KEY = STORAGE_KEYS.recentMapDataCacheEnabled.key;
+export const QUERY_CACHE_KEY = STORAGE_KEYS.queryCache.key;
+/**
+ * Version of the persisted query cache as a whole, passed as its buster.
+ * Raise it when a change makes restored entries unsafe or unreadable.
+ */
+export const QUERY_CACHE_SCHEMA_VERSION = 1;
+export const QUERY_CACHE_BUSTER = String(QUERY_CACHE_SCHEMA_VERSION);
 
 export const RECENT_MAP_DATA_CACHE_NAMES = [
-  "api-geodata",
-  "api-category-search",
-  "api-autocomplete",
-  "api-weather",
-  "api-photos",
-  "api-landmark-cells",
-  "api-landmark-models",
+  CACHE_STORAGE_NAMES.apiGeodata,
+  CACHE_STORAGE_NAMES.apiCategorySearch,
+  CACHE_STORAGE_NAMES.apiAutocomplete,
+  CACHE_STORAGE_NAMES.apiWeather,
+  CACHE_STORAGE_NAMES.apiPhotos,
+  CACHE_STORAGE_NAMES.apiLandmarkCells,
+  CACHE_STORAGE_NAMES.apiLandmarkModels,
 ] as const;
 
 const RECENT_MAP_DATA_QUERY_KEY_ROOTS = new Set([

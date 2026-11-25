@@ -66,7 +66,7 @@ describe("resolveCatalogBumpCandidate", () => {
     dirs.push(dir);
     await expect(
       resolveCatalogBumpCandidate({ catalogDir: dir, runner: fakeRunner() }),
-    ).rejects.toMatchObject({ code: "catalog-not-cloned" });
+    ).rejects.toMatchObject({ code: "CATALOG_NOT_CLONED" });
   });
 
   it("throws git-fetch-failed when fetch errors", async () => {
@@ -79,7 +79,7 @@ describe("resolveCatalogBumpCandidate", () => {
     const failure = await resolveCatalogBumpCandidate({ catalogDir, runner }).catch(
       (error) => error,
     );
-    expect(failure).toMatchObject({ code: "git-fetch-failed", message: "network down" });
+    expect(failure).toMatchObject({ code: "GIT_FETCH_FAILED", message: "network down" });
     expect(failure).toBeInstanceOf(CatalogBumpError);
     expect(failure).toBeInstanceOf(Error);
   });
@@ -92,7 +92,7 @@ describe("resolveCatalogBumpCandidate", () => {
         catalogDir,
         runner: fakeRunner({ "ls-tree": "not-a-submodule-line\n" }),
       }),
-    ).rejects.toMatchObject({ code: "submodule-resolution-failed" });
+    ).rejects.toMatchObject({ code: "SUBMODULE_RESOLUTION_FAILED" });
   });
 });
 

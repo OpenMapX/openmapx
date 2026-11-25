@@ -1,8 +1,9 @@
 import { getStorage } from "../platform/storage";
+import { STORAGE_KEYS } from "../platform/storageKeys";
 import type { LngLat } from "../types/geometry";
 
-export const REMEMBER_MAP_VIEW_STORAGE_KEY = "openmapx:rememberMapView";
-export const LAST_MAP_VIEW_STORAGE_KEY = "openmapx:lastMapView";
+export const REMEMBER_MAP_VIEW_STORAGE_KEY = STORAGE_KEYS.rememberMapView.key;
+export const LAST_MAP_VIEW_STORAGE_KEY = STORAGE_KEYS.lastMapView.key;
 
 /** Where the map was last left: enough to reopen on the same place. */
 export interface LastMapView {

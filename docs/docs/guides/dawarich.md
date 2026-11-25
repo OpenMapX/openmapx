@@ -65,14 +65,11 @@ actual capacity. Test a representative synthetic import before onboarding users.
 The default `STORE_GEODATA=true` can send coordinates to Dawarich's configured
 reverse geocoder. Review that provider and its terms before recording history.
 
-:::caution[Verify dedicated database persistence]
-Before recording real history, check that the running database's `PGDATA` is
-inside the intended persistent Docker volume and survives container recreation.
-The Dawarich manifest currently mounts `/var/lib/postgresql/data`; the platform's
-PostgreSQL 18 manifest mounts `/var/lib/postgresql`. Resolve any image/path
-mismatch on a disposable setup before relying on retained history. A successful
-logical backup alone does not prove live persistence.
-:::
+The dedicated `dawarich-postgis` database runs the same PostgreSQL 18 /
+PostGIS 3.6 image as the platform database and mounts its named volume at
+`/var/lib/postgresql`, the directory that holds that image's `PGDATA`
+(`/var/lib/postgresql/18/docker`). The timeline database therefore survives
+container recreation.
 
 ## Deploying managed Dawarich
 

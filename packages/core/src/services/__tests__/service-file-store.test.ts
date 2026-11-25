@@ -396,14 +396,10 @@ describe("the runtime bundle's service files", () => {
     );
   });
 
-  it("refuses a version 1 index, from an image that predates this checkout", () => {
+  it("writes version 1 and refuses an index of any other version", () => {
     const index = JSON.parse(serializeReleaseServiceFiles(release(releaseServices())));
-    expect(index.version).toBe(2);
-    // As an image built before the index dropped the file history printed it.
-    const older = JSON.stringify({ ...index, version: 1, history: {} });
-    expect(() => parseReleaseServiceFiles(older)).toThrow(
-      "its service file index is version 1, which this checkout no longer reads (it reads version 2): the selected release's image predates this checkout. Rebuild the image from this checkout, or select a newer release",
-    );
+    expect(index.version).toBe(1);
+    expect(() => parseReleaseServiceFiles(JSON.stringify({ ...index, version: 2 }))).toThrow();
   });
 
   it("covers each file's bytes, executable bit and path in the release authority digest", () => {

@@ -52,9 +52,9 @@ const LAYER_TTL_S: Record<WildfireProvider, number> = {
   "noaa-hms": 600,
 };
 const UNAVAILABLE_CODE: Record<WildfireProvider, string> = {
-  nifc: "nifc_unavailable",
-  effis: "effis_unavailable",
-  "noaa-hms": "noaa_hms_unavailable",
+  nifc: "NIFC_UNAVAILABLE",
+  effis: "EFFIS_UNAVAILABLE",
+  "noaa-hms": "NOAA_HMS_UNAVAILABLE",
 };
 
 type RouteReply = Parameters<RouteHandler>[1];

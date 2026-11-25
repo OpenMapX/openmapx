@@ -17,7 +17,7 @@ crashScenario({
     download.release();
     // The restarted API resumes the job once the dead owner's claim has lapsed.
     const job = await host.waitForJob(submitted.jobId as string, { timeoutMs: 300_000 });
-    expect(job.status).toBe("success");
+    expect(job.status).toBe("succeeded");
     // The restarted API asked again under the same keys: one operation each.
     expect(host.agentOperations("release.images.pull")).toHaveLength(1);
     expect(host.agentOperations("configurationMaintenance.prepare")).toHaveLength(1);

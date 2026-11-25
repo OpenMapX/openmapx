@@ -50,10 +50,14 @@ import {
   type ArtifactMetadata,
   validateArtifactMetadata as validatePortableArtifactMetadata,
 } from "@openmapx/extension-contracts/artifact";
+import { componentIdSchema, isComponentId } from "@openmapx/extension-contracts/identifiers";
 import z from "zod/v4";
 import { createDeterministicTarGz } from "./deterministic-tar";
-import { INTEGRATION_ID_REGEX, validateManifest } from "./manifest";
+import { validateManifest } from "./manifest";
 import { PLATFORM_VERSION, satisfiesPlatformVersion } from "./platform";
+
+/** Every integration this module installs, validates or packages is a community one. */
+const COMMUNITY = { firstParty: false } as const;
 
 export interface IntegrationSummary {
   id: string;
@@ -190,9 +194,9 @@ function builtInDir(rootDir: string): string {
  * re-check before any path concatenation.
  */
 function assertSafeId(id: string): void {
-  if (typeof id !== "string" || !INTEGRATION_ID_REGEX.test(id)) {
+  if (!isComponentId(id)) {
     throw new Error(
-      `Invalid integration id "${id}" — must match ${INTEGRATION_ID_REGEX} (lowercase, hyphen-separated, starts with a letter or digit)`,
+      `Invalid integration id "${id}" — use at most 48 lowercase letters, digits and single hyphens, starting and ending with a letter or digit`,
     );
   }
 }
@@ -261,7 +265,7 @@ function builtInIntegrationIds(rootDir: string): Set<string> {
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     const manifest = readManifest(join(builtInDir(rootDir), entry.name));
-    if (typeof manifest?.id === "string" && INTEGRATION_ID_REGEX.test(manifest.id)) {
+    if (isComponentId(manifest?.id)) {
       ids.add(manifest.id);
     }
   }
@@ -369,7 +373,7 @@ export function validateIntegrationDirectory(directory: string): ValidateResult 
   if (!manifest) {
     return { id: directory, valid: false, errors: ["manifest.json missing or invalid JSON"] };
   }
-  const result = validateManifest(manifest);
+  const result = validateManifest(manifest, COMMUNITY);
   const errors = [...result.errors];
   if (result.valid) {
     try {
@@ -578,7 +582,7 @@ export function validateStagedIntegration(
   if (!manifest || typeof manifest.id !== "string") {
     throw new Error("Source has no manifest.json with a string `id` at its root");
   }
-  const validation = validateManifest(manifest);
+  const validation = validateManifest(manifest, COMMUNITY);
   if (!validation.valid) {
     throw new Error(`Manifest validation failed:\n  - ${validation.errors.join("\n  - ")}`);
   }
@@ -724,7 +728,7 @@ const inodeSchema = z.strictObject({
 const preparationReceiptSchema = z.strictObject({
   version: z.literal(1),
   preparationId: z.uuid(),
-  id: z.string().regex(INTEGRATION_ID_REGEX),
+  id: componentIdSchema,
   integrationVersion: z.string().min(1).max(128),
   contentDigest: z.string().regex(/^[a-f0-9]{64}$/),
   archiveSha256: z
@@ -809,7 +813,7 @@ function validatePreparedIntegration(directory: string, rootDir: string): Record
   const manifest = readManifest(directory);
   if (!manifest || typeof manifest.id !== "string")
     throw Error("Source has no manifest.json with a string id");
-  const validation = validateManifest(manifest);
+  const validation = validateManifest(manifest, COMMUNITY);
   if (!validation.valid) throw Error(`Manifest validation failed: ${validation.errors.join("; ")}`);
   assertCompatibleManifestProtocol(manifest);
   assertSafeId(manifest.id);
@@ -1480,7 +1484,7 @@ export function inspectInstalledIntegrationFingerprint(options: {
 const publicationSchema = z.strictObject({
   version: z.literal(1),
   transactionId: z.uuid(),
-  integrationId: z.string().regex(INTEGRATION_ID_REGEX),
+  integrationId: componentIdSchema,
   preparation: preparationReceiptSchema,
   previousContentDigest: z
     .string()
@@ -2421,9 +2425,9 @@ export function integrationBackendBundlePath(directory: string): string {
 }
 
 function assertCompatibleManifestProtocol(manifest: Record<string, unknown>): void {
-  if (typeof manifest.platform === "string" && !satisfiesPlatformVersion(manifest.platform)) {
+  if (typeof manifest.platform !== "string" || !satisfiesPlatformVersion(manifest.platform)) {
     throw new Error(
-      `Extension protocol ${manifest.platform} is not compatible with ${PLATFORM_VERSION}`,
+      `Extension protocol ${String(manifest.platform)} is not compatible with ${PLATFORM_VERSION}`,
     );
   }
 }
@@ -2479,7 +2483,7 @@ export async function packageIntegration(opts: PackageOptions): Promise<PackageR
   if (!manifest || typeof manifest.id !== "string") {
     throw new Error(`No manifest.json with a string id in ${directory}`);
   }
-  const validation = validateManifest(manifest);
+  const validation = validateManifest(manifest, COMMUNITY);
   if (!validation.valid) {
     throw new Error(`Manifest validation failed:\n  - ${validation.errors.join("\n  - ")}`);
   }

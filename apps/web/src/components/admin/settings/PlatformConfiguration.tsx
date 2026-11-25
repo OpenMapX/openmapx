@@ -39,7 +39,7 @@ import {
 } from "../activity/activityQueries";
 import { JobDetail } from "../activity/JobDetail";
 import { AdminReauthenticationDialog } from "../users/AdminReauthenticationDialog";
-import { usePlatformPreviewDiscard } from "./PlatformPreviewLifecycle";
+import { platformPreviewStorageKey, usePlatformPreviewDiscard } from "./PlatformPreviewLifecycle";
 import {
   buildPlatformCandidate,
   PLATFORM_SCOPE_FIELDS,
@@ -125,7 +125,7 @@ function PlatformForm({
   const register = useOptionalAdminJobRegistration();
   const queryClient = useQueryClient();
   const { client, apiUrl } = useActivityClient(),
-    storageKey = `openmapx-platform-preview:${apiUrl}:${actorId}:${scope}`;
+    storageKey = platformPreviewStorageKey(apiUrl, actorId, scope);
   const owner = useAdminMutationOwner(
     client,
     JSON.stringify([actorId, scope, view.expectedCurrentRevisionId]),
@@ -208,7 +208,7 @@ function PlatformForm({
   });
   const observedTerminal =
     !!acceptedJob.data?.finishedAt &&
-    ["success", "failed", "canceled"].includes(acceptedJob.data.status) &&
+    ["succeeded", "failed", "cancelled"].includes(acceptedJob.data.status) &&
     !hasUnresolvedJobObservation(acceptedJob.data.result);
   const pending = view.pending ?? [],
     busy = pending.length > 0 || (!!accepted && !observedTerminal);

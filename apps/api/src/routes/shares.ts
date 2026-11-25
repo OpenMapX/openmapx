@@ -13,8 +13,9 @@ import {
   MAX_SHARES_PER_USER,
   MAX_SNAPSHOT_PLACES,
   ownerShareColumns,
-  parseStoredListSnapshot,
+  parseStoredSnapshot,
   routeShareLabel,
+  SHARE_SNAPSHOT_VERSION,
   toOwnerShare,
   toPublicListShare,
   toPublicRouteShare,
@@ -59,16 +60,14 @@ export const sharesRoute: FastifyPluginAsync = async (fastify) => {
         return reply.send(parsed.data);
       };
 
-      if (share.targetType === "route") {
-        const route = validateRouteShare(share.snapshot);
-        if (!route) throw gone();
-        return sendPublic(toPublicRouteShare(route));
-      }
-
       if (share.mode === "snapshot") {
-        const snap = parseStoredListSnapshot(share.snapshot);
-        if (!snap) throw gone();
-        return sendPublic(toPublicListShare("snapshot", snap));
+        const stored = parseStoredSnapshot(share.targetType, share.snapshotVersion, share.snapshot);
+        if (!stored) throw gone();
+        return sendPublic(
+          stored.targetType === "route"
+            ? toPublicRouteShare(stored.route)
+            : toPublicListShare("snapshot", stored.list),
+        );
       }
 
       if (share.targetId === null) throw gone();
@@ -165,6 +164,7 @@ export const sharesRoute: FastifyPluginAsync = async (fastify) => {
               mode: body.mode,
               label: list.name,
               snapshot,
+              snapshotVersion: snapshot ? SHARE_SNAPSHOT_VERSION : null,
               createdAt: now,
               updatedAt: now,
               expiresAt,
@@ -180,6 +180,7 @@ export const sharesRoute: FastifyPluginAsync = async (fastify) => {
               mode: "snapshot",
               label: routeShareLabel(route),
               snapshot: route,
+              snapshotVersion: SHARE_SNAPSHOT_VERSION,
               createdAt: now,
               updatedAt: now,
               expiresAt,

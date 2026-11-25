@@ -48,7 +48,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("one layout observer shared by extension and service adapters", () => {
-  it.each(["success", "failed", "canceled"] as const)(
+  it.each(["succeeded", "failed", "cancelled"] as const)(
     "survives view disposal, nonterminal errors/cancel_pending, and applies each family's %s effects",
     async (status) => {
       let phase: "pending" | "error" | "service" | "done" = "pending";
@@ -107,7 +107,7 @@ describe("one layout observer shared by extension and service adapters", () => {
     vi.stubGlobal("fetch", (raw: string) => {
       if (raw.endsWith("/install")) return acceptance.promise;
       observed = true;
-      return Response.json(job({ id: "ext-job", status: "success" }));
+      return Response.json(job({ id: "ext-job", status: "succeeded" }));
     });
     const { view, rerender, qc } = mount();
     const key = ["admin", "extensions", "", "installed"];
@@ -150,7 +150,7 @@ it("observes one accepted identity once and unions distinct settlement callbacks
     };
   let finished = false;
   vi.stubGlobal("fetch", async () =>
-    Response.json(job({ id: "shared-job", status: finished ? "success" : "running" })),
+    Response.json(job({ id: "shared-job", status: finished ? "succeeded" : "running" })),
   );
   function Register() {
     const { client, apiUrl: origin } = useActivityClient();
@@ -291,7 +291,7 @@ it("does not observe broad application jobs when the administration role disable
 it("keeps an older active job visible before newer completed jobs", async () => {
   vi.stubGlobal("fetch", async (raw: string) => {
     const id = new URL(raw).pathname.split("/").at(-1) ?? "";
-    return Response.json(job({ id, status: id === "old-active" ? "running" : "success" }));
+    return Response.json(job({ id, status: id === "old-active" ? "running" : "succeeded" }));
   });
   function Register() {
     const { client, apiUrl: origin } = useActivityClient();

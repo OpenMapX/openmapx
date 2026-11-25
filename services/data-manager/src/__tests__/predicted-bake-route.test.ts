@@ -11,6 +11,7 @@ vi.mock("../jobs/execution/local.js", () => ({
 
 import Fastify from "fastify";
 import { describe, expect, it, vi } from "vitest";
+import { authenticateAs } from "../../__tests__/helpers/authenticated-app.js";
 import { registerApi } from "../api.js";
 import type { BakePredictedResult } from "../jobs/traffic/bake-predicted.js";
 
@@ -31,7 +32,7 @@ const RESULT: BakePredictedResult = {
 };
 
 const appWith = (bakePredicted: () => Promise<BakePredictedResult>) => {
-  const app = Fastify();
+  const app = authenticateAs(Fastify());
   registerApi(app, { bakePredicted });
   return app;
 };

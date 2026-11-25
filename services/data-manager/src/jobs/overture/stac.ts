@@ -11,7 +11,7 @@ import type { RegionBbox } from "./pull.js";
 export const OVERTURE_STAC_URL = "https://stac.overturemaps.org/catalog.json";
 export const OVERTURE_THEME = "places";
 export const OVERTURE_TYPE = "place";
-export const OVERTURE_PULL_CONTRACT_VERSION = 3;
+export const OVERTURE_PULL_CONTRACT_VERSION = 1;
 
 export const OVERTURE_PLACE_COLUMNS = [
   "id",

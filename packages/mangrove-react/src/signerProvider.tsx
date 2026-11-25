@@ -11,6 +11,7 @@ import {
 import {
   createMangroveSigner,
   type MangroveSignerController,
+  type MangroveSignerStorageKeys,
   type SignerSnapshot,
   type SignerTransport,
 } from "./signer";
@@ -32,12 +33,15 @@ const getFallback = () => FALLBACK;
 export function MangroveSignerProvider({
   owner,
   transport,
+  storageKeys,
   children,
 }: {
   owner: string | null;
   transport?: SignerTransport;
+  storageKeys: MangroveSignerStorageKeys;
   children: ReactNode;
 }) {
+  const { session, pendingLogin, mode } = storageKeys;
   const controller = useMemo(
     () =>
       owner && transport && typeof window !== "undefined"
@@ -46,9 +50,10 @@ export function MangroveSignerProvider({
             transport,
             origin: window.location.origin,
             storage: window.sessionStorage,
+            storageKeys: { session, pendingLogin, mode },
           })
         : null,
-    [owner, transport],
+    [owner, transport, session, pendingLogin, mode],
   );
   useLayoutEffect(() => {
     if (!controller) return;

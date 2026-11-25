@@ -51,7 +51,6 @@
     }
   },
   "quality": "built-in",
-  "category": "Data Overlays",
   "healthCheck": [
     {
       "name": "RainViewer",

@@ -91,7 +91,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 describe("admin-owned accepted service jobs", () => {
-  it.each(["success", "failed", "canceled"] as const)(
+  it.each(["succeeded", "failed", "cancelled"] as const)(
     "replaces a pending initial service GET on terminal %s before its old response arrives",
     async (status) => {
       const initial = pending<Response>();
@@ -153,7 +153,7 @@ describe("admin-owned accepted service jobs", () => {
     },
   );
 
-  it.each(["success", "failed", "canceled"] as const)(
+  it.each(["succeeded", "failed", "cancelled"] as const)(
     "retains distinct same-origin clients, multiple jobs and disposed callers until %s refresh",
     async (status) => {
       let completed = false;
@@ -202,7 +202,7 @@ describe("admin-owned accepted service jobs", () => {
           job({
             id: mismatch === "wrong-id" ? "other" : "job-1",
             source: mismatch === "wrong-source" ? "data-manager" : "application",
-            status: "success",
+            status: "succeeded",
           }),
         );
       }

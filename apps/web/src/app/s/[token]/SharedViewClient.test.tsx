@@ -79,7 +79,10 @@ describe("SharedViewClient", () => {
     const url = new URL(href ?? "", "https://share.example");
     expect(url.pathname).toBe("/");
     expect(url.searchParams.get("panel")).toBe("directions");
-    expect(url.searchParams.getAll("wp")).toEqual(["52.52,13.405,Berlin", "53.55,9.99,Hamburg"]);
+    expect(url.searchParams.getAll("waypoint")).toEqual([
+      "52.52,13.405,Berlin",
+      "53.55,9.99,Hamburg",
+    ]);
   });
 
   it("renders the unavailable state for a null share", () => {

@@ -7,6 +7,7 @@ import { type ControlExecutionOrigin, controlOriginSchema } from "../ops/control
 import { retainedParentExecutionSchema } from "../ops/execution-identity";
 import { type ExecutionRef, executionRefSchema } from "../ops/execution-ref";
 import { leaseTargetsSchema } from "../ops/lease-records";
+import { OPS_JOB_JOURNAL_FILE, OPS_JOB_JOURNAL_VERSION } from "../services/agent-state";
 import { dataControlDelegationSchema } from "../services/data-manager/contracts/executions";
 import { retainedDataDatabaseTimestamp } from "./data-database-time";
 import { AnchoredDirectory, acquireGuardDirectory, identity } from "./filesystem";
@@ -391,20 +392,28 @@ export function journalFileRows(infraDir: string): OwningExecutionRows {
     try {
       directory = new AnchoredDirectory(join(infraDir, "state", "ops-agent"));
       const file = z
-        .object({ version: z.literal(2), jobs: z.array(z.unknown()).max(512) })
-        .parse(JSON.parse(directory.read("jobs-v1.json", JOURNAL_BYTES).toString("utf8")));
+        .object({
+          version: z.literal(OPS_JOB_JOURNAL_VERSION),
+          jobs: z.array(z.unknown()).max(512),
+        })
+        .parse(JSON.parse(directory.read(OPS_JOB_JOURNAL_FILE, JOURNAL_BYTES).toString("utf8")));
       const found = new Map<string, ExecutionRow>();
       for (const job of file.jobs) {
         const execution = (job as { execution?: unknown } | null)?.execution;
         if (execution === undefined) continue;
+        // The job's own fields are composed into the row unchecked; the row is
+        // checked whole. A row another release wrote in a shape this release
+        // cannot read is not offered: its key reads as absent.
+        const parsed = journalExecutionSchema.safeParse(execution);
+        if (!parsed.success) continue;
         const composed = journalExecutionRow({
           ...(job as JournalOperation),
-          execution: journalExecutionSchema.parse(execution),
+          execution: parsed.data,
         });
         if (!composed) continue;
-        // The job's own fields are composed into the row unchecked; the row is checked whole.
-        const row = executionRowSchema.parse(composed) as ExecutionRow;
-        found.set(row.admission.execution.operationKey, row);
+        const row = executionRowSchema.safeParse(composed);
+        if (!row.success) continue;
+        found.set(row.data.admission.execution.operationKey, row.data as ExecutionRow);
       }
       return found;
     } catch (error) {
@@ -434,7 +443,7 @@ export interface DataJobRowsDatabase {
   ): Promise<readonly Record<string, unknown>[]>;
 }
 const DATA_JOB_ROW =
-  "SELECT execution_ref,kind,execution_input,admitted_at,requested_deadline_at,execution_parent,execution_admission,execution_progress FROM data_manager.jobs WHERE operation_key=$1";
+  "SELECT execution_ref,kind,execution_input,admitted_at,requested_deadline_at,execution_parent,execution_admission,execution_progress FROM data_manager.job WHERE operation_key=$1";
 /** A job row's `timestamptz` as the epoch milliseconds the control records carry. */
 const epoch = z.unknown().transform((value) => retainedDataDatabaseTimestamp(value).getTime());
 const dataJobRowSchema = z.object({
@@ -475,7 +484,7 @@ function dataJobAdmission(
   };
 }
 /**
- * Data-manager's execution rows, on the `data_manager.jobs` row of each
+ * Data-manager's execution rows, on the `data_manager.job` row of each
  * execution: the job row already records the execution, its operation, its
  * admission time, its deadline and its parent; `execution_admission` adds the
  * rest of the admission and is inserted with the job row, and
@@ -522,7 +531,7 @@ export function dataJobExecutionRows(database: DataJobRowsDatabase): ExecutionRo
         if (after === before) return result;
         assertExecutionRowCapacity(after);
         const written = await database.unsafe(
-          "UPDATE data_manager.jobs SET execution_progress=$3::text::jsonb WHERE operation_key=$1 AND execution_progress=$2::text::jsonb RETURNING id",
+          "UPDATE data_manager.job SET execution_progress=$3::text::jsonb WHERE operation_key=$1 AND execution_progress=$2::text::jsonb RETURNING id",
           [key, before, after],
         );
         if (written.length) return result;
@@ -531,7 +540,7 @@ export function dataJobExecutionRows(database: DataJobRowsDatabase): ExecutionRo
     },
     async keys(limit) {
       const rows = await database.unsafe(
-        "SELECT operation_key FROM data_manager.jobs WHERE execution_admission IS NOT NULL ORDER BY operation_key LIMIT $1",
+        "SELECT operation_key FROM data_manager.job WHERE execution_admission IS NOT NULL ORDER BY operation_key LIMIT $1",
         [limit + 1],
       );
       return {
@@ -544,7 +553,7 @@ export function dataJobExecutionRows(database: DataJobRowsDatabase): ExecutionRo
     async remove(keys) {
       for (const key of keys)
         await database.unsafe(
-          `UPDATE data_manager.jobs SET ${DROP_EXECUTION_ROW},released_at=coalesce(released_at,now())
+          `UPDATE data_manager.job SET ${DROP_EXECUTION_ROW},released_at=coalesce(released_at,now())
             WHERE finished_at IS NOT NULL AND operation_key=$1`,
           [key],
         );
@@ -561,13 +570,13 @@ export function dataJobExecutionRows(database: DataJobRowsDatabase): ExecutionRo
       ];
       const keys = (
         await database.unsafe(
-          `SELECT operation_key FROM data_manager.jobs WHERE ${closed} ORDER BY operation_key LIMIT 256`,
+          `SELECT operation_key FROM data_manager.job WHERE ${closed} ORDER BY operation_key LIMIT 256`,
           bounds,
         )
       ).map((row) => z.string().parse(row.operation_key));
       if (!keys.length || !release(keys)) return;
       await database.unsafe(
-        `UPDATE data_manager.jobs SET released_at=now() WHERE ${closed} AND operation_key IN (SELECT jsonb_array_elements_text($3::text::jsonb))`,
+        `UPDATE data_manager.job SET released_at=now() WHERE ${closed} AND operation_key IN (SELECT jsonb_array_elements_text($3::text::jsonb))`,
         [...bounds, JSON.stringify(keys)],
       );
     },

@@ -1,4 +1,5 @@
 export type DataManagerStartupPhase =
+  | "database-schema"
   | "offline-storage"
   | "job-reconciliation"
   | "cron-schedulers"
@@ -12,7 +13,7 @@ export interface DataManagerReadinessSnapshot {
 export class DataManagerReadiness {
   #snapshot: DataManagerReadinessSnapshot = {
     status: "starting",
-    phase: "offline-storage",
+    phase: "database-schema",
   };
 
   setPhase(phase: Exclude<DataManagerStartupPhase, "complete">): void {

@@ -24,7 +24,7 @@ crashScenario({
     const job = await host.settledJob(submitted.jobId as string, 60_000);
     const operation = await host.operation(download?.operationId as string);
     // Failed without an effect, or held for the operator; never succeeded.
-    expect(job.status).not.toBe("success");
+    expect(job.status).not.toBe("succeeded");
     expect(["failed", "recovery_required"]).toContain(operation.state);
     if (!job.terminal) {
       // Held and visible: the unfinished update keeps a new one out.

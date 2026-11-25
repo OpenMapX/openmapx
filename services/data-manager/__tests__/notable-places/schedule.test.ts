@@ -1,3 +1,4 @@
+import { NOTABLE_PLACES_SCHEMA_VERSION } from "@openmapx/core/published-data";
 import type postgres from "postgres";
 import { describe, expect, it, vi } from "vitest";
 import { fameFromSitelinks } from "../../src/jobs/notable-places/build.js";
@@ -8,8 +9,10 @@ import {
 import { createNotablePlacesRuntimeState } from "../../src/jobs/notable-places/state.js";
 import type { SearchIndexOperationLock } from "../../src/jobs/search-index/operation-lock.js";
 
-function fakeSql(published: boolean): postgres.Sql {
-  return { unsafe: vi.fn(async () => [{ exists: published }]) } as unknown as postgres.Sql;
+function fakeSql(published: boolean, schemaVersion = NOTABLE_PLACES_SCHEMA_VERSION): postgres.Sql {
+  return {
+    unsafe: vi.fn(async () => [{ exists: published, schema_version: schemaVersion }]),
+  } as unknown as postgres.Sql;
 }
 
 const lock: SearchIndexOperationLock = {
@@ -62,7 +65,7 @@ describe("notable-places schedule", () => {
         await build();
       },
     });
-    await schedule.buildIfMissing();
+    await schedule.buildIfMissingOrOutdated();
     schedule.stop();
     expect(build).toHaveBeenCalledTimes(1);
   });
@@ -79,9 +82,26 @@ describe("notable-places schedule", () => {
         await build();
       },
     });
-    await schedule.buildIfMissing();
+    await schedule.buildIfMissingOrOutdated();
     schedule.stop();
     expect(build).not.toHaveBeenCalled();
+  });
+
+  it("rebuilds at startup a snapshot an older builder wrote", async () => {
+    const build = vi.fn();
+    const schedule = scheduleNotablePlaces({
+      sql: fakeSql(true, NOTABLE_PLACES_SCHEMA_VERSION + 1),
+      runtimeState: createNotablePlacesRuntimeState(),
+      operationLock: lock,
+      logger,
+      cronExpression: "0 2 1 * *",
+      runOwned: async () => {
+        await build();
+      },
+    });
+    await schedule.buildIfMissingOrOutdated();
+    schedule.stop();
+    expect(build).toHaveBeenCalledTimes(1);
   });
 
   it("fetches nothing when the operator turned the refresh off", async () => {
@@ -96,7 +116,7 @@ describe("notable-places schedule", () => {
         await build();
       },
     });
-    await schedule.buildIfMissing();
+    await schedule.buildIfMissingOrOutdated();
     schedule.stop();
     expect(build).not.toHaveBeenCalled();
   });
@@ -116,7 +136,7 @@ describe("notable-places schedule", () => {
         await build();
       },
     });
-    await expect(schedule.buildIfMissing()).resolves.toBeUndefined();
+    await expect(schedule.buildIfMissingOrOutdated()).resolves.toBeUndefined();
     schedule.stop();
     expect(warn).toHaveBeenCalledWith({ err: "endpoint down" }, "notable-places: build failed");
   });

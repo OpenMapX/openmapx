@@ -1,4 +1,10 @@
-import { API_ENDPOINTS, createPlace, type SavedList, type SavedPlace } from "@openmapx/core";
+import {
+  API_ENDPOINTS,
+  createPlace,
+  type SavedList,
+  type SavedPlace,
+  savedRowKey,
+} from "@openmapx/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -109,7 +115,7 @@ function setup(initial = false, savedPlace = place) {
     if (url === API_ENDPOINTS.savedCheck)
       return {
         listIds: rows
-          .filter((row) => row.placeId === (params as { placeId: string }).placeId)
+          .filter((row) => savedRowKey(row) === (params as { placeId: string }).placeId)
           .map((row) => row.listId),
       };
     return { places: [...rows] };
@@ -176,6 +182,44 @@ function setup(initial = false, savedPlace = place) {
   };
 }
 describe("saved-place membership intent", () => {
+  it("recognises a saved map-click place, which stores no id, by its coordinates", async () => {
+    const clicked = createPlace({
+      primaryScheme: "coordinate",
+      ids: { coordinate: "50.123457,8.654321" },
+      name: "Dropped pin",
+      address: "",
+      coordinates: [8.6543212, 50.1234567],
+    });
+    const key = "coordinate:50.123457,8.654321";
+    const fixture = setup(false, clicked);
+    await waitFor(() => expect(fixture.client.getQueryData(["savedCheck", key])).toEqual([]));
+    await userEvent.click(screen.getByText("Trip"));
+    await act(async () => fixture.finishPost());
+    await waitFor(() => expect(fixture.rows).toHaveLength(1));
+    expect(fixture.rows[0]).toMatchObject({ placeId: null, lat: 50.1234567, lng: 8.6543212 });
+
+    // A later read, as after reopening the place, finds the row by position.
+    await act(async () => fixture.client.invalidateQueries({ queryKey: ["savedCheck", key] }));
+    await waitFor(() =>
+      expect(fixture.client.getQueryData(["savedCheck", key])).toEqual([
+        "0193e4a0-0000-7000-8000-000000000001",
+      ]),
+    );
+    await waitFor(() => expect(screen.getByRole("checkbox")).toBeChecked());
+
+    // Unticking finds the same row to delete instead of leaving it behind.
+    fixture.view.unmount();
+    render(
+      <QueryClientProvider client={fixture.client}>
+        <SavePlaceDialog open onClose={() => {}} place={clicked} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(screen.getByRole("checkbox")).toBeChecked());
+    await userEvent.click(screen.getByText("Trip"));
+    await waitFor(() => expect(fixture.remove).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(fixture.rows).toHaveLength(0));
+  });
+
   it("accepts later server membership changes after a save finishes", async () => {
     const fixture = setup();
     await waitFor(() => expect(fixture.client.getQueryData(["savedCheck", place.id])).toEqual([]));

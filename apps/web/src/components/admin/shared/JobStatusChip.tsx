@@ -11,11 +11,14 @@ export function JobStatusChip({
   label,
   variant,
   sx,
+  stage = false,
 }: {
   status: string | null;
   label?: ReactNode;
   variant?: ChipProps["variant"];
   sx?: ChipProps["sx"];
+  /** The status is a transit stage's, not a job's. */
+  stage?: boolean;
 }) {
   const t = useAdminTranslations("adminShared");
   const value = status ?? "never";
@@ -28,6 +31,6 @@ export function JobStatusChip({
       sx={sx}
     />
   );
-  const description = jobStatusDescription(value, t);
+  const description = jobStatusDescription(value, t, stage);
   return description ? <Tooltip title={description}>{chip}</Tooltip> : chip;
 }

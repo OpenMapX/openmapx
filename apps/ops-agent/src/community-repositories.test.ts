@@ -55,6 +55,7 @@ function manifest(id: string, version: string, overrides: Record<string, unknown
     id,
     name: id,
     version,
+    platform: "1.0",
     quality: "community",
     container: {
       image: `registry.example.test/${id}`,
@@ -321,7 +322,7 @@ describe("community repository store", () => {
       readFileSync(join(community, `.repository-${REPOSITORY}.json`), "utf8"),
     ) as { version: number; manifests: unknown };
     expect(record).toMatchObject({
-      version: 2,
+      version: 1,
       manifests: [
         {
           path: "services/live",

@@ -60,7 +60,7 @@ function envelope(
     rootKey = key(operationKey);
   }
   return {
-    version: 2,
+    version: 1,
     requestId,
     operationKey: rootKey,
     issuedAt,
@@ -71,7 +71,7 @@ function envelope(
 }
 
 function auth(token: string) {
-  return { authorization: `Bearer ${token}`, "x-ops-protocol-version": "2" };
+  return { authorization: `Bearer ${token}`, "x-ops-protocol-version": "1" };
 }
 
 describe("ops-agent request boundary", () => {
@@ -429,6 +429,7 @@ describe("retained execution deadlines", () => {
       resourcePolicy: allowAll,
       journal: {
         records: () => [],
+        foreignRecords: () => [],
         replace: async (x) => {
           records.push(structuredClone([...x]));
         },
@@ -695,6 +696,7 @@ describe("execution identity at the agent boundary", () => {
       resourcePolicy: allowAll,
       journal: {
         records: () => [],
+        foreignRecords: () => [],
         replace: async (records) => {
           snapshots.push(structuredClone([...records]));
         },
@@ -738,6 +740,7 @@ describe("execution identity at the agent boundary", () => {
       now: () => new Date(nowIso),
       journal: {
         records: () => [],
+        foreignRecords: () => [],
         replace: async (records) => {
           snapshots.push(structuredClone([...records]));
         },
@@ -917,6 +920,7 @@ it.each([0, 1])(
       runtime,
       journal: {
         records: () => [],
+        foreignRecords: () => [],
         replace: async (x) => {
           retained.push(structuredClone([...x]));
         },
@@ -925,7 +929,7 @@ it.each([0, 1])(
     try {
       const payload = {
         ...envelope({ kind: "service.build", serviceId: "osrm" }),
-        version: 2,
+        version: 1,
         issuedAt: new Date().toISOString(),
         expiresAt: new Date(Date.now() + 20000).toISOString(),
       };
@@ -944,7 +948,7 @@ it.each([0, 1])(
         await app.inject({
           method: "GET",
           url: `/v1/operations/${id}`,
-          headers: { ...auth(apiToken), "x-ops-protocol-version": "2" },
+          headers: { ...auth(apiToken), "x-ops-protocol-version": "1" },
         })
       ).json().result;
       expect(status.diagnostics.truncated).toBe(true);
@@ -988,7 +992,7 @@ it.each([0, 1])(
 );
 
 describe("ops protocol version", () => {
-  it("refuses a status, lookup or cancellation peer that does not speak version 2", async () => {
+  it("refuses a status, lookup or cancellation peer that does not speak its protocol version", async () => {
     const { opsOperationFingerprint } = await import("@openmapx/core/ops");
     let finish!: (x: unknown) => void;
     const operation = {
@@ -1012,7 +1016,7 @@ describe("ops protocol version", () => {
         url: "/v1/protocol",
         headers: auth(apiToken),
       });
-      expect(protocol.json().result).toEqual({ versions: [2] });
+      expect(protocol.json().result).toEqual({ versions: [1] });
       const admission = (
         await app.inject({
           method: "POST",
@@ -1021,7 +1025,7 @@ describe("ops protocol version", () => {
           payload: envelope(operation),
         })
       ).json().result;
-      expect(admission).toMatchObject({ version: 2, fingerprint: expect.any(String) });
+      expect(admission).toMatchObject({ version: 1, fingerprint: expect.any(String) });
       const requests = [
         { method: "GET" as const, url: `/v1/operations/${admission.operationId}` },
         {
@@ -1035,7 +1039,7 @@ describe("ops protocol version", () => {
           headers: { "x-ops-operation-fingerprint": admission.fingerprint },
         },
       ];
-      for (const version of [undefined, "1", "3"])
+      for (const version of [undefined, "0", "2"])
         for (const request of requests) {
           const response = await app.inject({
             method: request.method,
@@ -1059,7 +1063,7 @@ describe("ops protocol version", () => {
           headers: { ...auth(apiToken), ...request.headers },
         });
         expect(response.statusCode).toBe(200);
-        expect(response.json().result).toMatchObject({ version: 2, state: "running" });
+        expect(response.json().result).toMatchObject({ version: 1, state: "running" });
       }
       const sole = await app.inject({
         method: "GET",
@@ -1070,14 +1074,14 @@ describe("ops protocol version", () => {
         },
       });
       expect(sole.statusCode).toBe(400);
-      const v1Body = await app.inject({
+      const otherBody = await app.inject({
         method: "POST",
         url: "/v1/operations",
         headers: auth(apiToken),
-        payload: { ...envelope(operation, "ops1_versionOneBody00"), version: 1 },
+        payload: { ...envelope(operation, "ops1_versionTwoBody00"), version: 2 },
       });
-      expect(v1Body.statusCode).toBe(400);
-      expect(v1Body.json().error.class).toBe("validation");
+      expect(otherBody.statusCode).toBe(400);
+      expect(otherBody.json().error.class).toBe("validation");
     } finally {
       finish?.({ lines: 0, truncated: false });
       await app.close();

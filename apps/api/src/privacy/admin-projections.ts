@@ -8,7 +8,7 @@ export function privacyCaseProjection(row: Record<string, unknown>) {
     ),
     kind: row.kind,
     channel: row.channel,
-    state: row.state,
+    status: row.status,
     userId: row.userId,
     locale: row.locale,
     timeZone: row.timeZone,

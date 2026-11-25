@@ -19,7 +19,7 @@ unavailable on hosted deployments. The hosted Data workspace offers Transit and 
 | ACME contact email | `ACME_EMAIL`, otherwise `admin@example.com` | Applied certificate configuration                                                              |
 | Release selector   | `OPENMAPX_RELEASE`, otherwise `main`        | The next explicit release check/selection; existing image pins stay selected                   |
 | Default region     | `OPENMAPX_REGION`, otherwise unset          | Subsequent data/build operations without an explicit region; deployment allowlists still apply |
-| Backup retention   | `BACKUP_RETENTION_DAYS`, otherwise 30 days  | Subsequent creation, restore validation and scheduled/manual pruning                           |
+| Backup retention   | `RETENTION_BACKUP_DAYS`, otherwise 30 days  | Subsequent creation, restore validation and scheduled/manual pruning                           |
 
 Use **Preview changes** to review the exact origin, affected services and warnings.
 The preview expires after ten minutes. Changing the draft invalidates the preview.

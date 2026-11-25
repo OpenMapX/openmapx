@@ -8,6 +8,7 @@ import {
   renderServiceSnippet,
   resolveProxyHost,
 } from "../services/compose-renderer";
+import { serviceContainerName, serviceNetworkAlias } from "../services/core-service-ids";
 import { CURRENT_CONFIGURATION } from "../services/deployment";
 import type { LoadedService } from "../services/types";
 
@@ -249,8 +250,8 @@ describe("renderServiceSnippet", () => {
     expect(snippet.environment).toEqual({
       PLAIN_KEY: "$${POSTGRES_PASSWORD}",
       REGION: "${SERVICE_PROBE_REGION:-}",
-      // `SERVICE_PROBE_BAD-KEY` is not a name Compose can interpolate.
-      "bad-key": "$${SERVICE_PROBE_BAD-KEY:-}",
+      // `SERVICE_PROBE_bad-key` is not a name Compose can interpolate.
+      "bad-key": "$${SERVICE_PROBE_bad-key:-}",
     });
   });
 
@@ -615,17 +616,12 @@ describe("renderServiceSnippet", () => {
     expect(snippet.image).toBe(`t/alpha:1.2.3@${digest}`);
   });
 
-  it("omits container_name by default and emits it when containerName is set", () => {
-    expect(renderServiceSnippet(svc("alpha"), {}).container_name).toBeUndefined();
-    const pinned = renderServiceSnippet(
-      svc("motis-staging", {
-        container: { image: "t/motis", tag: "2.10.2", containerName: "motis-staging" },
-      }),
-      {},
+  it("names every container after its network alias", () => {
+    expect(renderServiceSnippet(svc("alpha"), {}).container_name).toBe("openmapx-alpha");
+    expect(renderServiceSnippet(svc("motis-staging"), {}).container_name).toBe(
+      serviceContainerName("motis-staging"),
     );
-    // Pinned name lets the data-manager reach the container by bare name over
-    // the docker CLI (`docker exec motis-staging`, `docker restart motis`).
-    expect(pinned.container_name).toBe("motis-staging");
+    expect(serviceContainerName("motis-staging")).toBe(serviceNetworkAlias("motis-staging"));
   });
 
   // biome-ignore-start lint/suspicious/noTemplateCurlyInString: literal Docker Compose interpolation under test
@@ -1316,18 +1312,6 @@ describe("renderCompose", () => {
       bindMounts: [{ source: "@service:nonexistent:config/x.json", target: "/code/x.json" }],
     });
     expect(() => renderCompose([orphan], { domain: "example.com" })).toThrow(/not found/);
-  });
-
-  it("rejects two services that pin the same container_name", () => {
-    const a = svc("svc-a", {
-      container: { image: "t/a", tag: "1", containerName: "shared" },
-    });
-    const b = svc("svc-b", {
-      container: { image: "t/b", tag: "1", containerName: "shared" },
-    });
-    expect(() => renderCompose([a, b], { domain: "example.com" })).toThrow(
-      /[Dd]uplicate container_name "shared"/,
-    );
   });
 
   it("can resolve @service:<slug>:<path> against installed services outside the rendered subset", () => {

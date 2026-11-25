@@ -61,7 +61,7 @@ export async function runCatalogActivation(options: {
       : null;
   if (
     !terminal ||
-    terminal.status !== "ok" ||
+    terminal.status !== "succeeded" ||
     terminal.result?.kind !== "catalog.validate" ||
     terminal.result.status !== "passed" ||
     terminal.result.validationId !== input.validationId
@@ -142,16 +142,17 @@ export async function runCatalogActivation(options: {
     const proxy = await stageProxy(ctx);
     await ctx.onStageComplete(proxy);
     await context.checkpoint({ progress: 0.2 });
-    if (proxy.status !== "ok") throw Error("Candidate proxy preparation failed");
+    if (proxy.status !== "succeeded") throw Error("Candidate proxy preparation failed");
     await runTransitOwnedPhase(ctx, "restart-staging");
     const health = await checkHealth(ctx);
     await ctx.onStageComplete(health);
     await context.checkpoint({ progress: 0.5 });
-    if (health.status !== "ok") throw Error("Validated candidate no longer passes staging probes");
+    if (health.status !== "succeeded")
+      throw Error("Validated candidate no longer passes staging probes");
     const result = await promote(ctx);
     await ctx.onStageComplete(result);
     await context.checkpoint({ progress: 0.8 });
-    if (result.status !== "ok") throw Error("Candidate promotion did not complete");
+    if (result.status !== "succeeded") throw Error("Candidate promotion did not complete");
   } catch (error) {
     if (error instanceof DataOpsObservationPending || error instanceof DataPublicationUnknown)
       throw error;

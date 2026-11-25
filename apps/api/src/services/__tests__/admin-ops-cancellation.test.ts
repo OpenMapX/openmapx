@@ -64,7 +64,7 @@ function agentStatus() {
   const admission = agent.admissions[0];
   if (!admission) throw new Error("status requested before admission");
   return parseOpsJobStatus({
-    version: 2,
+    version: 1,
     admittedAt: admission.admittedAt,
     deadlineAt: admission.deadlineAt,
     fingerprint: admission.fingerprint,
@@ -179,7 +179,7 @@ vi.mock("../../db", () => {
         | { operations: Record<string, { terminal: boolean; receiptDelivery?: object }> }
         | undefined;
       if (
-        value.status === "canceled" &&
+        value.status === "cancelled" &&
         (database.row.status !== "cancel_pending" ||
           !p ||
           Object.values(p.operations).some((o) => !o.terminal || !o.receiptDelivery))
@@ -408,7 +408,7 @@ describe.each(ACTIONS)("single-service $name cancellation", (scenario) => {
     expect(agent.admissions[0]?.operation).toEqual({ kind: scenario.kind, serviceId: "redis" });
     expect(expectedKey()).toMatch(/^opk1_t1_/);
     expect(database.row.protocol.operations).toMatchObject({
-      version: 3,
+      version: 1,
       steps: {
         [stepAddress()]: {
           operationKey: expectedKey(),
@@ -456,7 +456,7 @@ describe.each(ACTIONS)("single-service $name cancellation", (scenario) => {
     expect(cancellation.settled).toBe(false);
     expect(job.controller.signal.aborted).toBe(true);
     expect(database.updates).toContainEqual(expect.objectContaining({ status: "cancel_pending" }));
-    expect(database.updates).not.toContainEqual(expect.objectContaining({ status: "canceled" }));
+    expect(database.updates).not.toContainEqual(expect.objectContaining({ status: "cancelled" }));
 
     // The agent's authoritative termination is the containment evidence.
     agent.state = "failed";
@@ -467,7 +467,7 @@ describe.each(ACTIONS)("single-service $name cancellation", (scenario) => {
     expect(agent.cancelCalls).toEqual([operationId]);
     expect(job.controller.signal.aborted).toBe(true);
     expect(database.updates).toContainEqual(
-      expect.objectContaining({ status: "canceled", finishedAt: expect.any(Date) }),
+      expect.objectContaining({ status: "cancelled", finishedAt: expect.any(Date) }),
     );
     await vi.advanceTimersByTimeAsync(1_000);
     expect(job.outcome.state).toBe("rejected");
@@ -496,7 +496,7 @@ describe.each(ACTIONS)("single-service $name cancellation", (scenario) => {
     expect(job.controller.signal.aborted).toBe(true);
     expect(job.outcome.state).toBe("rejected");
     expect(database.row.status).toBe("cancel_pending");
-    expect(database.updates).not.toContainEqual(expect.objectContaining({ status: "canceled" }));
+    expect(database.updates).not.toContainEqual(expect.objectContaining({ status: "cancelled" }));
   });
 
   it("does not turn an operation that already succeeded into a cancellation", async () => {
@@ -514,7 +514,7 @@ describe.each(ACTIONS)("single-service $name cancellation", (scenario) => {
     await until(() => cancellation.settled);
     expect(cancellation).toMatchObject({ settled: true, value: false });
     expect(job.controller.signal.aborted).toBe(true);
-    expect(database.updates).not.toContainEqual(expect.objectContaining({ status: "canceled" }));
+    expect(database.updates).not.toContainEqual(expect.objectContaining({ status: "cancelled" }));
     expect(database.row.status).toBe("cancel_pending");
     expect(projectedOperations()?.[expectedKey()]).toMatchObject({
       terminal: true,
@@ -555,7 +555,7 @@ describe.each(ACTIONS)("single-service $name cancellation", (scenario) => {
     await until(() => cancellation.settled);
     expect(cancellation).toMatchObject({ settled: true, value: false });
     expect(job.controller.signal.aborted).toBe(true);
-    expect(database.updates).not.toContainEqual(expect.objectContaining({ status: "canceled" }));
+    expect(database.updates).not.toContainEqual(expect.objectContaining({ status: "cancelled" }));
     expect(database.row.status).toBe("cancel_pending");
     expect(projectedOperations()?.[expectedKey()]).toMatchObject({
       terminal: true,

@@ -17,6 +17,7 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
+    "@openmapx/core": "workspace:^",
     "drizzle-orm": "^0.45.4"
   },
   "devDependencies": {

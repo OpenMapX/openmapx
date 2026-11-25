@@ -16,7 +16,6 @@
     "image": "nginx",
     "tag": "1.31.8-alpine",
     "digest": "sha256:785835ea65db4bba6f021acc0f3be91b0fef76a53fe41f8588c6698d2aed0606",
-    "containerName": "motis-feed-proxy",
     "expose": [80],
     "memory": "256m",
     "restart": "unless-stopped",

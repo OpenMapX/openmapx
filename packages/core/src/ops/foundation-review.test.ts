@@ -116,7 +116,7 @@ describe("reviewed ops foundation contract", () => {
   it("defines bounded typed async status and event batches", () => {
     expect(
       parseOpsJobStatus({
-        version: 2,
+        version: 1,
         admittedAt: 100,
         deadlineAt: 1000,
         fingerprint: "a".repeat(64),
@@ -173,7 +173,7 @@ describe("reviewed ops foundation contract", () => {
     ).toThrow();
     expect(() =>
       parseOpsJobStatusForKind("service.pull", {
-        version: 2,
+        version: 1,
         admittedAt: 100,
         deadlineAt: 1000,
         fingerprint: "a".repeat(64),
@@ -189,7 +189,7 @@ describe("reviewed ops foundation contract", () => {
     ).toThrow();
     expect(() =>
       parseOpsJobStatus({
-        version: 2,
+        version: 1,
         admittedAt: 100,
         deadlineAt: 1000,
         fingerprint: "a".repeat(64),
@@ -205,7 +205,7 @@ describe("reviewed ops foundation contract", () => {
     ).toThrow();
     expect(() =>
       parseOpsJobStatus({
-        version: 2,
+        version: 1,
         admittedAt: 100,
         deadlineAt: 1000,
         fingerprint: "a".repeat(64),

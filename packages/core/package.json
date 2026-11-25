@@ -34,6 +34,14 @@
       "types": "./src/ids/uuidv7.ts",
       "default": "./src/ids/uuidv7.ts"
     },
+    "./map-link-params": {
+      "types": "./src/deep-links/mapLinkParams.ts",
+      "default": "./src/deep-links/mapLinkParams.ts"
+    },
+    "./storage-keys": {
+      "types": "./src/platform/storageKeys.ts",
+      "default": "./src/platform/storageKeys.ts"
+    },
     "./deployment-secret-policy": {
       "types": "./src/deployment-secret-policy.ts",
       "default": "./src/deployment-secret-policy.ts"
@@ -73,6 +81,14 @@
     "./item-at": {
       "types": "./src/utils/itemAt.ts",
       "default": "./src/utils/itemAt.ts"
+    },
+    "./jobs": {
+      "types": "./src/jobs/vocabulary.ts",
+      "default": "./src/jobs/vocabulary.ts"
+    },
+    "./published-data": {
+      "types": "./src/published-data/schema-versions.ts",
+      "default": "./src/published-data/schema-versions.ts"
     },
     "./coordinates": {
       "types": "./src/utils/coordinates.ts",
@@ -149,6 +165,14 @@
     "./feed-id": {
       "types": "./src/feed-id.ts",
       "default": "./src/feed-id.ts"
+    },
+    "./component-id": {
+      "types": "./src/component-id.ts",
+      "default": "./src/component-id.ts"
+    },
+    "./services/config-env-names": {
+      "types": "./src/services/config-env-names.ts",
+      "default": "./src/services/config-env-names.ts"
     },
     "./services/secret-key": {
       "types": "./src/services/secret-key.ts",

@@ -1069,7 +1069,7 @@ describe("installIntegration (what the operations agent loads)", () => {
         /configSchema uses a construct/,
       ],
       ["invalid-utf8", invalidUtf8Manifest("invalid-utf8"), /not valid UTF-8/],
-      [`a${"b".repeat(64)}`, schemaManifest(`a${"b".repeat(64)}`), /longer than the 64 characters/],
+      [`a${"b".repeat(48)}`, schemaManifest(`a${"b".repeat(48)}`), /at most 48 characters/],
     ];
     for (const [id, data, message] of cases) {
       const artifact = join(tmp, "refused.tar.gz");

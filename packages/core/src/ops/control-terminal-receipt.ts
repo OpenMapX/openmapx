@@ -9,7 +9,7 @@ export function controlTerminalReceiptDigest(input: OpsJobStatus): string {
     throw Error("A terminal receipt is required");
   const result = s.result === undefined ? null : parseBoundedOpsResult(s.kind, s.result);
   const fields = {
-    version: 2,
+    version: 1,
     operationId: s.operationId,
     operationKey: s.operationKey,
     kind: s.kind,

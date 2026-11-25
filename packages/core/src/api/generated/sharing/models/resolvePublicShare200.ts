@@ -12,7 +12,6 @@ import type { SharingResolvePublicShare200Schema19 } from "./sharingResolvePubli
 import type { SharingResolvePublicShare200Schema20 } from "./sharingResolvePublicShare200Schema20";
 import type { SharingResolvePublicShare200Schema21 } from "./sharingResolvePublicShare200Schema21";
 import type { SharingResolvePublicShare200Schema22 } from "./sharingResolvePublicShare200Schema22";
-import type { SharingResolvePublicShare200Schema23 } from "./sharingResolvePublicShare200Schema23";
 
 export type ResolvePublicShare200 =
   | {
@@ -38,7 +37,6 @@ export type ResolvePublicShare200 =
         bikePreferQuietRoads?: SharingResolvePublicShare200Schema19;
         bikePreferSmoothSurfaces?: SharingResolvePublicShare200Schema20;
         bikeSpeedKmh?: SharingResolvePublicShare200Schema21;
-        scheduleVersion?: SharingResolvePublicShare200Schema22;
-        schedules?: SharingResolvePublicShare200Schema23;
+        schedules?: SharingResolvePublicShare200Schema22;
       };
     };

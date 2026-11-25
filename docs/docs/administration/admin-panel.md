@@ -26,22 +26,18 @@ enforces permissions separately:
 See [Users and access](./users-and-access.md) for assigning roles and
 [Data-subject requests](./data-subject-requests.md) for privacy work.
 
-### The local admin escape hatch
+### Host CLI access
 
-Some CLI commands call the admin API without a browser session. This requires
-both an actual loopback TCP peer (`127.0.0.1`, `::1`, or its IPv4-mapped form)
-and the `x-openmapx-local-admin` header. `X-Forwarded-For` cannot grant access.
-
-In production, configure `OPENMAPX_LOCAL_ADMIN_TOKEN` on the API and in the CLI
-environment. Without a token, production rejects this shortcut. Development
-accepts a present, empty header when no token is configured. Set
-`OPENMAPX_DISABLE_LOCALHOST_AUTH=1` to disable it on a host where other tenants
-can reach loopback. A remote API URL and token alone do not satisfy the peer
-check. Privacy casework requires an attributable signed-in administrator and
-rejects the synthetic loopback identity.
+Every admin API request needs a signed-in administrator's session. No address,
+header or token stands in for one, so a host command that calls the admin API
+(`pnpm openmapx system update` and the `ext` commands) acts as the operator's
+own administrator session. It reads that session's Better Auth cookie from a
+private file passed with `--session-file` and sends it only to the exact HTTPS
+API origin (`https://DOMAIN`, or `--api-origin`), refusing redirects. Every
+action is attributed to that administrator in the audit log.
 
 The `openmapx users` recovery commands use Docker and PostgreSQL directly;
-they do not use this HTTP shortcut.
+they do not call the admin API.
 
 ## Self-hosted vs. hosted
 

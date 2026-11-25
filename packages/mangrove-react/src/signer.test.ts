@@ -8,6 +8,11 @@ const config = {
   signerUrl: "https://signer.mangrove.reviews",
   accountUrl: "https://mangrove.reviews/account",
 };
+const storageKeys = {
+  session: "test:signer-session",
+  pendingLogin: "test:pending-login",
+  mode: "test:mode",
+};
 function fixture(owner = "owner-a") {
   const values = new Map<string, string>();
   const storage = {
@@ -31,6 +36,7 @@ function fixture(owner = "owner-a") {
   const controller = createMangroveSigner({
     owner,
     storage,
+    storageKeys,
     transport,
     origin: "https://maps.test",
     now: () => 1000,
@@ -56,7 +62,7 @@ describe("Mangrove signer authority", () => {
   it("does not revoke another owner's saved credential", async () => {
     const f = fixture();
     f.values.set(
-      "openmapx.mangrove.signer",
+      storageKeys.session,
       JSON.stringify({ owner: "owner-b", token: "secret".repeat(8) }),
     );
     f.transport.revokeSession = vi.fn(async () => undefined);
@@ -81,12 +87,12 @@ describe("Mangrove signer authority", () => {
     finish();
     await outcome;
     expect(f.controller.getSnapshot().mode).toBe("local");
-    expect(f.values.has("openmapx.mangrove.login")).toBe(false);
+    expect(f.values.has(storageKeys.pendingLogin)).toBe(false);
   });
   it("revokes an owner-bound saved credential even when restore could not load an account", async () => {
     const f = fixture();
     f.values.set(
-      "openmapx.mangrove.signer",
+      storageKeys.session,
       JSON.stringify({
         owner: "owner-a",
         token: "secret".repeat(8),
@@ -102,7 +108,7 @@ describe("Mangrove signer authority", () => {
     expect(f.controller.getSnapshot().account).toBeNull();
     await f.controller.disconnect();
     expect(f.transport.revokeSession).toHaveBeenCalledWith("secret".repeat(8), expect.anything());
-    expect(f.values.has("openmapx.mangrove.signer")).toBe(false);
+    expect(f.values.has(storageKeys.session)).toBe(false);
   });
   it("revokes the previous session before replacing it during reconnect", async () => {
     const f = fixture();
@@ -163,6 +169,7 @@ describe("Mangrove signer authority", () => {
     const other = createMangroveSigner({
       owner: "owner-b",
       storage: f.storage,
+      storageKeys,
       transport: f.transport,
       origin: "https://maps.test",
       now: () => 1000,
@@ -211,6 +218,7 @@ describe("Mangrove signer authority", () => {
       owner: "owner-a",
       origin: "https://maps.test",
       storage: f.storage,
+      storageKeys,
       transport: {
         ...f.transport,
         getAccount,

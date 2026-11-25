@@ -20,6 +20,7 @@ import {
   PRIVACY_SERVICE_UNAVAILABLE,
   type PrivacyRequestView,
   requestPrivacyExport,
+  STORAGE_KEYS,
   withdrawPrivacyDataRequest,
 } from "@openmapx/core";
 import { acceptsWithdrawal } from "@openmapx/core/privacy";
@@ -30,7 +31,7 @@ import { downloadPrivacyDeviceData } from "@/lib/privacyDeviceData";
 /** Set before the fresh sign-in so the download continues on return. It holds
  * only a timestamp and whether the one retry has happened, and expires with
  * the sign-in window. */
-export const PENDING_EXPORT_KEY = "openmapx:privacy:pending-export";
+export const PENDING_EXPORT_KEY = STORAGE_KEYS.privacyPendingExport.key;
 const PENDING_EXPORT_TTL_MS = 10 * 60_000;
 type PendingExport = { at: number; retried: boolean };
 
@@ -263,7 +264,7 @@ export const PrivacyDataSection = forwardRef<
                   <PrivacyTipIcon fontSize="small" />
                 </ListItemIcon>
                 <ListItemText
-                  primary={t(`privacyData.states.${request.state}`)}
+                  primary={t(`privacyData.states.${request.status}`)}
                   secondary={t("privacyData.due", { date: dateLabel(request.dueAt) })}
                 />
                 <Chip
@@ -277,7 +278,7 @@ export const PrivacyDataSection = forwardRef<
                   }
                 />
               </Box>
-              {acceptsWithdrawal(request.state) && (
+              {acceptsWithdrawal(request.status) && (
                 <Box sx={{ pl: 4, display: "flex", gap: 1, flexWrap: "wrap", mt: 0.75 }}>
                   <Button
                     size="small"

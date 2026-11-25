@@ -8,10 +8,9 @@ import { dehydrate, onlineManager, QueryClient, QueryClientProvider } from "@tan
 import { act, renderHook } from "@testing-library/react";
 import { createElement, type ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  PERSONAL_TIMELINE_CACHE_BUSTER,
-  shouldDehydrateOpenMapXMutation,
-} from "./personalTimelineCachePolicy";
+import { shouldDehydrateOpenMapXMutation } from "./personalTimelineCachePolicy";
+import { QUERY_CACHE_BUSTER } from "./recentMapDataCache";
+import { MANGROVE_SIGNER_STORAGE_KEYS } from "./signOutStorage";
 
 afterEach(() => {
   onlineManager.setOnline(true);
@@ -45,16 +44,13 @@ describe("personal timeline cache policy", () => {
     const dehydrated = dehydrate(client, {
       shouldDehydrateMutation: shouldDehydrateOpenMapXMutation,
     });
-    const serialized = JSON.stringify({ buster: PERSONAL_TIMELINE_CACHE_BUSTER, dehydrated });
+    const serialized = JSON.stringify({ buster: QUERY_CACHE_BUSTER, dehydrated });
 
     expect(serialized).not.toContain("must-never-persist");
     expect(dehydrated.mutations).toHaveLength(1);
     expect(dehydrated.mutations[0]?.mutationKey).toEqual(["unrelated", "write"]);
   });
 
-  it("uses a cache buster newer than the legacy timeline-mutation format", () => {
-    expect(PERSONAL_TIMELINE_CACHE_BUSTER).not.toBe("v1");
-  });
   it("excludes secrets from a real paused local-key setup hook", () => {
     const client = new QueryClient();
     onlineManager.setOnline(false);
@@ -68,6 +64,7 @@ describe("personal timeline cache policy", () => {
         createElement(MangroveProvider, {
           transport,
           currentUser: { id: "owner" },
+          signerStorageKeys: MANGROVE_SIGNER_STORAGE_KEYS,
           children,
         }),
       );

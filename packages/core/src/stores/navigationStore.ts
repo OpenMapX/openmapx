@@ -21,13 +21,14 @@ import { mergeTransitRefresh } from "../navigation/transitRefresh";
 import { repairTransitWalk } from "../navigation/transitWalkRepair";
 import type { CameraMode, NavProgress, NavStatus } from "../navigation/types";
 import { getStorage } from "../platform/storage";
+import { STORAGE_KEYS } from "../platform/storageKeys";
 import { expireRoadConditionRouteImpact } from "../road-conditions/roadConditionRouteImpact";
 import type { BikeRoutingOptions } from "../routing/bicycleOptions";
 import type { LngLat } from "../types/geometry";
 import type { RoadConditionRouteImpact, Route, TravelMode } from "../types/routing";
 
-const VOICE_STORAGE_KEY = "openmapx:nav:voiceEnabled";
-const KEEP_SCREEN_ON_STORAGE_KEY = "openmapx:nav:keepScreenOn";
+const VOICE_STORAGE_KEY = STORAGE_KEYS.voiceEnabled.key;
+const KEEP_SCREEN_ON_STORAGE_KEY = STORAGE_KEYS.keepScreenOn.key;
 
 /** Read a persisted boolean preference, falling back to `fallback` when unset. */
 function readBoolPref(key: string, fallback: boolean): boolean {

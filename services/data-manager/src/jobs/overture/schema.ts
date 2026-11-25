@@ -146,6 +146,8 @@ export function buildSchemaDDL(schema: string, options: BuildOvertureSchemaOptio
       sources_catalogue JSONB NOT NULL CONSTRAINT conflation_state_sources_catalogue_check
         CHECK (jsonb_typeof(sources_catalogue) = 'array'),
       places_published_at TIMESTAMPTZ,
+      schema_version    INTEGER NOT NULL
+        CONSTRAINT conflation_state_schema_version_check CHECK (schema_version > 0),
       status            TEXT NOT NULL CONSTRAINT conflation_state_status_check CHECK (
         status IN ('pending', 'running', 'completed', 'failed', 'waiting_for_osm')
       ),

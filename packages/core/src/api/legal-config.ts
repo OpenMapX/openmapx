@@ -40,8 +40,8 @@ const boundedNumber = (raw: unknown, fallback: number, min: number, max: number)
  * Fetch the operator's published legal facts (hosting, supervisory authority,
  * log retention) from the API, which resolves them env > admin-database >
  * default. Used by the public legal pages. Returns null when the API is
- * unreachable so callers can fall back to their web-process environment
- * without mistaking an intentionally empty API value for a fetch failure.
+ * unreachable or answers with an error; the pages then show an error state
+ * instead of facts the operator did not configure.
  */
 export async function fetchLegalConfig(): Promise<PublicLegalConfig | null> {
   try {

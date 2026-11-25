@@ -260,7 +260,10 @@ describe("WildfireLayer source orchestration", () => {
           ? ({
               ok: false,
               status: 503,
-              json: async () => ({ code: "effis_unavailable" }),
+              json: async () => ({
+                error: "Wildfire layer unavailable",
+                code: "EFFIS_UNAVAILABLE",
+              }),
             } as Response)
           : successfulResponse(url),
       ),

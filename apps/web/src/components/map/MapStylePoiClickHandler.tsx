@@ -5,6 +5,7 @@ import {
   categoryPlaceToPlace,
   createPlace,
   PANEL,
+  savedPlaceKey,
   useDirectionsStore,
   useIsSaved,
   useNavigationStore,
@@ -50,8 +51,8 @@ const HIDE_GRACE_MS = 150;
 export function stylePoiPlace(target: StylePoiTarget): Place {
   if (target.canonicalPlace) return categoryPlaceToPlace(target.canonicalPlace);
   return createPlace({
-    primaryScheme: "stylePoi",
-    ids: { stylePoi: target.featureId },
+    primaryScheme: "style-poi",
+    ids: { "style-poi": target.featureId },
     name: target.name,
     address: target.name,
     coordinates: target.coordinates,
@@ -288,7 +289,7 @@ export function MapStylePoiClickHandler() {
   );
   const { data: session } = useSession();
   const { data: savedInListIds } = useIsSaved(
-    session?.user && hoveredPlace ? hoveredPlace.id : null,
+    session?.user && hoveredPlace ? savedPlaceKey(hoveredPlace) : null,
   );
 
   const map = mapRef.current;

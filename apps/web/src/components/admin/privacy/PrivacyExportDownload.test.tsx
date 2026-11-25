@@ -41,7 +41,7 @@ afterEach(() => {
 
 function exportableDetail() {
   const detail = privacyDetail();
-  detail.request.state = "in_progress";
+  detail.request.status = "in_progress";
   detail.request.identityMethod = "manual";
   detail.capabilities.export = true;
   detail.capabilities.reasons = {};
