@@ -1,7 +1,3 @@
-import type {
-  GeocodingBias,
-  GeocodingProvider as GeocodingProviderImpl,
-} from "@openmapx/integration-geocoding/types";
 /**
  * Pelias geocoding client (self-hosted).
  * Set PELIAS_URL to your Pelias instance (e.g. http://localhost:4300).
@@ -14,7 +10,12 @@ import {
   type ReverseGeocodingResult,
   type SearchResult,
 } from "@openmapx/core";
-import { lngLatOrNull, usableGeocoderRecords } from "@openmapx/integration-geocoding/records";
+import {
+  type GeocodingBias,
+  type GeocodingProvider as GeocodingProviderImpl,
+  lngLatOrNull,
+  usableGeocoderRecords,
+} from "@openmapx/provider-kit/geocoding";
 
 // Populated by setup(ctx); see setPeliasUrl.
 const DEFAULT_PELIAS_URL = "http://localhost:4300";

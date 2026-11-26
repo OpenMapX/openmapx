@@ -2,10 +2,6 @@ import type { BBox } from "@openmapx/core";
 import { haversineMeters } from "@openmapx/core";
 import type { IntegrationContext, TransitProvider } from "@openmapx/integration-framework";
 import { captureCacheWriter, captureTransitContributors } from "@openmapx/integration-framework";
-import {
-  expandSearchQuery,
-  getQueryVariants,
-} from "@openmapx/integration-geocoding/query-expansion";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
   contributorsForField,
@@ -24,6 +20,7 @@ import type {
   ServiceAlert,
   TransitStop,
 } from "@openmapx/mobility-core/transit";
+import { expandSearchQuery, getQueryVariants } from "@openmapx/provider-kit/geocoding";
 import {
   bucketTimestamps,
   headsignsCompatible,

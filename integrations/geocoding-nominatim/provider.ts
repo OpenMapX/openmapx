@@ -1,8 +1,3 @@
-import { formatAddress, formatStreetLine } from "@openmapx/integration-geocoding/format-address";
-import type {
-  GeocodingBias,
-  GeocodingProvider as GeocodingProviderImpl,
-} from "@openmapx/integration-geocoding/types";
 /**
  * Nominatim geocoding client.
  * Uses the public OSM instance by default; override with NOMINATIM_URL.
@@ -21,7 +16,14 @@ import {
   type SearchResult,
   sanitizeAddressComponents,
 } from "@openmapx/core";
-import { lngLatOrNull, usableGeocoderRecords } from "@openmapx/integration-geocoding/records";
+import {
+  formatAddress,
+  formatStreetLine,
+  type GeocodingBias,
+  type GeocodingProvider as GeocodingProviderImpl,
+  lngLatOrNull,
+  usableGeocoderRecords,
+} from "@openmapx/provider-kit/geocoding";
 
 // Populated by setup(ctx); see setNominatimUrl.
 const DEFAULT_NOMINATIM_URL = "https://nominatim.openstreetmap.org";

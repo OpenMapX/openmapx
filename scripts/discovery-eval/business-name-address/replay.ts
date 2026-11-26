@@ -1,12 +1,12 @@
 /** Offline diagnostic replay. It never calls providers or changes production data. */
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
-import { getQueryVariants } from "../../../integrations/geocoding/query-expansion.js";
 import {
   enterAction,
   rankAutocompleteRows,
 } from "../../../packages/core/src/search/suggestionRanking.js";
 import type { AutocompleteResult } from "../../../packages/core/src/types/geocoding.js";
+import { getQueryVariants } from "../../../packages/provider-kit/src/geocoding/query-expansion.js";
 
 interface QuerySet {
   baseline: string;

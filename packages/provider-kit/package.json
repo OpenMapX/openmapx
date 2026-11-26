@@ -1,0 +1,47 @@
+{
+  "name": "@openmapx/provider-kit",
+  "license": "Apache-2.0",
+  "version": "1.0.0",
+  "description": "Shared helpers and provider types for OpenMapX weather, geocoding, photo, routing, POI-search and review providers",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./weather": {
+      "types": "./src/weather.ts",
+      "default": "./src/weather.ts"
+    },
+    "./geocoding": {
+      "types": "./src/geocoding.ts",
+      "default": "./src/geocoding.ts"
+    },
+    "./photos": {
+      "types": "./src/photos.ts",
+      "default": "./src/photos.ts"
+    },
+    "./routing": {
+      "types": "./src/routing.ts",
+      "default": "./src/routing.ts"
+    },
+    "./poi-search": {
+      "types": "./src/poi-search.ts",
+      "default": "./src/poi-search.ts"
+    },
+    "./reviews": {
+      "types": "./src/reviews.ts",
+      "default": "./src/reviews.ts"
+    }
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fragaria/address-formatter": "^7.1.2",
+    "@openmapx/core": "workspace:^",
+    "@openmapx/integration-framework": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.5"
+  }
+}

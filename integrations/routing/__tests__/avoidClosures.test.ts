@@ -1,7 +1,7 @@
 import type { RoutingOptions } from "@openmapx/core";
 import { RoutingProviderError } from "@openmapx/integration-framework";
+import type { DirectionsResult, RoutingProvider } from "@openmapx/provider-kit/routing";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { DirectionsResult, RoutingProvider } from "../types.js";
 import { boundEvent, effect, roadConditionEvent } from "./support/road-condition.js";
 import {
   closureRoutingContract,

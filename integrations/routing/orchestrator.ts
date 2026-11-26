@@ -8,8 +8,8 @@ import {
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { captureGeometryContributors } from "@openmapx/mobility-core/geometry-contributors";
+import type { RoutingProvider } from "@openmapx/provider-kit/routing";
 import { createRoutingProviderAdmission } from "./provider-admission.js";
-import type { RoutingProvider } from "./types.js";
 
 export interface ResolvedProvider {
   provider: RoutingProvider;

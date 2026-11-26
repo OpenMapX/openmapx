@@ -1,5 +1,5 @@
+import type { RoutingProvider } from "@openmapx/provider-kit/routing";
 import { expect, it, vi } from "vitest";
-import type { RoutingProvider } from "../types.js";
 import {
   closureRoutingContract,
   createDirectionsResult,

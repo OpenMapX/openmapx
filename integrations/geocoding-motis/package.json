@@ -9,7 +9,7 @@
     "@motis-project/motis-client": "^2.11.4",
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
-    "@openmapx/integration-geocoding": "workspace:^",
-    "@openmapx/mobility-core": "workspace:^"
+    "@openmapx/mobility-core": "workspace:^",
+    "@openmapx/provider-kit": "workspace:^"
   }
 }

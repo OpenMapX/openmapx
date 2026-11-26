@@ -8,6 +8,6 @@
     "@openmapx/core": "workspace:^",
     "@openmapx/i18n": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
-    "@openmapx/integration-routing": "workspace:^"
+    "@openmapx/provider-kit": "workspace:^"
   }
 }

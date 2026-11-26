@@ -1,12 +1,12 @@
 import type { LoadedIntegration } from "@openmapx/integration-framework";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
+import type { PhotoProvider } from "@openmapx/provider-kit/photos";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createOsmImagePhotoProvider,
   getPhotoProviders,
   searchHeroPhotos,
 } from "../orchestrator.js";
-import type { PhotoProvider } from "../types.js";
 
 afterEach(() => vi.restoreAllMocks());
 

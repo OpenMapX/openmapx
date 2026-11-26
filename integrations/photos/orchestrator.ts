@@ -13,7 +13,7 @@ import {
   lookupByNameAndCoords,
   lookupByOsmRef,
 } from "@openmapx/integration-geocoding/place-lookup";
-import type { PhotoProvider, PhotoQuery } from "./types.js";
+import type { PhotoProvider, PhotoQuery } from "@openmapx/provider-kit/photos";
 
 // Providers in this list are ordered last (street-level imagery — shown after editorial photos)
 const DEPRIORITIZED_PROVIDER_IDS = new Set(["mapillary", "panoramax"]);

@@ -1,7 +1,7 @@
 import { type PlacePhoto, withPhotoContributors } from "@openmapx/core";
 import type { HttpClient } from "@openmapx/integration-framework";
-import type { PhotoProvider, PhotoQuery } from "@openmapx/integration-photos/types";
 import { licenceLink, licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
+import type { PhotoProvider, PhotoQuery } from "@openmapx/provider-kit/photos";
 
 /**
  * Flickr license IDs that allow commercial use:

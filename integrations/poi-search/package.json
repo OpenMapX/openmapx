@@ -10,17 +10,14 @@
     ".": {
       "types": "./index.ts",
       "default": "./index.ts"
-    },
-    "./types": {
-      "types": "./types.ts",
-      "default": "./types.ts"
     }
   },
   "dependencies": {
     "@openmapx/brands": "workspace:^",
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
-    "@openmapx/presets": "workspace:^"
+    "@openmapx/presets": "workspace:^",
+    "@openmapx/provider-kit": "workspace:^"
   },
   "devDependencies": {
     "@openmapx/mobility-core": "workspace:^"

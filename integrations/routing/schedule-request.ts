@@ -9,8 +9,8 @@ import {
   type WaypointSchedule,
 } from "@openmapx/core";
 import { parseWgs84PointList } from "@openmapx/integration-framework";
+import type { RoutingOptions } from "@openmapx/provider-kit/routing";
 import { round } from "./closure-exclusions.js";
-import type { RoutingOptions } from "./types.js";
 import { parseTravelMode } from "./validation.js";
 
 /**

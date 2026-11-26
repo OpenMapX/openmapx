@@ -13,8 +13,8 @@ import {
   forecastTimeZone,
   groupByLocalDay,
   round4,
-} from "@openmapx/integration-weather/lib";
-import type { WeatherProvider } from "@openmapx/integration-weather/types";
+  type WeatherProvider,
+} from "@openmapx/provider-kit/weather";
 
 const BASE_URL = "https://api.brightsky.dev";
 

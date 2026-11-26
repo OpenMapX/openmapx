@@ -1,5 +1,5 @@
 import { diceSimilarity } from "@openmapx/core";
-import { expandSearchQuery } from "@openmapx/integration-geocoding/query-expansion";
+import { expandSearchQuery } from "@openmapx/provider-kit/geocoding";
 
 /** A platform or track designation and everything after it, e.g. "Gl.27-36", "Gleis 9". */
 const PLATFORM_DESIGNATION =

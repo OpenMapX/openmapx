@@ -48,6 +48,7 @@ const PACKAGE_ROOTS = [
   "packages/open-landmarks-client",
   "packages/entur-client/src",
   "packages/otp-client/src",
+  "packages/provider-kit/src",
 ];
 const SKIPPED_DIRECTORIES = new Set([
   "node_modules",

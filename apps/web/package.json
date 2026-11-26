@@ -50,6 +50,7 @@
     "@openmapx/mangrove-react": "workspace:^",
     "@openmapx/mobility-core": "workspace:^",
     "@openmapx/place-ids": "workspace:^",
+    "@openmapx/provider-kit": "workspace:^",
     "@photo-sphere-viewer/core": "^5.15.1",
     "@photo-sphere-viewer/virtual-tour-plugin": "^5.15.1",
     "@serwist/next": "^9.5.13",

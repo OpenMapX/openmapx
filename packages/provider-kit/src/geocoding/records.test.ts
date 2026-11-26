@@ -1,6 +1,6 @@
 import { ProviderPayloadError } from "@openmapx/integration-framework";
 import { describe, expect, it } from "vitest";
-import { lngLatOrNull, usableGeocoderRecords } from "../records.js";
+import { lngLatOrNull, usableGeocoderRecords } from "./records.js";
 
 describe("geocoder records", () => {
   it("accepts only finite coordinates in range", () => {

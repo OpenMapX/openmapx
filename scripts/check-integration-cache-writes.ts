@@ -37,6 +37,7 @@ const SCAN_ROOTS = [
   "packages/integration-framework/src",
   "packages/mobility-core/src",
   "packages/noaa-coops-data",
+  "packages/provider-kit/src",
 ];
 const SKIPPED_DIRECTORIES = new Set(["node_modules", "dist", "__tests__", "__fixtures__"]);
 /** Unlike the provider HTTP gate, which follows server imports only, this one also reads `.tsx`. */

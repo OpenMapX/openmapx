@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 
-import type { Route } from "@integrations/routing/types";
 import {
   type BoundingBox,
   type LngLat,
@@ -16,6 +15,7 @@ import {
   useSettingsStore,
 } from "@openmapx/core";
 import type { NavIncidentResource } from "@openmapx/integration-framework/react";
+import type { Route } from "@openmapx/provider-kit/routing";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { nth } from "@/test";

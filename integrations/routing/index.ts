@@ -17,6 +17,7 @@ import {
   RoutingProviderError,
   scalarQueries,
 } from "@openmapx/integration-framework";
+import type { DirectionsResult } from "@openmapx/provider-kit/routing";
 import {
   applyClosureExclusions,
   hashKey,
@@ -66,7 +67,6 @@ import {
   ScheduleRequestValidationError,
 } from "./schedule-request.js";
 import { verifyRouteTraffic } from "./traffic-application.js";
-import type { DirectionsResult } from "./types.js";
 import { parseDateTime, parseTravelMode } from "./validation.js";
 
 export { evidenceBoundCacheTtlSeconds } from "./road-condition-routing.js";

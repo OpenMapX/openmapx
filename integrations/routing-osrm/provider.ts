@@ -11,7 +11,7 @@ import type {
   ManeuverSign,
   RoutingOptions,
   RoutingProvider,
-} from "@openmapx/integration-routing/types";
+} from "@openmapx/provider-kit/routing";
 
 // Populated by setup(ctx): service-registry URL → ctx.config.endpoint
 // (INTEGRATION_ROUTING_OSRM_ENDPOINT) → hardcoded fallback.

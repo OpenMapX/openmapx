@@ -11,23 +11,16 @@
       "types": "./index.ts",
       "default": "./index.ts"
     },
-    "./types": {
-      "types": "./types.ts",
-      "default": "./types.ts"
-    },
     "./orchestrator": {
       "types": "./orchestrator.ts",
       "default": "./orchestrator.ts"
-    },
-    "./bbox-provider": {
-      "types": "./bbox-provider.ts",
-      "default": "./bbox-provider.ts"
     }
   },
   "dependencies": {
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
-    "@openmapx/integration-geocoding": "workspace:^"
+    "@openmapx/integration-geocoding": "workspace:^",
+    "@openmapx/provider-kit": "workspace:^"
   },
   "devDependencies": {
     "@openmapx/mobility-core": "workspace:^"

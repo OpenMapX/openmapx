@@ -1,7 +1,7 @@
 import { toPoiSearchOutcome } from "@openmapx/core";
 import { OVERTURE_PLACES_SCHEMA_VERSION } from "@openmapx/core/published-data";
 import { createMockIntegrationContext, nth } from "@openmapx/integration-framework/testing";
-import type { PoiSearchProvider, PoiSearchReturn } from "@openmapx/integration-poi-search/types";
+import type { PoiSearchProvider, PoiSearchReturn } from "@openmapx/provider-kit/poi-search";
 import { assert, beforeEach, describe, expect, it, vi } from "vitest";
 
 /** Providers may answer with a bare array or an outcome; normalize either. */

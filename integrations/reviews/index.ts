@@ -1,4 +1,5 @@
 import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
+import type { ReviewSubject } from "@openmapx/provider-kit/reviews";
 import {
   fetchAggregate,
   fetchReviews,
@@ -7,7 +8,6 @@ import {
   submitReview,
   uploadReviewImage,
 } from "./orchestrator.js";
-import type { ReviewSubject } from "./types.js";
 
 /** Cache TTL for read endpoints (10 minutes). */
 const READ_TTL_SECONDS = 600;

@@ -6,7 +6,7 @@ import {
   type PlacePhoto,
   parseCommonsPage,
 } from "@openmapx/core";
-import type { PhotoProvider, PhotoQuery } from "@openmapx/integration-photos/types";
+import type { PhotoProvider, PhotoQuery } from "@openmapx/provider-kit/photos";
 
 /** Max original file size in bytes (50 MB). Filters out satellite/aerial imagery. */
 const MAX_FILE_SIZE = 50 * 1024 * 1024;

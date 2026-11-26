@@ -1,8 +1,8 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import type { PoiSearchProvider, PoiSearchResult } from "@openmapx/provider-kit/poi-search";
 import { describe, expect, it, vi } from "vitest";
 import { setup } from "../index";
 import { createPoiSearchOrchestrator } from "../orchestrator";
-import type { PoiSearchProvider, PoiSearchResult } from "../types";
 
 const BBOX = { south: 48.85, west: 2.33, north: 48.87, east: 2.37 };
 

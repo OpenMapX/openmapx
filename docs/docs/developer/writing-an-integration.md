@@ -471,7 +471,7 @@ required `getCurrentWeather(coords, options?)` returns `Promise<WeatherResponse>
 optional hourly/daily methods return their own `WeatherForecastResponse`
 envelopes. Daily points name calendar days at the location, with their IANA
 `timeZone`; group UTC readings with `groupByLocalDay` and `forecastTimeZone` from
-`@openmapx/integration-weather/lib`. Use `ctx.http`, captured contributors and
+`@openmapx/provider-kit/weather`. Use `ctx.http`, captured contributors and
 shutdown handling inside the factory.
 
 The same shape holds for `registerGeocodingProvider`, `registerRoutingProvider`,

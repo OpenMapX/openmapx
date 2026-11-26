@@ -7,8 +7,8 @@ import {
   withPhotoContributors,
 } from "@openmapx/core";
 import type { PhotoProvider } from "@openmapx/integration-framework";
-import { createBboxPhotoProvider } from "@openmapx/integration-photos/bbox-provider";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
+import { createBboxPhotoProvider } from "@openmapx/provider-kit/photos";
 
 interface PanoramaxFeature extends PanoramaxCreatorMetadata {
   id?: string;

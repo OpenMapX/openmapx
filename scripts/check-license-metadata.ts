@@ -54,6 +54,7 @@ const APACHE_PACKAGES = new Set([
   "mobility-formats-tomp",
   "mobility-core",
   "place-ids",
+  "provider-kit", // shared helpers and types for the provider domains
   "motis-feed-proxy-config",
   "transitous-core",
   "hardlinks",

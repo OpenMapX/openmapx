@@ -1,7 +1,3 @@
-import type {
-  GeocodingBias,
-  GeocodingProvider as GeocodingProviderImpl,
-} from "@openmapx/integration-geocoding/types";
 /**
  * Photon geocoding client (by Komoot).
  * Backed by OSM data. No API key required.
@@ -16,7 +12,12 @@ import type {
   SearchResult,
 } from "@openmapx/core";
 import { fetchJson, normalizeSearchTerm, resolvePoiIconPath } from "@openmapx/core";
-import { lngLatOrNull, usableGeocoderRecords } from "@openmapx/integration-geocoding/records";
+import {
+  type GeocodingBias,
+  type GeocodingProvider as GeocodingProviderImpl,
+  lngLatOrNull,
+  usableGeocoderRecords,
+} from "@openmapx/provider-kit/geocoding";
 
 // Populated by setup(ctx); see setPhotonUrl.
 const DEFAULT_PHOTON_URL = "https://photon.komoot.io";

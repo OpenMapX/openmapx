@@ -30,7 +30,7 @@ import type {
   MatchTracePoint,
   RoutingOptions,
   RoutingProvider,
-} from "@openmapx/integration-routing/types";
+} from "@openmapx/provider-kit/routing";
 import {
   sanitizeValhallaExclusions,
   type LngLat as ValhallaLngLat,

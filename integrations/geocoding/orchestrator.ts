@@ -5,7 +5,7 @@ import {
   resolveCapturedContributors,
 } from "@openmapx/integration-framework";
 import { type ContributingRecord, withContributors } from "@openmapx/mobility-core/contributors";
-import type { GeocodingProvider } from "./types.js";
+import type { GeocodingProvider } from "@openmapx/provider-kit/geocoding";
 
 type ProviderName = "entur" | "maptiler" | "nominatim" | "pelias" | "photon" | "motis" | "db-ris";
 

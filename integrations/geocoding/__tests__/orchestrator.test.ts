@@ -1,8 +1,8 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
+import type { GeocodingProvider, SearchResult } from "@openmapx/provider-kit/geocoding";
 import { describe, expect, it, vi } from "vitest";
 import { getGeocodingProvider } from "../orchestrator.js";
-import type { GeocodingProvider, SearchResult } from "../types.js";
 
 function result(id: string): SearchResult {
   return { id, label: id, coordinates: [0, 0], type: "poi", confidence: 1 };

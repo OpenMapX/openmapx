@@ -15,12 +15,6 @@ import {
 import { overtureTaxonomyCategoryEvidence } from "@openmapx/core/places/overtureCategoryMap";
 import { OVERTURE_PLACES_SCHEMA_VERSION } from "@openmapx/core/published-data";
 import type { DatabaseClient, IntegrationContext } from "@openmapx/integration-framework";
-import type {
-  CategoryId,
-  PoiSearchOutcome,
-  PoiSearchProvider,
-  PoiSearchResult,
-} from "@openmapx/integration-poi-search/types";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
   contributorsForRecords,
@@ -28,6 +22,12 @@ import {
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
 import { registerPlaceResolver } from "@openmapx/place-ids";
+import type {
+  CategoryId,
+  PoiSearchOutcome,
+  PoiSearchProvider,
+  PoiSearchResult,
+} from "@openmapx/provider-kit/poi-search";
 
 interface OvertureRow {
   canonical_id?: string | null;

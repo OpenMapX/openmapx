@@ -3,9 +3,9 @@ import {
   createMockIntegrationContext,
   routeRequest,
 } from "@openmapx/integration-framework/testing";
+import type { GeocodingProvider } from "@openmapx/provider-kit/geocoding";
 import { describe, expect, it, vi } from "vitest";
 import { setup } from "../index.js";
-import type { GeocodingProvider } from "../types.js";
 
 function reply() {
   const send = vi.fn();

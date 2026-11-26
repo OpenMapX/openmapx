@@ -16,7 +16,7 @@ import {
   resolveCapturedContributors,
   withContributors,
 } from "@openmapx/integration-framework";
-import type { WeatherProvider } from "./types.js";
+import type { WeatherProvider } from "@openmapx/provider-kit/weather";
 
 export function createWeatherOrchestrator(ctx: IntegrationContext) {
   function getProviders(): Array<{ provider: WeatherProvider; integrationId: string }> {

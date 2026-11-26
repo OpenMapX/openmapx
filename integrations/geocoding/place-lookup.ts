@@ -28,7 +28,7 @@ import {
   parseId,
   sanitizeAddressComponents,
 } from "@openmapx/core";
-import { formatAddress, formatStreetLine } from "./format-address.js";
+import { formatAddress, formatStreetLine } from "@openmapx/provider-kit/geocoding";
 import { resolveOsmLabel } from "./osm-label.js";
 
 function normalizeIdValue(s: string | undefined): string {

@@ -5,11 +5,11 @@ import {
   reverseGeocode as motisReverseGeocode,
 } from "@motis-project/motis-client";
 import type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "@openmapx/core";
-import { formatAddress } from "@openmapx/integration-geocoding/format-address";
-import type {
-  GeocodingBias,
-  GeocodingProvider as GeocodingProviderImpl,
-} from "@openmapx/integration-geocoding/types";
+import {
+  formatAddress,
+  type GeocodingBias,
+  type GeocodingProvider as GeocodingProviderImpl,
+} from "@openmapx/provider-kit/geocoding";
 import { uniqueModes } from "./mode-map.js";
 
 // MOTIS declares array query params (here the geocode `language` list) as

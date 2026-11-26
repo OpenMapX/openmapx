@@ -1,6 +1,5 @@
 "use client";
 
-import type { Review, ReviewAggregate } from "@integrations/reviews/types";
 import { API_ENDPOINTS, apiClient } from "@openmapx/core";
 import {
   MangroveConflictError,
@@ -10,6 +9,7 @@ import {
   type MangroveTransport,
   type SignerTransport,
 } from "@openmapx/mangrove-react";
+import type { Review, ReviewAggregate } from "@openmapx/provider-kit/reviews";
 import type { ReactNode } from "react";
 import { useMemo } from "react";
 import { MANGROVE_SIGNER_STORAGE_KEYS } from "@/lib/signOutStorage";

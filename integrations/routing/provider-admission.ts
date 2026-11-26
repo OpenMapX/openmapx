@@ -3,7 +3,7 @@ import {
   type IntegrationContext,
   type QuotaDecision,
 } from "@openmapx/integration-framework";
-import type { RoutingProvider } from "./types.js";
+import type { RoutingProvider } from "@openmapx/provider-kit/routing";
 
 const DEFAULT_REQUESTS_PER_MINUTE = 3_000;
 const DEFAULT_REQUESTS_PER_DAY = 500_000;

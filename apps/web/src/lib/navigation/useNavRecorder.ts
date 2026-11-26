@@ -1,12 +1,12 @@
 "use client";
 
-import type { Route, TravelMode } from "@integrations/routing/types";
 import {
   type FixInput,
   NAV_RECORDING_VERSION,
   type NavRecording,
   type RecordedReroute,
 } from "@openmapx/core";
+import type { Route, TravelMode } from "@openmapx/provider-kit/routing";
 import { useCallback, useEffect, useRef } from "react";
 import { useNavRecordingStore } from "./navRecordingStore";
 

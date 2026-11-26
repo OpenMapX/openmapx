@@ -1,5 +1,6 @@
 import type { LoadedIntegration } from "@openmapx/integration-framework";
 import { nth } from "@openmapx/integration-framework/testing";
+import type { Review, ReviewProvider, ReviewSubject } from "@openmapx/provider-kit/reviews";
 import { describe, expect, it, vi } from "vitest";
 import mangroveManifest from "../../reviews-mangrove/manifest.json";
 import {
@@ -8,7 +9,6 @@ import {
   fetchReviews,
   getReviewProviders,
 } from "../orchestrator.js";
-import type { Review, ReviewProvider, ReviewSubject } from "../types.js";
 
 function reviewProvider(id: string): ReviewProvider {
   return {

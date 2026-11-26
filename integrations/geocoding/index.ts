@@ -2,6 +2,11 @@ import { createHash } from "node:crypto";
 import { type AutocompleteResult, setOverpassUrl } from "@openmapx/core";
 import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
 import { registerPlaceResolver } from "@openmapx/place-ids";
+import {
+  expandSearchQuery,
+  fetchWithVariants,
+  type GeocodingBias,
+} from "@openmapx/provider-kit/geocoding";
 import { geocodingCacheIdentity } from "./cache-identity.js";
 import { isStationQuery, mergeForwardEvidence, rankForwardResults } from "./forward-ranking.js";
 import { MemCache } from "./mem-cache.js";
@@ -12,8 +17,6 @@ import {
   reverseGeocodeCountry,
   setPlaceLookupNominatimUrl,
 } from "./place-lookup.js";
-import { expandSearchQuery, fetchWithVariants } from "./query-expansion.js";
-import type { GeocodingBias } from "./types.js";
 
 /** Build a short hash key from a prefix + arbitrary data. */
 function hashKey(prefix: string, data: unknown): string {

@@ -13,7 +13,11 @@ import {
 } from "@openmapx/core/published-data";
 import { httpError, type IntegrationContext } from "@openmapx/integration-framework";
 import { getPresetById } from "@openmapx/presets";
-import type { PoiSearchProvider, PoiSearchResult, PoiSearchReturn } from "./types.js";
+import type {
+  PoiSearchProvider,
+  PoiSearchResult,
+  PoiSearchReturn,
+} from "@openmapx/provider-kit/poi-search";
 
 /**
  * What every orchestrator search returns.

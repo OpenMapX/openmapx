@@ -1,8 +1,13 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { nth } from "@openmapx/integration-framework/testing";
+import type {
+  DirectionsResult,
+  MatchResult,
+  RoutingProvider,
+  TravelMode,
+} from "@openmapx/provider-kit/routing";
 import { describe, expect, it, vi } from "vitest";
 import { captureRoutingResult, createRoutingOrchestrator } from "../orchestrator";
-import type { DirectionsResult, MatchResult, RoutingProvider, TravelMode } from "../types.js";
 
 function makeProvider(
   modes: TravelMode[],

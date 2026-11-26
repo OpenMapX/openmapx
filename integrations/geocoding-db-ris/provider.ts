@@ -7,11 +7,11 @@
 
 import type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "@openmapx/core";
 import type { ProviderCallContext } from "@openmapx/integration-framework";
+import type { RisClient } from "@openmapx/mobility-core/ris-client";
 import type {
   GeocodingBias,
   GeocodingProvider as GeocodingProviderImpl,
-} from "@openmapx/integration-geocoding/types";
-import type { RisClient } from "@openmapx/mobility-core/ris-client";
+} from "@openmapx/provider-kit/geocoding";
 import {
   buildStationDetail,
   stopPlaceToAutocompleteResult,

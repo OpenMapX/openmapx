@@ -13,8 +13,8 @@ import {
   type IntegrationContext,
   resolveIntegrationContributors,
 } from "@openmapx/integration-framework";
-import type { PoiSearchOutcome, PoiSearchProvider } from "@openmapx/integration-poi-search/types";
 import { OPENSTREETMAP_ATTRIBUTION } from "@openmapx/mobility-core/attribution";
+import type { PoiSearchOutcome, PoiSearchProvider } from "@openmapx/provider-kit/poi-search";
 
 const PRESET_SENTINEL = "__preset__";
 

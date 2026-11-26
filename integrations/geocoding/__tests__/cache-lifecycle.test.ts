@@ -1,5 +1,6 @@
 import type { AutocompleteResult, IntegrationContext } from "@openmapx/integration-framework";
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import type { GeocodingProvider } from "@openmapx/provider-kit/geocoding";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setup } from "../index.js";
 import { MemCache } from "../mem-cache.js";
@@ -8,7 +9,6 @@ import {
   reverseGeocodeCountry,
   setPlaceLookupNominatimUrl,
 } from "../place-lookup.js";
-import type { GeocodingProvider } from "../types.js";
 
 afterEach(() => {
   vi.useRealTimers();

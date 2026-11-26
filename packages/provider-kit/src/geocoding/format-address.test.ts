@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatAddress, formatStreetLine } from "../format-address.js";
+import { formatAddress, formatStreetLine } from "./format-address.js";
 
 // Guards the @fragaria/address-formatter integration (v7): country-aware
 // templates put the house number before/after the street depending on

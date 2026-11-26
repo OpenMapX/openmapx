@@ -1,8 +1,8 @@
 import type { PlacePhoto } from "@openmapx/core";
 import { withPhotoContributors } from "@openmapx/core";
 import type { PhotoProvider, PhotoQuery } from "@openmapx/integration-framework";
-import { createBboxPhotoProvider } from "@openmapx/integration-photos/bbox-provider";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
+import { createBboxPhotoProvider } from "@openmapx/provider-kit/photos";
 
 interface MapillaryImageResponse {
   data: Array<{

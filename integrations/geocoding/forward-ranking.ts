@@ -4,7 +4,7 @@ import {
   normalizeSearchTerm,
   type SearchResult,
 } from "@openmapx/core";
-import { expandSearchQuery } from "./query-expansion.js";
+import { expandSearchQuery } from "@openmapx/provider-kit/geocoding";
 
 const STATION_WORDS = new Set(["hauptbahnhof", "bahnhof", "station", "centraal"]);
 // An amenity or numbered address at a station is a different destination.

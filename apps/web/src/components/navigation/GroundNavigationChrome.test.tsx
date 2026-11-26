@@ -1,5 +1,5 @@
-import type { Route } from "@integrations/routing/types";
 import { useDirectionsStore, useNavigationStore } from "@openmapx/core";
+import type { Route } from "@openmapx/provider-kit/routing";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import type { ReactNode } from "react";

@@ -1,7 +1,7 @@
 import { OverpassTimeoutError } from "@openmapx/core";
+import type { PoiSearchProvider, PoiSearchResult } from "@openmapx/provider-kit/poi-search";
 import { describe, expect, it, vi } from "vitest";
 import { createPoiSearchOrchestrator } from "../orchestrator";
-import type { PoiSearchProvider, PoiSearchResult } from "../types";
 
 const BBOX = { south: 52.49, west: 13.38, north: 52.53, east: 13.43 };
 
