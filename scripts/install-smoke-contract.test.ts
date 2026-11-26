@@ -131,6 +131,69 @@ describe("install smoke script", () => {
   });
 });
 
+/** Runs `body` in a shell that has sourced the install smoke script. */
+function sourced(body: string, env: Record<string, string> = {}) {
+  return spawnSync(
+    "bash",
+    ["-c", `source "$1"; ${body}`, "bash", resolve(root, "scripts/ci/install-smoke.sh")],
+    { cwd: root, encoding: "utf8", env: { ...process.env, ...env } },
+  );
+}
+
+describe("shared smoke helpers", () => {
+  it("keeps one definition of the administrator session", () => {
+    const update = readFileSync(resolve(root, "scripts/ci/update-smoke.sh"), "utf8");
+    expect(script).toContain("create_admin_session() {");
+    expect(update).not.toContain("create_admin_session() {");
+    expect(update).not.toMatch(/^admin_email=/m);
+  });
+  it("waits until a job has succeeded and fails on a failed one", () => {
+    const ok = sourced(
+      `admin_api() { echo '{"id":"j1","type":"extension.install","status":"succeeded"}'; }; wait_for_job j1 5`,
+    );
+    expect(ok.status).toBe(0);
+    const bad = sourced(
+      `admin_api() { echo '{"id":"j1","type":"extension.install","status":"failed"}'; }; wait_for_job j1 5`,
+    );
+    expect(bad.status).not.toBe(0);
+    expect(bad.stderr).toContain("job j1 (extension.install): failed");
+  });
+  it("gives up after the timeout", () => {
+    const stuck = sourced(
+      `admin_api() { echo '{"id":"j1","type":"extension.install","status":"running"}'; }; wait_for_job j1 1`,
+    );
+    expect(stuck.status).not.toBe(0);
+    expect(stuck.stderr).toContain("job j1 (extension.install): running");
+  });
+  it("installs with the caller's options and waits for the queued job", () => {
+    const run = sourced(
+      `admin_cli() { echo "args: $*"; echo "Install queued (job j9). Track it under Admin → Activity."; }; wait_for_job() { echo "waited $1"; }; install_extension https://example.org/extension.json --confirmation abc`,
+    );
+    expect(run.stdout).toContain(
+      "args: ext install https://example.org/extension.json --confirmation abc",
+    );
+    expect(run.stdout).toContain("waited j9");
+    const silent = sourced(`admin_cli() { echo "nothing"; }; install_extension demo`);
+    expect(silent.stderr).toContain("ext install printed no job id");
+  });
+  it("reads the confirmation fingerprint from the preview", () => {
+    const run = sourced(
+      `admin_cli() { printf '{\\n  "confirmation": "%s"\\n}\\n' "${"a".repeat(64)}"; }; extension_confirmation demo`,
+    );
+    expect(run.stdout.trim()).toBe("a".repeat(64));
+    const line = sourced(
+      `admin_cli() { echo "Grants: none"; echo "Confirmation: ${"b".repeat(64)}"; }; extension_confirmation demo`,
+    );
+    expect(line.stdout.trim()).toBe("b".repeat(64));
+    const none = sourced(`admin_cli() { echo "nothing"; }; extension_confirmation demo`);
+    expect(none.stderr).toContain("ext preview printed no confirmation");
+  });
+  it("appends the session and the origin to every CLI call", () => {
+    const run = sourced(`openmapx() { echo "$*"; }; cookie_file=/tmp/c; admin_cli ext list`);
+    expect(run.stdout.trim()).toBe("ext list --session-file /tmp/c --api-origin https://localhost");
+  });
+});
+
 describe("install smoke script behaviour", () => {
   const scratch: string[] = [];
   afterEach(() => {

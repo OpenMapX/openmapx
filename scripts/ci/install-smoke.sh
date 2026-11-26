@@ -26,6 +26,9 @@ env_file="$infra/.env"
 project="openmapx"
 timeout_seconds="${INSTALL_SMOKE_TIMEOUT_SECONDS:-600}"
 work=""
+admin_email="update-smoke@openmapx.org"
+admin_password=""
+cookie_file=""
 blocker="openmapx-install-smoke-port-80-$$"
 current_step="starting"
 
@@ -135,6 +138,106 @@ logged() {
   local status=${PIPESTATUS[0]}
   set -e
   return "$status"
+}
+
+# An administrator account and its session cookie, as an operator creates them.
+# The password is read rather than assigned, so a shell trace does not show it.
+create_admin_session() {
+  step "Create an administrator session"
+  read -r admin_password < <(openssl rand -hex 24) || fail "could not generate the administrator password"
+  local api="https://localhost"
+  curl --silent --show-error --insecure --fail --max-time 30 \
+    --header "content-type: application/json" --header "origin: $api" \
+    --data @- "$api/api/auth/sign-up/email" >/dev/null \
+    <<<"{\"email\":\"$admin_email\",\"password\":\"$admin_password\",\"name\":\"Update smoke\"}" ||
+    fail "administrator sign-up failed"
+  openmapx users verify "$admin_email" >/dev/null || fail "users verify failed"
+  openmapx users promote "$admin_email" >/dev/null || fail "users promote failed"
+  local jar="$work/cookies"
+  curl --silent --show-error --insecure --fail --max-time 30 --cookie-jar "$jar" \
+    --header "content-type: application/json" --header "origin: $api" \
+    --data @- "$api/api/auth/sign-in/email" >/dev/null \
+    <<<"{\"email\":\"$admin_email\",\"password\":\"$admin_password\"}" ||
+    fail "administrator sign-in failed"
+  cookie_file="$work/session-cookie"
+  (umask 077 && awk '$6 ~ /better-auth\.session_token$/ { print $6 "=" $7 }' "$jar" >"$cookie_file")
+  [[ -s "$cookie_file" ]] || fail "no session cookie was issued"
+}
+
+# Runs an openmapx command as the administrator of create_admin_session.
+admin_cli() {
+  NODE_TLS_REJECT_UNAUTHORIZED=0 openmapx "$@" --session-file "$cookie_file" --api-origin https://localhost
+}
+
+# Calls the API as the administrator and prints the response body:
+#   admin_api <METHOD> <path> [<json body>]
+# The cookie reaches curl through a file descriptor and the body through stdin,
+# so neither the process list nor a shell trace shows them. Only a request with
+# a body declares JSON: the API refuses an empty body declared as JSON.
+admin_api() {
+  local method="$1" path="$2" data=()
+  if (($# > 2)); then
+    data=(--header "content-type: application/json" --data-binary @-)
+  fi
+  curl --silent --show-error --insecure --fail-with-body --max-time 30 --request "$method" \
+    --header @<(printf 'cookie: ' && cat "$cookie_file") --header "origin: https://localhost" \
+    ${data[@]+"${data[@]}"} "https://localhost$path" <<<"${3-}"
+}
+
+# Waits until an application job has succeeded and fails when it failed, was
+# cancelled or is still unfinished after the timeout (default $timeout_seconds):
+#   wait_for_job <job id> [<timeout seconds>]
+# A request that fails counts as not finished yet, since installing an
+# extension can restart the API that answers it.
+wait_for_job() {
+  local id="$1" deadline=$((SECONDS + ${2:-$timeout_seconds})) body state
+  local type="unknown" status="unanswered"
+  while true; do
+    if body="$(admin_api GET "/api/admin/jobs/$id?source=application")" &&
+      state="$(BODY="$body" node -e '
+        const job = JSON.parse(process.env.BODY);
+        if (typeof job.status !== "string") process.exit(1);
+        console.log(`${job.type ?? "unknown"}\t${job.status}`);
+      ' 2>/dev/null)"; then
+      IFS=$'\t' read -r type status <<<"$state"
+    fi
+    case "$status" in
+      succeeded) return 0 ;;
+      failed | cancelled) fail "job $id ($type): $status" ;;
+    esac
+    ((SECONDS < deadline)) || fail "job $id ($type): $status"
+    sleep $((deadline - SECONDS < 5 ? deadline - SECONDS : 5))
+  done
+}
+
+# Prints the confirmation fingerprint `ext preview` shows for an extension,
+# which install and update options take. The preview itself goes to stderr.
+#   extension_confirmation <catalogue id or manifest URL>
+extension_confirmation() {
+  local output fingerprint
+  output="$(admin_cli ext preview "$1" 2>&1)" || {
+    printf '%s\n' "$output" >&2
+    fail "ext preview failed"
+  }
+  printf '%s\n' "$output" >&2
+  fingerprint="$(grep -oE '[Cc]onfirmation"?: "?[a-f0-9]{64}' <<<"$output" | head -1 | grep -oE '[a-f0-9]{64}$')" ||
+    fail "ext preview printed no confirmation"
+  echo "$fingerprint"
+}
+
+# Queues an extension install with the caller's options unchanged and waits for
+# its job:
+#   install_extension <catalogue id or manifest URL> [<install option>...]
+install_extension() {
+  local output job
+  output="$(admin_cli ext install "$@" 2>&1)" || {
+    printf '%s\n' "$output" >&2
+    fail "ext install failed"
+  }
+  printf '%s\n' "$output"
+  job="$(sed -nE 's/.*Install queued \(job ([^)]+)\).*/\1/p' <<<"$output" | head -1)"
+  [[ -n "$job" ]] || fail "ext install printed no job id"
+  wait_for_job "$job"
 }
 
 manifest_image() {
