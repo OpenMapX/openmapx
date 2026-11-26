@@ -293,7 +293,7 @@ async function installedBackendImportSpecifier(
   if (integration.manifest.backend?.entry !== INSTALLED_BACKEND_ENTRY) return null;
   const bytes = readIntegrationFile(integration.directory, INSTALLED_BACKEND_ENTRY);
   if (!bytes) throw new Error("backend entry is missing or changed since installation");
-  await assertBundleImports(bytes.toString("utf8"));
+  assertBundleImports(bytes);
   const sha256 = createHash("sha256").update(bytes).digest("hex");
   return pathToFileURL(integrationCodeCache().materialize(integration.id, sha256, bytes)).href;
 }

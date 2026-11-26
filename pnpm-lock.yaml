@@ -338,6 +338,9 @@ importers:
       '@opentelemetry/sdk-metrics':
         specifier: ^3.0.0
         version: 3.1.0(@opentelemetry/api@1.10.0)
+      acorn:
+        specifier: ^8.19.0
+        version: 8.19.0
       better-auth:
         specifier: 1.7.18
         version: 1.7.18(@opentelemetry/api@1.10.0)(drizzle-orm@0.45.4(@opentelemetry/api@1.10.0)(kysely@0.29.7)(postgres@4.1.1))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -347,9 +350,6 @@ importers:
       drizzle-orm:
         specifier: ^0.45.4
         version: 0.45.4(@opentelemetry/api@1.10.0)(kysely@0.29.7)(postgres@4.1.1)
-      es-module-lexer:
-        specifier: ^2.3.2
-        version: 2.3.2
       fast-xml-parser:
         specifier: ^5.11.2
         version: 5.12.0

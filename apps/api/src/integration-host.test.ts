@@ -955,30 +955,41 @@ describe("initIntegrations — loader", () => {
       await expectLeftOut(2);
     });
 
+    const lineSeparator = String.fromCodePoint(0x2028);
     it.each([
-      ["a package outside the SDK", "@openmapx/integration-framework"],
-      ["an SDK entry that does not exist", "@openmapx/integration-sdk/not-an-entry"],
-      ["a host path alias", "@integrations/weather/index.ts"],
-    ])("records an unresolved import as an import failure (%s)", async (_label, specifier) => {
-      writeInstalled(
-        "deep",
-        [
-          `// records an unresolved import as an import failure: ${specifier}`,
-          `import ${JSON.stringify(specifier)};`,
-          "globalThis.__omxInstalledDeepEvaluated = true;",
-          "export function setup() {}",
-        ].join("\n"),
-      );
+      ["a package outside the SDK", "@openmapx/integration-framework", ""],
+      ["an SDK entry that does not exist", "@openmapx/integration-sdk/not-an-entry", ""],
+      ["a host path alias", "@integrations/weather/index.ts", ""],
+      // Node treats U+2028 as a line terminator, so these imports would run.
+      ["a host path alias after U+2028", "@integrations/weather/index.ts", lineSeparator],
+      [
+        "host source after U+2028",
+        new URL("../../../packages/place-ids/src/index.ts", import.meta.url).href,
+        lineSeparator,
+      ],
+    ])(
+      "records an unresolved import as an import failure (%s)",
+      async (_label, specifier, before) => {
+        writeInstalled(
+          "deep",
+          [
+            `// records an unresolved import as an import failure: ${specifier}`,
+            `${before}import ${JSON.stringify(specifier)};`,
+            "globalThis.__omxInstalledDeepEvaluated = true;",
+            "export function setup() {}",
+          ].join("\n"),
+        );
 
-      await initIntegrations(makeApp(), [installed()]);
+        await initIntegrations(makeApp(), [installed()]);
 
-      expect(getIntegration("deep")).toMatchObject({
-        enabled: false,
-        loadState: "failed",
-        loadError: { phase: "import", message: expect.stringContaining(specifier) },
-      });
-      expect(g.__omxInstalledDeepEvaluated).toBeUndefined();
-    });
+        expect(getIntegration("deep")).toMatchObject({
+          enabled: false,
+          loadState: "failed",
+          loadError: { phase: "import", message: expect.stringContaining(specifier) },
+        });
+        expect(g.__omxInstalledDeepEvaluated).toBeUndefined();
+      },
+    );
 
     it("still discards the generation when a built-in fails on reload", async () => {
       writeInstalled(
