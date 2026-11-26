@@ -553,7 +553,6 @@ Enabling the proxy requires `container.expose` to declare at least one port
 | `stripPrefix`      | boolean  | If `true`, the prefix is stripped before forwarding.                                                                                                                                                                                 |
 | `middleware`       | string[] | Traefik middleware names (e.g. `tiles-cache@file`).                                                                                                                                                                                  |
 | `priority`         | number   | Higher wins when rules overlap. Use a low value for catch-all routes.                                                                                                                                                                |
-| `authRequired`     | boolean  | Reserved for a future forward-auth integration.                                                                                                                                                                                      |
 | `additionalRoutes` | array    | Extra routers pointing at the same backend. Each entry sets exactly one of `path` (exact match) or `pathPrefix`, plus optional `middleware`.                                                                                         |
 
 A proxy with `host` routes by the resolved hostname and can also use a

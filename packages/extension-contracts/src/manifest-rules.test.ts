@@ -340,6 +340,187 @@ describe("community service manifests", () => {
   });
 });
 
+describe("service requests", () => {
+  const svc = {
+    id: "demo-engine",
+    name: "Demo engine",
+    version: "1.0.0",
+    platform: "1.0",
+    quality: "community",
+    container: { image: "ghcr.io/example/demo", tag: "1", memory: "512m" },
+    ownsSchema: "demo",
+  };
+
+  it("accepts every kind of request", () => {
+    expect(
+      validateServiceManifest(
+        {
+          ...svc,
+          requests: {
+            hostPaths: [{ source: "/srv/gps", target: "/data/gps", readOnly: true }],
+            platformServices: ["postgis", "overpass"],
+            reachableByPlatform: true,
+            peerServices: true,
+            database: {
+              roles: [
+                {
+                  name: "demo_ingest",
+                  privileges: ["create-schema:demo", "use-schema:extensions"],
+                },
+                { name: "demo_reader", privileges: ["use-schema:demo"], connectionKey: "READ_URL" },
+                { name: "demo_login", privileges: [], connectionKey: "LOGIN_URL" },
+              ],
+            },
+          },
+        },
+        community,
+      ),
+    ).toEqual({ valid: true, errors: [] });
+  });
+
+  const secretField = (key: string) => ({
+    configSchema: {
+      type: "object",
+      properties: { [key]: { type: "string", "x-openmapx-secret": true } },
+    },
+  });
+
+  it.each([
+    [
+      {},
+      { hostPaths: [{ source: "srv/gps", target: "/data", readOnly: true }] },
+      "must be an absolute host path",
+    ],
+    [
+      {},
+      { hostPaths: [{ source: "/srv/../etc", target: "/data", readOnly: true }] },
+      "must not contain '.' or '..' segments",
+    ],
+    [
+      {},
+      { hostPaths: [{ source: "/srv/a:b", target: "/data", readOnly: true }] },
+      "must be an absolute host path",
+    ],
+    [{}, { hostPaths: [{ source: "/srv/gps", target: "/data" }] }, "readOnly"],
+    [{}, { platformServices: ["postgis", "postgis"] }, 'requests: duplicate "postgis"'],
+    [
+      {},
+      { database: { roles: [{ name: "openmapx_api", privileges: [] }] } },
+      'role "openmapx_api" is a reserved name',
+    ],
+    [
+      {},
+      { database: { roles: [{ name: "ab", privileges: [] }] } },
+      "must be a lowercase PostgreSQL role name",
+    ],
+    [
+      {},
+      { database: { roles: [{ name: "demo", privileges: ["superuser"] }] } },
+      "unknown database privilege",
+    ],
+    [
+      {},
+      { database: { roles: [{ name: "demo", privileges: ["create-schema"] }] } },
+      "unknown database privilege",
+    ],
+    [
+      {},
+      { database: { roles: [{ name: "demo", privileges: ["usage:extensions"] }] } },
+      "unknown database privilege",
+    ],
+    [
+      {},
+      { database: { roles: [{ name: "demo", privileges: ["member-of:demo_readers"] }] } },
+      "unknown database privilege",
+    ],
+    [
+      {},
+      {
+        database: {
+          roles: [
+            { name: "demo_a", privileges: [] },
+            { name: "demo_b", privileges: [] },
+          ],
+        },
+      },
+      'requests.database: role "demo_b" needs its own connectionKey',
+    ],
+    [
+      {},
+      {
+        database: {
+          roles: [
+            { name: "demo_a", privileges: [], connectionKey: "DATABASE_URL" },
+            { name: "demo_b", privileges: [] },
+          ],
+        },
+      },
+      'requests.database: role "demo_b" needs its own connectionKey',
+    ],
+    [
+      secretField("DATABASE_URL"),
+      { database: { roles: [{ name: "demo", privileges: [] }] } },
+      'requests.database: "DATABASE_URL" is filled by the platform and must not be a configSchema property',
+    ],
+    [
+      secretField("READ_URL"),
+      { database: { roles: [{ name: "demo", privileges: [], connectionKey: "READ_URL" }] } },
+      'requests.database: "READ_URL" is filled by the platform and must not be a configSchema property',
+    ],
+    [{}, { routes: [] }, "requests"],
+  ])("refuses %j with requests %j", (extra, requests, message) => {
+    const result = validateServiceManifest({ ...svc, ...extra, requests }, community);
+    expect(result.valid).toBe(false);
+    expect(result.errors.join("\n")).toContain(message);
+  });
+
+  it("lets a setting that is not a connection key stay in configSchema", () => {
+    expect(
+      validateServiceManifest(
+        {
+          ...svc,
+          ...secretField("API_TOKEN"),
+          requests: { database: { roles: [{ name: "demo", privileges: [] }] } },
+        },
+        community,
+      ).valid,
+    ).toBe(true);
+  });
+
+  it("refuses a reserved schema, requests on a built-in, a long device and the removed authRequired", () => {
+    expect(
+      validateServiceManifest({ ...svc, ownsSchema: "ext_other" }, community).errors.join("\n"),
+    ).toContain('ownsSchema: "ext_other" is a reserved name');
+    expect(
+      validateServiceManifest(
+        { ...svc, quality: "built-in", requests: { peerServices: true } },
+        { firstParty: true },
+      ).errors.join("\n"),
+    ).toContain("requests: built-in services use their existing fields");
+    expect(
+      validateServiceManifest(
+        {
+          ...svc,
+          quality: "built-in",
+          container: { ...svc.container, devices: [`/dev/${"a".repeat(251)}`] },
+        },
+        { firstParty: true },
+      ).valid,
+    ).toBe(false);
+    const proxied = validateServiceManifest(
+      {
+        ...svc,
+        quality: "built-in",
+        container: { ...svc.container, expose: [8080] },
+        exposure: { proxy: { enabled: true, authRequired: true } },
+      },
+      { firstParty: true },
+    );
+    expect(proxied.valid).toBe(false);
+    expect(proxied.errors.join("\n")).toMatch(/authRequired/);
+  });
+});
+
 describe("extension manifests", () => {
   it("require platform and a semantic version", () => {
     expect(validateExtensionManifest(extension)).toEqual({ valid: true, errors: [] });

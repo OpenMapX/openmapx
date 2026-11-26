@@ -121865,9 +121865,6 @@
                                       "type": "string"
                                     }
                                   },
-                                  "authRequired": {
-                                    "type": "boolean"
-                                  },
                                   "priority": {
                                     "type": "integer",
                                     "minimum": 0,
@@ -135529,6 +135526,7 @@
                               "type": "array",
                               "items": {
                                 "type": "string",
+                                "maxLength": 255,
                                 "pattern": "^\\/dev\\/[a-zA-Z0-9_\\-/]+$"
                               }
                             },
@@ -136117,9 +136115,6 @@
                                     "type": "string"
                                   }
                                 },
-                                "authRequired": {
-                                  "type": "boolean"
-                                },
                                 "priority": {
                                   "type": "integer",
                                   "minimum": 0,
@@ -136158,6 +136153,124 @@
                               },
                               "required": [
                                 "enabled"
+                              ],
+                              "additionalProperties": {
+                                "description": "Recursive JSON. Objects with an own __proto__ key are rejected at every depth.",
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/Admin_getAdminService_200___schema0"
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          "additionalProperties": {
+                            "description": "Recursive JSON. Objects with an own __proto__ key are rejected at every depth.",
+                            "allOf": [
+                              {
+                                "$ref": "#/components/schemas/Admin_getAdminService_200___schema0"
+                              }
+                            ]
+                          }
+                        },
+                        "requests": {
+                          "type": "object",
+                          "properties": {
+                            "hostPaths": {
+                              "minItems": 1,
+                              "maxItems": 16,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "source": {
+                                    "type": "string",
+                                    "maxLength": 255,
+                                    "pattern": "^\\/(?:[A-Za-z0-9._-]+(?:\\/[A-Za-z0-9._-]+)*)?$"
+                                  },
+                                  "target": {
+                                    "type": "string",
+                                    "pattern": "^\\/[^\\s]+$"
+                                  },
+                                  "readOnly": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "source",
+                                  "target",
+                                  "readOnly"
+                                ],
+                                "additionalProperties": {
+                                  "description": "Recursive JSON. Objects with an own __proto__ key are rejected at every depth.",
+                                  "allOf": [
+                                    {
+                                      "$ref": "#/components/schemas/Admin_getAdminService_200___schema0"
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "platformServices": {
+                              "minItems": 1,
+                              "maxItems": 16,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "maxLength": 48,
+                                "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+                              }
+                            },
+                            "reachableByPlatform": {
+                              "type": "boolean"
+                            },
+                            "peerServices": {
+                              "type": "boolean"
+                            },
+                            "database": {
+                              "type": "object",
+                              "properties": {
+                                "roles": {
+                                  "minItems": 1,
+                                  "maxItems": 8,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string",
+                                        "pattern": "^[a-z][a-z0-9_]{2,62}$"
+                                      },
+                                      "privileges": {
+                                        "maxItems": 16,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string",
+                                          "pattern": "^(create-schema|use-schema):([a-z][a-z0-9_]{0,62})$"
+                                        }
+                                      },
+                                      "connectionKey": {
+                                        "type": "string",
+                                        "pattern": "^[A-Z][A-Z0-9_]*$"
+                                      }
+                                    },
+                                    "required": [
+                                      "name",
+                                      "privileges"
+                                    ],
+                                    "additionalProperties": {
+                                      "description": "Recursive JSON. Objects with an own __proto__ key are rejected at every depth.",
+                                      "allOf": [
+                                        {
+                                          "$ref": "#/components/schemas/Admin_getAdminService_200___schema0"
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              },
+                              "required": [
+                                "roles"
                               ],
                               "additionalProperties": {
                                 "description": "Recursive JSON. Objects with an own __proto__ key are rejected at every depth.",

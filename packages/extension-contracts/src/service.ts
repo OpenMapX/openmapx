@@ -1,11 +1,18 @@
 import z from "zod/v4";
 import { capabilityNameErrors } from "./capabilities";
+import {
+  DATABASE_PRIVILEGE_PATTERN,
+  DATABASE_ROLE_NAME_PATTERN,
+  HOST_PATH_MAX_LENGTH,
+  HOST_PATH_PATTERN,
+  isReservedDatabaseName,
+} from "./grants";
 import { componentIdSchema } from "./identifiers";
 import { platformVersionSchema } from "./platform";
 import { isValidSecretKey, SECRET_KEY_RE } from "./secret-key";
 import { semverSchema } from "./semver";
 import { checkManifestSandbox, isComposeVarReference } from "./service-policy";
-import type { ManifestProvenance, ServiceManifest } from "./service-types";
+import type { ManifestProvenance, ServiceManifest, ServiceRequests } from "./service-types";
 
 const IMAGE_REGEX = /^[a-z0-9]([a-z0-9._\-/])*$/;
 const TAG_REGEX = /^[a-zA-Z0-9._-]+$/;
@@ -160,13 +167,12 @@ const proxyHostSchema = z.object({
 });
 
 const proxyExposureSchema = z
-  .object({
+  .strictObject({
     enabled: z.boolean(),
     host: proxyHostSchema.optional(),
     pathPrefix: z.string().regex(PATH_PREFIX_REGEX).optional(),
     stripPrefix: z.boolean().optional(),
     middleware: z.array(z.string()).optional(),
-    authRequired: z.boolean().optional(),
     priority: z.number().int().min(0).max(1_000_000).optional(),
     additionalRoutes: z.array(additionalRouteSchema).optional(),
   })
@@ -357,7 +363,14 @@ const containerSchema = z.strictObject({
     .array(z.string())
     .refine((caps) => caps.every((c) => ALLOWED_CAPS.has(c) || c === "ALL"), "unknown capability")
     .optional(),
-  devices: z.array(z.string().regex(/^\/dev\/[a-zA-Z0-9_\-/]+$/)).optional(),
+  devices: z
+    .array(
+      z
+        .string()
+        .max(255)
+        .regex(/^\/dev\/[a-zA-Z0-9_\-/]+$/),
+    )
+    .optional(),
   gpu: z
     .object({
       driver: z.string().default("nvidia"),
@@ -475,6 +488,35 @@ const configSchema = z
   })
   .passthrough();
 
+/** The variable the platform fills with a requested role's connection URL when the role names none. */
+export const DEFAULT_DATABASE_CONNECTION_KEY = "DATABASE_URL";
+
+const hostPathRequestSchema = z.strictObject({
+  source: z
+    .string()
+    .max(HOST_PATH_MAX_LENGTH)
+    .regex(HOST_PATH_PATTERN, "must be an absolute host path"),
+  target: z.string().regex(ABSOLUTE_PATH_REGEX, "must be absolute"),
+  readOnly: z.boolean(),
+});
+
+const databaseRoleRequestSchema = z.strictObject({
+  name: z.string().regex(DATABASE_ROLE_NAME_PATTERN, "must be a lowercase PostgreSQL role name"),
+  privileges: z
+    .array(z.string().regex(DATABASE_PRIVILEGE_PATTERN, "unknown database privilege"))
+    .max(16),
+  connectionKey: z.string().regex(SERVICE_CONFIG_KEY_REGEX).optional(),
+});
+
+/** Capabilities a community service asks the operator to grant. */
+export const serviceRequestsSchema = z.strictObject({
+  hostPaths: z.array(hostPathRequestSchema).min(1).max(16).optional(),
+  platformServices: z.array(componentIdSchema).min(1).max(16).optional(),
+  reachableByPlatform: z.boolean().optional(),
+  peerServices: z.boolean().optional(),
+  database: z.strictObject({ roles: z.array(databaseRoleRequestSchema).min(1).max(8) }).optional(),
+});
+
 const serviceManifestShape = {
   id: componentIdSchema,
   name: z.string().min(1),
@@ -523,6 +565,7 @@ const serviceManifestShape = {
   volumes: z.array(volumeSchema).optional(),
   bindMounts: z.array(bindMountSchema).optional(),
   exposure: exposureSchema.optional(),
+  requests: serviceRequestsSchema.optional(),
 
   buildCommand: z.string().optional(),
   buildImages: z.record(componentIdSchema, buildImageSchema).optional(),
@@ -556,6 +599,64 @@ function hasCommunityBindMountEntries(raw: unknown, provenance: ManifestProvenan
   }
   const bindMounts = (raw as Record<string, unknown>).bindMounts;
   return Array.isArray(bindMounts) && bindMounts.length > 0;
+}
+
+function hasDotSegment(path: string): boolean {
+  return path.split("/").some((segment) => segment === "." || segment === "..");
+}
+
+function duplicateErrors(values: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const reported = new Set<string>();
+  const errors: string[] = [];
+  for (const value of values) {
+    if (seen.has(value) && !reported.has(value)) {
+      errors.push(`requests: duplicate "${value}"`);
+      reported.add(value);
+    }
+    seen.add(value);
+  }
+  return errors;
+}
+
+function requestErrors(
+  requests: ServiceRequests,
+  configProps: Record<string, unknown>,
+  provenance: ManifestProvenance,
+): string[] {
+  // Built-in services already hold these capabilities through their bind
+  // mounts, networks and roles; a second way to say the same thing would
+  // have to be kept consistent with the first.
+  if (provenance.firstParty) return ["requests: built-in services use their existing fields"];
+  const errors: string[] = [];
+  const hostPaths = requests.hostPaths ?? [];
+  if (hostPaths.some((path) => hasDotSegment(path.source) || hasDotSegment(path.target))) {
+    errors.push("requests.hostPaths: paths must not contain '.' or '..' segments");
+  }
+  errors.push(...duplicateErrors(hostPaths.map((path) => path.target)));
+  errors.push(...duplicateErrors(requests.platformServices ?? []));
+  const roles = requests.database?.roles ?? [];
+  errors.push(...duplicateErrors(roles.map((role) => role.name)));
+  const connectionKeys = new Set<string>();
+  for (const role of roles) {
+    errors.push(...duplicateErrors(role.privileges));
+    if (isReservedDatabaseName(role.name)) {
+      errors.push(`requests.database: role "${role.name}" is a reserved name`);
+    }
+    const key = role.connectionKey ?? DEFAULT_DATABASE_CONNECTION_KEY;
+    if (connectionKeys.has(key)) {
+      errors.push(`requests.database: role "${role.name}" needs its own connectionKey`);
+    }
+    connectionKeys.add(key);
+    // The platform writes the role's connection URL into this variable, so an
+    // operator-set value of the same name would silently lose to it.
+    if (Object.hasOwn(configProps, key)) {
+      errors.push(
+        `requests.database: "${key}" is filled by the platform and must not be a configSchema property`,
+      );
+    }
+  }
+  return errors;
 }
 
 export function validateServiceManifest(
@@ -638,6 +739,11 @@ export function validateServiceManifest(
       );
     }
   }
+
+  if (!provenance.firstParty && m.ownsSchema && isReservedDatabaseName(m.ownsSchema)) {
+    errors.push(`ownsSchema: "${m.ownsSchema}" is a reserved name`);
+  }
+  if (m.requests) errors.push(...requestErrors(m.requests, configProps, provenance));
 
   // A service can ship multiple `produces` entries for the same `type` only
   // when each carries a distinct `instance` id. Same (type, instance) pair
