@@ -1,19 +1,73 @@
+import type { AttentionInput } from "@openmapx/core/api-contracts";
 import { attentionUpsertStatement } from "@openmapx/core/attention";
+import postgres from "postgres";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { createMigratedPostgresFixture } from "../test/postgres-fixture";
+import { createMigratedPostgresContainer } from "../test/postgres-fixture";
 import { acknowledgeAttention, listAttention, raiseAttention, resolveAttention } from "./attention";
 
 const dbDescribe = process.env.OPENMAPX_RUN_DATABASE_TESTS === "1" ? describe : describe.skip;
 
+/** A psql meta-command argument: single-quoted, with psql's backslash escapes. */
+const psqlArgument = (value: string) =>
+  `'${value.replace(/\\/g, "\\\\").replace(/'/g, "''").replace(/\n/g, "\\n")}'`;
+
 dbDescribe("stored attention list", () => {
-  let fixture: Awaited<ReturnType<typeof createMigratedPostgresFixture>>;
+  let fixture: Awaited<ReturnType<typeof createMigratedPostgresContainer>>;
+  // A postgres.js client without drizzle's pass-through JSON serializers.
+  let plain: postgres.Sql;
 
   beforeAll(async () => {
-    fixture = await createMigratedPostgresFixture();
+    fixture = await createMigratedPostgresContainer();
+    plain = postgres(fixture.connectionUri, { max: 1 });
   }, 90_000);
   afterAll(async () => {
+    await plain?.end({ timeout: 2 });
     await fixture?.stop();
   });
+
+  /**
+   * Runs the statement with the psql binary inside the database container, as
+   * the host CLI does. `\bind` cannot send NULL, so an absent value is ''.
+   */
+  async function raiseWithPsql(input: AttentionInput): Promise<string> {
+    const { text, values } = attentionUpsertStatement(input);
+    const script = `${text}\n\\bind ${values.map((value) => psqlArgument(value ?? "")).join(" ")} \\g\n`;
+    await fixture.container.copyContentToContainer([
+      { content: script, target: "/tmp/attention-raise.sql" },
+    ]);
+    const result = await fixture.container.exec([
+      "psql",
+      "-U",
+      "postgres",
+      "-d",
+      "openmapx_test",
+      "-X",
+      "-A",
+      "-t",
+      "-v",
+      "ON_ERROR_STOP=1",
+      "-f",
+      "/tmp/attention-raise.sql",
+    ]);
+    if (result.exitCode !== 0) throw new Error(`psql failed: ${result.output}`);
+    return result.stdout.trim();
+  }
+
+  async function raiseWithPlainClient(input: AttentionInput): Promise<string> {
+    const { text, values } = attentionUpsertStatement(input);
+    const [row] = await plain.unsafe<{ outcome: string }[]>(text, values);
+    return row?.outcome ?? "";
+  }
+
+  /** Everything stored for `key` apart from the key and the timestamps. */
+  async function storedRow(key: string) {
+    const [row] = await fixture.sql`
+      SELECT severity, source, title, detail, action::text AS action,
+        jsonb_typeof(action) AS action_type, clearance, occurrence_ref,
+        acknowledged_at IS NOT NULL AS acknowledged
+      FROM attention_item WHERE key = ${key}`;
+    return row;
+  }
   beforeEach(async () => {
     await fixture.sql`DELETE FROM attention_notification`;
     await fixture.sql`DELETE FROM attention_item`;
@@ -174,26 +228,43 @@ dbDescribe("stored attention list", () => {
     expect((await listAttention(fixture.db)).map((item) => item.key)).toContain("host.written");
   });
 
-  it("writes the same row through a plain SQL client as through the service", async () => {
-    const input = {
-      severity: "warning",
-      source: "operations",
-      title: "Restart failed",
-      detail: "The service did not come back.",
-      action: { label: "Open", href: "/admin/activity" },
-      clearance: "acknowledge",
-      occurrenceRef: "job-7",
-    } as const;
-    await raiseAttention({ ...input, key: "written.by-service" }, fixture.db);
-    const { text, values } = attentionUpsertStatement({ ...input, key: "written.by-host" });
-    await fixture.sql.unsafe(text, values);
-    const rows = await fixture.sql`
-      SELECT key, severity, source, title, detail, action, clearance, occurrence_ref, acknowledged_at
-      FROM attention_item WHERE key IN ('written.by-service', 'written.by-host') ORDER BY key`;
-    expect(rows).toHaveLength(2);
-    const [byHost, byService] = rows;
-    expect({ ...byHost, key: null }).toEqual({ ...byService, key: null });
-  });
+  const minimal = { severity: "critical", source: "updates", title: "Update incomplete" } as const;
+  const full = {
+    severity: "warning",
+    source: "operations",
+    title: "Restart of 'demo' failed…",
+    detail: 'The service did not come back.\nIt said "no".',
+    action: { label: "Open", href: "/admin/activity?job=7" },
+    clearance: "acknowledge",
+    occurrenceRef: "job-7",
+  } as const;
+
+  for (const [client, raise] of [
+    ["a postgres.js client without drizzle", raiseWithPlainClient],
+    ["psql with \\bind", raiseWithPsql],
+  ] as const) {
+    it(`writes the same row and outcome through ${client} as through the service`, async () => {
+      for (const [name, input] of [
+        ["minimal", minimal],
+        ["full", full],
+      ] as const) {
+        const service = `by-service.${name}`;
+        const host = `by-host.${name}`;
+        expect(await raiseAttention({ ...input, key: service }, fixture.db)).toBe("inserted");
+        expect(await raise({ ...input, key: host })).toBe("inserted");
+        expect(await storedRow(host)).toEqual(await storedRow(service));
+        expect((await storedRow(host))?.action_type).toBe("action" in input ? "object" : null);
+        expect(await raise({ ...input, key: host })).toBe("unchanged");
+        // The other writer sees the same row, so neither rewrites it.
+        expect(await raiseAttention({ ...input, key: host }, fixture.db)).toBe("unchanged");
+        expect(await raise({ ...input, key: service })).toBe("unchanged");
+        expect(await raise({ ...input, key: host, severity: "critical", title: "Worse" })).toBe(
+          input.severity === "critical" ? "changed" : "escalated",
+        );
+        expect(await raise({ ...input, key: host, occurrenceRef: "job-8" })).toBe("inserted");
+      }
+    });
+  }
 
   it("lists critical items first and forgets a resolved one", async () => {
     await raiseAttention(

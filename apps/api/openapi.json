@@ -46204,14 +46204,7 @@
         ],
         "responses": {
           "204": {
-            "description": "Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "description": "Response"
-                }
-              }
-            }
+            "description": "Response"
           },
           "400": {
             "description": "Response",

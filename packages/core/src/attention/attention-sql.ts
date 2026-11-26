@@ -10,11 +10,18 @@ export type AttentionUpsertInput = AttentionInput;
 // nothing. The insert reads `old` so that `old` locks and reads the row before
 // it changes: a `FOR UPDATE` scan run after the same statement has updated a
 // row skips that row, and every update would then report `inserted`.
+//
+// Every parameter is declared `text`, so no client chooses its own encoding:
+// a postgres.js client without drizzle would otherwise serialise a `jsonb`
+// parameter a second time and store the action as a JSON string. The optional
+// parameters treat empty text as absent, because `psql \bind` cannot send
+// NULL; the input contract already refuses an empty detail or reference.
 const ATTENTION_UPSERT_SQL = `WITH old AS (
   SELECT severity, acknowledged_at, occurrence_ref FROM attention_item WHERE key = $1::text FOR UPDATE
 ), written AS (
   INSERT INTO attention_item AS item (key, severity, source, title, detail, action, clearance, occurrence_ref)
-  SELECT $1::text, $2::text, $3::text, $4::text, $5::text, $6::jsonb, $7::text, $8::text
+  SELECT $1::text, $2::text, $3::text, $4::text, NULLIF($5::text, ''), NULLIF($6::text, '')::jsonb,
+    COALESCE(NULLIF($7::text, ''), 'condition'), NULLIF($8::text, '')
   FROM (SELECT count(*) FROM old) AS locked
   ON CONFLICT (key) DO UPDATE SET
     severity = EXCLUDED.severity, source = EXCLUDED.source, title = EXCLUDED.title,
@@ -39,7 +46,8 @@ const ATTENTION_UPSERT_SQL = `WITH old AS (
 SELECT CASE
   WHEN NOT EXISTS (SELECT 1 FROM written) THEN 'unchanged'
   WHEN NOT EXISTS (SELECT 1 FROM old) THEN 'inserted'
-  WHEN $8::text IS NOT NULL AND $8::text IS DISTINCT FROM (SELECT occurrence_ref FROM old) THEN 'inserted'
+  WHEN NULLIF($8::text, '') IS NOT NULL
+    AND NULLIF($8::text, '') IS DISTINCT FROM (SELECT occurrence_ref FROM old) THEN 'inserted'
   WHEN array_position(ARRAY['info','warning','critical'], $2::text)
      > array_position(ARRAY['info','warning','critical'], (SELECT severity FROM old)) THEN 'escalated'
   ELSE 'changed' END AS outcome`;
@@ -47,6 +55,16 @@ SELECT CASE
 /**
  * The statement that raises or updates one attention item, returning one row
  * `{ outcome }` of `inserted`, `escalated`, `changed` or `unchanged`.
+ *
+ * Any client may run it, as long as it passes each value as text:
+ * - `$1` key, `$2` severity, `$3` source, `$4` title: required, as given.
+ * - `$5` detail, `$8` occurrence reference: the text, or NULL or `''` when absent.
+ * - `$6` action: the action object serialised as JSON text (`JSON.stringify`),
+ *   never a JSON value the client encodes itself; NULL or `''` when absent.
+ * - `$7` clearance: `condition` or `acknowledge`; NULL or `''` mean `condition`.
+ *
+ * `values` holds them in that order, with NULL for an absent value. A client
+ * that cannot send NULL, such as `psql \bind`, passes `''` instead.
  */
 export function attentionUpsertStatement(input: AttentionUpsertInput): {
   text: string;

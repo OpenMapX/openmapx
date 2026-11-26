@@ -463,7 +463,7 @@ export const listAdminAttention = async (
 };
 
 export type acknowledgeAdminAttentionResponse204 = {
-  data: unknown;
+  data: void;
   status: 204;
 };
 
