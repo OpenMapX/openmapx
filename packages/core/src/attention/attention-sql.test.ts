@@ -1,7 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { attentionUpsertStatement } from "./attention-sql";
+import { ATTENTION_SEVERITIES } from "../api/contracts/integration-admin/attention";
+import { ATTENTION_SEVERITY_ORDER_SQL, attentionUpsertStatement } from "./attention-sql";
 
 describe("attentionUpsertStatement", () => {
+  it("ranks severities in SQL only through the contract's order", () => {
+    expect(ATTENTION_SEVERITY_ORDER_SQL).toBe(
+      `ARRAY[${ATTENTION_SEVERITIES.map((severity) => `'${severity}'`).join(",")}]`,
+    );
+    const { text } = attentionUpsertStatement({
+      key: "k",
+      severity: "info",
+      source: "t",
+      title: "T",
+    });
+    const arrays = text.match(/ARRAY\[[^\]]*\]/g) ?? [];
+    expect(arrays.length).toBeGreaterThan(0);
+    expect(new Set(arrays)).toEqual(new Set([ATTENTION_SEVERITY_ORDER_SQL]));
+  });
+
   it("passes absent fields as null and the default clearance", () => {
     const { text, values } = attentionUpsertStatement({
       key: "k",

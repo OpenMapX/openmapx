@@ -31,7 +31,7 @@ integration that has registered a personal-data handler. No integration can
 register one yet.
 
 The PostGIS entrypoint lets the API's database role create schemas named
-`ext_<id>` for installed integrations, or rename a schema to such a name,
+`ext_<id>`, reserved for installed integrations, or rename a schema to such a name,
 besides `data_manager` and `drizzle`.
 
 The operations agent's community repository records carry the approved grants
@@ -48,8 +48,8 @@ overview's attention list. Nothing raises one yet.
 
 Extension manifests change in breaking ways:
 
-- Integration manifests lose `backend.cron`. `frontend.panel` is an object, such as `{}` or `{ "detents": "place" }`; `true` and `false` are refused.
-- Service manifests lose `exposure.proxy.authRequired`, and the proxy object refuses unknown keys. A device path is at most 255 characters.
+- Integration manifests lose `backend.cron`, and the `backend` object refuses unknown keys. `frontend.panel` is an object, such as `{}` or `{ "detents": "place" }`; `true` and `false` are refused.
+- Service manifests lose `exposure.proxy.authRequired`, and the proxy object refuses unknown keys. A device path is at most 255 characters. `ownsSchema` must start with a letter and have at most 63 characters.
 - Extension manifests lose `readiness`. A `config[]` entry has a lowerCamel `key` and a `targets` list instead of one `target`.
 
 A service manifest's `requests`, an extension's `config[]` and
@@ -72,4 +72,5 @@ version precedes this baseline.
 Extension authors: replace `config[].target` with `targets: [{ component, key }]`,
 write `config[].key` in lowerCamel, replace `"panel": true` with `"panel": {}`,
 and delete `"panel": false`, `readiness`, `backend.cron` and `authRequired`.
+Rename an `ownsSchema` that starts with `_` or is longer than 63 characters.
 `openmapx-ext validate` names each of them.

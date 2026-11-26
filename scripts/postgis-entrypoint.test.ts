@@ -12,6 +12,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { describe, expect, it } from "vitest";
+import { EXTENSION_SCHEMA_PATTERN } from "../packages/extension-contracts/src/identifiers";
 
 const stub = `#!/usr/bin/env python3
 import os, pathlib, signal, sys, time
@@ -316,8 +317,10 @@ describe("PostGIS entrypoint child ownership", () => {
         "AND p.proname IN ('lo_create', 'lo_creat', 'lo_from_bytea', 'lo_import')",
       );
       expect(roles).toContain("tg_tag IN ('CREATE EXTENSION', 'ALTER EXTENSION')");
+      // The guard admits exactly the schema names an integration id maps to.
+      const extensionSchema = EXTENSION_SCHEMA_PATTERN.source.replace(/^\^|\$$/g, "");
       expect(roles).toContain(
-        "api_schemas constant text := '^(data_manager|drizzle|ext_[a-z0-9_]{1,48})$';",
+        `api_schemas constant text := '^(data_manager|drizzle|${extensionSchema})$';`,
       );
       expect(roles).toContain("AS $$");
       expect(roles).toContain(

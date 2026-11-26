@@ -524,8 +524,8 @@ manifest without it, but host admission rejects an unpinned community image.
 Use the digest produced by your build/publish workflow; the illustrative image
 above is not a deployable artifact.
 
-`ownsSchema` must be a valid lowercase Postgres identifier
-(`[a-z_][a-z0-9_]*`). The platform applies no migration and grants nothing,
+`ownsSchema` must be a lowercase Postgres identifier that starts with a letter
+and has at most 63 characters (`[a-z][a-z0-9_]{0,62}`). The platform applies no migration and grants nothing,
 it is entirely your service's responsibility.
 
 ### Set resource limits

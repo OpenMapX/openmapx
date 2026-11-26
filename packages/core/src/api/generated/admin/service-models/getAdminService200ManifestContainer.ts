@@ -34,7 +34,7 @@ export type GetAdminService200ManifestContainer = {
   capDrop?: string[];
   /**
    * @items.maxLength 255
-   * @items.pattern ^\/dev\/[a-zA-Z0-9_\-/]+$
+   * @items.pattern ^\/dev\/[A-Za-z0-9_\-/]+$
    */
   devices?: string[];
   gpu?: GetAdminService200ManifestContainerGpu;

@@ -15,19 +15,21 @@ The delivered package contains compiled ESM JavaScript, TypeScript declarations,
 
 ## Supported entry points
 
-| Import                                                                                                    | Purpose                                                                    |
-| --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `@openmapx/extension-contracts`                                                                           | Main manifest validators and types, artifact validation and compatibility  |
-| `/integration`                                                                                            | Integration manifests, source metadata and semantic validation             |
-| `/service`                                                                                                | Service manifests and static provenance-aware community policy             |
-| `/extension`                                                                                              | Component bundles, configuration and catalog shapes                        |
-| `/platform`                                                                                               | Extension protocol version and compatibility checks                        |
-| `/artifact`                                                                                               | Declarative archive metadata and compatibility checks                      |
-| `/contributors`, `/attribution`, `/licensing`                                                             | Captured contributor receipts and structured licence metadata              |
-| `/identifiers`, `/media-hosts`, `/capabilities`                                                           | Source and component identifiers, media-host matching and capability names |
-| `/semver`                                                                                                 | Semantic-version validation and precedence                                 |
-| `/schemas`                                                                                                | Structural authoring schemas from `createAuthoringSchemas()`               |
-| `/schemas/integration.json`, `/schemas/service.json`, `/schemas/extension.json`, `/schemas/artifact.json` | Packaged editor schemas                                                    |
+| Import                                                                                                    | Purpose                                                                     |
+| --------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `@openmapx/extension-contracts`                                                                           | Main manifest validators and types, artifact validation and compatibility   |
+| `/integration`                                                                                            | Integration manifests, source metadata and semantic validation              |
+| `/service`                                                                                                | Service manifests and static provenance-aware community policy              |
+| `/extension`                                                                                              | Component bundles, configuration and catalog shapes                         |
+| `/platform`                                                                                               | Extension protocol version and compatibility checks                         |
+| `/artifact`                                                                                               | Declarative archive metadata and compatibility checks                       |
+| `/archive`                                                                                                | Integration archive layout, per-kind limits and migration numbering         |
+| `/grants`                                                                                                 | Grant identifiers, approved-grants records and the database-request grammar |
+| `/contributors`, `/attribution`, `/licensing`                                                             | Captured contributor receipts and structured licence metadata               |
+| `/identifiers`, `/media-hosts`, `/capabilities`                                                           | Source and component identifiers, media-host matching and capability names  |
+| `/semver`                                                                                                 | Semantic-version validation and precedence                                  |
+| `/schemas`                                                                                                | Structural authoring schemas from `createAuthoringSchemas()`                |
+| `/schemas/integration.json`, `/schemas/service.json`, `/schemas/extension.json`, `/schemas/artifact.json` | Packaged editor schemas                                                     |
 
 `/licensing-schema` also exports the portable structural licensing schema.
 

@@ -55,7 +55,7 @@ export type GetAdminService200Manifest = {
   platformNetwork?: boolean;
   configSchema?: GetAdminService200ManifestConfigSchema;
   envVars?: GetAdminService200ManifestEnvVarsItem[];
-  /** @pattern ^[a-z_][a-z0-9_]*$ */
+  /** @pattern ^[a-z][a-z0-9_]{0,62}$ */
   ownsSchema?: string;
   volumes?: GetAdminService200ManifestVolumesItem[];
   bindMounts?: GetAdminService200ManifestBindMountsItem[];

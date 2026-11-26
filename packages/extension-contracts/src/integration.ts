@@ -1,6 +1,7 @@
 import z from "zod/v4";
 import { BACKEND_ENTRY_PATH, integrationArchiveEntryKind, WEB_ENTRY_PATH } from "./archive";
 import { checkCapabilityName } from "./capabilities";
+import { EXTENSION_CONFIG_KEY_PATTERN } from "./extension";
 import { componentIdSchema, feedIdSchema } from "./identifiers";
 import { parseLicensing } from "./licensing";
 import { licensingSchema } from "./licensing-schema";
@@ -432,8 +433,9 @@ const requireEntrySchema = z
  */
 // lowerCamel with each later word a capital followed by lower-case letters or
 // digits (`apiKey`, not `APIKey` or `keyA`), so the environment variable that
-// splits the words (`API_KEY`) names exactly one key.
-const INTEGRATION_CONFIG_KEY_REGEX = /^[a-z][a-z0-9]*(?:[A-Z][a-z0-9]+)*$/;
+// splits the words (`API_KEY`) names exactly one key. Extension-level keys use
+// the same grammar.
+const INTEGRATION_CONFIG_KEY_REGEX = EXTENSION_CONFIG_KEY_PATTERN;
 
 const integrationConfigSchema = z.record(z.string(), z.unknown()).superRefine((schema, context) => {
   const properties = schema.properties;

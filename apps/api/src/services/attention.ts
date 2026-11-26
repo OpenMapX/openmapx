@@ -5,7 +5,7 @@ import {
   type AttentionItem,
   attentionInputSchema,
 } from "@openmapx/core/api-contracts";
-import { attentionUpsertStatement } from "@openmapx/core/attention";
+import { ATTENTION_SEVERITY_ORDER_SQL, attentionUpsertStatement } from "@openmapx/core/attention";
 import { and, asc, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { db } from "../db";
 import { attentionItem, attentionNotification } from "../db/schema";
@@ -91,7 +91,7 @@ export async function listAttention(database?: typeof db): Promise<AttentionItem
     .from(attentionItem)
     .where(or(ne(attentionItem.clearance, "acknowledge"), isNull(attentionItem.acknowledgedAt)))
     .orderBy(
-      sql`array_position(ARRAY['critical','warning','info'], ${attentionItem.severity})`,
+      sql`array_position(${sql.raw(ATTENTION_SEVERITY_ORDER_SQL)}, ${attentionItem.severity}) DESC`,
       sql`${attentionItem.acknowledgedAt} IS NOT NULL`,
       desc(attentionItem.raisedAt),
       asc(attentionItem.key),

@@ -1,9 +1,9 @@
 import type { AdminOverview } from "@openmapx/core/api-contracts";
 
-export type AttentionItem = AdminOverview["attention"][number];
+export type OverviewAttentionEntry = AdminOverview["attention"][number];
 
 /** Where an overview attention item leads; a stored item's link never leaves the admin area. */
-export function attentionHref(item: AttentionItem): string {
+export function attentionHref(item: OverviewAttentionEntry): string {
   if (item.type === "missing_credentials" || item.type === "health_check_failed") {
     return `/admin/integrations/${item.target}`;
   }

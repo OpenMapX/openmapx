@@ -37,7 +37,7 @@ import { CompactAlert } from "../shared/CompactAlert";
 import { CompactAlertList } from "../shared/CompactAlertList";
 import { jobStatusColor } from "../shared/jobStatus";
 import { useJobTypeLabel } from "../shared/jobTypeLabel";
-import { type AttentionItem, attentionHref } from "./attentionHref";
+import { attentionHref, type OverviewAttentionEntry } from "./attentionHref";
 
 // Components
 
@@ -179,7 +179,7 @@ export function AdminOverview() {
   const generalAttention = data.attention.filter((item) => item.type !== "missing_credentials");
   const integrationNames = new Map(credentials.map((entry) => [entry.integrationId, entry.name]));
   /** Known attention codes are worded here; the server's English stays for codes added later. */
-  const attentionMessage = (item: AttentionItem) =>
+  const attentionMessage = (item: OverviewAttentionEntry) =>
     item.job
       ? t("jobAttention", { jobLabel: jobTypeLabel(item.job.type) })
       : ATTENTION_TYPES.has(item.type)

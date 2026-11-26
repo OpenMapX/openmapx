@@ -3,6 +3,8 @@ import { capabilityNameErrors } from "./capabilities";
 import {
   DATABASE_PRIVILEGE_PATTERN,
   DATABASE_ROLE_NAME_PATTERN,
+  DATABASE_SCHEMA_NAME_PATTERN,
+  DEVICE_PATH_PATTERN,
   HOST_PATH_MAX_LENGTH,
   HOST_PATH_PATTERN,
   isReservedDatabaseName,
@@ -363,14 +365,7 @@ const containerSchema = z.strictObject({
     .array(z.string())
     .refine((caps) => caps.every((c) => ALLOWED_CAPS.has(c) || c === "ALL"), "unknown capability")
     .optional(),
-  devices: z
-    .array(
-      z
-        .string()
-        .max(255)
-        .regex(/^\/dev\/[a-zA-Z0-9_\-/]+$/),
-    )
-    .optional(),
+  devices: z.array(z.string().max(255).regex(DEVICE_PATH_PATTERN)).optional(),
   gpu: z
     .object({
       driver: z.string().default("nvidia"),
@@ -556,10 +551,15 @@ const serviceManifestShape = {
 
   // Postgres schema this service owns and migrates itself, idempotently, on boot
   // (CREATE SCHEMA/TABLE IF NOT EXISTS under its own DB role). Declaration only —
-  // the platform applies no migration and grants nothing.
+  // the platform applies no migration and grants nothing. The pattern is the one
+  // a role's `create-schema` privilege accepts, and it stays within PostgreSQL's
+  // 63-byte limit, so the stored name is never silently truncated.
   ownsSchema: z
     .string()
-    .regex(/^[a-z_][a-z0-9_]*$/, "must be a valid lowercase Postgres identifier")
+    .regex(
+      DATABASE_SCHEMA_NAME_PATTERN,
+      "must be a lowercase Postgres identifier that starts with a letter and has at most 63 characters",
+    )
     .optional(),
 
   volumes: z.array(volumeSchema).optional(),

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { validateExtensionManifest } from "./extension";
+import { DATABASE_SCHEMA_NAME_PATTERN } from "./grants";
 import { COMPONENT_ID_PATTERN, componentIdSchema, isComponentId } from "./identifiers";
 import { validateDataSource, validateManifest } from "./integration";
 import { compareSemver, isSemver } from "./semver";
@@ -485,6 +486,18 @@ describe("service requests", () => {
         community,
       ).valid,
     ).toBe(true);
+  });
+
+  it("accepts only an ownsSchema a create-schema privilege can name", () => {
+    expect(
+      validateServiceManifest({ ...svc, ownsSchema: `a${"b".repeat(62)}` }, community).valid,
+    ).toBe(true);
+    for (const ownsSchema of ["_demo", `a${"b".repeat(63)}`, "1demo"]) {
+      expect(DATABASE_SCHEMA_NAME_PATTERN.test(ownsSchema)).toBe(false);
+      expect(
+        validateServiceManifest({ ...svc, ownsSchema }, community).errors.join("\n"),
+      ).toContain("ownsSchema: must be a lowercase Postgres identifier");
+    }
   });
 
   it("refuses a reserved schema, requests on a built-in, a long device and the removed authRequired", () => {

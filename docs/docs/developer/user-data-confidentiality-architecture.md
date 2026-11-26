@@ -131,8 +131,9 @@ runs the `BEFORE DELETE` trigger `openmapx_erase_user_residue()` on `user`. The
 trigger clears what no key reaches: verification challenges, audit IP
 addresses, user agents and details, log entries, data-job actors, pending
 account confirmations and impersonation sessions. It also records one pending
-erasure for each integration that registered a personal-data handler; the API
-then calls the handler and deletes the record. Every delete path runs it,
+erasure for each integration listed as having a personal-data handler, in the
+same transaction as the deletion; no integration can register a handler yet, so
+nothing is recorded. Every delete path runs it,
 including the restore replay and plain SQL; `TRUNCATE` does not. The API's
 delete hook adds the offline-package rows, which name the account by a keyed
 hash the database cannot compute. Deletion does not retroactively rewrite

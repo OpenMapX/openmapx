@@ -655,7 +655,8 @@ documentation surfaced in the admin UI: it is **not** enforced.
 ## `ownsSchema`
 
 Declares the Postgres schema this service owns and migrates itself, idempotently,
-on boot. The value must be a valid lowercase Postgres identifier (`[a-z_][a-z0-9_]*`).
+on boot. The value must be a lowercase Postgres identifier that starts with a letter and
+has at most 63 characters (`[a-z][a-z0-9_]{0,62}`).
 
 ```json
 "ownsSchema": "conditions"

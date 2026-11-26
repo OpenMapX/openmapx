@@ -137143,7 +137143,7 @@
                               "items": {
                                 "type": "string",
                                 "maxLength": 255,
-                                "pattern": "^\\/dev\\/[a-zA-Z0-9_\\-/]+$"
+                                "pattern": "^\\/dev\\/[A-Za-z0-9_\\-/]+$"
                               }
                             },
                             "gpu": {
@@ -137555,7 +137555,7 @@
                         },
                         "ownsSchema": {
                           "type": "string",
-                          "pattern": "^[a-z_][a-z0-9_]*$"
+                          "pattern": "^[a-z][a-z0-9_]{0,62}$"
                         },
                         "volumes": {
                           "type": "array",

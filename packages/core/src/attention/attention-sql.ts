@@ -1,7 +1,17 @@
-import type { AttentionInput } from "../api/contracts/integration-admin/attention";
+import {
+  ATTENTION_SEVERITIES,
+  type AttentionInput,
+} from "../api/contracts/integration-admin/attention";
 
 /** An attention item that has already been shortened and parsed against `attentionInputSchema`. */
 export type AttentionUpsertInput = AttentionInput;
+
+/**
+ * The severities as a SQL array literal, lowest first, so `array_position`
+ * ranks a severity in SQL exactly as `ATTENTION_SEVERITIES` orders it.
+ */
+export const ATTENTION_SEVERITY_ORDER_SQL = `ARRAY[${ATTENTION_SEVERITIES.map((severity) => `'${severity}'`).join(",")}]`;
+const ORDER = ATTENTION_SEVERITY_ORDER_SQL;
 
 // One statement, so concurrent raises of one key serialise on the row lock and
 // the host CLI, which has no API code, applies the same occurrence and
@@ -32,15 +42,15 @@ const ATTENTION_UPSERT_SQL = `WITH old AS (
       THEN now() ELSE item.raised_at END,
     acknowledged_at = CASE
       WHEN EXCLUDED.occurrence_ref IS NOT NULL AND EXCLUDED.occurrence_ref IS DISTINCT FROM item.occurrence_ref THEN NULL
-      WHEN array_position(ARRAY['info','warning','critical'], EXCLUDED.severity)
-         > array_position(ARRAY['info','warning','critical'], item.severity) THEN NULL
+      WHEN array_position(${ORDER}, EXCLUDED.severity)
+         > array_position(${ORDER}, item.severity) THEN NULL
       ELSE item.acknowledged_at END
   WHERE (item.severity, item.source, item.title, item.detail, item.action, item.clearance, item.occurrence_ref)
       IS DISTINCT FROM (EXCLUDED.severity, EXCLUDED.source, EXCLUDED.title, EXCLUDED.detail, EXCLUDED.action, EXCLUDED.clearance, EXCLUDED.occurrence_ref)
     AND NOT (item.acknowledged_at IS NOT NULL
       AND item.occurrence_ref IS NOT DISTINCT FROM EXCLUDED.occurrence_ref
-      AND array_position(ARRAY['info','warning','critical'], EXCLUDED.severity)
-       <= array_position(ARRAY['info','warning','critical'], item.severity))
+      AND array_position(${ORDER}, EXCLUDED.severity)
+       <= array_position(${ORDER}, item.severity))
   RETURNING 1
 )
 SELECT CASE
@@ -48,8 +58,8 @@ SELECT CASE
   WHEN NOT EXISTS (SELECT 1 FROM old) THEN 'inserted'
   WHEN NULLIF($8::text, '') IS NOT NULL
     AND NULLIF($8::text, '') IS DISTINCT FROM (SELECT occurrence_ref FROM old) THEN 'inserted'
-  WHEN array_position(ARRAY['info','warning','critical'], $2::text)
-     > array_position(ARRAY['info','warning','critical'], (SELECT severity FROM old)) THEN 'escalated'
+  WHEN array_position(${ORDER}, $2::text)
+     > array_position(${ORDER}, (SELECT severity FROM old)) THEN 'escalated'
   ELSE 'changed' END AS outcome`;
 
 /**
