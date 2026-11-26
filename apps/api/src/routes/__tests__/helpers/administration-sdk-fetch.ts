@@ -30,6 +30,8 @@ export function administrationSdkFetch(
       if (value === undefined) continue;
       for (const item of Array.isArray(value) ? value : [value]) headers.append(name, String(item));
     }
-    return new Response(result.body, { status: result.statusCode, headers });
+    // A Response for a null-body status refuses any body, even an empty one.
+    const nullBody = [101, 204, 205, 304].includes(result.statusCode);
+    return new Response(nullBody ? null : result.body, { status: result.statusCode, headers });
   };
 }

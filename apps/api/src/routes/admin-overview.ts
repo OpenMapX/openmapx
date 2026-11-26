@@ -1,9 +1,11 @@
+import type { AttentionSeverity } from "@openmapx/core/api-contracts";
 import { count, desc, eq, gt } from "drizzle-orm";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db";
 import { adminAuditLog, session, user } from "../db/schema";
 import { getAllIntegrations } from "../integration-host";
 import { listActivityJobs } from "../services/activity-jobs";
+import { listAttention } from "../services/attention";
 import { isSelfHostedDeployment } from "../services/deployment-mode";
 import {
   computeCredentialStatus,
@@ -13,6 +15,12 @@ import { getCachedHealthStatus } from "../services/integration-health";
 import { readServiceInventory } from "../services/service-inventory";
 import { adminAuditEntry } from "../utils/admin-audit-entry";
 import { registerIntegrationAdminRoute } from "./admin-integration-contract";
+
+const STORED_SEVERITY = {
+  critical: "error",
+  warning: "warning",
+  info: "info",
+} as const satisfies Record<AttentionSeverity, "error" | "warning" | "info">;
 
 export async function adminOverviewRoute(app: FastifyInstance): Promise<void> {
   registerIntegrationAdminRoute(app, "getAdminOverview", async () => {
@@ -28,6 +36,7 @@ export async function adminOverviewRoute(app: FastifyInstance): Promise<void> {
       recentAudit,
       activityJobs,
       inventory,
+      storedAttention,
     ] = await Promise.all([
       db.select({ total: count() }).from(user),
       db.select({ total: count() }).from(user).where(eq(user.banned, true)),
@@ -36,6 +45,7 @@ export async function adminOverviewRoute(app: FastifyInstance): Promise<void> {
       db.select().from(adminAuditLog).orderBy(desc(adminAuditLog.createdAt)).limit(10),
       listActivityJobs({ limit: 10, offset: 0 }),
       selfHosted ? readServiceInventory() : Promise.resolve(null),
+      listAttention(),
     ]);
 
     const totalUsers = userRow?.total ?? 0;
@@ -82,7 +92,12 @@ export async function adminOverviewRoute(app: FastifyInstance): Promise<void> {
       message: string;
       target?: string;
       job?: { type: string; status: "failed" };
-    }> = [];
+    }> = storedAttention.map((item) => ({
+      type: "stored",
+      severity: STORED_SEVERITY[item.severity],
+      message: item.detail ? `${item.title}: ${item.detail}` : item.title,
+      ...(item.action ? { target: item.action.href } : {}),
+    }));
 
     if (inventory?.acquisition.state === "unavailable")
       attention.push({

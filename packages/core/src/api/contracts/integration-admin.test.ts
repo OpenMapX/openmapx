@@ -61,6 +61,8 @@ const inventory = [
   ["setAdminIntegrationCredential", "PUT", "/api/admin/credentials/:integrationId/:key"],
   ["deleteAdminIntegrationCredential", "DELETE", "/api/admin/credentials/:integrationId/:key"],
   ["getAdminOverview", "GET", "/api/admin/overview"],
+  ["listAdminAttention", "GET", "/api/admin/attention"],
+  ["acknowledgeAdminAttention", "POST", "/api/admin/attention/:key/acknowledge"],
 ];
 const health = {
   id: "sample",
@@ -198,6 +200,7 @@ function success(
     | "installAdminStandaloneIntegration"
     | "listAdminStandaloneIntegrations"
     | "removeAdminStandaloneIntegration"
+    | "acknowledgeAdminAttention"
   >,
   value: unknown,
 ) {
@@ -325,6 +328,22 @@ describe("integration administration canonical producer contracts", () => {
         reason: "integration_disabled",
       },
       getAdminOverview: overview,
+      listAdminAttention: {
+        items: [
+          {
+            key: "storage-low:data",
+            severity: "warning",
+            source: "operations",
+            title: "Disk space low (data)",
+            detail: null,
+            action: { label: "Open", href: "/admin/system/storage" },
+            clearance: "condition",
+            acknowledgedAt: at,
+            raisedAt: at,
+            updatedAt: at,
+          },
+        ],
+      },
     };
     for (const [id, fixture] of Object.entries(fixtures))
       expect(success(id as keyof typeof fixtures, fixture)).toEqual(fixture);

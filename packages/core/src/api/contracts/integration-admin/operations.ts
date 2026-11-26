@@ -1,10 +1,17 @@
 import z from "zod/v4";
-import { type AdminOperation, adminCommonResponses, adminJson, httpErrorSchema } from "../admin";
+import {
+  type AdminOperation,
+  adminCommonResponses,
+  adminEmpty,
+  adminJson,
+  httpErrorSchema,
+} from "../admin";
 import {
   configurationSourceOwnedSchema,
   configurationVersionConflictSchema,
 } from "../configuration-ownership";
 import { integrationApplyReceiptSchema } from "./application";
+import { adminAttentionKeyParamsSchema, adminAttentionListSchema } from "./attention";
 import {
   adminIntegrationBindingDeleteSchema,
   adminIntegrationBindingParamsSchema,
@@ -283,6 +290,19 @@ export const integrationAdminOperations = {
     path: "/api/admin/overview",
     auth: "admin",
     responses: { ...common, 200: adminJson(adminOverviewSchema) },
+  },
+  listAdminAttention: {
+    method: "GET",
+    path: "/api/admin/attention",
+    auth: "admin",
+    responses: { ...common, 200: adminJson(adminAttentionListSchema) },
+  },
+  acknowledgeAdminAttention: {
+    method: "POST",
+    path: "/api/admin/attention/:key/acknowledge",
+    auth: "admin",
+    request: { params: adminAttentionKeyParamsSchema },
+    responses: { ...missing, 204: adminEmpty() },
   },
 } as const satisfies Record<string, AdminOperation>;
 export type IntegrationAdminOperationId = keyof typeof integrationAdminOperations;

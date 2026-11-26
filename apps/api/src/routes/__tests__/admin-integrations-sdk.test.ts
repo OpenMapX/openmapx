@@ -52,6 +52,11 @@ vi.mock("../../services/activity-jobs.js", () => ({
   getActivityJob: (...args: unknown[]) => mockGetActivityJob(...args),
 }));
 
+vi.mock("../../services/attention.js", () => ({
+  listAttention: vi.fn(async () => []),
+  acknowledgeAttention: vi.fn(async () => true),
+}));
+
 // DB — multiple tables used across admin.ts
 const mockDbSelect = vi.fn();
 const mockDbInsert = vi.fn();
@@ -355,7 +360,7 @@ async function wire() {
   return { app, registered, client };
 }
 describe("actual integration producers through generated SDK", () => {
-  it("exports all 33 registered operations and executes integration producers with full serialized fields", async () => {
+  it("exports all registered operations and executes integration producers with full serialized fields", async () => {
     const sdk = await import("@openmapx/core/api-admin-sdk");
     for (const id of Object.keys(integrationAdminOperations))
       expect(sdk).toHaveProperty(id, expect.any(Function));
@@ -458,6 +463,13 @@ describe("actual integration producers through generated SDK", () => {
       for (const call of cases)
         expect(await call(), call.toString()).toMatchObject({ status: 200 });
       expect(cases).toHaveLength(19);
+      expect(await sdk.listAdminAttention(options)).toMatchObject({
+        status: 200,
+        data: { items: [] },
+      });
+      expect(await sdk.acknowledgeAdminAttention("storage-low:data", options)).toMatchObject({
+        status: 204,
+      });
       mockGetIntegration.mockReturnValueOnce({
         ...MOCK_INTEGRATION,
         manifest: {
