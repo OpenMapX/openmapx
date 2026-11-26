@@ -26,12 +26,16 @@ export class GitCloneQuotaError extends Error {
   }
 }
 
-const GIT_TREE_ENTRY = /^([0-7]{6}) (\S+) [a-f0-9]{40,64}\s+(\d+|-)\t(.+)$/;
+const GIT_TREE_ENTRY = /^([0-7]{6}) (\S+) [a-f0-9]{40,64}\s+(\d+|-|BAD)\t(.+)$/;
 
 /**
  * Enforce blob budgets from `git ls-tree -rl --full-tree` before checkout.
  * This prevents an oversized blob from reaching the working tree first and
  * only being noticed by the post-checkout filesystem walk.
+ *
+ * The fetch asks the remote to leave out every blob above the per-file limit,
+ * and lazy fetching is off, so `ls-tree` prints `BAD` instead of a size for
+ * such a blob. That is the per-file refusal, decided without downloading it.
  */
 export function assertGitTreeMetadataWithinBudget(lines: Iterable<string>): void {
   let entries = 0;
@@ -53,6 +57,11 @@ export function assertGitTreeMetadataWithinBudget(lines: Iterable<string>): void
     // submodules (160000), and any future special mode before checkout.
     if (type !== "blob" || (mode !== "100644" && mode !== "100755") || rawSize === "-") {
       throw new GitCloneQuotaError(`Repository contains an unsupported entry type at ${path}`);
+    }
+    if (rawSize === "BAD") {
+      throw new GitCloneQuotaError(
+        `Repository contains a file larger than ${GIT_CLONE_MAX_FILE_BYTES} bytes at ${path}`,
+      );
     }
     const size = Number(rawSize);
     if (!Number.isSafeInteger(size) || size < 0) {
@@ -78,6 +87,10 @@ function safeGitEnvironment(): NodeJS.ProcessEnv {
     GIT_ALLOW_PROTOCOL: "https",
     GIT_CONFIG_GLOBAL: process.platform === "win32" ? "NUL" : "/dev/null",
     GIT_CONFIG_NOSYSTEM: "1",
+    // The clone is partial. Without this, any later step that touches a blob
+    // the fetch left out downloads it in a request of its own, behind every
+    // budget, and thousands of such requests outlast the timeout.
+    GIT_NO_LAZY_FETCH: "1",
     GIT_TERMINAL_PROMPT: "0",
   };
 }
@@ -215,6 +228,11 @@ export async function gitShallowCloneSnapshot(
       env,
       displayCommand: `git remote add ${allowed.hostname}`,
     });
+    // One request brings every blob that can pass the per-file limit; the
+    // remote leaves out only the ones that would be refused anyway.
+    // `blob:limit=<n>` omits blobs of n bytes or more, hence the + 1. A remote
+    // that ignores the filter sends everything, and the tree check below still
+    // refuses an oversized blob before checkout.
     await spawnWithBufferedLogs(
       "git",
       [
@@ -223,7 +241,7 @@ export async function gitShallowCloneSnapshot(
         "fetch",
         "--depth=1",
         "--no-tags",
-        "--filter=blob:none",
+        `--filter=blob:limit=${GIT_CLONE_MAX_FILE_BYTES + 1}`,
         "origin",
         opts.ref ?? "HEAD",
       ],
