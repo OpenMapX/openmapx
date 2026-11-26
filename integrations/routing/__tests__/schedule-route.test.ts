@@ -19,6 +19,7 @@ function routingIntegration(id: string, provider: RoutingProvider): LoadedIntegr
     enabled: true,
     providers: new Map([["routing", [provider]]]),
     strings: {},
+    loadState: "loaded",
     shutdownHandlers: [],
   };
 }

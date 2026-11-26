@@ -7,6 +7,13 @@ export type { IntegrationsResponse } from "@openmapx/core/api-contracts";
 
 export type IntegrationStrings = LocaleStrings;
 
+export type IntegrationLoadState = "loaded" | "disabled" | "incompatible" | "failed" | "safe-mode";
+
+export interface IntegrationLoadError {
+  phase: "import" | "migrate" | "setup" | "deadline";
+  message: string;
+}
+
 export interface LoadedIntegration {
   id: string;
   manifest: IntegrationManifest;
@@ -22,11 +29,12 @@ export interface LoadedIntegration {
   strings: IntegrationStrings;
   customHealthCheck?: CustomHealthCheckFn;
   /**
-   * True when a community directory ships backend/frontend code that the
-   * host deliberately does not execute. Surfaced to the admin UI so the
-   * deactivation is visible rather than a log line.
+   * How this generation's load of the integration ended. Surfaced to the
+   * admin UI so an integration left out is visible rather than a log line.
    */
-  blockedCode?: boolean;
+  loadState: IntegrationLoadState;
+  /** Why the load failed; present only when `loadState` is `"failed"`. */
+  loadError?: IntegrationLoadError;
   disclosures?: Disclosure[];
   shutdownHandlers: Array<() => Promise<void>>;
 }

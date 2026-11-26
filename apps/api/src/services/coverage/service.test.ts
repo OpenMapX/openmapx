@@ -103,6 +103,7 @@ describe("CoverageService", () => {
       ["parking-sites", [{ id: "parking", searchSites: async () => ({ sites: [] }) }]],
     ]),
     strings: {},
+    loadState: "loaded",
     shutdownHandlers: [],
   });
 
@@ -732,6 +733,7 @@ describe("coverage of the OpenConditions place domains", () => {
           : []),
       ]),
       strings: {},
+      loadState: "loaded",
       shutdownHandlers: [],
     };
   }
@@ -745,6 +747,7 @@ describe("coverage of the OpenConditions place domains", () => {
     enabled: true,
     providers: new Map([["routing", [{ id: "valhalla", supportedModes: ["driving"] }]]]),
     strings: {},
+    loadState: "loaded",
     shutdownHandlers: [],
   });
 

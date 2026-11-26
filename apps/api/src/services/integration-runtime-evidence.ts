@@ -28,7 +28,7 @@ export function stageIntegrationRuntimeEvidence(
 export function integrationRuntimeEvidence(
   integration: LoadedIntegration | undefined,
 ): IntegrationRuntimeEvidence | null {
-  if (!integration?.enabled || integration.blockedCode) return null;
+  if (!integration?.enabled || integration.loadState !== "loaded") return null;
   const value = observations.get(integration);
   return value ? structuredClone(value) : null;
 }

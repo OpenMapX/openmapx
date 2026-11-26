@@ -69,6 +69,25 @@ export function rollbackPlaceResolverStaging(): void {
   stagedRegistry = null;
 }
 
+/** A copy of the scheme-to-resolver map at the time it was taken. */
+export type PlaceResolverSnapshot = ReadonlyMap<string, PlaceResolver>;
+
+/**
+ * Copy the registry that registrations currently go to: the staged one while
+ * staging is active, the live one otherwise. Taken before one integration
+ * loads, so its registrations can be undone when it fails.
+ */
+export function snapshotPlaceResolvers(): PlaceResolverSnapshot {
+  return new Map(stagedRegistry ?? registry);
+}
+
+/** Make the registry that registrations currently go to equal `snapshot` again. */
+export function restorePlaceResolvers(snapshot: PlaceResolverSnapshot): void {
+  const target = stagedRegistry ?? registry;
+  target.clear();
+  for (const [scheme, resolver] of snapshot) target.set(scheme, resolver);
+}
+
 /** Look up the resolver for a scheme, or `undefined` if none registered. */
 export function getPlaceResolver<TPlace = unknown>(
   scheme: string,

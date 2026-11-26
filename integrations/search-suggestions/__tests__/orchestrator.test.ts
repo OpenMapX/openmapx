@@ -42,6 +42,7 @@ function context(providers: SearchSuggestionProvider[]) {
       enabled: true,
       providers: new Map([["search-suggestions", [item]]]),
       strings: {},
+      loadState: "loaded",
       shutdownHandlers: [],
     }));
   return ctx;

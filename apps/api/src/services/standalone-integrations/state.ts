@@ -5,6 +5,8 @@ import {
   standaloneInstallSourceSchema,
 } from "@openmapx/core/ops";
 import z from "zod/v4";
+// Keeps the sealed state well inside its size limit whatever an integration throws.
+export const LOAD_FAILURE_MAX_LENGTH = 2048;
 export const standaloneStateSchema = z.strictObject({
   version: z.literal(1),
   jobId: z.uuid(),
@@ -25,6 +27,8 @@ export const standaloneStateSchema = z.strictObject({
     "complete",
   ]),
   outcome: z.enum(["committed", "restored"]).nullable(),
+  /** Why the reload left the installed integration out, when it did. */
+  loadFailure: z.string().max(LOAD_FAILURE_MAX_LENGTH).optional(),
 });
 export type StandaloneState = z.infer<typeof standaloneStateSchema>;
 

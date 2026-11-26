@@ -80,7 +80,8 @@ const summary = {
   domains: ["routing"],
   quality: "built-in",
   isBuiltIn: true,
-  blockedCode: false,
+  loadState: "loaded",
+  loadError: null,
   enabled: true,
   configured: true,
   hasHealthCheck: true,
@@ -222,7 +223,10 @@ describe("integration administration canonical producer contracts", () => {
   });
   it("retains every actual success envelope without reducing it to browser DTOs", () => {
     const fixtures = {
-      listAdminIntegrations: [summary],
+      listAdminIntegrations: [
+        summary,
+        { ...summary, id: "broken", enabled: false, loadState: "failed", loadError: "bad setup" },
+      ],
       getAdminIntegration: detail,
       listAdminIntegrationEnvVars: {
         integrations: [

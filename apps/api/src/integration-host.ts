@@ -14,6 +14,7 @@ import {
   type IntegrationContext,
   type IntegrationDataSource,
   IntegrationEventBus,
+  type IntegrationLoadError,
   type IntegrationManifest,
   type IntegrationStrings,
   type LoadedIntegration,
@@ -32,11 +33,15 @@ import { parseLicensing } from "@openmapx/mobility-core/licensing";
 import {
   beginPlaceResolverStaging,
   commitPlaceResolverStaging,
+  restorePlaceResolvers,
   rollbackPlaceResolverStaging,
+  snapshotPlaceResolvers,
 } from "@openmapx/place-ids";
 import type { FastifyInstance } from "fastify";
 import { integrationSql } from "./db";
+import { assertBundleImports } from "./integration-bundle-imports";
 import { createCacheClient, createHttpClient, createLogger } from "./integration-clients";
+import { type IntegrationCodeCache, prepareIntegrationCodeCache } from "./integration-code-cache";
 import {
   type ConfigSource,
   type ConfigValueWithSource,
@@ -50,6 +55,7 @@ import { readIntegrationFile, setVerifiedIntegrationFiles } from "./integration-
 import {
   beginIntegrationRouteStaging,
   commitIntegrationRouteStaging,
+  dropIntegrationRoutes,
   registerIntegrationRoute,
   registerIntegrationRouteDispatcher,
   resetIntegrationRoutes,
@@ -251,12 +257,7 @@ function loadStrings(directory: string): IntegrationStrings {
   return strings;
 }
 
-function resolveBackendEntryPoint(directory: string, isBuiltIn: boolean): string | null {
-  // Community directories are writable installation inputs. Importing any JS
-  // from them here would execute it with the API process's database, secrets,
-  // filesystem, and Docker authority. Community backends require an isolated
-  // service boundary; until one exists, their files are deliberately inert.
-  if (!isBuiltIn) return null;
+function resolveBuiltInBackendEntryPoint(directory: string): string | null {
   const bundled = integrationBackendBundlePath(directory);
   if (existsSync(bundled)) return bundled;
   const modulePath = join(directory, "index.ts");
@@ -265,17 +266,40 @@ function resolveBackendEntryPoint(directory: string, isBuiltIn: boolean): string
   return existsSync(jsModulePath) ? jsModulePath : null;
 }
 
-function hasBlockedCommunityBackend(directory: string, manifest: IntegrationManifest): boolean {
-  if (manifest.backend?.routes || manifest.backend?.entry) return true;
-  return [
-    integrationBackendBundlePath(directory),
-    join(directory, "index.ts"),
-    join(directory, "index.js"),
-  ].some((path) => existsSync(path));
+/** The only backend entry an installed integration can declare. */
+const INSTALLED_BACKEND_ENTRY = "dist/backend/index.mjs";
+
+let codeCache: IntegrationCodeCache | null = null;
+
+/**
+ * Prepared on first use after each boot rather than at boot, so a host
+ * without installed backend code never touches the cache directory.
+ */
+function integrationCodeCache(): IntegrationCodeCache {
+  codeCache ??= prepareIntegrationCodeCache();
+  return codeCache;
 }
 
-// Cache-bust the dynamic import by the entry file's mtime+size so a reload
-// (`reloadIntegrations` — fired by extension install/update and credential
+/**
+ * The `file:` URL of an installed integration's verified backend bundle in the
+ * code cache, or null when its manifest declares no backend entry. Only bytes
+ * the operations agent recorded are read, and the URL is keyed by their
+ * SHA-256, so unchanged bytes reuse the module Node already holds and new
+ * bytes get a fresh one.
+ */
+async function installedBackendImportSpecifier(
+  integration: LoadedIntegration,
+): Promise<string | null> {
+  if (integration.manifest.backend?.entry !== INSTALLED_BACKEND_ENTRY) return null;
+  const bytes = readIntegrationFile(integration.directory, INSTALLED_BACKEND_ENTRY);
+  if (!bytes) throw new Error("backend entry is missing or changed since installation");
+  await assertBundleImports(bytes.toString("utf8"));
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  return pathToFileURL(integrationCodeCache().materialize(integration.id, sha256, bytes)).href;
+}
+
+// Cache-bust a built-in's dynamic import by the entry file's mtime+size so a
+// reload (`reloadIntegrations` — fired by extension install/update and credential
 // set/delete) picks up CHANGED backend code WITHOUT restarting the API. ESM
 // `import()` is keyed by URL and process-lifetime cached, so re-importing the
 // same file URL returns the stale module — which is why a store update of an
@@ -647,7 +671,12 @@ function buildIntegrationContext(args: {
       [...requiresMap].map(([key, service]) => [key, Object.freeze({ ...service })]),
     ),
   );
-  return {
+  const subscriptions = new Set<() => void>();
+  // An installed integration that fails is left out of a generation that goes
+  // on, so nothing it registers may activate before its setup has returned.
+  let pendingActivations: Array<{ activate: () => void; rollback?: () => void }> | null =
+    integration.isBuiltIn ? null : [];
+  const ctx: IntegrationContext = {
     id,
     manifest,
     config,
@@ -836,10 +865,17 @@ function buildIntegrationContext(args: {
       } as never);
     },
     on(event: string, handler: (data: unknown) => void) {
-      return contextEventBus.on(event as never, handler as never);
+      const unsubscribe = contextEventBus.on(event as never, handler as never);
+      const tracked = () => {
+        subscriptions.delete(tracked);
+        unsubscribe();
+      };
+      subscriptions.add(tracked);
+      return tracked;
     },
     onActivate(activate: () => void, rollback?: () => void) {
-      activationScope.register(activate, rollback);
+      if (pendingActivations) pendingActivations.push({ activate, rollback });
+      else activationScope.register(activate, rollback);
     },
     onShutdown(cleanup: () => Promise<void>) {
       shutdownHandlers.push(cleanup);
@@ -870,6 +906,131 @@ function buildIntegrationContext(args: {
         : Promise.resolve(new Set<string>());
     },
   };
+  contextControls.set(ctx, {
+    releaseActivations() {
+      const released = pendingActivations ?? [];
+      pendingActivations = null;
+      for (const { activate, rollback } of released) activationScope.register(activate, rollback);
+    },
+    discardActivations() {
+      pendingActivations = null;
+    },
+    unsubscribeAll() {
+      for (const unsubscribe of [...subscriptions]) unsubscribe();
+    },
+  });
+  return ctx;
+}
+
+/** Host-side controls over a context's registrations that the integration cannot reach. */
+interface IntegrationContextControl {
+  /** Hands the `onActivate` registrations held back during setup to the generation's scope. */
+  releaseActivations(): void;
+  /** Drops the held-back registrations of an integration that is left out. */
+  discardActivations(): void;
+  /** Removes every `ctx.on` subscription the context made. */
+  unsubscribeAll(): void;
+}
+
+const contextControls = new WeakMap<IntegrationContext, IntegrationContextControl>();
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Imports an integration's backend and runs its `setup`. A built-in's failure
+ * is rethrown for the caller to handle. An installed integration that fails is
+ * left out: it is recorded as failed and disabled, everything it registered is
+ * undone, its shutdown handlers run, and the generation goes on without it.
+ */
+async function loadIntegrationBackend(args: {
+  integration: LoadedIntegration;
+  ctx: IntegrationContext;
+  shutdownHandlers: Array<() => Promise<void>>;
+}): Promise<"loaded" | "left-out"> {
+  const { integration, ctx, shutdownHandlers } = args;
+  let phase: IntegrationLoadError["phase"] = "import";
+  if (integration.isBuiltIn) {
+    try {
+      const entryPoint = resolveBuiltInBackendEntryPoint(integration.directory);
+      if (entryPoint) {
+        const mod = (await import(backendEntryImportSpecifier(entryPoint))) as {
+          setup?: SetupFunction;
+        };
+        phase = "setup";
+        if (typeof mod.setup === "function") await mod.setup(ctx);
+      }
+      return "loaded";
+    } catch (error) {
+      integration.loadState = "failed";
+      integration.loadError = { phase, message: errorMessage(error) };
+      throw error;
+    }
+  }
+
+  const control = contextControls.get(ctx);
+  const resolvers = snapshotPlaceResolvers();
+  const declaredDataSources = integration.manifest.dataSources;
+  try {
+    const specifier = await installedBackendImportSpecifier(integration);
+    if (specifier) {
+      const mod = (await import(specifier)) as { setup?: SetupFunction };
+      phase = "setup";
+      if (typeof mod.setup === "function") await mod.setup(ctx);
+    }
+    phase = "setup";
+    control?.releaseActivations();
+    return "loaded";
+  } catch (error) {
+    control?.discardActivations();
+    control?.unsubscribeAll();
+    dropIntegrationRoutes(integration.id);
+    restorePlaceResolvers(resolvers);
+    integration.providers.clear();
+    integration.customHealthCheck = undefined;
+    integration.manifest.dataSources = declaredDataSources;
+    integration.enabled = false;
+    integration.loadState = "failed";
+    integration.loadError = { phase, message: errorMessage(error) };
+    _fastify?.log.error(
+      { err: error, integrationId: integration.id, phase },
+      `Leaving out installed integration ${integration.id}: its backend failed to ${phase === "import" ? "import" : "set up"}`,
+    );
+    const handlers = shutdownHandlers.splice(0);
+    for (const handler of handlers) {
+      try {
+        await handler();
+      } catch (shutdownError) {
+        _fastify?.log.warn(
+          { err: shutdownError, integrationId: integration.id },
+          `A shutdown handler of the left-out integration ${integration.id} failed`,
+        );
+      }
+    }
+    return "left-out";
+  }
+}
+
+/**
+ * The integrations of the live generation whose load failed, limited to `ids`
+ * when given. Install and update jobs use it to fail a change whose
+ * integration the reload left out.
+ */
+export function failedIntegrationLoads(
+  ids?: readonly string[],
+): Array<{ id: string; phase: IntegrationLoadError["phase"]; message: string }> {
+  const wanted = ids ? new Set(ids) : null;
+  const failed: Array<{ id: string; phase: IntegrationLoadError["phase"]; message: string }> = [];
+  for (const integration of integrations.values()) {
+    if (integration.loadState !== "failed" || (wanted && !wanted.has(integration.id))) continue;
+    failed.push({
+      id: integration.id,
+      phase: integration.loadError?.phase ?? "setup",
+      message: integration.loadError?.message ?? "",
+    });
+  }
+  return failed;
 }
 
 export async function initIntegrations(
@@ -881,6 +1042,7 @@ export async function initIntegrations(
   _fastify = fastify;
   _integrationDirs = normalizeIntegrationDirs(integrationDirs);
   resetIntegrationRoutes();
+  codeCache = null;
 
   const discovered = await discoverManifests(_integrationDirs);
   const sorted = topologicalSort(discovered);
@@ -1013,16 +1175,9 @@ export async function initIntegrations(
       providers,
       strings: loadStrings(directory),
       customHealthCheck: undefined,
+      loadState: "loaded",
       shutdownHandlers,
     };
-
-    if (!isBuiltIn && hasBlockedCommunityBackend(directory, manifest)) {
-      integration.blockedCode = true;
-      fastify.log.warn(
-        { integrationId: id },
-        "Community backend code is not executed in the API process; use an isolated service component",
-      );
-    }
 
     if (!integration.enabled) {
       integrations.set(id, integration);
@@ -1062,17 +1217,18 @@ export async function initIntegrations(
       activationScope,
     });
 
-    // Try to load the integration's setup function
     try {
-      const entryPoint = resolveBackendEntryPoint(directory, isBuiltIn);
-
-      if (entryPoint) {
-        const mod = (await import(backendEntryImportSpecifier(entryPoint))) as {
-          setup?: SetupFunction;
-        };
-        if (typeof mod.setup === "function") {
-          await mod.setup(ctx);
+      if ((await loadIntegrationBackend({ integration, ctx, shutdownHandlers })) === "left-out") {
+        for (const rollbackError of activationScope.rollback()) {
+          fastify.log.warn(rollbackError, `Failed to roll back activation for integration ${id}`);
         }
+        integrations.set(id, integration);
+        eventBus.emit({
+          type: "integration.error",
+          integrationId: id,
+          error: new Error(integration.loadError?.message),
+        });
+        continue;
       }
 
       stageIntegrationRuntimeEvidence(integration, generationId);
@@ -1086,6 +1242,10 @@ export async function initIntegrations(
       }
       fastify.log.error(err, `Failed to load integration ${id}`);
       integration.enabled = false;
+      if (integration.loadState !== "failed") {
+        integration.loadState = "failed";
+        integration.loadError = { phase: "setup", message: errorMessage(err) };
+      }
       integrations.set(id, integration);
       eventBus.emit({
         type: "integration.error",
@@ -1436,16 +1596,9 @@ async function doReloadIntegrations(
         providers,
         strings: loadStrings(directory),
         customHealthCheck: undefined,
+        loadState: "loaded",
         shutdownHandlers,
       };
-
-      if (!isBuiltIn && hasBlockedCommunityBackend(directory, manifest)) {
-        integration.blockedCode = true;
-        _fastify.log.warn(
-          { integrationId: id },
-          "Community backend code is not executed in the API process; use an isolated service component",
-        );
-      }
 
       if (!integration.enabled) {
         next.set(id, integration);
@@ -1488,15 +1641,14 @@ async function doReloadIntegrations(
       });
 
       try {
-        const entryPoint = resolveBackendEntryPoint(directory, isBuiltIn);
-
-        if (entryPoint) {
-          const mod = (await import(backendEntryImportSpecifier(entryPoint))) as {
-            setup?: SetupFunction;
-          };
-          if (typeof mod.setup === "function") {
-            await mod.setup(ctx);
-          }
+        if ((await loadIntegrationBackend({ integration, ctx, shutdownHandlers })) === "left-out") {
+          next.set(id, integration);
+          stagedEventBus.emit({
+            type: "integration.error",
+            integrationId: id,
+            error: new Error(integration.loadError?.message),
+          });
+          continue;
         }
 
         stageIntegrationRuntimeEvidence(integration, generationId);

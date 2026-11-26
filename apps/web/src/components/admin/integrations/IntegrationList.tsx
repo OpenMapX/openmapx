@@ -516,12 +516,14 @@ export function IntegrationList() {
                   <TableCell>
                     <Stack direction="row" sx={{ gap: 0.5, flexWrap: "wrap" }}>
                       <StatusBadge quality={integration.quality} />
-                      {integration.blockedCode ? (
-                        <Tooltip title={t("thisCommunityIntegrationShipsBackend")}>
+                      {integration.loadState === "failed" ? (
+                        <Tooltip
+                          title={t("failedToLoadDetail", { error: integration.loadError ?? "" })}
+                        >
                           <Chip
-                            label={t("codeNotExecuted")}
+                            label={t("failedToLoad")}
                             size="small"
-                            color="warning"
+                            color="error"
                             variant="outlined"
                           />
                         </Tooltip>

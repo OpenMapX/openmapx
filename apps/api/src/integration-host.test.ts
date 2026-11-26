@@ -42,6 +42,7 @@ vi.mock("node:fs", async (importOriginal) => {
 const FIXTURES_DIR = join(fileURLToPath(import.meta.url), "../__tests__/fixtures/integrations");
 
 import {
+  failedIntegrationLoads,
   getAllIntegrations,
   getIntegration,
   getIntegrationProviders,
@@ -742,55 +743,284 @@ describe("initIntegrations — loader", () => {
     }
   });
 
-  it("never imports a community backend bundle into the privileged API process", async () => {
-    const parent = mkdtempSync(join(tmpdir(), "omx-untrusted-backend-"));
-    const integrationDir = join(parent, "untrusted-backend");
-    const bundleDir = join(integrationDir, "dist", "backend");
-    const frontendBundleDir = join(integrationDir, "dist", "frontend");
+  describe("installed backend code", () => {
     const g = globalThis as Record<string, unknown>;
-    mkdirSync(bundleDir, { recursive: true });
-    mkdirSync(frontendBundleDir, { recursive: true });
-    writeFileSync(
-      join(integrationDir, "manifest.json"),
-      JSON.stringify({
-        id: "untrusted-backend",
-        version: "1.0.0",
-        platform: "1.0",
-        license: "MIT",
-        domains: ["knowledge"],
-        backend: { routes: true },
-        quality: "community",
-      }),
-    );
-    writeFileSync(
-      join(bundleDir, "index.mjs"),
-      [
-        "globalThis.__untrustedBackendExecuted = true;",
-        "export function setup(ctx) {",
-        '  ctx.registerRoute("GET", "/owned", (_request, reply) => reply.send({ owned: true }));',
-        "}",
-      ].join("\n"),
-    );
-    writeFileSync(join(frontendBundleDir, "index.js"), "globalThis.owned = true;");
+    let parent: string;
+    let installedRoot: string;
+    let builtInRoot: string;
 
-    const app = makeApp();
-    try {
-      await initIntegrations(app, [{ directory: parent, isBuiltIn: false }]);
-      expect(g.__untrustedBackendExecuted).toBeUndefined();
-      expect(getIntegration("untrusted-backend")).toBeDefined();
-      expect(getIntegration("untrusted-backend")?.blockedCode).toBe(true);
-      expect((await app.inject("/api/integrations/untrusted-backend/owned")).statusCode).toBe(404);
-      expect(
-        (await app.inject("/api/integrations/untrusted-backend/bundle/index.js")).statusCode,
-      ).toBe(404);
+    beforeEach(() => {
+      parent = mkdtempSync(join(tmpdir(), "omx-installed-backend-"));
+      installedRoot = join(parent, "installed");
+      builtInRoot = join(parent, "built-in");
+      mkdirSync(installedRoot);
+      mkdirSync(builtInRoot);
+      // Node caches modules per URL for the life of the process, so every test
+      // gets its own cache root and bundle bytes naming the test.
+      vi.stubEnv("OPENMAPX_INTEGRATION_CODE_CACHE_DIR", join(parent, "code-cache"));
+    });
+
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      rmSync(parent, { recursive: true, force: true });
+      for (const key of Object.keys(g)) if (key.startsWith("__omxInstalled")) delete g[key];
+    });
+
+    function writeInstalled(id: string, bundle: string, options: { declared?: boolean } = {}) {
+      const directory = join(installedRoot, id);
+      mkdirSync(join(directory, "dist", "backend"), { recursive: true });
+      writeFileSync(
+        join(directory, "manifest.json"),
+        JSON.stringify({
+          id,
+          version: "1.0.0",
+          platform: "1.0",
+          license: "MIT",
+          domains: ["knowledge"],
+          quality: "community",
+          ...(options.declared === false ? {} : { backend: { entry: "dist/backend/index.mjs" } }),
+        }),
+      );
+      writeFileSync(join(directory, "dist", "backend", "index.mjs"), bundle);
+      return directory;
+    }
+
+    function writeBuiltIn(id: string, source: string) {
+      const directory = join(builtInRoot, id);
+      mkdirSync(directory, { recursive: true });
+      writeFileSync(
+        join(directory, "manifest.json"),
+        JSON.stringify({
+          id,
+          version: "1.0.0",
+          license: "MIT",
+          domains: ["knowledge"],
+          quality: "built-in",
+        }),
+      );
+      writeFileSync(join(directory, "index.js"), source);
+    }
+
+    const installed = () => ({ directory: installedRoot, isBuiltIn: false });
+    const builtIn = () => ({ directory: builtInRoot, isBuiltIn: true });
+
+    it("imports an installed backend bundle through the verified cache", async () => {
+      writeInstalled(
+        "demo",
+        [
+          "// imports an installed backend bundle through the verified cache",
+          'import { registerPlaceResolver } from "@openmapx/integration-sdk/places";',
+          "export function setup(ctx) {",
+          "  globalThis.__omxInstalledLoaded = import.meta.url;",
+          '  registerPlaceResolver("demo", async () => null);',
+          '  ctx.registerRoute("GET", "/owned", (_request, reply) => reply.send({ owned: true }));',
+          "}",
+        ].join("\n"),
+      );
+      const app = makeApp();
+
+      await initIntegrations(app, [installed()]);
+
+      expect(getIntegration("demo")?.loadState).toBe("loaded");
+      expect(getIntegration("demo")?.loadError).toBeUndefined();
+      expect(g.__omxInstalledLoaded).toMatch(/[\\/]demo[\\/][a-f0-9]{64}[\\/]index\.mjs$/);
+      expect(getPlaceResolver("demo")).toBeTypeOf("function");
+      expect((await app.inject("/api/integrations/demo/owned")).statusCode).toBe(200);
+    });
+
+    it("serves no installed frontend bundle", async () => {
+      const directory = writeInstalled(
+        "demo",
+        "// serves no installed frontend bundle\nexport function setup() {}\n",
+      );
+      mkdirSync(join(directory, "dist", "frontend"), { recursive: true });
+      writeFileSync(join(directory, "dist", "frontend", "index.js"), "globalThis.owned = true;");
+      const app = makeApp();
+
+      await initIntegrations(app, [installed()]);
+
+      expect((await app.inject("/api/integrations/demo/bundle/index.js")).statusCode).toBe(404);
+    });
+
+    it("gives two integrations with identical bundles separate module state", async () => {
+      const bundle = [
+        "// gives two integrations with identical bundles separate module state",
+        "let n = 0;",
+        "export function setup(ctx) {",
+        '  ctx.registerRoute("GET", "/n", (_request, reply) => reply.send({ n: ++n }));',
+        "}",
+      ].join("\n");
+      writeInstalled("a", bundle);
+      writeInstalled("b", bundle);
+      const app = makeApp();
+
+      await initIntegrations(app, [installed()]);
+
+      expect((await app.inject("/api/integrations/a/n")).json()).toEqual({ n: 1 });
+      expect((await app.inject("/api/integrations/b/n")).json()).toEqual({ n: 1 });
+    });
+
+    it("does not import the same bytes again on reload", async () => {
+      writeInstalled(
+        "demo",
+        [
+          "// does not import the same bytes again on reload",
+          "globalThis.__omxInstalledEvaluations = (globalThis.__omxInstalledEvaluations ?? 0) + 1;",
+          "export function setup() {",
+          "  globalThis.__omxInstalledSetups = (globalThis.__omxInstalledSetups ?? 0) + 1;",
+          "}",
+        ].join("\n"),
+      );
+      await initIntegrations(makeApp(), [installed()]);
 
       await reloadIntegrations();
-      expect(g.__untrustedBackendExecuted).toBeUndefined();
-      expect(getIntegration("untrusted-backend")?.blockedCode).toBe(true);
-    } finally {
-      delete g.__untrustedBackendExecuted;
-      rmSync(parent, { recursive: true, force: true });
-    }
+
+      expect(g.__omxInstalledEvaluations).toBe(1);
+      expect(g.__omxInstalledSetups).toBe(2);
+      expect(getIntegration("demo")?.loadState).toBe("loaded");
+    });
+
+    it("imports new bytes after an update without a restart", async () => {
+      const bundle = (version: string) =>
+        [
+          "// imports new bytes after an update without a restart",
+          "export function setup(ctx) {",
+          `  ctx.registerRoute("GET", "/version", (_request, reply) => reply.send({ version: ${JSON.stringify(version)} }));`,
+          "}",
+        ].join("\n");
+      writeInstalled("demo", bundle("v1"));
+      const app = makeApp();
+      await initIntegrations(app, [installed()]);
+      expect((await app.inject("/api/integrations/demo/version")).json()).toEqual({
+        version: "v1",
+      });
+
+      writeInstalled("demo", bundle("v2"));
+      await reloadIntegrations();
+
+      expect((await app.inject("/api/integrations/demo/version")).json()).toEqual({
+        version: "v2",
+      });
+    });
+
+    it("leaves a failing installed integration out and keeps the rest of the generation", async () => {
+      writeInstalled(
+        "bad",
+        [
+          "// leaves a failing installed integration out and keeps the rest of the generation",
+          'import { registerPlaceResolver } from "@openmapx/integration-sdk/places";',
+          "export function setup(ctx) {",
+          '  ctx.registerRoute("GET", "/owned", (_request, reply) => reply.send({ owned: true }));',
+          '  registerPlaceResolver("bad", async () => null);',
+          '  ctx.on("integration.loaded", (event) => globalThis.__omxInstalledSpy(event));',
+          "  ctx.onActivate(() => { globalThis.__omxInstalledActivated = true; });",
+          "  ctx.onShutdown(async () => {",
+          "    globalThis.__omxInstalledShutdowns = (globalThis.__omxInstalledShutdowns ?? 0) + 1;",
+          "  });",
+          '  throw new Error("bad setup");',
+          "}",
+        ].join("\n"),
+      );
+      writeBuiltIn(
+        "good",
+        'export function setup(ctx) { ctx.registerRoute("GET", "/ok", (_q, reply) => reply.send({ ok: true })); }\n',
+      );
+      const spy = vi.fn();
+      g.__omxInstalledSpy = spy;
+      const app = makeApp();
+
+      const expectLeftOut = async (shutdowns: number) => {
+        expect(getIntegration("bad")).toMatchObject({
+          enabled: false,
+          loadState: "failed",
+          loadError: { phase: "setup", message: "bad setup" },
+        });
+        expect(getIntegration("good")?.loadState).toBe("loaded");
+        expect((await app.inject("/api/integrations/good/ok")).statusCode).toBe(200);
+        expect((await app.inject("/api/integrations/bad/owned")).statusCode).toBe(404);
+        expect(getPlaceResolver("bad")).toBeUndefined();
+        expect(spy).not.toHaveBeenCalled();
+        expect(g.__omxInstalledActivated).toBeUndefined();
+        expect(g.__omxInstalledShutdowns).toBe(shutdowns);
+        expect(failedIntegrationLoads(["bad", "good"])).toEqual([
+          { id: "bad", phase: "setup", message: "bad setup" },
+        ]);
+        expect(failedIntegrationLoads(["good"])).toEqual([]);
+      };
+
+      await initIntegrations(app, [installed(), builtIn()]);
+      await expectLeftOut(1);
+
+      await reloadIntegrations();
+      await expectLeftOut(2);
+    });
+
+    it.each([
+      ["a package outside the SDK", "@openmapx/integration-framework"],
+      ["an SDK entry that does not exist", "@openmapx/integration-sdk/not-an-entry"],
+      ["a host path alias", "@integrations/weather/index.ts"],
+    ])("records an unresolved import as an import failure (%s)", async (_label, specifier) => {
+      writeInstalled(
+        "deep",
+        [
+          `// records an unresolved import as an import failure: ${specifier}`,
+          `import ${JSON.stringify(specifier)};`,
+          "globalThis.__omxInstalledDeepEvaluated = true;",
+          "export function setup() {}",
+        ].join("\n"),
+      );
+
+      await initIntegrations(makeApp(), [installed()]);
+
+      expect(getIntegration("deep")).toMatchObject({
+        enabled: false,
+        loadState: "failed",
+        loadError: { phase: "import", message: expect.stringContaining(specifier) },
+      });
+      expect(g.__omxInstalledDeepEvaluated).toBeUndefined();
+    });
+
+    it("still discards the generation when a built-in fails on reload", async () => {
+      writeInstalled(
+        "demo",
+        [
+          "// still discards the generation when a built-in fails on reload",
+          "export function setup(ctx) {",
+          '  ctx.registerRoute("GET", "/owned", (_request, reply) => reply.send({ owned: true }));',
+          "}",
+        ].join("\n"),
+      );
+      writeBuiltIn(
+        "fragile",
+        'export function setup() { if (globalThis.__omxInstalledFragile) throw new Error("fragile setup"); }\n',
+      );
+      const app = makeApp();
+      await initIntegrations(app, [installed(), builtIn()]);
+      g.__omxInstalledFragile = true;
+
+      await expect(reloadIntegrations()).rejects.toThrow("fragile setup");
+
+      expect(getIntegration("fragile")?.loadState).toBe("loaded");
+      expect(getIntegration("demo")?.loadState).toBe("loaded");
+      expect((await app.inject("/api/integrations/demo/owned")).statusCode).toBe(200);
+    });
+
+    it("ignores a bundle the manifest does not declare", async () => {
+      writeInstalled(
+        "demo",
+        [
+          "// ignores a bundle the manifest does not declare",
+          "globalThis.__omxInstalledUndeclared = true;",
+          "export function setup() {}",
+        ].join("\n"),
+        { declared: false },
+      );
+
+      await initIntegrations(makeApp(), [installed()]);
+
+      expect(g.__omxInstalledUndeclared).toBeUndefined();
+      expect(getIntegration("demo")?.loadState).toBe("loaded");
+    });
   });
 
   it("respects topological order: alpha setup ran before beta", async () => {

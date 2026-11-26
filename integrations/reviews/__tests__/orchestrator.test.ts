@@ -41,6 +41,7 @@ function loadedIntegration(
     enabled,
     providers: new Map([["reviews", providers]]),
     strings: {},
+    loadState: "loaded",
     shutdownHandlers: [],
   };
 }

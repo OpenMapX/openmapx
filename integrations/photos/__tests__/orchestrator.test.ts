@@ -33,6 +33,7 @@ function loadedIntegration(
     enabled,
     providers: new Map([["photos", providers]]),
     strings: {},
+    loadState: "loaded",
     shutdownHandlers: [],
   };
 }

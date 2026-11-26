@@ -333,6 +333,8 @@ export { withKnowledgeContributors } from "./knowledge-contributors";
 // who imports the barrel — including the client-reachable `@openmapx/core`
 // main entry. Consumers import them from `@openmapx/core/server` instead.
 export type {
+  IntegrationLoadError,
+  IntegrationLoadState,
   IntegrationStrings,
   IntegrationsResponse,
   LoadedIntegration,

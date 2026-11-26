@@ -49,6 +49,7 @@ function richIntegration(): LoadedIntegration {
     directory: "private-sdk-directory",
     config: { token: "private-sdk-token" },
     providers: new Map([["secret-provider", ["private-sdk-provider"]]]),
+    loadState: "loaded",
     shutdownHandlers: [],
     manifest: {
       id: "rich",

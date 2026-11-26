@@ -53,6 +53,7 @@ describe("GET /api/capabilities", () => {
       config: { apiKey: "private-secret" },
       directory: "private-directory",
       providers: new Map(),
+      loadState: "loaded",
       shutdownHandlers: [],
     };
     runtime.integrations = [row, { ...row, id: "disabled", enabled: false }];

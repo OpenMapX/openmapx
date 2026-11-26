@@ -46,6 +46,7 @@ it("serializes captured receipts, skips old caches and invalidates both receipt-
     directory: "/integrations/reviews-mangrove",
     isBuiltIn: true,
     strings: {},
+    loadState: "loaded",
     shutdownHandlers: [],
   };
   const oldList = "cache:reviews:list:51.000000:6.000000:cafe:no-osm";

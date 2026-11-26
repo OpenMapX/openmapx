@@ -45,6 +45,7 @@ function integration(
     enabled: true,
     providers: new Map([["air-quality", [p]]]),
     strings: {},
+    loadState: "loaded",
     shutdownHandlers: [],
     ...input,
   };

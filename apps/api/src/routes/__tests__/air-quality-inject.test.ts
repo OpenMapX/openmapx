@@ -73,6 +73,7 @@ async function plugin(fastify: FastifyInstance): Promise<void> {
     enabled: true,
     providers: new Map(),
     strings: {},
+    loadState: "loaded",
     shutdownHandlers: [],
   };
   const provider = providerIntegration(modeledProvider());

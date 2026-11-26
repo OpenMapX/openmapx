@@ -128,6 +128,7 @@ const MOCK_INTEGRATION = {
   id: "geocoding-maptiler",
   enabled: true,
   isBuiltIn: true,
+  loadState: "loaded",
   directory: "/integrations/geocoding-maptiler",
   manifest: {
     id: "geocoding-maptiler",

@@ -17,6 +17,7 @@ function integration(dataSources: IntegrationManifest["dataSources"]): LoadedInt
     enabled: true,
     providers: new Map(),
     strings: {},
+    loadState: "loaded",
     shutdownHandlers: [],
   };
 }

@@ -90203,8 +90203,21 @@
                       "isBuiltIn": {
                         "type": "boolean"
                       },
-                      "blockedCode": {
-                        "type": "boolean"
+                      "loadState": {
+                        "type": "string",
+                        "enum": [
+                          "loaded",
+                          "disabled",
+                          "incompatible",
+                          "failed",
+                          "safe-mode"
+                        ]
+                      },
+                      "loadError": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
                       },
                       "enabled": {
                         "type": "boolean"
@@ -90299,7 +90312,8 @@
                       "domains",
                       "quality",
                       "isBuiltIn",
-                      "blockedCode",
+                      "loadState",
+                      "loadError",
                       "enabled",
                       "configured",
                       "hasHealthCheck",
@@ -93324,8 +93338,21 @@
                     "isBuiltIn": {
                       "type": "boolean"
                     },
-                    "blockedCode": {
-                      "type": "boolean"
+                    "loadState": {
+                      "type": "string",
+                      "enum": [
+                        "loaded",
+                        "disabled",
+                        "incompatible",
+                        "failed",
+                        "safe-mode"
+                      ]
+                    },
+                    "loadError": {
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "enabled": {
                       "type": "boolean"
@@ -95136,7 +95163,8 @@
                     "domains",
                     "quality",
                     "isBuiltIn",
-                    "blockedCode",
+                    "loadState",
+                    "loadError",
                     "enabled",
                     "configured",
                     "hasHealthCheck",

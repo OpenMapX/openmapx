@@ -184,6 +184,71 @@ describe("installed integrations with an operations agent", () => {
     );
   });
 
+  it("imports the backend entry the agent installed", async () => {
+    vi.stubEnv("OPENMAPX_INTEGRATION_CODE_CACHE_DIR", `${root}-code-cache`);
+    const g = globalThis as Record<string, unknown>;
+    write(
+      "manifest.json",
+      JSON.stringify({ ...MANIFEST, backend: { entry: "dist/backend/index.mjs" } }),
+    );
+    write(
+      "dist/backend/index.mjs",
+      [
+        "// imports the backend entry the agent installed",
+        "export function setup(ctx) { globalThis.__omxInstalledEntry = ctx.config.greeting; }",
+      ].join("\n"),
+    );
+    agentReports([{ integrationId: "delta", files: recordedFiles() }]);
+
+    try {
+      await start();
+
+      expect(getIntegration("delta")).toMatchObject({ enabled: true, loadState: "loaded" });
+      expect(g.__omxInstalledEntry).toBe("from-config-json");
+    } finally {
+      delete g.__omxInstalledEntry;
+      vi.unstubAllEnvs();
+      rmSync(`${root}-code-cache`, { recursive: true, force: true });
+    }
+  });
+
+  it("does not import a backend entry that changed since the agent installed it", async () => {
+    vi.stubEnv("OPENMAPX_INTEGRATION_CODE_CACHE_DIR", `${root}-code-cache`);
+    const g = globalThis as Record<string, unknown>;
+    const bundle = (marker: string) =>
+      [
+        "// does not import a backend entry that changed since the agent installed it",
+        `globalThis.__omxChangedEntry = ${JSON.stringify(marker)};`,
+        "export function setup() {}",
+      ].join("\n");
+    write(
+      "manifest.json",
+      JSON.stringify({ ...MANIFEST, backend: { entry: "dist/backend/index.mjs" } }),
+    );
+    write("dist/backend/index.mjs", bundle("installed"));
+    const files = recordedFiles();
+    write("dist/backend/index.mjs", bundle("rewritten"));
+    agentReports([{ integrationId: "delta", files }]);
+
+    try {
+      await start();
+
+      expect(getIntegration("delta")).toMatchObject({
+        enabled: false,
+        loadState: "failed",
+        loadError: {
+          phase: "import",
+          message: "backend entry is missing or changed since installation",
+        },
+      });
+      expect(g.__omxChangedEntry).toBeUndefined();
+    } finally {
+      delete g.__omxChangedEntry;
+      vi.unstubAllEnvs();
+      rmSync(`${root}-code-cache`, { recursive: true, force: true });
+    }
+  });
+
   it("asks the agent again on every reload", async () => {
     const resolver = agentReports([{ integrationId: "delta", files: recordedFiles() }]);
     await start();

@@ -72,6 +72,7 @@ async function poiSearchPlugin(fastify: FastifyInstance): Promise<void> {
     enabled: true,
     providers: new Map(),
     strings: {},
+    loadState: "loaded",
     shutdownHandlers: [],
   };
   const integrations = new Map<string, LoadedIntegration>([["poi-search", integration]]);

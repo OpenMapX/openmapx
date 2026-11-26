@@ -38,6 +38,7 @@ vi.mock("../extension-store", () => ({
 
 vi.mock("../../integration-host", () => ({
   reloadIntegrations: vi.fn().mockResolvedValue({ message: "ok", reloaded: 1, enabled: 1 }),
+  failedIntegrationLoads: vi.fn().mockReturnValue([]),
 }));
 
 vi.mock("../../utils/docker-compose", () => ({
@@ -90,7 +91,7 @@ vi.mock("../extension-recovery", () => ({
   recoverInterruptedExtensionChanges: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { reloadIntegrations } from "../../integration-host";
+import { failedIntegrationLoads, reloadIntegrations } from "../../integration-host";
 import { dockerComposeAction } from "../../utils/docker-compose";
 import { getServiceSelectionSummary } from "../admin-cli";
 import { renderAndPersistCompose, serviceStart } from "../admin-ops";
@@ -1112,6 +1113,29 @@ describe("installExtension", () => {
       settleIntegrationMock.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
     );
     // The reload threw before the bookkeeping transaction, so no rows to leak.
+    expect(dbMock.db.transaction).not.toHaveBeenCalled();
+    expect(dbMock.db.insert).not.toHaveBeenCalled();
+  });
+
+  it("fails and rolls back when the reload leaves the installed integration out", async () => {
+    const failedLoadsMock = vi.mocked(failedIntegrationLoads);
+    failedLoadsMock.mockReturnValueOnce([
+      { id: "intg-one", phase: "setup", message: "setup exploded" },
+    ]);
+
+    await expect(
+      installExtension(makeCtx(), { manifest: INTEGRATION_ONLY, sourceTrust: "community" }),
+    ).rejects.toThrow("Integration intg-one failed to load: setup exploded");
+
+    expect(failedLoadsMock).toHaveBeenCalledWith(["intg-one"]);
+    expect(settleIntegrationMock.mock.calls.map(([request]) => request)).toEqual([
+      { integrationId: "intg-one", transactionId: INTEGRATION_TRANSACTION, outcome: "rollback" },
+    ]);
+    // Pipeline reload + rollback reload, so the restored files are what runs.
+    expect(reloadMock).toHaveBeenCalledTimes(2);
+    expect(reloadMock.mock.invocationCallOrder[1]).toBeGreaterThan(
+      settleIntegrationMock.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+    );
     expect(dbMock.db.transaction).not.toHaveBeenCalled();
     expect(dbMock.db.insert).not.toHaveBeenCalled();
   });

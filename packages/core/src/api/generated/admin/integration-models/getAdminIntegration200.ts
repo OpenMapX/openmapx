@@ -5,6 +5,7 @@ import type { GetAdminIntegration200CredentialStatusItem } from "./getAdminInteg
 import type { GetAdminIntegration200DependencyStatusItem } from "./getAdminIntegration200DependencyStatusItem";
 import type { GetAdminIntegration200Health } from "./getAdminIntegration200Health";
 import type { GetAdminIntegration200Infrastructure } from "./getAdminIntegration200Infrastructure";
+import type { GetAdminIntegration200LoadState } from "./getAdminIntegration200LoadState";
 import type { GetAdminIntegration200Manifest } from "./getAdminIntegration200Manifest";
 import type { GetAdminIntegration200Ownership } from "./getAdminIntegration200Ownership";
 import type { GetAdminIntegration200Quality } from "./getAdminIntegration200Quality";
@@ -20,7 +21,9 @@ export type GetAdminIntegration200 = {
   domains: string[];
   quality: GetAdminIntegration200Quality;
   isBuiltIn: boolean;
-  blockedCode: boolean;
+  loadState: GetAdminIntegration200LoadState;
+  /** @nullable */
+  loadError: string | null;
   enabled: boolean;
   configured: boolean;
   hasHealthCheck: boolean;

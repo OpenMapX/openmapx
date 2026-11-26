@@ -22,7 +22,8 @@ function makeIntegrations(count: number): IntegrationSummary[] {
     domains: ["geocoding"],
     quality: "built-in" as const,
     isBuiltIn: true,
-    blockedCode: false,
+    loadState: "loaded" as const,
+    loadError: null,
     requires: [],
     enabled: i % 2 === 0,
     configured: true,
@@ -74,5 +75,28 @@ describe("IntegrationList pagination", () => {
     // After the filter, page must be back to 0, so the first matching row is
     // visible and the pager reports page 1 of the filtered set.
     await screen.findByText("Provider 000");
+  });
+});
+
+describe("IntegrationList load state", () => {
+  it("marks an integration whose code failed to load", async () => {
+    const [loaded, failed] = makeIntegrations(2);
+    fetchMock.mockImplementation(() =>
+      Response.json([
+        loaded,
+        { ...failed, enabled: false, loadState: "failed", loadError: "bad setup" },
+      ]),
+    );
+    const user = userEvent.setup();
+    render(<IntegrationList />, { wrapper: createQueryWrapper() });
+
+    const chips = await screen.findAllByText("Failed to load");
+    expect(chips).toHaveLength(1);
+    await user.hover(chips[0] as HTMLElement);
+    expect(
+      await screen.findByText(
+        "This integration was left out because its code failed to load: bad setup",
+      ),
+    ).toBeTruthy();
   });
 });

@@ -244,7 +244,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await delay(50);
       }
     }
-    async function upload(id: string) {
+    async function upload(id: string, backend?: string) {
       const bytes = createDeterministicTarGz([
         {
           path: "manifest.json",
@@ -256,9 +256,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
               platform: "1.0",
               quality: "community",
               domains: ["map-overlay"],
+              ...(backend === undefined ? {} : { backend: { entry: "dist/backend/index.mjs" } }),
             }),
           ),
         },
+        ...(backend === undefined
+          ? []
+          : [{ path: "dist/backend/index.mjs", contents: Buffer.from(backend) }]),
       ]);
       const digest = createHash("sha256").update(bytes).digest("hex");
       const stage = await store.createStage({
@@ -471,6 +475,50 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const retry = await post("preview", { source }, randomUUID()),
         retryJob = await completed(retry.body.jobId);
       expect(retryJob.status, retryJob.error ?? JSON.stringify(retryJob.result)).toBe("succeeded");
+    }, 90000);
+
+    it("restores an install whose backend fails to load and fails with the reason", async () => {
+      vi.stubEnv(
+        "OPENMAPX_INTEGRATION_CODE_CACHE_DIR",
+        join(state.host.cleanupRoot, "integration-code-cache"),
+      );
+      const { source } = await upload(
+        "standalone-failing-backend",
+        [
+          "// restores an install whose backend fails to load",
+          "export function setup() {",
+          '  throw new Error("setup exploded");',
+          "}",
+        ].join("\n"),
+      );
+      const preview = await post("preview", { source }, randomUUID()),
+        previewJob = await completed(preview.body.jobId);
+      expect(previewJob.status, previewJob.error ?? JSON.stringify(previewJob.result)).toBe(
+        "succeeded",
+      );
+      const inspection = previewJob.result as { inspectionId: string; contentDigest: string };
+      const accepted = await post(
+        "install",
+        { inspectionId: inspection.inspectionId, expectedContentDigest: inspection.contentDigest },
+        randomUUID(),
+      );
+      const done = await completed(accepted.body.jobId);
+      expect(done.status, done.error ?? JSON.stringify(done.result)).toBe("failed");
+      expect(done.error).toContain(
+        "Integration standalone-failing-backend failed to load: setup exploded",
+      );
+      expect(done.result).toMatchObject({ outcome: "restored" });
+      expect(
+        await state.fixture.db
+          .select()
+          .from(schema.installedIntegration)
+          .where(eq(schema.installedIntegration.id, "standalone-failing-backend")),
+      ).toEqual([]);
+      expect(
+        existsSync(join(state.host.root, "custom_integrations", "standalone-failing-backend")),
+      ).toBe(false);
+      const { getIntegration } = await import("../../integration-host");
+      expect(getIntegration("standalone-failing-backend")).toBeUndefined();
     }, 90000);
 
     it("keeps a published cancellation pending until exact restoration and stage release", async () => {
