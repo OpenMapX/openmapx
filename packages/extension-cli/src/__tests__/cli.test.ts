@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { validateServiceManifest } from "@openmapx/extension-contracts/service";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { scaffoldIntegration, scaffoldService } from "../commands/scaffold.js";
-import { runValidate } from "../commands/validate.js";
+import { runValidate, validateAuthoringInput } from "../commands/validate.js";
 
 const CLI = resolve(__dirname, "../../dist/cli.js");
 
@@ -142,6 +142,24 @@ describe("validate", () => {
     scaffoldIntegration({ id: "demo-validate", domain: "knowledge", outDir: tmp });
     const destDir = join(tmp, "demo-validate");
     await expect(runValidate(destDir)).resolves.toBeUndefined();
+  });
+
+  it("passes a layer-selector preview stored under assets/", async () => {
+    scaffoldIntegration({ id: "demo-preview", domain: "knowledge", outDir: tmp });
+    const destDir = join(tmp, "demo-preview");
+    const manifestPath = join(destDir, "manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf-8")) as Record<string, unknown>;
+    manifest.frontend = {
+      layerSelector: {
+        group: "map-details",
+        labelKey: "layer",
+        preview: "assets/layer-preview.svg",
+      },
+    };
+    writeFileSync(manifestPath, JSON.stringify(manifest));
+    mkdirSync(join(destDir, "assets"), { recursive: true });
+    writeFileSync(join(destDir, "assets", "layer-preview.svg"), "<svg/>");
+    await expect(validateAuthoringInput(destDir)).resolves.toEqual({ valid: true, errors: [] });
   });
 });
 

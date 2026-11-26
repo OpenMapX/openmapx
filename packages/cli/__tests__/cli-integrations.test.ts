@@ -12,6 +12,7 @@ import {
   rmSync,
   statSync,
   symlinkSync,
+  truncateSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -207,7 +208,7 @@ describe("listIntegrations", () => {
 });
 
 describe("integrations command policy", () => {
-  it("does not expose executable community build controls", () => {
+  it("has no build subcommand", () => {
     const program = new Command();
     registerIntegrationsCommands(program);
     const integrations = program.commands.find((command) => command.name() === "integrations");
@@ -448,6 +449,85 @@ describe("installIntegration (local source)", () => {
     await expect(
       installIntegration({ source: "/this/path/does/not/exist", rootDir: tmp }),
     ).rejects.toThrow(/not.*existing local directory/);
+  });
+
+  /** A local source directory holding `files` beside a manifest extended by `manifest`. */
+  function localSource(
+    id: string,
+    manifest: Record<string, unknown>,
+    files: Record<string, string>,
+  ): string {
+    const src = join(tmp, `${id}-src`);
+    mkdirSync(src, { recursive: true });
+    writeFileSync(
+      join(src, "manifest.json"),
+      JSON.stringify({ ...baseManifest, id, ...manifest }),
+      "utf-8",
+    );
+    for (const [path, contents] of Object.entries(files)) {
+      mkdirSync(join(src, path, ".."), { recursive: true });
+      writeFileSync(join(src, path), contents, "utf-8");
+    }
+    return src;
+  }
+
+  async function expectLocalRejection(src: string, id: string, message: RegExp | string) {
+    await expect(installIntegration({ source: src, rootDir: tmp })).rejects.toThrow(message);
+    expect(existsSync(join(tmp, "custom_integrations", id))).toBe(false);
+  }
+
+  it("rejects a backend bundle larger than the archive layout admits", async () => {
+    const src = localSource(
+      "oversized-bundle",
+      { backend: { entry: "dist/backend/index.mjs" } },
+      { "dist/backend/index.mjs": "" },
+    );
+    truncateSync(join(src, "dist", "backend", "index.mjs"), 32 * 1024 * 1024 + 1);
+    await expectLocalRejection(
+      src,
+      "oversized-bundle",
+      "dist/backend/index.mjs exceeds 33554432 bytes",
+    );
+  });
+
+  it("rejects migrations the manifest does not declare", async () => {
+    const src = localSource(
+      "undeclared-migrations",
+      {},
+      { "migrations/0001_init.sql": "select 1;" },
+    );
+    await expectLocalRejection(
+      src,
+      "undeclared-migrations",
+      "migrations/ is present but the manifest does not declare database.migrations",
+    );
+  });
+
+  it("rejects declared migrations when migrations/ holds none", async () => {
+    const src = localSource("empty-migrations", { database: { migrations: true } }, {});
+    mkdirSync(join(src, "migrations"));
+    await expectLocalRejection(
+      src,
+      "empty-migrations",
+      "Manifest declares database.migrations but migrations/ holds no migration file",
+    );
+  });
+
+  it("rejects a directory with more asset files than the archive layout admits", async () => {
+    const files: Record<string, string> = {};
+    for (let index = 0; index < 513; index++) files[`assets/icon-${index}.svg`] = "<svg/>";
+    const src = localSource("too-many-assets", {}, files);
+    await expectLocalRejection(src, "too-many-assets", "Artifact holds more than 512 asset files");
+  });
+
+  it("rejects a directory with an asset larger than the archive layout admits", async () => {
+    const src = localSource("oversized-asset", {}, { "assets/tiles/big.bin": "" });
+    truncateSync(join(src, "assets", "tiles", "big.bin"), 8 * 1024 * 1024 + 1);
+    await expectLocalRejection(
+      src,
+      "oversized-asset",
+      "Artifact file assets/tiles/big.bin exceeds its 8388608-byte limit",
+    );
   });
 });
 
@@ -847,14 +927,17 @@ describe("installIntegration (artifact source)", () => {
     );
   });
 
-  it("rejects a native add-on", async () => {
-    const artifact = backendArtifact("native-addon", declaredBackend, {
-      "dist/backend/index.mjs": "export default {};",
-      "dist/backend/binding.node": "\u007fELF",
-      "migrations/0001_init.sql": "select 1;",
-    });
-    await expectArtifactRejection(artifact, "native-addon", /Native add-ons/);
-  });
+  it.each(["dist/backend/binding.node", "assets/a/b/c/x.NODE"])(
+    "rejects a native add-on at %s",
+    async (addOn) => {
+      const artifact = backendArtifact("native-addon", declaredBackend, {
+        "dist/backend/index.mjs": "export default {};",
+        [addOn]: "\u007fELF",
+        "migrations/0001_init.sql": "select 1;",
+      });
+      await expectArtifactRejection(artifact, "native-addon", /Native add-ons/);
+    },
+  );
 
   it("rejects migrations that skip a number", async () => {
     const artifact = backendArtifact("skipped-migration", declaredBackend, {

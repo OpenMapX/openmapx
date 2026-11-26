@@ -60,7 +60,7 @@ import {
 } from "@openmapx/extension-contracts/artifact";
 import { componentIdSchema, isComponentId } from "@openmapx/extension-contracts/identifiers";
 import z from "zod/v4";
-import { createDeterministicTarGz } from "./deterministic-tar";
+import { createDeterministicTarGz, deterministicTarSize } from "./deterministic-tar";
 import { validateManifest } from "./manifest";
 import { PLATFORM_VERSION, satisfiesPlatformVersion } from "./platform";
 
@@ -603,6 +603,7 @@ export function validateStagedIntegration(
   assertNoExecutableFrontendCode(stage, manifest);
   assertNoShippedNodeModules(stage);
   assertInstallableBackend(stage, manifest);
+  assertInstallableAssets(stage);
   if (options.artifact) validateArtifactMetadata(stage, manifest);
   if (!options.allowLinks) assertOnlyFilesAndDirectories(stage);
   applyInstalledModes(stage);
@@ -832,6 +833,7 @@ function validatePreparedIntegration(directory: string, rootDir: string): Record
   assertNoExecutableFrontendCode(directory, manifest);
   assertNoShippedNodeModules(directory);
   assertInstallableBackend(directory, manifest);
+  assertInstallableAssets(directory);
   validateArtifactMetadata(directory, manifest);
   assertAgentLoads(directory, manifest.id);
   return manifest;
@@ -2287,10 +2289,16 @@ function collectStagedFile(
     }
     return null;
   }
-  if (stats.size > maxBytes) {
-    throw new Error(`Artifact file ${relativePath} exceeds its ${maxBytes}-byte limit`);
-  }
+  if (stats.size > maxBytes) throw oversizedArtifactFile(relativePath, maxBytes);
   return { relativePath, absoluteSource: absolute, sizeBytes: stats.size };
+}
+
+function oversizedArtifactFile(relativePath: string, maxBytes: number): Error {
+  return new Error(`Artifact file ${relativePath} exceeds its ${maxBytes}-byte limit`);
+}
+
+function tooManyAssetFiles(): Error {
+  return new Error(`Artifact holds more than ${INTEGRATION_ARCHIVE_LIMITS.assetFiles} asset files`);
 }
 
 /**
@@ -2385,7 +2393,9 @@ function collectArtifactFiles(
     }
   }
 
-  files.push(...collectAssetFiles(directory));
+  // A layer-selector preview stored under `assets/` is already staged above.
+  const staged = new Set(files.map((file) => file.relativePath));
+  files.push(...collectAssetFiles(directory).filter((file) => !staged.has(file.relativePath)));
 
   const seen = new Set<string>();
   for (const file of files) {
@@ -2426,11 +2436,7 @@ function collectAssetFiles(directory: string): StagedFile[] {
         continue;
       }
       if (!regularFile(join(directory, path))) continue;
-      if (files.length === INTEGRATION_ARCHIVE_LIMITS.assetFiles) {
-        throw new Error(
-          `Artifact holds more than ${INTEGRATION_ARCHIVE_LIMITS.assetFiles} asset files`,
-        );
-      }
+      if (files.length === INTEGRATION_ARCHIVE_LIMITS.assetFiles) throw tooManyAssetFiles();
       const staged = collectStagedFile(
         directory,
         path,
@@ -2442,6 +2448,30 @@ function collectAssetFiles(directory: string): StagedFile[] {
   };
   walk("assets");
   return files;
+}
+
+/**
+ * The archive layout's asset limits, for a tree published as it is. Every
+ * entry below `assets/` counts, since all of it is published; links are
+ * counted but not followed.
+ */
+function assertInstallableAssets(directory: string): void {
+  let count = 0;
+  const walk = (relativeDirectory: string): void => {
+    const entries = readdirSync(join(directory, relativeDirectory), { withFileTypes: true });
+    for (const entry of entries) {
+      const path = `${relativeDirectory}/${entry.name}`;
+      if (entry.isDirectory()) {
+        walk(path);
+        continue;
+      }
+      if (++count > INTEGRATION_ARCHIVE_LIMITS.assetFiles) throw tooManyAssetFiles();
+      const stats = lstatSync(join(directory, path));
+      if (stats.isFile() && stats.size > INTEGRATION_ARCHIVE_LIMITS.assetBytes)
+        throw oversizedArtifactFile(path, INTEGRATION_ARCHIVE_LIMITS.assetBytes);
+    }
+  };
+  if (regularDirectory(join(directory, "assets"))) walk("assets");
 }
 
 const ARTIFACT_METADATA_FILE = "openmapx-artifact.json";
@@ -2485,7 +2515,8 @@ function findNativeAddOn(directory: string, skipAuthoringDirectories: boolean): 
     const entries = readdirSync(join(directory, relativeDirectory), { withFileTypes: true });
     for (const entry of entries) {
       const path = relativeDirectory ? `${relativeDirectory}/${entry.name}` : entry.name;
-      if (entry.name.endsWith(".node")) return path;
+      // Case-insensitive: a case-insensitive filesystem loads `x.NODE` for `./x.node`.
+      if (/\.node$/i.test(entry.name)) return path;
       if (!entry.isDirectory()) continue;
       if (
         skipAuthoringDirectories &&
@@ -2712,6 +2743,16 @@ export async function packageIntegration(opts: PackageOptions): Promise<PackageR
   const files = collectArtifactFiles(directory, manifest, { metadata, licenses });
   const totalBytes = files.reduce((sum, file) => sum + file.sizeBytes, 0);
   const relativePaths = files.map((file) => file.relativePath);
+  // Every install bounds the extracted tar by this size; refuse an artifact
+  // that would exceed it before any contents are read into memory.
+  const tarBytes = deterministicTarSize(
+    files.map((file) => ({ path: file.relativePath, sizeBytes: file.sizeBytes })),
+  );
+  if (tarBytes > DEFAULT_MAX_ARTIFACT_BYTES) {
+    throw new Error(
+      `Artifact would expand to ${tarBytes} bytes; an install accepts at most ${DEFAULT_MAX_ARTIFACT_BYTES}`,
+    );
+  }
 
   if (opts.dryRun) {
     // The list and the byte total only — never file contents.

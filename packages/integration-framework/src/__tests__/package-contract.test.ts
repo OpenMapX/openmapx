@@ -1,14 +1,17 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
+  chmodSync,
   closeSync,
   fstatSync,
   mkdirSync,
   mkdtempSync,
   openSync,
   readFileSync,
+  rmSync,
   statSync,
   symlinkSync,
+  truncateSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -212,6 +215,101 @@ describe("integration packaging contract", () => {
     // No file contents are printed.
     expect(logs.join("\n")).not.toContain("fixture-packaging-secret");
     expect(logs.join("\n")).toContain(`${result.files?.length} files`);
+  });
+
+  it("packages a layer-selector preview stored under assets/ once", async () => {
+    const source = sourceTree();
+    const file = join(source, "manifest.json");
+    writeFileSync(
+      file,
+      JSON.stringify({
+        ...JSON.parse(readFileSync(file, "utf8")),
+        frontend: {
+          layerSelector: {
+            group: "map-details",
+            labelKey: "layer",
+            preview: "assets/layer-preview.svg",
+          },
+        },
+      }),
+    );
+    writeFileSync(join(source, "assets", "layer-preview.svg"), "<svg/>");
+
+    const result = await packageIntegration({ rootDir: source, source, outFile: outFile() });
+
+    expect(result.files?.filter((path) => path === "assets/layer-preview.svg")).toHaveLength(1);
+  });
+
+  it("refuses a native add-on whatever the case of its extension", async () => {
+    const source = sourceTree();
+    mkdirSync(join(source, "assets", "a", "b"), { recursive: true });
+    writeFileSync(join(source, "assets", "a", "b", "x.NODE"), "\u007fELF");
+    await expect(
+      packageIntegration({ rootDir: source, source, outFile: outFile(), dryRun: true }),
+    ).rejects.toThrow("Native add-ons cannot be installed");
+  });
+
+  it("refuses more asset files than the archive layout admits", async () => {
+    const source = sourceTree();
+    rmSync(join(source, "assets"), { recursive: true });
+    mkdirSync(join(source, "assets"));
+    for (let index = 0; index < 513; index++) {
+      writeFileSync(join(source, "assets", `icon-${index}.svg`), "<svg/>");
+    }
+    await expect(
+      packageIntegration({ rootDir: source, source, outFile: outFile(), dryRun: true }),
+    ).rejects.toThrow("Artifact holds more than 512 asset files");
+  });
+
+  it("refuses, before reading any contents, an artifact no install accepts", async () => {
+    const source = sourceTree();
+    // 25 sparse assets at the per-asset limit add up to exactly 200 MiB of
+    // payload; their tar headers push the archive over what an install accepts.
+    for (let index = 0; index < 25; index++) {
+      const path = join(source, "assets", `tile-${index}.bin`);
+      writeFileSync(path, "");
+      truncateSync(path, 8 * 1024 * 1024);
+    }
+    // Unreadable, so reading contents before the size check would fail differently.
+    chmodSync(join(source, "assets", "tile-0.bin"), 0o000);
+    const message = /^Artifact would expand to \d+ bytes; an install accepts at most 209715200$/;
+    try {
+      await expect(
+        packageIntegration({ rootDir: source, source, outFile: outFile(), dryRun: true }),
+      ).rejects.toThrow(message);
+      const target = outFile();
+      await expect(
+        packageIntegration({ rootDir: source, source, outFile: target }),
+      ).rejects.toThrow(message);
+      expect(existsSyncSafe(target)).toBe(false);
+    } finally {
+      chmodSync(join(source, "assets", "tile-0.bin"), 0o644);
+    }
+  });
+
+  it("packages and installs an asset path at the archive layout's limits", async () => {
+    const source = sourceTree();
+    const segments = Array.from({ length: 7 }, (_, index) => `${index}`.repeat(100));
+    const leaf = `${"f".repeat(96)}.svg`;
+    mkdirSync(join(source, "assets", ...segments), { recursive: true });
+    writeFileSync(join(source, "assets", ...segments, leaf), "<svg/>");
+    const longPath = ["assets", ...segments, leaf].join("/");
+    expect(Buffer.byteLength(longPath)).toBe(814);
+
+    const target = outFile();
+    const result = await packageIntegration({ rootDir: source, source, outFile: target });
+    expect(result.files).toContain(longPath);
+    const listing = execFileSync("tar", ["-tzf", target], { encoding: "utf8" }).split("\n");
+    expect(listing).toContain(longPath);
+
+    const host = mkdtempSync(join(tmpdir(), "omx-"));
+    roots.push(host);
+    const installed = await installIntegration({
+      rootDir: host,
+      source: target,
+      sourceKind: "artifact",
+    });
+    expect(statSync(join(installed.directory, longPath)).isFile()).toBe(true);
   });
 
   it("never packages a symlink, even one named like an allowlisted file", async () => {
