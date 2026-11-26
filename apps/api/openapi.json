@@ -169,6 +169,12 @@
                 "frontend": {
                   "type": "object",
                   "properties": {
+                    "entry": {
+                      "type": "string",
+                      "enum": [
+                        "dist/web/index.mjs"
+                      ]
+                    },
                     "mapLayer": {
                       "type": "boolean"
                     },
@@ -178,7 +184,27 @@
                     "legend": {
                       "type": "boolean"
                     },
+                    "legendKind": {
+                      "type": "string",
+                      "enum": [
+                        "card",
+                        "toolbar"
+                      ]
+                    },
                     "panel": {
+                      "type": "object",
+                      "properties": {
+                        "detents": {
+                          "type": "string",
+                          "enum": [
+                            "list",
+                            "place"
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "mapControl": {
                       "type": "boolean"
                     },
                     "searchCategory": {
@@ -233,6 +259,14 @@
                         },
                         "quickSelector": {
                           "type": "boolean"
+                        },
+                        "section": {
+                          "type": "string",
+                          "enum": [
+                            "transport",
+                            "outdoors",
+                            "weatherEnvironment"
+                          ]
                         }
                       },
                       "required": [
@@ -244,6 +278,11 @@
                     "overlay": {
                       "type": "object",
                       "properties": {
+                        "id": {
+                          "type": "string",
+                          "maxLength": 48,
+                          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                        },
                         "excludes": {
                           "type": "array",
                           "items": {
@@ -741,6 +780,11 @@
                       },
                       "attribution": {
                         "type": "string"
+                      },
+                      "logoAsset": {
+                        "type": "string",
+                        "maxLength": 256,
+                        "pattern": "\\.(?:svg|png|webp)$"
                       },
                       "notes": {
                         "type": "string"
@@ -91792,6 +91836,10 @@
                           "type": "string",
                           "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
                         },
+                        "webPlatform": {
+                          "type": "string",
+                          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+                        },
                         "domains": {
                           "type": "array",
                           "items": {
@@ -91832,6 +91880,12 @@
                         "frontend": {
                           "type": "object",
                           "properties": {
+                            "entry": {
+                              "type": "string",
+                              "enum": [
+                                "dist/web/index.mjs"
+                              ]
+                            },
                             "mapLayer": {
                               "type": "boolean"
                             },
@@ -91841,7 +91895,34 @@
                             "legend": {
                               "type": "boolean"
                             },
+                            "legendKind": {
+                              "type": "string",
+                              "enum": [
+                                "card",
+                                "toolbar"
+                              ]
+                            },
                             "panel": {
+                              "type": "object",
+                              "properties": {
+                                "detents": {
+                                  "type": "string",
+                                  "enum": [
+                                    "list",
+                                    "place"
+                                  ]
+                                }
+                              },
+                              "additionalProperties": {
+                                "description": "Recursive JSON. Objects with an own __proto__ key are rejected at every depth.",
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/Admin_getAdminIntegration_200___schema0"
+                                  }
+                                ]
+                              }
+                            },
+                            "mapControl": {
                               "type": "boolean"
                             },
                             "searchCategory": {
@@ -91903,6 +91984,14 @@
                                 },
                                 "quickSelector": {
                                   "type": "boolean"
+                                },
+                                "section": {
+                                  "type": "string",
+                                  "enum": [
+                                    "transport",
+                                    "outdoors",
+                                    "weatherEnvironment"
+                                  ]
                                 }
                               },
                               "required": [
@@ -91921,6 +92010,11 @@
                             "overlay": {
                               "type": "object",
                               "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "maxLength": 48,
+                                  "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                                },
                                 "excludes": {
                                   "type": "array",
                                   "items": {
@@ -92039,13 +92133,35 @@
                             "routes": {
                               "type": "boolean"
                             },
-                            "cron": {
-                              "type": [
-                                "string",
-                                "null"
+                            "entry": {
+                              "type": "string",
+                              "enum": [
+                                "dist/backend/index.mjs"
                               ]
                             }
                           },
+                          "additionalProperties": {
+                            "description": "Recursive JSON. Objects with an own __proto__ key are rejected at every depth.",
+                            "allOf": [
+                              {
+                                "$ref": "#/components/schemas/Admin_getAdminIntegration_200___schema0"
+                              }
+                            ]
+                          }
+                        },
+                        "database": {
+                          "type": "object",
+                          "properties": {
+                            "migrations": {
+                              "type": "boolean",
+                              "enum": [
+                                true
+                              ]
+                            }
+                          },
+                          "required": [
+                            "migrations"
+                          ],
                           "additionalProperties": {
                             "description": "Recursive JSON. Objects with an own __proto__ key are rejected at every depth.",
                             "allOf": [
@@ -92680,6 +92796,11 @@
                               "attribution": {
                                 "type": "string"
                               },
+                              "logoAsset": {
+                                "type": "string",
+                                "maxLength": 256,
+                                "pattern": "\\.(?:svg|png|webp)$"
+                              },
                               "notes": {
                                 "type": "string"
                               },
@@ -92831,6 +92952,14 @@
                               "items": {
                                 "type": "string",
                                 "pattern": "^[a-z0-9][a-z0-9-]*$"
+                              }
+                            },
+                            "registrations": {
+                              "maxItems": 64,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": {}
                               }
                             },
                             "operatorInstructions": {

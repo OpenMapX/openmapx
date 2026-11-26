@@ -8,7 +8,6 @@
   "frontend": {
     "mapLayer": true,
     "legend": true,
-    "panel": false,
     "layerSelector": {
       "group": "map-details",
       "labelKey": "winterSports",

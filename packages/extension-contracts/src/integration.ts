@@ -1,4 +1,5 @@
 import z from "zod/v4";
+import { BACKEND_ENTRY_PATH, integrationArchiveEntryKind, WEB_ENTRY_PATH } from "./archive";
 import { checkCapabilityName } from "./capabilities";
 import { componentIdSchema, feedIdSchema } from "./identifiers";
 import { parseLicensing } from "./licensing";
@@ -79,6 +80,17 @@ export const dataSourceSchema = z.object({
     return licensing;
   }),
   attribution: z.string().optional(),
+  /**
+   * The source's logo, shipped in the integration's own archive. The
+   * attribution policy's `logo` stays the closed list of reviewed built-in
+   * assets; this path belongs to the source that ships the file.
+   */
+  logoAsset: z
+    .string()
+    .max(256)
+    .regex(/\.(?:svg|png|webp)$/)
+    .refine((path) => integrationArchiveEntryKind(path) === "asset", "must be a file under assets/")
+    .optional(),
   /** Operator/privacy context, not credit copy. Required notices belong in attribution/licensing. */
   notes: z.string().optional(),
   commercialUse: z.enum(["yes", "no", "conditional", "unknown"]).optional(),
@@ -263,6 +275,7 @@ const layerSelectorSchema = z.object({
   icon: z.string().optional(),
   preview: layerSelectorPreviewPathSchema.nullable().optional(),
   quickSelector: z.boolean().optional(),
+  section: z.enum(["transport", "outdoors", "weatherEnvironment"]).optional(),
 });
 
 const overlayLegendItemSchema = z.object({
@@ -287,6 +300,11 @@ const overlayLegendSchema = z.object({
  * are rendered by the integration's own `map-layer.tsx` code, not the manifest.
  */
 const overlaySchema = z.object({
+  id: z
+    .string()
+    .max(48)
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+    .optional(),
   excludes: z.array(z.string()).optional(),
   minZoom: z.number().optional(),
   legend: overlayLegendSchema.optional(),
@@ -299,7 +317,11 @@ const searchCategorySchema = z.object({
   iconPath: z.string().optional(),
 });
 
+/** Declaring a panel, even an empty object, means the integration has one. */
+const panelSchema = z.strictObject({ detents: z.enum(["list", "place"]).optional() });
+
 const frontendSchema = z.object({
+  entry: z.literal(WEB_ENTRY_PATH).optional(),
   mapLayer: z.boolean().optional(),
   /**
    * Groups integrations that render ONE shared map-layer component. Several
@@ -309,16 +331,21 @@ const frontendSchema = z.object({
    */
   sharedMapLayer: z.string().optional(),
   legend: z.boolean().optional(),
-  panel: z.boolean().optional(),
+  legendKind: z.enum(["card", "toolbar"]).optional(),
+  panel: panelSchema.optional(),
+  mapControl: z.boolean().optional(),
   searchCategory: searchCategorySchema.optional(),
   layerSelector: layerSelectorSchema.optional(),
   overlay: overlaySchema.optional(),
 });
 
-const backendSchema = z.object({
+/** Strict, so a manifest declaring a field the host does not run fails by name. */
+const backendSchema = z.strictObject({
   routes: z.boolean().optional(),
-  cron: z.string().nullable().optional(),
+  entry: z.literal(BACKEND_ENTRY_PATH).optional(),
 });
+
+const databaseSchema = z.strictObject({ migrations: z.literal(true) });
 
 const infrastructureSchema = z.object({
   dataRequirements: z.array(z.string()).optional(),
@@ -330,6 +357,12 @@ export const integrationSubjectDataSchema = z
     storesPersonalData: z.boolean(),
     strategy: z.enum(["collector", "operator_task", "not_personal"]),
     registrationIds: z.array(z.string().regex(/^[a-z0-9][a-z0-9-]*$/)).max(64),
+    /**
+     * An installed integration's personal-data registrations as plain
+     * objects. Their schema lives in the host, which validates each entry
+     * when it builds the catalogue.
+     */
+    registrations: z.array(z.record(z.string(), z.unknown())).max(64).optional(),
     operatorInstructions: z.string().min(1).max(2_000).nullable(),
   })
   .strict()
@@ -371,6 +404,13 @@ export const integrationSubjectDataSchema = z
         code: "custom",
         path: ["registrationIds"],
         message: "non-personal integration cannot declare subject data",
+      });
+    }
+    if (!value.storesPersonalData && (value.registrations?.length ?? 0) > 0) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["registrations"],
+        message: "registrations need storesPersonalData",
       });
     }
   });
@@ -419,6 +459,8 @@ const integrationManifestShape = {
   license: z.string().optional(),
   documentation: z.string().optional(),
   platform: platformVersionSchema.optional(),
+  /** Web extension protocol of the `dist/web` bundle; only an integration that ships one states it. */
+  webPlatform: platformVersionSchema.optional(),
 
   domains: z.array(z.string()),
 
@@ -427,6 +469,7 @@ const integrationManifestShape = {
 
   frontend: frontendSchema.optional(),
   backend: backendSchema.optional(),
+  database: databaseSchema.optional(),
 
   configSchema: integrationConfigSchema.optional(),
   /**
@@ -481,6 +524,7 @@ export type IntegrationRequireEntry = z.infer<typeof requireEntrySchema>;
 export type IntegrationDataSource = z.infer<typeof dataSourceSchema>;
 export type IntegrationHealthCheck = z.infer<typeof healthCheckSchema>;
 export type IntegrationFrontend = z.infer<typeof frontendSchema>;
+export type IntegrationPanel = z.infer<typeof panelSchema>;
 export type IntegrationLayerSelector = z.infer<typeof layerSelectorSchema>;
 export type IntegrationOverlay = z.infer<typeof overlaySchema>;
 export type IntegrationOverlayLegend = z.infer<typeof overlayLegendSchema>;
@@ -561,6 +605,18 @@ export function validateManifest(
             `requires[${index}].capability: "${entry.capability}" is neither a well-known capability nor namespaced as "<vendor>/<name>"`,
           );
       }
+    }
+
+    if (provenance.firstParty && manifest.subjectData?.registrations !== undefined) {
+      errors.push(
+        "manifest.subjectData.registrations: built-in integrations register in the catalogue",
+      );
+    }
+    if (manifest.frontend?.legendKind !== undefined && manifest.frontend.legend !== true) {
+      errors.push("manifest.frontend.legendKind: needs frontend.legend");
+    }
+    if (manifest.frontend?.entry !== undefined && manifest.webPlatform === undefined) {
+      errors.push("manifest.webPlatform: required when frontend.entry is set");
     }
 
     if (!manifest.id) {

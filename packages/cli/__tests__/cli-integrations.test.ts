@@ -810,6 +810,52 @@ describe("installIntegration (artifact source)", () => {
     expect(existsSync(join(tmp, "custom_integrations", "broken-backend-artifact"))).toBe(false);
   });
 
+  it("rejects a web entry bundle that the manifest declares", async () => {
+    const src = join(tmp, "web-entry-artifact-src");
+    mkdirSync(join(src, "dist", "web"), { recursive: true });
+    writeFileSync(
+      join(src, "manifest.json"),
+      JSON.stringify({
+        ...baseManifest,
+        id: "web-entry-artifact",
+        webPlatform: "1.0",
+        frontend: { entry: "dist/web/index.mjs" },
+      }),
+      "utf-8",
+    );
+    writeFileSync(join(src, "dist", "web", "index.mjs"), "export default {};", "utf-8");
+    const artifact = join(tmp, "web-entry-artifact.tar.gz");
+    writeTarGz(src, artifact);
+
+    await expect(
+      installIntegration({ source: artifact, sourceKind: "artifact", rootDir: tmp }),
+    ).rejects.toThrow(
+      /Executable community integration code cannot be installed.*Found: dist\/web\/index\.mjs/s,
+    );
+    expect(existsSync(join(tmp, "custom_integrations", "web-entry-artifact"))).toBe(false);
+  });
+
+  it("rejects a declared map control without shipped code", async () => {
+    const src = join(tmp, "map-control-artifact-src");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(
+      join(src, "manifest.json"),
+      JSON.stringify({
+        ...baseManifest,
+        id: "map-control-artifact",
+        frontend: { mapControl: true },
+      }),
+      "utf-8",
+    );
+    const artifact = join(tmp, "map-control-artifact.tar.gz");
+    writeTarGz(src, artifact);
+
+    await expect(
+      installIntegration({ source: artifact, sourceKind: "artifact", rootDir: tmp }),
+    ).rejects.toThrow(/Executable community integration code cannot be installed/);
+    expect(existsSync(join(tmp, "custom_integrations", "map-control-artifact"))).toBe(false);
+  });
+
   it("rejects obsolete executable-bundle metadata", async () => {
     const src = join(tmp, "bad-checksum-artifact-src");
     mkdirSync(src, { recursive: true });

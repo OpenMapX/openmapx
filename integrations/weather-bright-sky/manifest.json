@@ -7,8 +7,7 @@
   "dependencies": ["weather"],
   "frontend": {
     "mapLayer": false,
-    "legend": false,
-    "panel": false
+    "legend": false
   },
   "backend": {
     "routes": false

@@ -8,7 +8,6 @@
   "frontend": {
     "mapLayer": false,
     "legend": false,
-    "panel": false,
     "layerSelector": {
       "group": "map-details",
       "labelKey": "alpha",

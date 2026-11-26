@@ -143,7 +143,7 @@ described in [Capability requirement resolution](#capability-requirement-resolut
     mapLayer?: boolean;      // ships a code map-layer component
     sharedMapLayer?: string; // sibling providers mount one common layer/legend
     legend?: boolean;        // ships a code legend component
-    panel?: boolean;         // ships a code side-panel component
+    panel?: { detents?: "list" | "place" }; // ships a code side-panel component
     searchCategory?: { id: string; label?: string; showInChipBar?: boolean; iconPath?: string };
     layerSelector?: {
       group: "map-details" | "map-tools" | "map-types";
@@ -167,7 +167,6 @@ described in [Capability requirement resolution](#capability-requirement-resolut
   };
   backend?: {
     routes?: boolean;        // registers routes via ctx.registerRoute
-    cron?: string | null;    // declaration; the host does not schedule it
   };
 }
 ```
@@ -179,8 +178,7 @@ declarations the host renders (a search-bar category chip; a layer-selector
 entry). `overlay` carries mutual-exclusion rules (`excludes`), `minZoom`, and an
 optional **declarative legend** the host draws from the manifest, which an
 overlay can use instead of shipping a `legend.tsx`. `backend.routes` signals that
-the integration registers HTTP routes; `backend.cron` is a declaration only; the current API host has no cron
-scheduler. A built-in that starts a timer owns its cleanup through `onShutdown`.
+the integration registers HTTP routes. A built-in that starts a timer owns its cleanup through `onShutdown`.
 How an overlay renders is detailed in [Map overlays](#map-overlays).
 
 Several enabled providers can intentionally share one overlay, as Mapillary and

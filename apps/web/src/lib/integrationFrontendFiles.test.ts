@@ -256,11 +256,13 @@ describe("integration frontend modules", () => {
       if (!frontend) continue;
 
       for (const { flag, basename } of REQUIRED_FILES) {
-        if (frontend[flag] !== true) continue;
+        // A panel is declared by its presence; the other two are booleans.
+        const declared = flag === "panel" ? frontend[flag] !== undefined : frontend[flag] === true;
+        if (!declared) continue;
 
         const file = modulePath(dir, basename);
         if (!file) {
-          missing.push(`${dir}: frontend.${flag} is true but ${basename}.tsx is missing`);
+          missing.push(`${dir}: frontend.${flag} is declared but ${basename}.tsx is missing`);
         } else if (!exportsSomething(file)) {
           missing.push(`${dir}: ${basename} exists but exports nothing the host can render`);
         }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { validateExtensionManifest } from "./extension";
 import { COMPONENT_ID_PATTERN, componentIdSchema, isComponentId } from "./identifiers";
-import { validateManifest } from "./integration";
+import { validateDataSource, validateManifest } from "./integration";
 import { compareSemver, isSemver } from "./semver";
 import { validateServiceManifest } from "./service";
 
@@ -126,6 +126,165 @@ describe("community integration manifests", () => {
     expect(
       validateManifest({ ...communityIntegration, quality: "community-verified" }, builtIn).valid,
     ).toBe(false);
+  });
+});
+
+describe("code, migration, panel and slot declarations", () => {
+  const base = { id: "demo", version: "1.0.0", platform: "1.0", domains: ["knowledge"] };
+  const validSource = {
+    sourceId: "example-feed",
+    name: "Example publisher",
+    url: "https://example.test/",
+    providerCountry: "DE",
+    providerPrivacyUrl: "https://example.test/privacy",
+    licensing: {
+      version: 1,
+      bindings: [
+        { scope: "data", subject: "Readings", license: { kind: "spdx", expression: "CC-BY-4.0" } },
+      ],
+    },
+  };
+
+  it("refuses the removed backend.cron by name", () => {
+    const result = validateManifest({ ...base, backend: { cron: "0 * * * *" } }, community);
+    expect(result.valid).toBe(false);
+    expect(result.errors.join("\n")).toMatch(/backend.*cron/);
+  });
+
+  it("accepts a full code-bearing community manifest", () => {
+    expect(
+      validateManifest(
+        {
+          ...base,
+          webPlatform: "1.0",
+          backend: { routes: true, entry: "dist/backend/index.mjs" },
+          database: { migrations: true },
+          frontend: {
+            entry: "dist/web/index.mjs",
+            mapLayer: true,
+            legend: true,
+            legendKind: "toolbar",
+            panel: { detents: "place" },
+            mapControl: true,
+            layerSelector: { group: "map-details", labelKey: "layer", section: "transport" },
+            overlay: { id: "demo-reports" },
+          },
+          subjectData: {
+            storesPersonalData: true,
+            strategy: "collector",
+            registrationIds: ["demo-reports"],
+            operatorInstructions: null,
+            registrations: [{ id: "demo-reports" }],
+          },
+        },
+        community,
+      ),
+    ).toEqual({ valid: true, errors: [] });
+    expect(validateManifest({ ...base, frontend: { panel: {} } }, community).valid).toBe(true);
+  });
+
+  it("accepts declarations without an entry and migrations without a postgis requirement", () => {
+    for (const fields of [
+      { backend: { routes: true } },
+      { frontend: { mapLayer: true } },
+      { frontend: { legend: true } },
+      { database: { migrations: true } },
+    ])
+      expect(validateManifest({ ...base, ...fields }, community), JSON.stringify(fields)).toEqual({
+        valid: true,
+        errors: [],
+      });
+  });
+
+  it.each([
+    [{ backend: { entry: "dist/backend/main.mjs" } }, "backend.entry"],
+    [
+      { frontend: { entry: "dist/web/index.mjs" } },
+      "manifest.webPlatform: required when frontend.entry is set",
+    ],
+    [{ frontend: { panel: true } }, "frontend.panel"],
+    [{ frontend: { panel: false } }, "frontend.panel"],
+    [{ frontend: { panel: { detents: "tall" } } }, "frontend.panel.detents"],
+    [{ frontend: { panel: { titleKey: "panel.title" } } }, "titleKey"],
+    [
+      { frontend: { legendKind: "toolbar" } },
+      "manifest.frontend.legendKind: needs frontend.legend",
+    ],
+    [{ frontend: { legend: true, legendKind: "legend" } }, "frontend.legendKind"],
+    [
+      { frontend: { layerSelector: { group: "map-details", labelKey: "l", section: "food" } } },
+      "section",
+    ],
+    [{ database: { migrations: false } }, "database.migrations"],
+    [{ frontend: { overlay: { id: "Demo_Reports" } } }, "frontend.overlay.id"],
+    [
+      {
+        subjectData: {
+          storesPersonalData: false,
+          strategy: "not_personal",
+          registrationIds: [],
+          operatorInstructions: null,
+          registrations: [{ id: "x" }],
+        },
+      },
+      "registrations need storesPersonalData",
+    ],
+  ])("refuses %j", (fields, message) => {
+    const result = validateManifest({ ...base, ...fields }, community);
+    expect(result.valid).toBe(false);
+    expect(result.errors.join("\n")).toContain(message);
+  });
+
+  it("keeps built-ins on their own slots and their own catalogue", () => {
+    expect(
+      validateManifest(
+        {
+          id: "demo",
+          domains: ["knowledge"],
+          backend: { routes: true },
+          frontend: { mapLayer: true, legend: true },
+        },
+        { firstParty: true },
+      ).valid,
+    ).toBe(true);
+    expect(
+      validateManifest(
+        { id: "demo", domains: ["knowledge"], frontend: { panel: false } },
+        { firstParty: true },
+      ).valid,
+    ).toBe(false);
+    expect(
+      validateManifest(
+        {
+          id: "demo",
+          domains: ["knowledge"],
+          subjectData: {
+            storesPersonalData: true,
+            strategy: "collector",
+            registrationIds: ["x"],
+            operatorInstructions: null,
+            registrations: [{ id: "x" }],
+          },
+        },
+        { firstParty: true },
+      ).errors.join("\n"),
+    ).toContain(
+      "manifest.subjectData.registrations: built-in integrations register in the catalogue",
+    );
+  });
+
+  it("accepts a logo only as an image file under assets/", () => {
+    const source = (logoAsset: string) =>
+      validateDataSource({ ...validSource, logoAsset }, ["knowledge"]);
+    expect(source("assets/logos/acme.svg").valid).toBe(true);
+    for (const path of [
+      "https://example.org/logo.svg",
+      "logos/acme.svg",
+      "assets/../logo.svg",
+      "assets/acme.gif",
+      "assets/a b.png",
+    ])
+      expect(source(path).valid, path).toBe(false);
   });
 });
 

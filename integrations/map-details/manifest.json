@@ -6,8 +6,7 @@
   "domains": ["map-overlay"],
   "frontend": {
     "mapLayer": true,
-    "legend": false,
-    "panel": false
+    "legend": false
   },
   "backend": {
     "routes": false
