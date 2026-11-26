@@ -550,8 +550,7 @@ CREATE TABLE "installed_extension" (
 	"approved_grants" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	CONSTRAINT "installed_extension_source_trust_check" CHECK ("installed_extension"."source_trust" in ('built-in','verified','community')),
 	CONSTRAINT "installed_extension_installation_kind_check" CHECK ("installed_extension"."installation_kind" in ('catalog','standalone')),
-	CONSTRAINT "installed_extension_standalone_provenance_check" CHECK ("installed_extension"."installation_kind" <> 'standalone' or coalesce(("installed_extension"."source_trust" = 'community' and "installed_extension"."id" ~ '^local-[0-9a-f-]{36}$' and jsonb_typeof("installed_extension"."provenance") = 'object' and "installed_extension"."provenance"->>'kind' in ('artifact','source','uploaded-artifact') and "installed_extension"."provenance"->>'contentDigest' ~ '^[a-f0-9]{64}$'),false)),
-	CONSTRAINT "installed_extension_approved_grants_check" CHECK (jsonb_typeof("installed_extension"."approved_grants") = 'object')
+	CONSTRAINT "installed_extension_standalone_provenance_check" CHECK ("installed_extension"."installation_kind" <> 'standalone' or coalesce(("installed_extension"."source_trust" = 'community' and "installed_extension"."id" ~ '^local-[0-9a-f-]{36}$' and jsonb_typeof("installed_extension"."provenance") = 'object' and "installed_extension"."provenance"->>'kind' in ('artifact','source','uploaded-artifact') and "installed_extension"."provenance"->>'contentDigest' ~ '^[a-f0-9]{64}$'),false))
 );
 --> statement-breakpoint
 CREATE TABLE "installed_extension_component" (

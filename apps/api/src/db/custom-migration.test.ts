@@ -30,6 +30,13 @@ const allowedKinds: { kind: string; pattern: RegExp }[] = [
     pattern:
       /^ALTER\s+TABLE\s+"data_manager"\."job"\s+ADD\s+CONSTRAINT\s+job_triggered_by_user_id_fkey\s+FOREIGN\s+KEY\s+\("triggered_by_user_id"\)\s+REFERENCES\s+"user"\("id"\)\s+ON\s+DELETE\s+SET\s+NULL;?$/i,
   },
+  {
+    // The CHECK calls a function, and the baseline creates the table before
+    // the custom migration creates any function.
+    kind: "approved grants check",
+    pattern:
+      /^ALTER\s+TABLE\s+installed_extension\s+ADD\s+CONSTRAINT\s+installed_extension_approved_grants_check\s+CHECK\s+\(openmapx_approved_grants_valid\(approved_grants\)\);?$/i,
+  },
 ];
 
 /** Masks dollar-quoted bodies, keeping the statement shape. */

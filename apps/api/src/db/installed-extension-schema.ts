@@ -42,6 +42,7 @@ export const installedExtension = pgTable(
     enabled: boolean("enabled").notNull().default(true),
     // Keyed by service id: an approval is one decision about the whole
     // extension. The agent's record is authoritative; this row is the panel's.
+    // Each value is a list of distinct grants in code-unit order.
     approvedGrants: jsonb("approved_grants").$type<ApprovedGrants>().notNull().default({}),
   },
   (table) => [
@@ -63,10 +64,8 @@ export const installedExtension = pgTable(
       "installed_extension_standalone_provenance_check",
       sql`${table.installationKind} <> 'standalone' or coalesce((${table.sourceTrust} = 'community' and ${table.id} ~ '^local-[0-9a-f-]{36}$' and jsonb_typeof(${table.provenance}) = 'object' and ${table.provenance}->>'kind' in ('artifact','source','uploaded-artifact') and ${table.provenance}->>'contentDigest' ~ '^[a-f0-9]{64}$'),false)`,
     ),
-    check(
-      "installed_extension_approved_grants_check",
-      sql`jsonb_typeof(${table.approvedGrants}) = 'object'`,
-    ),
+    // installed_extension_approved_grants_check is in the custom migration: it
+    // calls a function, and the baseline creates this table before any function.
   ],
 );
 

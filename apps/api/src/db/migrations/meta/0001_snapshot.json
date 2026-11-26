@@ -1,6 +1,6 @@
 {
-  "id": "90fbe607-3e49-4cf0-aca4-1e8f15934604",
-  "prevId": "cc14667a-840a-45c8-ac30-c9b9a80052f4",
+  "id": "f30ca1b8-1d9c-4afe-964d-2d7c3c945c5d",
+  "prevId": "e0574669-984e-497b-8d58-32f4c16c00eb",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -4760,10 +4760,6 @@
         "installed_extension_standalone_provenance_check": {
           "name": "installed_extension_standalone_provenance_check",
           "value": "\"installed_extension\".\"installation_kind\" <> 'standalone' or coalesce((\"installed_extension\".\"source_trust\" = 'community' and \"installed_extension\".\"id\" ~ '^local-[0-9a-f-]{36}$' and jsonb_typeof(\"installed_extension\".\"provenance\") = 'object' and \"installed_extension\".\"provenance\"->>'kind' in ('artifact','source','uploaded-artifact') and \"installed_extension\".\"provenance\"->>'contentDigest' ~ '^[a-f0-9]{64}$'),false)"
-        },
-        "installed_extension_approved_grants_check": {
-          "name": "installed_extension_approved_grants_check",
-          "value": "jsonb_typeof(\"installed_extension\".\"approved_grants\") = 'object'"
         }
       },
       "isRLSEnabled": false

@@ -2,6 +2,9 @@ import {
   ADMIN_REAUTH_PURPOSES,
   AUDIT_ACTION_NAMES,
   AUDIT_TARGET_TYPES,
+  approvedGrantsSchema,
+  type GrantId,
+  normalizeGrants,
 } from "@openmapx/core/api-contracts";
 import { ACTIVE_JOB_STATUSES, ADMIN_JOB_TYPES } from "@openmapx/core/jobs";
 import { and, asc, eq, getTableName, inArray, is, type SQL } from "drizzle-orm";
@@ -999,6 +1002,87 @@ integration("schema hygiene", () => {
         component("service", "demo-digest", null, "b".repeat(64)),
         "installed_extension_component_image_digest_check",
       );
+    });
+
+    it("approved grants are stored only in their one normalised form", async () => {
+      await demo();
+      const store = (grants: unknown) =>
+        fixture.sql`UPDATE installed_extension SET approved_grants = ${JSON.stringify(grants)}::jsonb
+          WHERE id = 'demo'`;
+      for (const grants of [
+        { svc: "gpu" },
+        { svc: [1, 2] },
+        { svc: ["privileged", "gpu"] },
+        { svc: ["gpu", "gpu"] },
+        { svc: { a: 1 } },
+        { svc: ["gpu", null] },
+        ["gpu"],
+      ])
+        await refused(store(grants), "installed_extension_approved_grants_check");
+      await store({});
+      await store({ svc: ["gpu", "privileged"], other: [] });
+
+      // Grant identifiers mixing every character class a grant may hold: the
+      // database's order must be the code-unit order the API sorts in.
+      const identifiers: GrantId[] = [
+        "gpu",
+        "host-network",
+        "logging",
+        "peer-services",
+        "privileged",
+        "reachable-by-platform",
+        "host-path:/srv/data:ro",
+        "host-path:/srv/data:rw",
+        "host-path:/srv/data/2:ro",
+        "host-path:/srv/data/A:ro",
+        "host-path:/srv/data/a:ro",
+        "host-path:/srv/data-2:ro",
+        "host-path:/srv/data.2:ro",
+        "host-path:/srv/data_2:ro",
+        "host-path:/srv/dataA:ro",
+        "host-path:/srv/Data:ro",
+        "host-path:/srv/data0:ro",
+        "host-path:/srv/data9:ro",
+        "device:/dev/dri/renderD128",
+        "device:/dev/tty-a",
+        "device:/dev/tty_a",
+        "device:/dev/ttyA",
+        "device:/dev/ttya",
+        "device:/dev/tty0",
+        "device:/dev/tty/a",
+        "capability:NET_ADMIN",
+        "capability:NET_RAW",
+        "capability:SYS_TIME",
+        "capability:_",
+        "platform-service:redis",
+        "platform-service:demo-engine",
+        "platform-service:demo0",
+        "database-role:demo_role",
+        "database-role:demo2_role",
+        "database-role:demorole",
+      ];
+      const sorted = normalizeGrants(identifiers);
+      const byDatabase = await fixture.sql<{ id: string }[]>`
+        SELECT id FROM unnest(${identifiers}::text[]) AS id ORDER BY id COLLATE "C"`;
+      expect(byDatabase.map((row) => row.id)).toEqual(sorted);
+      const parsed = approvedGrantsSchema.parse({ "demo-engine": sorted, "demo-plain": [] });
+      await store(parsed);
+      expect(
+        await fixture.sql`SELECT approved_grants FROM installed_extension WHERE id = 'demo'`,
+      ).toEqual([{ approved_grants: parsed }]);
+      // Each neighbouring pair swapped is refused by both, so they agree on
+      // every adjacent comparison, not only on the whole list.
+      for (let i = 1; i < sorted.length; i++) {
+        const swapped = [...sorted];
+        [swapped[i - 1], swapped[i]] = [swapped[i] as GrantId, swapped[i - 1] as GrantId];
+        expect(approvedGrantsSchema.safeParse({ "demo-engine": swapped }).success, `${i}`).toBe(
+          false,
+        );
+        await refused(
+          store({ "demo-engine": swapped }),
+          "installed_extension_approved_grants_check",
+        );
+      }
     });
 
     it("configuration rows carry an owner and a schema version, and outlive the extension", async () => {
