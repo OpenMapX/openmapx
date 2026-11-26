@@ -117,7 +117,7 @@ assert(validateArtifactMetadata({schemaVersion:1,id:"demo",platformVersion:"1.0"
 assert(!satisfiesPlatformVersion("bogus"));
 assert.deepEqual(parseContributors([]),[]);
 assert.equal(createAuthoringSchemas().extension.type,"object");
-for (const subpath of ["", "/identifiers", "/semver", "/media-hosts", "/capabilities", "/licensing", "/attribution"]) {
+for (const subpath of ["", "/identifiers", "/semver", "/media-hosts", "/capabilities", "/licensing", "/attribution", "/archive"]) {
   await import("@openmapx/extension-contracts" + subpath);
 }
 for (const name of ["integration", "service", "extension", "artifact"]) {

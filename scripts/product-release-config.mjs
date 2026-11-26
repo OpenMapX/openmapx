@@ -27,9 +27,14 @@ export function readProductReleaseConfig(bytes) {
     config.notesPath === `docs/docs/releases/${config.version}.md`,
     "Release notes path must match version",
   );
-  exactObject(config.compatibility, ["extensionProtocol", "platforms"], "compatibility");
+  exactObject(
+    config.compatibility,
+    ["extensionProtocol", "webExtensionProtocol", "platforms"],
+    "compatibility",
+  );
   assert(
     config.compatibility.extensionProtocol === "1.0" &&
+      config.compatibility.webExtensionProtocol === "1.0" &&
       JSON.stringify(config.compatibility.platforms) === '["linux/amd64"]',
     "Unsupported compatibility declaration",
   );

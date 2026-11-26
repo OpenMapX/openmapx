@@ -1,1 +1,6 @@
-export { PLATFORM_VERSION, satisfiesPlatformVersion } from "@openmapx/extension-contracts/platform";
+export {
+  PLATFORM_VERSION,
+  satisfiesPlatformVersion,
+  satisfiesWebPlatformVersion,
+  WEB_PLATFORM_VERSION,
+} from "@openmapx/extension-contracts/platform";

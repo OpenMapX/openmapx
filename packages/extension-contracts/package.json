@@ -74,6 +74,11 @@
       "import": "./src/artifact.ts",
       "default": "./src/artifact.ts"
     },
+    "./archive": {
+      "types": "./src/archive.ts",
+      "import": "./src/archive.ts",
+      "default": "./src/archive.ts"
+    },
     "./schemas": {
       "types": "./src/schemas.ts",
       "import": "./src/schemas.ts",
@@ -148,6 +153,10 @@
       "./artifact": {
         "types": "./dist/artifact.d.ts",
         "import": "./dist/artifact.js"
+      },
+      "./archive": {
+        "types": "./dist/archive.d.ts",
+        "import": "./dist/archive.js"
       },
       "./schemas": {
         "types": "./dist/schemas.d.ts",

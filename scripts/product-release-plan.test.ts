@@ -1,4 +1,8 @@
 import { describe, expect, it } from "vitest";
+import {
+  PLATFORM_VERSION,
+  WEB_PLATFORM_VERSION,
+} from "../packages/extension-contracts/src/platform";
 import { nth } from "./fixtures/nth";
 import { fixture } from "./product-release.fixtures";
 import { readProductReleaseConfig } from "./product-release-config.mjs";
@@ -94,6 +98,18 @@ describe("named product candidate", () => {
   it("orders prerelease stages and counters numerically", () => {
     expect(release.compareProductVersions("v0.1.0-alpha.10", "v0.1.0-alpha.9")).toBeGreaterThan(0);
     expect(release.compareProductVersions("v0.1.0-beta.1", "v0.1.0-alpha.99")).toBeGreaterThan(0);
+  });
+  it("requires both extension protocol versions and refuses another value", () => {
+    const { configuration } = fixture();
+    expect(readProductReleaseConfig(JSON.stringify(configuration)).compatibility).toEqual({
+      extensionProtocol: PLATFORM_VERSION,
+      webExtensionProtocol: WEB_PLATFORM_VERSION,
+      platforms: ["linux/amd64"],
+    });
+    const { webExtensionProtocol: _dropped, ...withoutWeb } = configuration.compatibility;
+    expect(() =>
+      readProductReleaseConfig(JSON.stringify({ ...configuration, compatibility: withoutWeb })),
+    ).toThrow();
   });
 });
 

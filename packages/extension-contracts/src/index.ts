@@ -13,7 +13,13 @@ export {
   extensionManifestSchema,
   validateExtensionManifest,
 } from "./extension";
-export { COMPONENT_ID_MAX_LENGTH, componentIdSchema, isComponentId } from "./identifiers";
+export {
+  COMPONENT_ID_MAX_LENGTH,
+  componentIdSchema,
+  EXTENSION_SCHEMA_PATTERN,
+  extensionSchemaName,
+  isComponentId,
+} from "./identifiers";
 export type {
   IntegrationDataSource,
   IntegrationManifest,
@@ -28,7 +34,12 @@ export {
   validateDataSource,
   validateManifest,
 } from "./integration";
-export { PLATFORM_VERSION, satisfiesPlatformVersion } from "./platform";
+export {
+  PLATFORM_VERSION,
+  satisfiesPlatformVersion,
+  satisfiesWebPlatformVersion,
+  WEB_PLATFORM_VERSION,
+} from "./platform";
 export { compareSemver, isSemver, semverSchema } from "./semver";
 export type { ManifestProvenance, ServiceManifest } from "./service";
 export {
