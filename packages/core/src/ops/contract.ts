@@ -12,6 +12,7 @@ import { catalogRuntimeInputsSchema } from "../catalog-pins/review-schemas";
 import { catalogPinSetSchema } from "../catalog-pins/schemas";
 import { BACKUP_FORMAT_VERSION } from "../services/backup-format";
 import { CORE_RESTART_SERVICE_IDS, RELEASE_PINNED_SERVICE_IDS } from "../services/core-service-ids";
+import { MAX_RECORDED_FILES } from "../services/integration-records";
 import { platformConfigurationSchema } from "../services/platform-configuration";
 import {
   artifactTransferOperationSchemas,
@@ -1371,7 +1372,7 @@ export const OPS_RESULT_SCHEMAS = {
           status: z.enum(["ok", "needs_reinstall"]),
           reason: z.string().max(1_024).nullable(),
           source: integrationSourceSchema.nullable(),
-          files: z.array(integrationFileSchema).max(128),
+          files: z.array(integrationFileSchema).max(MAX_RECORDED_FILES),
           pending: z.strictObject({ transactionId: integrationTransactionIdSchema }).nullable(),
         }),
       )

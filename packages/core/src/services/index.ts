@@ -244,9 +244,11 @@ export {
   integrationRecordsDirectory,
   integrationUploadsDirectory,
   MAX_RECORDED_FILES,
+  MAX_RECORDED_INVENTORY_BYTES,
   MAX_TOTAL_RECORDED_FILES,
   parseIntegrationRecord,
   readIntegrationRecords,
+  recordedInventoryBytes,
   sha256Hex,
 } from "./integration-records";
 export { findServiceManifestDirs } from "./manifest-discovery";

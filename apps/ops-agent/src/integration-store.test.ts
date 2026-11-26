@@ -173,6 +173,28 @@ function paxRecord(key: string, value: string): Buffer {
   }
 }
 
+/** An artifact pin for a raw archive holding `manifest(id)` and one small file per path. */
+function artifactWithPaths(
+  f: Fixture,
+  id: string,
+  paths: string[],
+): { kind: "artifact"; url: string; sha256: string } {
+  const entries: RawEntry[] = [{ name: "manifest.json", data: JSON.stringify(manifest(id)) }];
+  for (const [index, path] of paths.entries()) {
+    if (Buffer.byteLength(path) > 100) {
+      entries.push({ name: "PaxHeader", type: "x", data: paxRecord("path", path) });
+    }
+    entries.push({ name: path, data: String(index) });
+  }
+  const bytes = tarGz(entries);
+  const path = join(f.root, "..", `${id}-${Math.random()}.tar.gz`);
+  roots.push(path);
+  writeFileSync(path, bytes);
+  const url = `https://artifacts.example.test/${id}/${sha256(bytes).slice(0, 8)}.tar.gz`;
+  f.artifacts.set(url, path);
+  return { kind: "artifact", url, sha256: sha256(bytes) };
+}
+
 function record(f: Fixture, id: string) {
   return services.readIntegrationRecords(join(f.root, "infra", "docker"), uid).records.get(id);
 }
@@ -934,5 +956,49 @@ describe("integration store", () => {
       readdirSync(join(f.root, "infra", "docker", "state", "ops-agent", "custom-integrations")),
     ).toEqual(["weather-radar"]);
     expect(update.transactionId).toMatch(/^itx1_/);
+  });
+
+  const publish = (f: Fixture, id: string, source: ReturnType<typeof artifactWithPaths>) =>
+    f.store.publish(
+      { kind: "catalogIntegration.publish", integrationId: id, source, extensionId: "bundle" },
+      signal,
+    );
+  const files = (count: number) => Array.from({ length: count }, (_, i) => `assets/f${i}.bin`);
+  // Extracting and digesting a thousand files takes seconds on a loaded runner.
+  const MANY_FILES_TIMEOUT_MS = 90_000;
+
+  it(
+    "installs an integration with 1,024 files and refuses 1,025",
+    async () => {
+      const f = fixture();
+      // manifest.json plus 1,023 files, then plus 1,024
+      await expect(
+        publish(f, "many-files", artifactWithPaths(f, "many-files", files(1_023))),
+      ).resolves.toMatchObject({ integrationId: "many-files" });
+      await expect(
+        publish(f, "too-many", artifactWithPaths(f, "too-many", files(1_024))),
+      ).rejects.toThrow("An integration may hold at most 1024 regular files");
+    },
+    MANY_FILES_TIMEOUT_MS,
+  );
+
+  it(
+    "refuses an install whose paths would overflow one inspection",
+    async () => {
+      const f = fixture();
+      const deep = Array.from({ length: 7 }, () => "a".repeat(100)).join("/");
+      const paths = Array.from({ length: 1_000 }, (_, i) => `assets/${deep}/${i}.bin`);
+      // 1,000 entries of about 720 + 96 bytes: 816 KB against a budget of 640 KiB
+      await expect(
+        publish(f, "long-paths", artifactWithPaths(f, "long-paths", paths)),
+      ).rejects.toThrow("Installed integrations would exceed what one inspection can report");
+    },
+    MANY_FILES_TIMEOUT_MS,
+  );
+
+  it("measures an inventory entry as its path plus 96 bytes", () => {
+    expect(
+      services.recordedInventoryBytes([{ path: "manifest.json", sha256: "0".repeat(64) }]),
+    ).toBe(109);
   });
 });

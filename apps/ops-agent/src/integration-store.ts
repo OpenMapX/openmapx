@@ -56,8 +56,10 @@ const {
   integrationRecordsDirectory,
   integrationUploadsDirectory,
   MAX_RECORDED_FILES,
+  MAX_RECORDED_INVENTORY_BYTES,
   MAX_TOTAL_RECORDED_FILES,
   readIntegrationRecords,
+  recordedInventoryBytes,
   sha256Hex,
 } = coreServices;
 type IntegrationRecord = coreServices.IntegrationRecord;
@@ -358,12 +360,20 @@ export class IntegrationStore {
   private conflicts(integrationId: string, staged: Staged): string[] {
     const { records } = this.reading();
     let files = staged.files.length;
-    for (const [id, record] of records) if (id !== integrationId) files += record.files.length;
+    let inventoryBytes = recordedInventoryBytes(staged.files);
+    for (const [id, record] of records) {
+      if (id === integrationId) continue;
+      files += record.files.length;
+      inventoryBytes += recordedInventoryBytes(record.files);
+    }
     const problems: string[] = [];
     if (files > MAX_TOTAL_RECORDED_FILES) {
       problems.push(
         `Installed integrations would hold more than ${MAX_TOTAL_RECORDED_FILES} files`,
       );
+    }
+    if (inventoryBytes > MAX_RECORDED_INVENTORY_BYTES) {
+      problems.push("Installed integrations would exceed what one inspection can report");
     }
     if (records.size >= 256 && !records.has(integrationId)) {
       problems.push("At most 256 integrations can be installed");
@@ -473,7 +483,8 @@ export class IntegrationStore {
             `The archive installs integration "${staged.integrationId}", not "${integrationId}"`,
           );
         }
-        if (this.conflicts(integrationId, staged).length > 0) throw new Error(PUBLISH_REJECTED);
+        const problems = this.conflicts(integrationId, staged);
+        if (problems.length > 0) throw new Error(problems.join("; "));
         const next: IntegrationInstallation = {
           extensionId,
           status: "ok",

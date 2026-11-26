@@ -92,6 +92,7 @@ function writeRecord(root: string, paths: string[]): void {
         path,
         sha256: services.manifestSha256(readFileSync(join(repository, path, "service.json"))),
       })),
+      approvedGrants: {},
       pending: null,
     }),
     { mode: 0o644 },

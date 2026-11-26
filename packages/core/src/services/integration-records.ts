@@ -22,12 +22,22 @@ import { canonicalExtensionLocator } from "./extension-schema";
  */
 
 export const INTEGRATION_RECORD_VERSION = 1;
-const MAX_RECORD_BYTES = 1024 * 1024;
+/** A record holds three file lists while a transaction is pending. */
+const MAX_RECORD_BYTES = 4 * 1024 * 1024;
 const MAX_RECORDS = 256;
-/** Files one installed integration may hold; a declarative artifact needs far fewer. */
-export const MAX_RECORDED_FILES = 128;
+/** Files one installed integration may hold, above what every archive kind allows together. */
+export const MAX_RECORDED_FILES = 1_024;
 /** Files all installed integrations together may hold, so one inspection reports them all. */
 export const MAX_TOTAL_RECORDED_FILES = 4_096;
+/**
+ * Bytes the file inventories of all installed integrations may take in one
+ * inspection result of at most 1 MiB. The rest of that result, up to 256
+ * integrations with a reason of up to 1,024 characters each, a source and
+ * framing, takes about 300 KiB at most.
+ */
+export const MAX_RECORDED_INVENTORY_BYTES = 640 * 1024;
+/** The hash and JSON framing of one inventory entry in the inspection result. */
+const INVENTORY_ENTRY_OVERHEAD_BYTES = 96;
 const ID = COMPONENT_ID_PATTERN;
 const SHA256 = /^[a-f0-9]{64}$/;
 const TRANSACTION = /^itx1_[a-f0-9]{24}$/;
@@ -81,6 +91,15 @@ export interface IntegrationRecord extends IntegrationInstallation {
   version: typeof INTEGRATION_RECORD_VERSION;
   integrationId: string;
   pending: IntegrationPending | null;
+}
+
+/** The bytes `files` take in an inspection result: each path in UTF-8, plus its hash and framing. */
+export function recordedInventoryBytes(files: readonly IntegrationFileDigest[]): number {
+  let bytes = 0;
+  for (const file of files) {
+    bytes += Buffer.byteLength(file.path, "utf8") + INVENTORY_ENTRY_OVERHEAD_BYTES;
+  }
+  return bytes;
 }
 
 export function integrationRecordsDirectory(infraDir: string): string {

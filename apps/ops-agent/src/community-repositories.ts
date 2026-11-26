@@ -307,6 +307,7 @@ export class CommunityRepositoryStore {
       commit: null,
       extensionId: null,
       manifests: null,
+      approvedGrants: {},
     };
     if (keepNote) {
       this.writeRecord({ ...record, ...previous, pending: { ...pending, phase: "rolledBack" } });
@@ -433,6 +434,7 @@ export class CommunityRepositoryStore {
                 commit: record.commit,
                 extensionId: record.extensionId,
                 manifests: record.manifests,
+                approvedGrants: record.approvedGrants,
               }
             : null;
         pending = {
@@ -448,6 +450,7 @@ export class CommunityRepositoryStore {
             manifests: staged.reading.services
               .map(({ path, bytes }) => ({ path, sha256: manifestSha256(bytes) }))
               .sort((left, right) => left.path.localeCompare(right.path)),
+            approvedGrants: {},
           },
           recovery: {
             selectionBefore: operation.recovery.selectionBefore,
@@ -462,6 +465,7 @@ export class CommunityRepositoryStore {
           commit: previous?.commit ?? null,
           extensionId: previous?.extensionId ?? null,
           manifests: previous?.manifests ?? null,
+          approvedGrants: previous?.approvedGrants ?? {},
           pending,
         };
         this.writeRecord(current);
