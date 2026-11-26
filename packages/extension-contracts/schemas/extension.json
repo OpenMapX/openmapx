@@ -20,6 +20,10 @@
       "type": "string",
       "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
     },
+    "webPlatform": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+    },
     "description": {
       "type": "string"
     },
@@ -32,6 +36,10 @@
     "homepage": {
       "type": "string",
       "format": "uri"
+    },
+    "changelog": {
+      "type": "string",
+      "maxLength": 2048
     },
     "services": {
       "type": "array",
@@ -50,6 +58,9 @@
             "type": "string",
             "maxLength": 48,
             "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+          },
+          "optional": {
+            "type": "boolean"
           }
         },
         "required": ["repo", "service"]
@@ -78,40 +89,66 @@
       }
     },
     "config": {
+      "maxItems": 64,
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
           "key": {
             "type": "string",
-            "minLength": 1
+            "maxLength": 64,
+            "pattern": "^[a-z][a-z0-9]*(?:[A-Z][a-z0-9]+)*$"
           },
-          "target": {
-            "type": "string",
-            "pattern": "^(service|integration):[a-z0-9]+(-[a-z0-9]+)*$"
+          "targets": {
+            "minItems": 1,
+            "maxItems": 16,
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "component": {
+                      "type": "string",
+                      "pattern": "^(service|integration):[a-z0-9]+(-[a-z0-9]+)*$"
+                    },
+                    "key": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 64
+                    }
+                  },
+                  "required": ["component", "key"],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "capability": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
+                  },
+                  "required": ["capability"],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "secret": {
+            "type": "boolean"
+          },
+          "generated": {
+            "type": "boolean"
           },
           "default": {
-            "type": "string"
-          }
-        },
-        "required": ["key", "target"]
-      }
-    },
-    "readiness": {
-      "type": "object",
-      "properties": {
-        "requires": {
-          "type": "array",
-          "items": {
             "type": "string",
-            "pattern": "^(service|integration):[a-z0-9]+(-[a-z0-9]+)*$"
+            "maxLength": 4096
           }
         },
-        "integrationHealth": {
-          "type": "string",
-          "maxLength": 48,
-          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
-        }
+        "required": ["key", "targets"],
+        "additionalProperties": false
       }
     }
   },

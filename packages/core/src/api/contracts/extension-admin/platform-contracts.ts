@@ -1,5 +1,9 @@
 // The API and the ops-agent reach the published extension contracts only
 // through this package, so they share one grammar with extension authors.
+export type {
+  ExtensionConfigEntry,
+  ExtensionConfigTarget,
+} from "@openmapx/extension-contracts/extension";
 export type { ApprovedGrants, GrantId } from "@openmapx/extension-contracts/grants";
 export {
   approvedGrantsSchema,

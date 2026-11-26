@@ -141,25 +141,183 @@ describe("validateExtensionManifest", () => {
     expect(r.valid).toBe(false);
     expect(r.errors.some((error) => error.includes("sha256"))).toBe(true);
   });
+});
 
-  it("rejects a config target that is neither service: nor integration:", () => {
-    const r = validateExtensionManifest({
-      ...bundle,
-      config: [{ key: "K", target: "bogus:openconditions-ingest" }],
-    });
-    expect(r.valid).toBe(false);
+describe("extension config, optional services and changelog", () => {
+  const bundle = {
+    id: "demo",
+    name: "Demo",
+    version: "1.0.0",
+    platform: "1.0",
+    services: [
+      { repo: "https://github.com/example/demo", ref: "a".repeat(40), service: "demo-engine" },
+    ],
+    integrations: [
+      { artifact: "https://example.org/demo.tar.gz", sha256: "b".repeat(64), id: "demo-adapter" },
+    ],
+  };
+  const toEngine = (key: string) => ({ component: "service:demo-engine", key });
+  it("accepts shared, secret, generated and capability-bound config with a changelog", () => {
+    expect(
+      validateExtensionManifest({
+        ...bundle,
+        webPlatform: "1.0",
+        changelog: "https://example.org/releases?tag=v1.0.0#notes",
+        services: [
+          ...bundle.services,
+          {
+            repo: "https://github.com/example/demo",
+            ref: "a".repeat(40),
+            service: "demo-heavy",
+            optional: true,
+          },
+        ],
+        config: [
+          {
+            key: "relayToken",
+            secret: true,
+            generated: true,
+            targets: [
+              toEngine("RELAY_TOKEN"),
+              { component: "integration:demo-adapter", key: "relayToken" },
+              { capability: "acme/feed" },
+            ],
+          },
+          {
+            key: "instanceId",
+            targets: [
+              toEngine("INSTANCE_ID"),
+              { component: "service:demo-heavy", key: "INSTANCE_ID" },
+            ],
+          },
+          {
+            key: "mode",
+            default: "fixture",
+            targets: [{ component: "integration:demo-adapter", key: "mode" }],
+          },
+        ],
+      }),
+    ).toEqual({ valid: true, errors: [] });
   });
-
-  it("accepts well-formed config + readiness blocks", () => {
-    const r = validateExtensionManifest({
-      ...bundle,
-      config: [{ key: "NDW_ENABLED", target: "service:openconditions-ingest", default: "true" }],
-      readiness: {
-        requires: ["service:openconditions-ingest"],
-        integrationHealth: "overlay-road-conditions",
+  it.each([
+    [{ readiness: { requires: ["service:demo-engine"] } }, "readiness"],
+    [{ config: [{ key: "k", target: "service:demo-engine" }] }, "target"],
+    [
+      { config: [{ key: "RELAY_TOKEN", targets: [toEngine("K")] }] },
+      "extension config keys must be lowerCamel",
+    ],
+    [{ config: [{ key: "k".repeat(65), targets: [toEngine("K")] }] }, "config"],
+    [{ config: [{ key: "k", targets: [] }] }, "targets"],
+    [
+      { config: [{ key: "k", targets: [{ component: "service:other", key: "K" }] }] },
+      "config must reference a declared component",
+    ],
+    [
+      { config: [{ key: "k", targets: [toEngine("relayToken")] }] },
+      "config target keys follow their component's key style",
+    ],
+    [
+      {
+        config: [
+          { key: "k", targets: [{ component: "integration:demo-adapter", key: "RELAY_TOKEN" }] },
+        ],
       },
-    });
-    expect(r.valid).toBe(true);
+      "config target keys follow their component's key style",
+    ],
+    [
+      {
+        config: [
+          { key: "a", targets: [toEngine("K")] },
+          { key: "b", targets: [toEngine("K")] },
+        ],
+      },
+      "a component setting may receive one config value",
+    ],
+    [
+      {
+        config: [
+          { key: "a", targets: [toEngine("K")] },
+          { key: "a", targets: [toEngine("L")] },
+        ],
+      },
+      "config keys must be unique",
+    ],
+    [
+      { config: [{ key: "k", secret: true, targets: [{ capability: "feed" }] }] },
+      "config capability targets name a well-known or <vendor>/<name> capability",
+    ],
+    [
+      {
+        config: [{ key: "k", secret: true, targets: [{ capability: "acme/feed", key: "token" }] }],
+      },
+      "targets",
+    ],
+    [
+      {
+        config: [
+          {
+            key: "k",
+            secret: true,
+            targets: [{ component: "capability:acme/feed", key: "token" }],
+          },
+        ],
+      },
+      "config",
+    ],
+    [
+      { config: [{ key: "k", targets: [{ capability: "acme/feed" }] }] },
+      "a config value delivered to a capability is a secret",
+    ],
+    [
+      {
+        config: [
+          { key: "a", secret: true, targets: [{ capability: "acme/feed" }] },
+          { key: "b", secret: true, targets: [{ capability: "acme/feed" }] },
+        ],
+      },
+      "a capability may receive one config value",
+    ],
+    [
+      { config: [{ key: "k", generated: true, targets: [toEngine("K")] }] },
+      "a generated config value is a secret",
+    ],
+    [
+      { config: [{ key: "k", secret: true, default: "x", targets: [toEngine("K")] }] },
+      "a secret config value has no default",
+    ],
+    [{ changelog: "http://example.org/changes" }, "must be an https URL without credentials"],
+    [
+      { changelog: "https://user:pw@example.org/changes" },
+      "must be an https URL without credentials",
+    ],
+    [
+      { integrations: undefined, services: [{ ...bundle.services[0], optional: true }] },
+      "an extension must declare at least one component that is not an optional service",
+    ],
+  ])("refuses %j", (fields, message) => {
+    const result = validateExtensionManifest({ ...bundle, ...fields });
+    expect(result.valid).toBe(false);
+    expect(result.errors.join("\n")).toContain(message);
+  });
+  it("lets a verified catalogue entry mark a pre-release and link a changelog", () => {
+    const entry = {
+      id: "demo",
+      version: "1.1.0-rc.1",
+      manifest: "https://example.org/extension.json",
+      manifestSha256: "c".repeat(64),
+      platform: "1.0",
+      webPlatform: "1.0",
+      prerelease: true,
+      changelog: "https://example.org/releases#v1.1.0-rc.1",
+    };
+    expect(verifiedCatalogEntrySchema.safeParse(entry).success).toBe(true);
+    expect(verifiedCatalogEntrySchema.safeParse({ ...entry, prerelease: "yes" }).success).toBe(
+      false,
+    );
+    expect(
+      verifiedCatalogEntrySchema.safeParse({ ...entry, changelog: "http://example.org" }).success,
+    ).toBe(false);
+    expect(verifiedCatalogEntrySchema.safeParse({ ...entry, trusted: true }).success).toBe(false);
   });
 });
 
@@ -195,33 +353,6 @@ describe("manifest component identity", () => {
     });
     expect(r.valid).toBe(false);
     expect(r.errors.join(" ")).toMatch(/unique/i);
-  });
-
-  it("rejects a config target that names an undeclared component", () => {
-    const r = validateExtensionManifest({
-      ...bundle,
-      config: [{ key: "TOKEN", target: "integration:not-declared" }],
-    });
-    expect(r.valid).toBe(false);
-    expect(r.errors.join(" ")).toMatch(/declared component/i);
-  });
-
-  it("rejects a readiness requirement that names an undeclared component", () => {
-    const r = validateExtensionManifest({
-      ...bundle,
-      readiness: { requires: ["service:not-declared"] },
-    });
-    expect(r.valid).toBe(false);
-    expect(r.errors.join(" ")).toMatch(/declared component/i);
-  });
-
-  it("rejects an integrationHealth that names an undeclared integration", () => {
-    const r = validateExtensionManifest({
-      ...bundle,
-      readiness: { integrationHealth: "not-declared" },
-    });
-    expect(r.valid).toBe(false);
-    expect(r.errors.join(" ")).toMatch(/declared component/i);
   });
 
   it("rejects unknown top-level fields", () => {

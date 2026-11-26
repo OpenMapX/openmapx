@@ -73,7 +73,7 @@ describe("component ids", () => {
     expect(
       validateExtensionManifest({
         ...extension,
-        config: [{ key: "k", target: `integration:${"x".repeat(49)}` }],
+        config: [{ key: "k", targets: [{ component: `integration:${"x".repeat(49)}`, key: "k" }] }],
       }).valid,
     ).toBe(false);
   });

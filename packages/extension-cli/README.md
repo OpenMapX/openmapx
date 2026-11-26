@@ -96,13 +96,13 @@ protocol. Optional bundle metadata includes `--description`, `--license`, and `-
 Integration artifacts are declarative. Put executable behavior and its types in
 the companion service rather than depending on an in-process host SDK.
 
-For bundles with configuration forwarding or readiness requirements, author the complete document and validate it before writing the output:
+For bundles with configuration forwarding, author the complete document and validate it before writing the output:
 
 ```sh
 openmapx-ext bundle --input extension.source.json --out extension.json
 openmapx-ext validate extension.json --kind extension
 ```
 
-`--input` accepts the full shared extension manifest, including `config` and `readiness`. It cannot be combined with component or metadata flags. Invalid input leaves the output untouched.
+`--input` accepts the full shared extension manifest, including `config`. It cannot be combined with component or metadata flags. Invalid input leaves the output untouched.
 
 The npm package version, extension version and minimum extension protocol are independent. Protocol requirements use `major.minor`, with the same major and a host minor at least as high as the requirement. Legacy range strings such as `>=1.0.0` must be written as `1.0` for this protocol contract.

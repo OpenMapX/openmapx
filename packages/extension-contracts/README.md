@@ -20,7 +20,7 @@ The delivered package contains compiled ESM JavaScript, TypeScript declarations,
 | `@openmapx/extension-contracts`                                                                           | Main manifest validators and types, artifact validation and compatibility  |
 | `/integration`                                                                                            | Integration manifests, source metadata and semantic validation             |
 | `/service`                                                                                                | Service manifests and static provenance-aware community policy             |
-| `/extension`                                                                                              | Component bundles, configuration, readiness and catalog shapes             |
+| `/extension`                                                                                              | Component bundles, configuration and catalog shapes                        |
 | `/platform`                                                                                               | Extension protocol version and compatibility checks                        |
 | `/artifact`                                                                                               | Declarative archive metadata and compatibility checks                      |
 | `/contributors`, `/attribution`, `/licensing`                                                             | Captured contributor receipts and structured licence metadata              |
@@ -50,7 +50,13 @@ const result = validateExtensionManifest({
       service: "example-service",
     },
   ],
-  readiness: { requires: ["service:example-service"] },
+  config: [
+    {
+      key: "mode",
+      default: "fixture",
+      targets: [{ component: "service:example-service", key: "MODE" }],
+    },
+  ],
 });
 
 if (!result.valid) throw new Error(result.errors.join("; "));

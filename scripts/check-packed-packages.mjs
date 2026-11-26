@@ -250,8 +250,13 @@ void artifact; void receipts; void serviceCheck;
           id: "packed-demo",
         },
       ],
-      config: [{ key: "DEMO", target: "service:packed-service", default: "fixture" }],
-      readiness: { requires: ["service:packed-service"] },
+      config: [
+        {
+          key: "demo",
+          default: "fixture",
+          targets: [{ component: "service:packed-service", key: "DEMO" }],
+        },
+      ],
     }),
   );
   run(process.execPath, [cli, "bundle", "--input", source, "--out", out], consumer);
