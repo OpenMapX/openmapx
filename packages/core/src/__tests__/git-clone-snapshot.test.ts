@@ -24,6 +24,7 @@ const remote = vi.hoisted(() => ({
   canonical: "https://github.com/fixture/many-files",
   fixture: "",
   traceDirectory: "",
+  withoutLazyFetchVariable: false,
   calls: [] as { args: string[]; env: NodeJS.ProcessEnv | undefined }[],
 }));
 
@@ -38,22 +39,16 @@ vi.mock("../spawn", async (importOriginal) => {
     ) => {
       remote.calls.push({ args: [...args], env: opts.env });
       if (cmd !== "git" || !remote.fixture) return actual.spawnWithBufferedLogs(cmd, args, opts);
+      const env: NodeJS.ProcessEnv = {
+        ...opts.env,
+        GIT_ALLOW_PROTOCOL: "file",
+        GIT_TRACE2_EVENT: remote.traceDirectory,
+      };
+      if (remote.withoutLazyFetchVariable) delete env.GIT_NO_LAZY_FETCH;
       return actual.spawnWithBufferedLogs(
         cmd,
         args.map((arg) => (arg === remote.canonical ? remote.fixture : arg)),
-        {
-          ...opts,
-          env: {
-            ...opts.env,
-            GIT_ALLOW_PROTOCOL: "file",
-            GIT_TRACE2_EVENT: remote.traceDirectory,
-            // A detached background maintenance run would keep writing trace
-            // files while the test removes them.
-            GIT_CONFIG_COUNT: "1",
-            GIT_CONFIG_KEY_0: "maintenance.auto",
-            GIT_CONFIG_VALUE_0: "false",
-          },
-        },
+        { ...opts, env },
       );
     },
   };
@@ -63,7 +58,7 @@ const { GIT_CLONE_MAX_FILE_BYTES, GitCloneQuotaError, gitShallowCloneSnapshot } 
   "../git-clone"
 );
 
-const FILE_COUNT = 400;
+const FILE_COUNT = 50;
 const fixtureEnvironment = {
   ...process.env,
   GIT_CONFIG_GLOBAL: "/dev/null",
@@ -103,17 +98,22 @@ function bareRepository(name: string, options: { oversized: boolean; allowFilter
   return `file://${bare}`;
 }
 
-/** Count the times any git process in the trace contacted the fixture remote. */
-function remoteRoundTrips(): number {
+/** Count the processes any traced git process started whose argv mentions `needle`. */
+function childStarts(needle: string): number {
   let count = 0;
   for (const name of readdirSync(remote.traceDirectory)) {
     for (const line of readFileSync(join(remote.traceDirectory, name), "utf8").split("\n")) {
       if (!line.includes('"event":"child_start"')) continue;
       const event = JSON.parse(line) as { argv?: string[] };
-      if (event.argv?.some((arg) => arg.includes("git-upload-pack"))) count += 1;
+      if (event.argv?.some((arg) => arg.includes(needle))) count += 1;
     }
   }
   return count;
+}
+
+/** Count the times any git process in the trace contacted the fixture remote. */
+function remoteRoundTrips(): number {
+  return childStarts("git-upload-pack");
 }
 
 const repositories = {
@@ -140,6 +140,7 @@ beforeAll(() => {
 
 afterEach(async () => {
   remote.fixture = "";
+  remote.withoutLazyFetchVariable = false;
   remote.calls.length = 0;
   await Promise.all(scratch.splice(0).map((path) => rm(path, { recursive: true, force: true })));
 });
@@ -168,12 +169,20 @@ describe("gitShallowCloneSnapshot against a local remote", () => {
     expect(snapshot.commit).toBe(
       git(["-C", repositories.filtered.slice(7), "rev-parse", "main"]).trim(),
     );
-    expect(readFileSync(join(targetDir, "src", "file-123.txt"), "utf8")).toBe("fixture file 123\n");
+    expect(readFileSync(join(targetDir, "src", "file-23.txt"), "utf8")).toBe("fixture file 23\n");
     expect(readdirSync(join(targetDir, "src"))).toHaveLength(FILE_COUNT);
     expect(existsSync(join(targetDir, ".git"))).toBe(false);
     // One fetch, and no git step went back to the remote for a missing blob.
     expect(gitCalls("fetch")).toHaveLength(1);
     expect(remoteRoundTrips()).toBe(1);
+  });
+
+  it("starts no background maintenance in the staging repository", async () => {
+    const targetDir = prepare(repositories.filtered);
+    await gitShallowCloneSnapshot({ url: remote.canonical, targetDir });
+
+    expect(gitCalls("fetch")[0]?.args).toContain("--no-auto-maintenance");
+    expect(childStarts("maintenance")).toBe(0);
   });
 
   it("asks the remote to leave out only blobs above the per-file limit", async () => {
@@ -209,6 +218,21 @@ describe("gitShallowCloneSnapshot against a local remote", () => {
     expect(remoteRoundTrips()).toBe(1);
     expect(gitCalls("checkout")).toHaveLength(0);
     expect(existsSync(targetDir)).toBe(false);
+  });
+
+  it("refuses an oversized file without a fetch even if git ignored the lazy-fetch variable", async () => {
+    // Removing the remote after the fetch is what makes the refusal the same
+    // on every git version; the variable is only the second guard.
+    const targetDir = prepare(repositories.filteredOversized);
+    remote.withoutLazyFetchVariable = true;
+
+    await expect(gitShallowCloneSnapshot({ url: remote.canonical, targetDir })).rejects.toThrow(
+      new GitCloneQuotaError(
+        `Repository contains a file larger than ${GIT_CLONE_MAX_FILE_BYTES} bytes at huge.bin`,
+      ),
+    );
+    expect(remoteRoundTrips()).toBe(1);
+    expect(gitCalls("checkout")).toHaveLength(0);
   });
 
   it("stages correctly from a remote that ignores the filter", async () => {

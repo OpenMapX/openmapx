@@ -34,8 +34,9 @@ const GIT_TREE_ENTRY = /^([0-7]{6}) (\S+) [a-f0-9]{40,64}\s+(\d+|-|BAD)\t(.+)$/;
  * only being noticed by the post-checkout filesystem walk.
  *
  * The fetch asks the remote to leave out every blob above the per-file limit,
- * and lazy fetching is off, so `ls-tree` prints `BAD` instead of a size for
- * such a blob. That is the per-file refusal, decided without downloading it.
+ * and the remote is removed before the listing, so `ls-tree` prints `BAD`
+ * instead of a size for such a blob. That is the per-file refusal, decided
+ * without downloading it.
  */
 export function assertGitTreeMetadataWithinBudget(lines: Iterable<string>): void {
   let entries = 0;
@@ -232,7 +233,8 @@ export async function gitShallowCloneSnapshot(
     // remote leaves out only the ones that would be refused anyway.
     // `blob:limit=<n>` omits blobs of n bytes or more, hence the + 1. A remote
     // that ignores the filter sends everything, and the tree check below still
-    // refuses an oversized blob before checkout.
+    // refuses an oversized blob before checkout. No background maintenance may
+    // run in a repository that is deleted moments later.
     await spawnWithBufferedLogs(
       "git",
       [
@@ -241,6 +243,7 @@ export async function gitShallowCloneSnapshot(
         "fetch",
         "--depth=1",
         "--no-tags",
+        "--no-auto-maintenance",
         `--filter=blob:limit=${GIT_CLONE_MAX_FILE_BYTES + 1}`,
         "origin",
         opts.ref ?? "HEAD",
@@ -252,6 +255,15 @@ export async function gitShallowCloneSnapshot(
         displayCommand: `git fetch ${allowed.hostname}`,
       },
     );
+    // With no promisor remote left, no later step can fetch a missing blob on
+    // any git version. It also makes `ls-tree` print `BAD` for a left-out blob:
+    // older git (2.39) otherwise exits with a fetch error even with lazy
+    // fetching off. FETCH_HEAD survives the removal.
+    await spawnWithBufferedLogs("git", ["-C", tmp, "remote", "remove", "origin"], {
+      signal,
+      env,
+      displayCommand: "git remote remove",
+    });
 
     // Resolve the exact commit while `.git` still exists.
     let commit = "";
