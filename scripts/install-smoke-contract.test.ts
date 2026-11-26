@@ -271,7 +271,9 @@ exit 0
     const { run, calls } = stubCurl();
     const result = run(`admin_api GET /api/admin/thing; admin_api POST /api/admin/thing '{"a":1}'`);
     expect(result.status, result.stderr).toBe(0);
-    const [get, post] = calls();
+    const received = calls();
+    expect(received).toHaveLength(2);
+    const [get = [], post = []] = received;
     expect(get).toContain("arg: https://localhost/api/admin/thing");
     expect(get.some((line) => /content-type/i.test(line))).toBe(false);
     expect(get.some((line) => line.startsWith("stdin:"))).toBe(false);
@@ -292,7 +294,9 @@ exit 0
       expect(output).not.toContain(password);
       expect(output).not.toContain(cookie);
     }
-    const [signUp, signIn] = calls();
+    const received = calls();
+    expect(received).toHaveLength(2);
+    const [signUp = [], signIn = []] = received;
     expect(signUp).toContain("arg: https://localhost/api/auth/sign-up/email");
     expect(signIn).toContain("arg: https://localhost/api/auth/sign-in/email");
     expect(signIn).toContain(
