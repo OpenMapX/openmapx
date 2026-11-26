@@ -107,6 +107,64 @@ describe("createProviderRegistrars", () => {
     expect(providers.has("transit")).toBe(false);
   });
 
+  it("runs the realtime capability contract at registration", () => {
+    const { registrars, providers } = registrarsFor("demo");
+    expect(() =>
+      registrars.registerRealtimeProvider({
+        id: "rt",
+        coverage: { all: true },
+        priority: 1,
+        capabilities: { vehiclePositions: true },
+        attribution: [],
+      } as never),
+    ).toThrow(/capability "vehiclePositions" requires method "getVehiclePositions"/);
+    expect(providers.has("live-transit")).toBe(false);
+  });
+
+  it("runs the ride capability contract at registration", () => {
+    const { registrars, providers } = registrarsFor("demo");
+    expect(() =>
+      registrars.registerRideProvider({
+        id: "ride",
+        meta: {},
+        capabilities: { quote: false, booking: false, tracking: false },
+        permitsComparison: false,
+        attribution: [],
+        getAvailability: async () => ({}),
+        createHandoff: async () => ({}),
+      } as never),
+    ).toThrow('Ride provider "ride" must declare the deepLink capability');
+    expect(providers.has("ride-hailing")).toBe(false);
+  });
+
+  it("accepts required members that are getters or inherited from a class", () => {
+    const { registrars, providers } = registrarsFor("demo");
+    class Base {
+      get id() {
+        return "inherited";
+      }
+      get supportedModes() {
+        return ["driving" as const];
+      }
+      async getRoute() {
+        return {} as never;
+      }
+    }
+    class Derived extends Base {}
+    const ownGetters = {
+      get id() {
+        return "own";
+      },
+      get supportedModes() {
+        return ["driving" as const];
+      },
+      getRoute: async () => ({}) as never,
+    };
+    registrars.registerRoutingProvider(new Derived());
+    registrars.registerRoutingProvider(ownGetters);
+    expect(providers.get("routing")).toHaveLength(2);
+  });
+
   it("refuses a data source whose id cannot be a place id scheme", () => {
     const { registrars } = registrarsFor("demo");
     expect(() =>
