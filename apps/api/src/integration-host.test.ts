@@ -605,7 +605,8 @@ describe("initIntegrations — loader", () => {
       join(directory, "index.js"),
       [
         "export function setup(ctx) {",
-        `  ctx.registerMobilityDataSource({ id: '${providerId}', meta: {}, attribution: [] });`,
+        `  ctx.registerMobilityDataSource({ id: '${providerId}', meta: {}, attribution: [],`,
+        "    getFilters: async () => [], search: async () => ({}), getDetail: async () => ({}) });",
         "}",
       ].join("\n"),
     );

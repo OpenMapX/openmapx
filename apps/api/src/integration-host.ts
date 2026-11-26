@@ -2,11 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { ID_SCHEME_PATTERN } from "@openmapx/core/place-ids";
 import {
   type ActivationTransactionScope,
-  assertAirQualityProviderContract,
-  assertLandmarkModelProviderContract,
   type CacheClient,
   type CustomHealthCheckFn,
   createActivationTransactionScope,
@@ -52,6 +49,7 @@ import {
 } from "./integration-config";
 import { createIntegrationDb } from "./integration-db";
 import { readIntegrationFile, setVerifiedIntegrationFiles } from "./integration-files";
+import { createProviderRegistrars } from "./integration-registrars";
 import {
   beginIntegrationRouteStaging,
   commitIntegrationRouteStaging,
@@ -705,145 +703,12 @@ function buildIntegrationContext(args: {
         endpointId,
       );
     },
-    registerTransitProvider(provider) {
-      const existing = providers.get("transit") ?? [];
-      existing.push(provider);
-      providers.set("transit", existing);
-    },
-    registerRealtimeProvider(provider) {
-      const existing = providers.get("live-transit") ?? [];
-      existing.push(provider);
-      providers.set("live-transit", existing);
-    },
-    registerMobilityDataSource(provider) {
-      // The id is the scheme of the place ids its items open as.
-      if (!ID_SCHEME_PATTERN.test(provider.id))
-        throw new Error(
-          `Data source id "${provider.id}" must start with a letter and use only lower-case letters, digits and hyphens, because it names its places' id scheme`,
-        );
-      const existing = providers.get("data-source") ?? [];
-      existing.push(provider);
-      providers.set("data-source", existing);
-    },
-    registerWeatherProvider(provider) {
-      const existing = providers.get("weather") ?? [];
-      existing.push(provider);
-      providers.set("weather", existing);
-    },
-    registerAirQualityProvider(provider) {
-      const allowedSourceIds = new Set(manifest.dataSources?.map(({ sourceId }) => sourceId) ?? []);
-      assertAirQualityProviderContract(provider, allowedSourceIds);
-      const existing = providers.get("air-quality") ?? [];
-      existing.push(provider);
-      providers.set("air-quality", existing);
-    },
-    registerGeocodingProvider(provider) {
-      const existing = providers.get("geocoding") ?? [];
-      existing.push(provider);
-      providers.set("geocoding", existing);
-    },
-    registerRoutingProvider(provider) {
-      const existing = providers.get("routing") ?? [];
-      existing.push(provider);
-      providers.set("routing", existing);
-    },
-    registerRideProvider(provider) {
-      const existing = providers.get("ride-hailing") ?? [];
-      existing.push(provider);
-      providers.set("ride-hailing", existing);
-    },
-    registerRoadConditionsProvider(provider) {
-      const existing = providers.get("road-conditions") ?? [];
-      existing.push(provider);
-      providers.set("road-conditions", existing);
-    },
-    registerFuelStationProvider(provider) {
-      const existing = providers.get("fuel-stations") ?? [];
-      existing.push(provider);
-      providers.set("fuel-stations", existing);
-    },
-    registerParkingSiteProvider(provider) {
-      const existing = providers.get("parking-sites") ?? [];
-      existing.push(provider);
-      providers.set("parking-sites", existing);
-    },
-    registerChargingSiteProvider(provider) {
-      const existing = providers.get("charging-sites") ?? [];
-      existing.push(provider);
-      providers.set("charging-sites", existing);
-    },
-    registerCameraProvider(provider) {
-      const existing = providers.get("cameras") ?? [];
-      existing.push(provider);
-      providers.set("cameras", existing);
-    },
-    registerMessageSignProvider(provider) {
-      const existing = providers.get("message-signs") ?? [];
-      existing.push(provider);
-      providers.set("message-signs", existing);
-    },
-    registerLandmarkModelProvider(provider) {
-      const allowedSourceIds = new Set(manifest.dataSources?.map(({ sourceId }) => sourceId) ?? []);
-      assertLandmarkModelProviderContract(provider, manifest.id, allowedSourceIds);
-      const existing = providers.get("landmark-models") ?? [];
-      existing.push(provider);
-      providers.set("landmark-models", existing);
-    },
-    registerRoadWeatherProvider(provider) {
-      const existing = providers.get("road-weather") ?? [];
-      existing.push(provider);
-      providers.set("road-weather", existing);
-    },
-    registerServiceVehicleProvider(provider) {
-      const existing = providers.get("service-vehicles") ?? [];
-      existing.push(provider);
-      providers.set("service-vehicles", existing);
-    },
-    registerBorderCrossingProvider(provider) {
-      const existing = providers.get("border-crossings") ?? [];
-      existing.push(provider);
-      providers.set("border-crossings", existing);
-    },
-    registerHazardsProvider(provider) {
-      const existing = providers.get("hazards") ?? [];
-      existing.push(provider);
-      providers.set("hazards", existing);
-    },
-    registerPhotoProvider(provider) {
-      const existing = providers.get("photos") ?? [];
-      existing.push(provider);
-      providers.set("photos", existing);
-    },
-    registerStreetLevelProvider(provider) {
-      const existing = providers.get("street-level-imagery") ?? [];
-      existing.push(provider);
-      providers.set("street-level-imagery", existing);
-    },
-    registerReviewProvider(provider) {
-      const existing = providers.get("reviews") ?? [];
-      existing.push(provider);
-      providers.set("reviews", existing);
-    },
-    registerPoiSearchProvider(provider) {
-      const existing = providers.get("poi-search") ?? [];
-      existing.push(provider);
-      providers.set("poi-search", existing);
-    },
-    registerSearchSuggestionProvider(provider) {
-      const existing = providers.get("search-suggestions") ?? [];
-      existing.push(provider);
-      providers.set("search-suggestions", existing);
-    },
-    registerKnowledgeProvider(provider) {
-      const existing = providers.get("knowledge") ?? [];
-      existing.push(provider);
-      providers.set("knowledge", existing);
-    },
-    registerGtfsCatalogProvider(provider) {
-      const existing = providers.get("gtfs-catalog") ?? [];
-      existing.push(provider);
-      providers.set("gtfs-catalog", existing);
-    },
+    ...createProviderRegistrars({
+      integrationId: id,
+      manifest,
+      providers,
+      bind: (_domain, provider) => provider,
+    }),
     registerRoute(method, path, handler, options) {
       registerIntegrationRoute(id, method, path, handler, options);
     },

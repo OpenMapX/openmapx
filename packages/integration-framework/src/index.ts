@@ -283,6 +283,12 @@ export type {
   OsmElementRef,
 } from "./contracts/landmark-model-provider";
 export { assertLandmarkModelProviderContract } from "./contracts/landmark-model-provider";
+export type {
+  ProviderDomain,
+  ProviderRegistrar,
+  ProviderShape,
+} from "./contracts/provider-shapes";
+export { assertProviderShape, PROVIDER_SHAPES } from "./contracts/provider-shapes";
 // Straight to the leaf, and without the `.js` the type-only re-export above it
 // carries. The type export is erased before anything resolves it, so it can name
 // a file that was never emitted; a value export is resolved for real, and this
