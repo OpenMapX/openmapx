@@ -79557,6 +79557,9 @@
                                   "type": "string",
                                   "maxLength": 48,
                                   "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+                                },
+                                "optional": {
+                                  "type": "boolean"
                                 }
                               },
                               "required": [
@@ -80539,6 +80542,9 @@
                             "type": "string",
                             "maxLength": 48,
                             "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+                          },
+                          "optional": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
