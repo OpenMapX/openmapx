@@ -173,12 +173,15 @@ admin_cli() {
 #   admin_api <METHOD> <path> [<json body>]
 # The cookie reaches curl through a file descriptor and the body through stdin,
 # so neither the process list nor a shell trace shows them. Only a request with
-# a body declares JSON: the API refuses an empty body declared as JSON.
+# a body declares JSON: the API refuses an empty body declared as JSON. When the
+# caller sets admin_api_status_line, the HTTP status code (000 without an answer)
+# ends stderr, after any error curl prints.
 admin_api() {
   local method="$1" path="$2" data=()
   if (($# > 2)); then
     data=(--header "content-type: application/json" --data-binary @-)
   fi
+  [[ -z "${admin_api_status_line:-}" ]] || data+=(--write-out '%{stderr}%{http_code}')
   curl --silent --show-error --insecure --fail-with-body --max-time 30 --request "$method" \
     --header @<(printf 'cookie: ' && cat "$cookie_file") --header "origin: https://localhost" \
     ${data[@]+"${data[@]}"} "https://localhost$path" <<<"${3-}"
@@ -188,24 +191,47 @@ admin_api() {
 # cancelled or is still unfinished after the timeout (default $timeout_seconds):
 #   wait_for_job <job id> [<timeout seconds>]
 # A request that fails counts as not finished yet, since installing an
-# extension can restart the API that answers it.
+# extension can restart the API that answers it. The timeout message ends with
+# what the last poll got: its HTTP status and the job status, if one was read.
+# A response body is never printed; only the job's status and error are.
 wait_for_job() {
-  local id="$1" deadline=$((SECONDS + ${2:-$timeout_seconds})) body state
-  local type="unknown" status="unanswered"
+  local id="$1" deadline=$((SECONDS + ${2:-$timeout_seconds})) body state errors code http
+  local type="unknown" status="unanswered" error="" last="" admin_api_status_line=1
+  errors="$(mktemp)"
   while true; do
-    if body="$(admin_api GET "/api/admin/jobs/$id?source=application")" &&
-      state="$(BODY="$body" node -e '
+    code=0
+    body="$(admin_api GET "/api/admin/jobs/$id?source=application" 2>"$errors")" || code=$?
+    http="$(sed -n '$p' "$errors" | grep -oE '^[0-9]{3}$')" || http=""
+    if [[ "$http" == 000 || (-z "$http" && code -ne 0) ]]; then
+      last="no HTTP answer (curl exit $code)"
+    else
+      last="${http:+HTTP $http, }"
+      if ((code == 0)) && state="$(BODY="$body" node -e '
         const job = JSON.parse(process.env.BODY);
         if (typeof job.status !== "string") process.exit(1);
-        console.log(`${job.type ?? "unknown"}\t${job.status}`);
+        const error = typeof job.error === "string" ? job.error.replace(/\s+/g, " ").slice(0, 300) : "";
+        console.log(`${job.type ?? "unknown"}\t${job.status}\t${error}`);
       ' 2>/dev/null)"; then
-      IFS=$'\t' read -r type status <<<"$state"
+        IFS=$'\t' read -r type status error <<<"$state"
+        last+="job status $status"
+      else
+        last+="no job status in the answer"
+      fi
     fi
     case "$status" in
-      succeeded) return 0 ;;
-      failed | cancelled) fail "job $id ($type): $status" ;;
+      succeeded)
+        rm -f "$errors"
+        return 0
+        ;;
+      failed | cancelled)
+        rm -f "$errors"
+        fail "job $id ($type): $status${error:+ (error: $error)}"
+        ;;
     esac
-    ((SECONDS < deadline)) || fail "job $id ($type): $status"
+    if ((SECONDS >= deadline)); then
+      rm -f "$errors"
+      fail "job $id ($type): $status (last poll: $last)"
+    fi
     sleep $((deadline - SECONDS < 5 ? deadline - SECONDS : 5))
   done
 }

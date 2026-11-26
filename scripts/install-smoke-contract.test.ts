@@ -194,6 +194,157 @@ describe("shared smoke helpers", () => {
   });
 });
 
+describe("shared smoke helpers against a stub curl", () => {
+  const password = "0123456789abcdef0123456789abcdef0123456789abcdef";
+  const cookie = "stubSessionCookieValue.signature";
+  const scratch: string[] = [];
+  afterEach(() => {
+    for (const dir of scratch.splice(0)) rmSync(dir, { recursive: true, force: true });
+  });
+
+  /**
+   * A curl that logs each argument, the contents of a `--header @file`, its
+   * stdin when it sends a body, and the end of the call; writes a session
+   * cookie into a `--cookie-jar`; and answers with $STUB_HTTP and $STUB_BODY
+   * as curl does with `--fail-with-body` and `--write-out '%{stderr}%{http_code}'`.
+   */
+  function stubCurl() {
+    const dir = mkdtempSync(join(tmpdir(), "smoke-helpers-test-"));
+    scratch.push(dir);
+    const bin = join(dir, "bin");
+    mkdirSync(bin);
+    const log = join(dir, "curl.log");
+    writeFileSync(
+      join(bin, "curl"),
+      `#!/bin/bash
+prev=""; data=0; writeout=0
+for a in "$@"; do
+  printf 'arg: %s\\n' "$a" >>"${log}"
+  if [[ "$prev" == --header && "$a" == @* ]]; then
+    printf 'header-file: %s\\n' "$(cat "\${a#@}")" >>"${log}"
+  fi
+  if [[ "$prev" == --cookie-jar ]]; then
+    printf '#HttpOnly_localhost\\tFALSE\\t/\\tTRUE\\t0\\tbetter-auth.session_token\\t%s\\n' "${cookie}" >"$a"
+  fi
+  [[ "$a" == --data-binary || "$a" == --data ]] && data=1
+  [[ "$a" == --write-out ]] && writeout=1
+  prev="$a"
+done
+if ((data)); then printf 'stdin: %s\\n' "$(cat)" >>"${log}"; fi
+echo "end" >>"${log}"
+printf '%s' "$STUB_BODY"
+if [[ "$STUB_HTTP" == 000 ]]; then
+  echo "curl: (7) Failed to connect to localhost port 443" >&2
+  if ((writeout)); then printf 000 >&2; fi
+  exit 7
+fi
+if ((STUB_HTTP >= 400)); then
+  echo "curl: (22) The requested URL returned error: $STUB_HTTP" >&2
+  if ((writeout)); then printf '%s' "$STUB_HTTP" >&2; fi
+  exit 22
+fi
+if ((writeout)); then printf '%s' "$STUB_HTTP" >&2; fi
+exit 0
+`,
+      { mode: 0o755 },
+    );
+    writeFileSync(join(bin, "openssl"), `#!/bin/sh\necho ${password}\n`, { mode: 0o755 });
+    writeFileSync(join(dir, "session-cookie"), `better-auth.session_token=${cookie}\n`, {
+      mode: 0o600,
+    });
+    const run = (body: string, answer: { http?: string; body?: string } = {}) =>
+      sourced(`cookie_file="${join(dir, "session-cookie")}"; work="${dir}"; ${body}`, {
+        PATH: `${bin}:${process.env.PATH}`,
+        STUB_HTTP: answer.http ?? "200",
+        STUB_BODY: answer.body ?? "{}",
+      });
+    /** The calls curl received, each as its log lines. */
+    const calls = () =>
+      readFileSync(log, "utf8")
+        .split("end\n")
+        .filter(Boolean)
+        .map((call) => call.split("\n").filter(Boolean));
+    return { dir, run, calls };
+  }
+
+  it("declares JSON only with a body and passes the cookie by file", () => {
+    const { run, calls } = stubCurl();
+    const result = run(`admin_api GET /api/admin/thing; admin_api POST /api/admin/thing '{"a":1}'`);
+    expect(result.status, result.stderr).toBe(0);
+    const [get, post] = calls();
+    expect(get).toContain("arg: https://localhost/api/admin/thing");
+    expect(get.some((line) => /content-type/i.test(line))).toBe(false);
+    expect(get.some((line) => line.startsWith("stdin:"))).toBe(false);
+    expect(post).toContain("arg: content-type: application/json");
+    expect(post).toContain('stdin: {"a":1}');
+    for (const call of [get, post]) {
+      expect(call).toContain(`header-file: cookie: better-auth.session_token=${cookie}`);
+      expect(call.filter((line) => line.startsWith("arg:")).join("\n")).not.toContain(cookie);
+    }
+  });
+
+  it("creates the session without showing the password or the cookie, also under a trace", () => {
+    const { dir, run, calls } = stubCurl();
+    const result = run(`openmapx() { :; }; set -x; create_admin_session`);
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stderr).toContain("+ read -r admin_password");
+    for (const output of [result.stdout, result.stderr]) {
+      expect(output).not.toContain(password);
+      expect(output).not.toContain(cookie);
+    }
+    const [signUp, signIn] = calls();
+    expect(signUp).toContain("arg: https://localhost/api/auth/sign-up/email");
+    expect(signIn).toContain("arg: https://localhost/api/auth/sign-in/email");
+    expect(signIn).toContain(
+      `stdin: {"email":"update-smoke@openmapx.org","password":"${password}"}`,
+    );
+    for (const call of [signUp, signIn])
+      expect(call.filter((line) => line.startsWith("arg:")).join("\n")).not.toContain(password);
+    const session = join(dir, "session-cookie");
+    expect(readFileSync(session, "utf8")).toBe(`better-auth.session_token=${cookie}\n`);
+    expect(statSync(session).mode & 0o777).toBe(0o600);
+  });
+
+  it("polls the application job and names its error when it failed", () => {
+    const { run, calls } = stubCurl();
+    const result = run(`wait_for_job j1 5`, {
+      body: '{"id":"j1","type":"extension.install","status":"failed","error":"boom\\nagain"}',
+    });
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("job j1 (extension.install): failed (error: boom again)");
+    expect(calls()[0]).toContain("arg: https://localhost/api/admin/jobs/j1?source=application");
+  });
+
+  it.each([
+    [
+      "an error status",
+      { http: "404", body: '{"message":"secret-body-text"}' },
+      "job j1 (unknown): unanswered (last poll: HTTP 404, no job status in the answer)",
+    ],
+    [
+      "an answer that is not a job",
+      { http: "200", body: "<html>secret-body-text</html>" },
+      "job j1 (unknown): unanswered (last poll: HTTP 200, no job status in the answer)",
+    ],
+    [
+      "no answer",
+      { http: "000", body: "" },
+      "job j1 (unknown): unanswered (last poll: no HTTP answer (curl exit 7))",
+    ],
+    [
+      "a job still running",
+      { http: "200", body: '{"id":"j1","type":"extension.install","status":"running"}' },
+      "job j1 (extension.install): running (last poll: HTTP 200, job status running)",
+    ],
+  ])("names what the last poll got at the timeout: %s", (_name, answer, message) => {
+    const { run } = stubCurl();
+    const result = run(`wait_for_job j1 1`, answer);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain(message);
+    expect(result.stdout + result.stderr).not.toContain("secret-body-text");
+  });
+});
+
 describe("install smoke script behaviour", () => {
   const scratch: string[] = [];
   afterEach(() => {
