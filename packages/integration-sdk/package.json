@@ -15,15 +15,120 @@
       "import": "./src/index.ts",
       "default": "./src/index.ts"
     },
+    "./air-quality": {
+      "types": "./src/air-quality.ts",
+      "import": "./src/air-quality.ts",
+      "default": "./src/air-quality.ts"
+    },
+    "./attribution": {
+      "types": "./src/attribution.ts",
+      "import": "./src/attribution.ts",
+      "default": "./src/attribution.ts"
+    },
+    "./data-source": {
+      "types": "./src/data-source.ts",
+      "import": "./src/data-source.ts",
+      "default": "./src/data-source.ts"
+    },
     "./errors": {
       "types": "./src/errors.ts",
       "import": "./src/errors.ts",
       "default": "./src/errors.ts"
     },
+    "./geo": {
+      "types": "./src/geo.ts",
+      "import": "./src/geo.ts",
+      "default": "./src/geo.ts"
+    },
+    "./geocoding": {
+      "types": "./src/geocoding.ts",
+      "import": "./src/geocoding.ts",
+      "default": "./src/geocoding.ts"
+    },
+    "./hazards": {
+      "types": "./src/hazards.ts",
+      "import": "./src/hazards.ts",
+      "default": "./src/hazards.ts"
+    },
+    "./http": {
+      "types": "./src/http.ts",
+      "import": "./src/http.ts",
+      "default": "./src/http.ts"
+    },
+    "./knowledge": {
+      "types": "./src/knowledge.ts",
+      "import": "./src/knowledge.ts",
+      "default": "./src/knowledge.ts"
+    },
+    "./media": {
+      "types": "./src/media.ts",
+      "import": "./src/media.ts",
+      "default": "./src/media.ts"
+    },
     "./places": {
       "types": "./src/places.ts",
       "import": "./src/places.ts",
       "default": "./src/places.ts"
+    },
+    "./poi": {
+      "types": "./src/poi.ts",
+      "import": "./src/poi.ts",
+      "default": "./src/poi.ts"
+    },
+    "./query": {
+      "types": "./src/query.ts",
+      "import": "./src/query.ts",
+      "default": "./src/query.ts"
+    },
+    "./reviews": {
+      "types": "./src/reviews.ts",
+      "import": "./src/reviews.ts",
+      "default": "./src/reviews.ts"
+    },
+    "./rides": {
+      "types": "./src/rides.ts",
+      "import": "./src/rides.ts",
+      "default": "./src/rides.ts"
+    },
+    "./road": {
+      "types": "./src/road.ts",
+      "import": "./src/road.ts",
+      "default": "./src/road.ts"
+    },
+    "./routing": {
+      "types": "./src/routing.ts",
+      "import": "./src/routing.ts",
+      "default": "./src/routing.ts"
+    },
+    "./sites": {
+      "types": "./src/sites.ts",
+      "import": "./src/sites.ts",
+      "default": "./src/sites.ts"
+    },
+    "./strings": {
+      "types": "./src/strings.ts",
+      "import": "./src/strings.ts",
+      "default": "./src/strings.ts"
+    },
+    "./testing": {
+      "types": "./src/testing.ts",
+      "import": "./src/testing.ts",
+      "default": "./src/testing.ts"
+    },
+    "./tiles": {
+      "types": "./src/tiles.ts",
+      "import": "./src/tiles.ts",
+      "default": "./src/tiles.ts"
+    },
+    "./transit": {
+      "types": "./src/transit.ts",
+      "import": "./src/transit.ts",
+      "default": "./src/transit.ts"
+    },
+    "./weather": {
+      "types": "./src/weather.ts",
+      "import": "./src/weather.ts",
+      "default": "./src/weather.ts"
     },
     "./package.json": "./package.json"
   },
@@ -38,13 +143,97 @@
         "types": "./dist/index.d.ts",
         "import": "./dist/index.js"
       },
+      "./air-quality": {
+        "types": "./dist/air-quality.d.ts",
+        "import": "./dist/air-quality.js"
+      },
+      "./attribution": {
+        "types": "./dist/attribution.d.ts",
+        "import": "./dist/attribution.js"
+      },
+      "./data-source": {
+        "types": "./dist/data-source.d.ts",
+        "import": "./dist/data-source.js"
+      },
       "./errors": {
         "types": "./dist/errors.d.ts",
         "import": "./dist/errors.js"
       },
+      "./geo": {
+        "types": "./dist/geo.d.ts",
+        "import": "./dist/geo.js"
+      },
+      "./geocoding": {
+        "types": "./dist/geocoding.d.ts",
+        "import": "./dist/geocoding.js"
+      },
+      "./hazards": {
+        "types": "./dist/hazards.d.ts",
+        "import": "./dist/hazards.js"
+      },
+      "./http": {
+        "types": "./dist/http.d.ts",
+        "import": "./dist/http.js"
+      },
+      "./knowledge": {
+        "types": "./dist/knowledge.d.ts",
+        "import": "./dist/knowledge.js"
+      },
+      "./media": {
+        "types": "./dist/media.d.ts",
+        "import": "./dist/media.js"
+      },
       "./places": {
         "types": "./dist/places.d.ts",
         "import": "./dist/places.js"
+      },
+      "./poi": {
+        "types": "./dist/poi.d.ts",
+        "import": "./dist/poi.js"
+      },
+      "./query": {
+        "types": "./dist/query.d.ts",
+        "import": "./dist/query.js"
+      },
+      "./reviews": {
+        "types": "./dist/reviews.d.ts",
+        "import": "./dist/reviews.js"
+      },
+      "./rides": {
+        "types": "./dist/rides.d.ts",
+        "import": "./dist/rides.js"
+      },
+      "./road": {
+        "types": "./dist/road.d.ts",
+        "import": "./dist/road.js"
+      },
+      "./routing": {
+        "types": "./dist/routing.d.ts",
+        "import": "./dist/routing.js"
+      },
+      "./sites": {
+        "types": "./dist/sites.d.ts",
+        "import": "./dist/sites.js"
+      },
+      "./strings": {
+        "types": "./dist/strings.d.ts",
+        "import": "./dist/strings.js"
+      },
+      "./testing": {
+        "types": "./dist/testing.d.ts",
+        "import": "./dist/testing.js"
+      },
+      "./tiles": {
+        "types": "./dist/tiles.d.ts",
+        "import": "./dist/tiles.js"
+      },
+      "./transit": {
+        "types": "./dist/transit.d.ts",
+        "import": "./dist/transit.js"
+      },
+      "./weather": {
+        "types": "./dist/weather.d.ts",
+        "import": "./dist/weather.js"
       },
       "./package.json": "./package.json"
     }
@@ -54,13 +243,19 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
+    "@fragaria/address-formatter": "^7.1.2",
     "@openmapx/air-quality": "workspace:^",
     "@openmapx/core": "workspace:^",
     "@openmapx/extension-contracts": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/mobility-core": "workspace:^",
     "@openmapx/place-ids": "workspace:^",
+    "@openmapx/provider-kit": "workspace:^",
+    "@photostructure/tz-lookup": "^11.8.0",
     "@types/geojson": "^7946.0.16",
+    "escape-html": "1.0.3",
+    "parse5": "8.1.1",
+    "spdx-expression-parse": "5.0.0",
     "zod": "^4.6.7"
   },
   "peerDependencies": {
@@ -71,7 +266,8 @@
     "rollup": "4.66.0",
     "rollup-plugin-dts": "6.5.1",
     "tsup": "9.0.0",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^5.0.5"
   },
   "repository": {
     "type": "git",

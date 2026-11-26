@@ -199,10 +199,19 @@
       // Run by hand to test the packed package outside the monorepo.
       "entry": ["scripts/check-external-consumer.mjs"],
       // Bundles resolve zod through the integration code cache's link to this
-      // package's zod. air-quality is declared ahead of the entry point that
-      // re-exports it. The bundled declarations import `geojson` types, which
-      // no source file here names directly.
-      "ignoreDependencies": ["zod", "@openmapx/air-quality", "@types/geojson"]
+      // package's zod. The bundled declarations import `geojson` types, which
+      // no source file here names directly. The published build leaves the
+      // third-party libraries that inlined workspace modules call as imports,
+      // so the SDK declares them although no source file here names them.
+      "ignoreDependencies": [
+        "zod",
+        "@types/geojson",
+        "@fragaria/address-formatter",
+        "@photostructure/tz-lookup",
+        "escape-html",
+        "parse5",
+        "spdx-expression-parse"
+      ]
     },
     "packages/presets": {
       // The schema is loaded with a template-literal dynamic import.

@@ -1,9 +1,12 @@
 // Checks the SDK as an author outside the monorepo receives it: the packed
 // package type-checks and imports with only its public dependencies present,
 // the build inlines no third-party code, and the output imports nothing but
-// zod, the public contracts package, Node built-ins and declared type packages.
+// zod, the public contracts package, Node built-ins, the reviewed runtime
+// libraries (JavaScript only) and declared type packages (declarations only).
+// Every entry point is imported, and every type it exports is named once.
 import { execFileSync } from "node:child_process";
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -27,7 +30,23 @@ const consumerModules = join(consumer, "node_modules");
 const ts = createRequire(join(sdkDirectory, "package.json"))("typescript");
 
 const PUBLIC_PACKAGES = ["zod", "@openmapx/extension-contracts"];
+// Libraries that shared helpers call at run time: address formatting
+// (`./geocoding`), time-zone lookup (`./weather`), and the HTML and SPDX parsing
+// behind the attribution helpers (`./attribution`, `./media`). The build leaves
+// them as imports and the SDK declares them, so an author's package manager
+// installs them; their code is never part of the SDK.
+const RUNTIME_PACKAGES = [
+  "@fragaria/address-formatter",
+  "@photostructure/tz-lookup",
+  "escape-html",
+  "parse5",
+  "spdx-expression-parse",
+];
 const sdkManifest = JSON.parse(readFileSync(join(sdkDirectory, "package.json"), "utf8"));
+const surfaceTypes = JSON.parse(
+  readFileSync(join(import.meta.dirname, "surface-types.json"), "utf8"),
+);
+const entryPoints = Object.keys(sdkManifest.exports).filter((key) => key !== "./package.json");
 // `@types/geojson` in the SDK's dependencies lets its declarations import `geojson`.
 const TYPE_PACKAGES = Object.keys(sdkManifest.dependencies)
   .filter((name) => name.startsWith("@types/"))
@@ -61,13 +80,26 @@ function packInto(packageName, destination) {
   renameSync(join(extracted, "package"), destination);
 }
 
+// Looked up along Node's search paths rather than resolved, because a package
+// whose `exports` leave out `./package.json` (parse5) cannot be resolved by it.
 function linkInstalled(name, fromDirectory) {
-  const manifest = createRequire(join(fromDirectory, "package.json")).resolve(
-    `${name}/package.json`,
-  );
+  const searchPaths = createRequire(join(fromDirectory, "package.json")).resolve.paths(name) ?? [];
+  const installed = searchPaths
+    .map((directory) => join(directory, name))
+    .find((directory) => existsSync(join(directory, "package.json")));
+  if (installed === undefined)
+    throw new CheckFailure(`${name} is not installed for ${fromDirectory}`);
   const target = join(consumerModules, name);
+  const source = realpathSync(installed);
+  // The SDK and the contracts package can both depend on the same package.
+  if (existsSync(target)) {
+    if (realpathSync(target) === source) return;
+    throw new CheckFailure(
+      `${name} is installed in two versions: ${realpathSync(target)}, ${source}`,
+    );
+  }
   mkdirSync(dirname(target), { recursive: true });
-  symlinkSync(realpathSync(dirname(manifest)), target, "dir");
+  symlinkSync(source, target, "dir");
 }
 
 function packageOf(specifier) {
@@ -89,7 +121,10 @@ function disallowedImports(dist) {
   for (const file of readdirSync(dist)) {
     const declaration = file.endsWith(".d.ts");
     if (!declaration && !file.endsWith(".js")) continue;
-    const allowed = new Set([...PUBLIC_PACKAGES, ...(declaration ? TYPE_PACKAGES : [])]);
+    const allowed = new Set([
+      ...PUBLIC_PACKAGES,
+      ...(declaration ? TYPE_PACKAGES : RUNTIME_PACKAGES),
+    ]);
     for (const specifier of bareImports(join(dist, file))) {
       if (specifier.startsWith("node:") || builtins.has(specifier)) continue;
       if (!allowed.has(packageOf(specifier))) problems.push(`${file}: ${specifier}`);
@@ -118,6 +153,39 @@ function attempt(step) {
   }
 }
 
+/** Third-party packages the SDK declares, which must be exactly the reviewed ones. */
+function undeclaredDependencies() {
+  const declared = Object.keys(sdkManifest.dependencies)
+    .filter((name) => !name.startsWith("@openmapx/") && !name.startsWith("@types/"))
+    .sort();
+  const reviewed = [...PUBLIC_PACKAGES, ...RUNTIME_PACKAGES]
+    .filter((name) => !name.startsWith("@openmapx/"))
+    .sort();
+  return JSON.stringify(declared) === JSON.stringify(reviewed)
+    ? []
+    : [`package.json declares ${declared.join(", ")}; reviewed: ${reviewed.join(", ")}`];
+}
+
+/**
+ * One `import type` statement per entry point, naming every type it exports.
+ * The compiler reports a named import the module does not export, used or not.
+ */
+function typeImports() {
+  return Object.entries(surfaceTypes)
+    .map(([entry, names], index) => {
+      const specifier = `@openmapx/integration-sdk${entry.slice(1)}`;
+      const bindings = names.map((name) => `${name} as T${index}_${name}`).join(", ");
+      return `import type { ${bindings} } from "${specifier}";`;
+    })
+    .join("\n");
+}
+
+const unknownEntries = Object.keys(surfaceTypes).filter((entry) => !entryPoints.includes(entry));
+if (unknownEntries.length > 0) {
+  failures.push(`surface-types.json names entries the SDK does not export: ${unknownEntries}`);
+}
+failures.push(...undeclaredDependencies());
+
 try {
   run("pnpm", ["--filter", "@openmapx/integration-sdk", "build"]);
   const dist = join(sdkDirectory, "dist");
@@ -140,6 +208,7 @@ try {
   packInto("@openmapx/extension-contracts", join(consumerModules, "@openmapx/extension-contracts"));
   linkInstalled("zod", sdkDirectory);
   linkInstalled("typescript", sdkDirectory);
+  for (const runtimePackage of RUNTIME_PACKAGES) linkInstalled(runtimePackage, sdkDirectory);
   for (const typePackage of [...TYPE_PACKAGES, ...PEER_TYPE_PACKAGES]) {
     linkInstalled(`@types/${typePackage}`, sdkDirectory);
   }
@@ -156,11 +225,38 @@ try {
   writeFileSync(
     join(consumer, "provider.ts"),
     `import type { IntegrationContext } from "@openmapx/integration-sdk";
-import { ProviderTimeoutError } from "@openmapx/integration-sdk/errors";
+import { ProviderDeclinedError, ProviderTimeoutError } from "@openmapx/integration-sdk/errors";
 import { registerPlaceResolver } from "@openmapx/integration-sdk/places";
+import type { DirectionsResult, RoutingProvider, TravelMode } from "@openmapx/integration-sdk/routing";
+import { fetchJsonWithTimeout, forecastTimeZone } from "@openmapx/integration-sdk/weather";
+import type { WeatherProvider, WeatherResponse } from "@openmapx/integration-sdk/weather";
+${typeImports()}
+
+export const weather: WeatherProvider = {
+  id: "consumer-weather",
+  priority: 10,
+  async getCurrentWeather(coords) {
+    const [lng, lat] = coords;
+    const zone = forecastTimeZone(coords);
+    return fetchJsonWithTimeout<WeatherResponse>(
+      \`https://weather.example/current?lat=\${lat}&lng=\${lng}&tz=\${zone}\`,
+    );
+  },
+};
+
+export const routing: RoutingProvider = {
+  id: "consumer-routing",
+  supportedModes: ["driving"] satisfies TravelMode[],
+  async getRoute(waypoints, mode): Promise<DirectionsResult> {
+    if (waypoints.length < 2) throw new ProviderDeclinedError("unsupported");
+    throw new ProviderDeclinedError("no-coverage", \`no \${mode} coverage\`);
+  },
+};
 
 export function setup(ctx: IntegrationContext): void {
   registerPlaceResolver("consumer", async (id: string) => ({ id }));
+  ctx.registerWeatherProvider(weather);
+  ctx.registerRoutingProvider(routing);
   ctx.log.info("ready");
 }
 
@@ -197,9 +293,13 @@ export function fail(): never {
       consumer,
     ),
   );
-  for (const entry of ["", "/errors", "/places"]) {
+  for (const entry of entryPoints) {
     attempt(() =>
-      run(process.execPath, ["-e", `import('@openmapx/integration-sdk${entry}')`], consumer),
+      run(
+        process.execPath,
+        ["--input-type=module", "-e", `await import('@openmapx/integration-sdk${entry.slice(1)}')`],
+        consumer,
+      ),
     );
   }
 } catch (error) {

@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { FetchJsonHttpError } from "@openmapx/core";
+import { FetchJsonHttpError } from "@openmapx/core/http/fetch-json-error";
 import { parseRetryAfterMs } from "@openmapx/core/retry-after";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type {
@@ -462,6 +462,8 @@ export interface MockContextOverrides {
   db?: DatabaseClient;
   log?: Logger;
   manifest?: IntegrationContext["manifest"];
+  /** Required services the host has running, by service id, each with its URL. */
+  requiredServices?: Record<string, string>;
 }
 
 export interface MockIntegrationContext extends IntegrationContext {
@@ -631,7 +633,11 @@ export function createMockIntegrationContext(
     onActivate: runImmediateActivation,
     onShutdown: noop,
     getIntegrationsByDomain: () => [],
-    getRequiredService: () => null,
+    getRequiredService: (serviceId) => {
+      const services = overrides.requiredServices ?? {};
+      const url = Object.hasOwn(services, serviceId) ? services[serviceId] : undefined;
+      return url === undefined ? null : { serviceId, url, enabled: true };
+    },
     resolvePlatformEndpoint: (endpointId) =>
       resolveIntegrationPlatformEndpoint(
         { manifest: ctx.manifest, config: ctx.config },

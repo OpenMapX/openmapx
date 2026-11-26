@@ -193,6 +193,8 @@ export function readsCredential(source: ts.SourceFile): boolean {
  */
 const FETCH_JSON_HELPERS: ReadonlyArray<{ module: string; name: string }> = [
   { module: "@openmapx/core", name: "fetchJson" },
+  // The module the SDK's `./http` entry re-exports fetchJson from.
+  { module: "@openmapx/core/http/fetchJson", name: "fetchJson" },
   { module: "@openmapx/integration-sdk/http", name: "fetchJson" },
   { module: "@openmapx/provider-kit/weather", name: "fetchJsonWithTimeout" },
   { module: "@openmapx/integration-sdk/weather", name: "fetchJsonWithTimeout" },

@@ -10,7 +10,8 @@
  */
 
 import formatter from "@fragaria/address-formatter";
-import { type PlaceAddressComponents, sanitizeAddressComponents } from "@openmapx/core";
+import type { PlaceAddressComponents } from "@openmapx/core";
+import { sanitizeAddressComponents } from "@openmapx/core/places/addressEvidence";
 
 export interface AddressComponents extends PlaceAddressComponents {}
 

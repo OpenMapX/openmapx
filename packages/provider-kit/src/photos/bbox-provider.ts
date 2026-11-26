@@ -1,5 +1,9 @@
-import { fetchJson, type PlacePhoto } from "@openmapx/core";
-import type { PhotoProvider, PhotoQuery } from "@openmapx/integration-framework";
+import type { PlacePhoto } from "@openmapx/core";
+import { fetchJson } from "@openmapx/core/http/fetchJson";
+import type {
+  PhotoProvider,
+  PhotoQuery,
+} from "@openmapx/integration-framework/contracts/photo-provider";
 
 /** A geographic bounding box in [west, south, east, north] degrees. */
 export interface PhotoBbox {

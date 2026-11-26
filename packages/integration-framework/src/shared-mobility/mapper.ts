@@ -20,7 +20,7 @@ import type {
   PricingPlanEntry,
   Translatable,
 } from "@openmapx/core";
-import { itemAt } from "@openmapx/core";
+import { itemAt } from "@openmapx/core/item-at";
 import type {
   SharedMobilityStation,
   SharedMobilityVehicle,

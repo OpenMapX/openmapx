@@ -8,7 +8,7 @@ export {
   CATEGORY_DEFINITIONS,
   categoryPlaceToPlace,
   HOURS_FILTER_CATEGORY_IDS,
-} from "@openmapx/core";
+} from "@openmapx/core/types/category";
 export type {
   PoiSearchOutcome,
   PoiSearchProvider,

@@ -1,4 +1,5 @@
-import { type PlacePhoto, type StreetLevelImage, withPhotoContributors } from "@openmapx/core";
+import type { PlacePhoto, StreetLevelImage } from "@openmapx/core";
+import { withPhotoContributors } from "@openmapx/core/attribution/photo-contributors";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
   readCapturedContributors,

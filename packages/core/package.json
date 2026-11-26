@@ -238,6 +238,106 @@
       "types": "./src/types/roadConditions.ts",
       "default": "./src/types/roadConditions.ts"
     },
+    "./types/routing": {
+      "types": "./src/types/routing.ts",
+      "default": "./src/types/routing.ts"
+    },
+    "./types/category": {
+      "types": "./src/types/category.ts",
+      "default": "./src/types/category.ts"
+    },
+    "./types/searchSuggestion": {
+      "types": "./src/types/searchSuggestion.ts",
+      "default": "./src/types/searchSuggestion.ts"
+    },
+    "./types/ev": {
+      "types": "./src/types/ev.ts",
+      "default": "./src/types/ev.ts"
+    },
+    "./http/fetchJson": {
+      "types": "./src/http/fetchJson.ts",
+      "default": "./src/http/fetchJson.ts"
+    },
+    "./http/userAgent": {
+      "types": "./src/http/userAgent.ts",
+      "default": "./src/http/userAgent.ts"
+    },
+    "./http/validate-url": {
+      "types": "./src/http/validate-url.ts",
+      "default": "./src/http/validate-url.ts"
+    },
+    "./http/boundedBinaryResponse": {
+      "types": "./src/http/boundedBinaryResponse.ts",
+      "default": "./src/http/boundedBinaryResponse.ts"
+    },
+    "./utils/platform-endpoints": {
+      "types": "./src/utils/platform-endpoints.ts",
+      "default": "./src/utils/platform-endpoints.ts"
+    },
+    "./attribution/knowledgeContributors": {
+      "types": "./src/attribution/knowledgeContributors.ts",
+      "default": "./src/attribution/knowledgeContributors.ts"
+    },
+    "./utils/format": {
+      "types": "./src/utils/format.ts",
+      "default": "./src/utils/format.ts"
+    },
+    "./utils/bbox": {
+      "types": "./src/utils/bbox.ts",
+      "default": "./src/utils/bbox.ts"
+    },
+    "./utils/timezone": {
+      "types": "./src/utils/timezone.ts",
+      "default": "./src/utils/timezone.ts"
+    },
+    "./utils/tideExtrema": {
+      "types": "./src/utils/tideExtrema.ts",
+      "default": "./src/utils/tideExtrema.ts"
+    },
+    "./routing/bicycleOptions": {
+      "types": "./src/routing/bicycleOptions.ts",
+      "default": "./src/routing/bicycleOptions.ts"
+    },
+    "./routing/temporalCapabilities": {
+      "types": "./src/routing/temporalCapabilities.ts",
+      "default": "./src/routing/temporalCapabilities.ts"
+    },
+    "./navigation/bearing": {
+      "types": "./src/navigation/bearing.ts",
+      "default": "./src/navigation/bearing.ts"
+    },
+    "./navigation/deadReckon": {
+      "types": "./src/navigation/deadReckon.ts",
+      "default": "./src/navigation/deadReckon.ts"
+    },
+    "./domains/knowledge": {
+      "types": "./src/domains/knowledge.ts",
+      "default": "./src/domains/knowledge.ts"
+    },
+    "./search/searchSuggestion": {
+      "types": "./src/search/searchSuggestion.ts",
+      "default": "./src/search/searchSuggestion.ts"
+    },
+    "./places/poiRanking": {
+      "types": "./src/places/poiRanking.ts",
+      "default": "./src/places/poiRanking.ts"
+    },
+    "./places/poi-icon": {
+      "types": "./src/places/poi-icon.ts",
+      "default": "./src/places/poi-icon.ts"
+    },
+    "./places/connector-standard": {
+      "types": "./src/places/connector-standard.ts",
+      "default": "./src/places/connector-standard.ts"
+    },
+    "./attribution/commons-metadata": {
+      "types": "./src/attribution/commons-metadata.ts",
+      "default": "./src/attribution/commons-metadata.ts"
+    },
+    "./attribution/photo-contributors": {
+      "types": "./src/attribution/photo-contributors.ts",
+      "default": "./src/attribution/photo-contributors.ts"
+    },
     "./utils/geo-server": {
       "types": "./src/utils/geo-server.ts",
       "default": "./src/utils/geo-server.ts"

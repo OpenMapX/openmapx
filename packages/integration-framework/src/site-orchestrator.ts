@@ -1,9 +1,5 @@
-import {
-  type BBox,
-  type BoundingBox,
-  type DataSourcePartialReason,
-  isSafeHttpUrl,
-} from "@openmapx/core";
+import type { BBox, BoundingBox, DataSourcePartialReason } from "@openmapx/core";
+import { isSafeHttpUrl } from "@openmapx/core/utils/format";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";

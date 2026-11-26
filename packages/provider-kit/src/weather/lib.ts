@@ -6,7 +6,9 @@
  * in each provider because every upstream uses a different vocabulary.
  */
 
-import { fetchJson, type LngLat, timeZoneAt } from "@openmapx/core";
+import type { LngLat } from "@openmapx/core";
+import { fetchJson } from "@openmapx/core/http/fetchJson";
+import { timeZoneAt } from "@openmapx/core/utils/timezone";
 
 /** Default HTTP timeout for upstream weather APIs. */
 export const DEFAULT_FETCH_TIMEOUT_MS = 10_000;

@@ -385,6 +385,8 @@ export {
   type ProviderCallContext,
   ProviderCancelledError,
   type ProviderDeadlineOptions,
+  ProviderDeclinedError,
+  type ProviderDeclineReason,
   ProviderInputError,
   ProviderPayloadError,
   ProviderRetiredError,

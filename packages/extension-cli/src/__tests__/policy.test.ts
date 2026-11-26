@@ -44,6 +44,19 @@ describe("policy library on arbitrary source", () => {
     expect(failures).toHaveLength(1);
     expect(failures[0]).toContain("src/backend/a.ts");
   });
+  it("reports fetchJson imported from its core module when the call carries a credential", () => {
+    const failures = checkProviderHttp(
+      new Map([
+        [
+          "src/backend/a.ts",
+          'import { fetchJson } from "@openmapx/core/http/fetchJson";\nexport const load = (key: string) => fetchJson("https://example.org", { headers: { Authorization: key } });',
+        ],
+      ]),
+      NONE,
+    );
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toContain("src/backend/a.ts");
+  });
   it("reports a direct cache write", () => {
     const failures = checkCacheWrites(
       new Map([

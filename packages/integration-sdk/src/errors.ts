@@ -7,6 +7,8 @@ export { OpaqueCursorError } from "@openmapx/integration-framework/cursor";
 export {
   classifyProviderFailure,
   ProviderCancelledError,
+  ProviderDeclinedError,
+  type ProviderDeclineReason,
   ProviderInputError,
   ProviderPayloadError,
   ProviderRetiredError,

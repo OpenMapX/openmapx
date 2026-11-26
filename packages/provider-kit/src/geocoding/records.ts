@@ -1,5 +1,5 @@
 import { latLngOrNull } from "@openmapx/core/coordinates";
-import { ProviderPayloadError } from "@openmapx/integration-framework";
+import { ProviderPayloadError } from "@openmapx/integration-framework/provider-execution";
 
 /** A WGS84 `[lng, lat]` pair in range, or null. */
 export function lngLatOrNull(lng: unknown, lat: unknown): [number, number] | null {
