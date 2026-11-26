@@ -1,6 +1,7 @@
 // Checks the SDK as an author outside the monorepo receives it: the packed
 // package type-checks and imports with only its public dependencies present,
-// and the build carries no browser or auth library and no private host import.
+// the build inlines no third-party code, and the output imports nothing but
+// zod, the public contracts package, Node built-ins and declared type packages.
 import { execFileSync } from "node:child_process";
 import {
   mkdirSync,
@@ -13,7 +14,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { createRequire } from "node:module";
+import { builtinModules, createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
@@ -23,14 +24,14 @@ const contractsDirectory = join(repositoryRoot, "packages/extension-contracts");
 const work = mkdtempSync(join(tmpdir(), "openmapx-integration-sdk-consumer-"));
 const consumer = join(work, "consumer");
 const consumerModules = join(consumer, "node_modules");
+const ts = createRequire(join(sdkDirectory, "package.json"))("typescript");
 
-const FORBIDDEN_INPUTS = [
-  "node_modules/react/",
-  "node_modules/zustand/",
-  "node_modules/@tanstack/react-query/",
-  "node_modules/better-auth/",
-];
-const PUBLIC_HOST_PACKAGE = "@openmapx/extension-contracts";
+const PUBLIC_PACKAGES = ["zod", "@openmapx/extension-contracts"];
+const sdkManifest = JSON.parse(readFileSync(join(sdkDirectory, "package.json"), "utf8"));
+// `@types/geojson` in the SDK's dependencies lets its declarations import `geojson`.
+const TYPE_PACKAGES = Object.keys(sdkManifest.dependencies)
+  .filter((name) => name.startsWith("@types/"))
+  .map((name) => name.slice("@types/".length));
 
 class CheckFailure extends Error {}
 
@@ -63,24 +64,77 @@ function linkInstalled(name, fromDirectory) {
   symlinkSync(realpathSync(dirname(manifest)), target, "dir");
 }
 
-function privateHostImports(file) {
-  const text = readFileSync(file, "utf8");
-  const specifiers = text.matchAll(/(?:\bfrom\s*|\bimport\s*\(?\s*)["'](@openmapx\/[^"']+)["']/g);
-  return [...specifiers]
-    .map((match) => match[1])
-    .filter(
-      (specifier) =>
-        specifier !== PUBLIC_HOST_PACKAGE && !specifier.startsWith(`${PUBLIC_HOST_PACKAGE}/`),
-    );
+function packageOf(specifier) {
+  const parts = specifier.split("/");
+  return specifier.startsWith("@") ? parts.slice(0, 2).join("/") : parts[0];
+}
+
+/** Bare import specifiers of a module, read by TypeScript so comments do not count. */
+function bareImports(file) {
+  return ts
+    .preProcessFile(readFileSync(file, "utf8"), true, true)
+    .importedFiles.map((imported) => imported.fileName)
+    .filter((specifier) => !specifier.startsWith("."));
+}
+
+function disallowedImports(dist) {
+  const builtins = new Set(builtinModules);
+  const problems = [];
+  for (const file of readdirSync(dist)) {
+    const declaration = file.endsWith(".d.ts");
+    if (!declaration && !file.endsWith(".js")) continue;
+    const allowed = new Set([...PUBLIC_PACKAGES, ...(declaration ? TYPE_PACKAGES : [])]);
+    for (const specifier of bareImports(join(dist, file))) {
+      if (specifier.startsWith("node:") || builtins.has(specifier)) continue;
+      if (!allowed.has(packageOf(specifier))) problems.push(`${file}: ${specifier}`);
+    }
+  }
+  return problems;
+}
+
+/** Inputs the JavaScript build read from installed packages, which it would inline. */
+function thirdPartyInputs(dist) {
+  const metafile = JSON.parse(readFileSync(join(dist, "metafile-esm.json"), "utf8"));
+  const marker = "node_modules/";
+  return Object.keys(metafile.inputs).filter((input) => {
+    const at = input.lastIndexOf(marker);
+    return at !== -1 && !PUBLIC_PACKAGES.includes(packageOf(input.slice(at + marker.length)));
+  });
+}
+
+const failures = [];
+function attempt(step) {
+  try {
+    step();
+  } catch (error) {
+    if (!(error instanceof CheckFailure)) throw error;
+    failures.push(error.message);
+  }
 }
 
 try {
   run("pnpm", ["--filter", "@openmapx/integration-sdk", "build"]);
+  const dist = join(sdkDirectory, "dist");
+
+  const inlined = thirdPartyInputs(dist);
+  if (inlined.length > 0) {
+    failures.push(
+      `dist/metafile-esm.json lists ${inlined.length} inputs from installed packages, which the build may inline:\n${inlined.slice(0, 40).join("\n")}`,
+    );
+  }
+  const imports = disallowedImports(dist);
+  if (imports.length > 0) {
+    failures.push(
+      `dist imports packages an author does not receive with the SDK:\n${imports.join("\n")}`,
+    );
+  }
+
   mkdirSync(consumerModules, { recursive: true });
   packInto("@openmapx/integration-sdk", join(consumerModules, "@openmapx/integration-sdk"));
   packInto("@openmapx/extension-contracts", join(consumerModules, "@openmapx/extension-contracts"));
   linkInstalled("zod", sdkDirectory);
   linkInstalled("typescript", sdkDirectory);
+  for (const typePackage of TYPE_PACKAGES) linkInstalled(`@types/${typePackage}`, sdkDirectory);
   for (const dependency of Object.keys(
     JSON.parse(readFileSync(join(contractsDirectory, "package.json"), "utf8")).dependencies,
   )) {
@@ -108,43 +162,37 @@ export function fail(): never {
 `,
   );
   const compiler = join(consumerModules, "typescript/bin/tsc");
-  run(
-    process.execPath,
-    [
-      compiler,
-      "--noEmit",
-      "--module",
-      "nodenext",
-      "--moduleResolution",
-      "nodenext",
-      "--strict",
-      "provider.ts",
-    ],
-    consumer,
+  attempt(() =>
+    run(
+      process.execPath,
+      [
+        compiler,
+        "--noEmit",
+        "--module",
+        "nodenext",
+        "--moduleResolution",
+        "nodenext",
+        "--strict",
+        "provider.ts",
+      ],
+      consumer,
+    ),
   );
-  run(process.execPath, ["-e", "import('@openmapx/integration-sdk/errors')"], consumer);
-
-  const dist = join(sdkDirectory, "dist");
-  const metafile = JSON.parse(readFileSync(join(dist, "metafile-esm.json"), "utf8"));
-  const forbidden = Object.keys(metafile.inputs).filter((input) =>
-    FORBIDDEN_INPUTS.some((fragment) => input.includes(fragment)),
-  );
-  if (forbidden.length > 0) {
-    throw new CheckFailure(
-      `dist/metafile-esm.json lists browser or auth inputs:\n${forbidden.join("\n")}`,
+  for (const entry of ["", "/errors", "/places"]) {
+    attempt(() =>
+      run(process.execPath, ["-e", `import('@openmapx/integration-sdk${entry}')`], consumer),
     );
   }
-  const leaks = readdirSync(dist)
-    .filter((file) => file.endsWith(".js") || file.endsWith(".d.ts"))
-    .flatMap((file) => privateHostImports(join(dist, file)).map((spec) => `${file}: ${spec}`));
-  if (leaks.length > 0) {
-    throw new CheckFailure(`dist still imports private host packages:\n${leaks.join("\n")}`);
-  }
-  console.log("external consumer: ok");
 } catch (error) {
   if (!(error instanceof CheckFailure)) throw error;
-  console.error(`external consumer: failed\n${error.message}`);
-  process.exitCode = 1;
+  failures.push(error.message);
 } finally {
   rmSync(work, { recursive: true, force: true });
+}
+
+if (failures.length === 0) {
+  console.log("external consumer: ok");
+} else {
+  console.error(`external consumer: failed\n\n${failures.join("\n\n")}`);
+  process.exitCode = 1;
 }

@@ -3344,6 +3344,9 @@ importers:
       '@openmapx/place-ids':
         specifier: workspace:^
         version: link:../place-ids
+      '@types/geojson':
+        specifier: ^7946.0.16
+        version: 7946.0.16
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -3351,6 +3354,12 @@ importers:
       '@types/node':
         specifier: ^26.6.6
         version: 26.6.6
+      rollup:
+        specifier: 4.66.0
+        version: 4.66.0
+      rollup-plugin-dts:
+        specifier: 6.5.1
+        version: 6.5.1(rollup@4.66.0)(typescript@6.0.3)
       tsup:
         specifier: 9.0.0
         version: 9.0.0(@swc/core@1.16.20(@swc/helpers@0.5.23))(jiti@2.7.0)(postcss@8.5.32)(tsx@4.23.15)(typescript@6.0.3)(yaml@2.9.1)
@@ -3705,6 +3714,9 @@ importers:
       '@openmapx/mobility-core':
         specifier: workspace:^
         version: link:../packages/mobility-core
+      '@openmapx/place-ids':
+        specifier: workspace:^
+        version: link:../packages/place-ids
       '@openmapx/transitous-core':
         specifier: workspace:^
         version: link:../packages/transitous-core
@@ -3729,6 +3741,9 @@ importers:
       yaml:
         specifier: ^2.9.1
         version: 2.9.1
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
     devDependencies:
       '@types/node':
         specifier: ^26.6.6
@@ -11975,6 +11990,17 @@ packages:
     resolution: {integrity: sha512-6odND+fel5zVw3I4Yc2e69gvguDnX0CAAGiNDZSq4ik5WUcaLrkD2GLuog0XcODbor31hZ5ayEMgVDno+KPV5g==}
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
+
+  rollup-plugin-dts@6.5.1:
+    resolution: {integrity: sha512-jODTXp3H7MK/Ur/ErtsrQ0G1GvaCmc3du+y5pNrdBMf6d7HlL2Nd/N6TkEr+f75CkUj01zEoEd7y2elH0eHi1Q==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      '@typescript/typescript6': ^6
+      rollup: ^3 || ^4
+      typescript: ^4.5 || ^5 || ^6 || ^7
+    peerDependenciesMeta:
+      '@typescript/typescript6':
+        optional: true
 
   rollup@4.66.0:
     resolution: {integrity: sha512-Onq6/qO4ARhxIs+jYiHE0pYehadLyMECAiGEqQ+0/aWND3+2PmifJIIqBLYtuBODqHTlOUEQFtIVPyCy0Lck7A==}
@@ -22380,6 +22406,17 @@ snapshots:
       '@rolldown/binding-openharmony-arm64': 1.2.15
       '@rolldown/binding-win32-arm64-msvc': 1.2.15
       '@rolldown/binding-win32-x64-msvc': 1.2.15
+
+  rollup-plugin-dts@6.5.1(rollup@4.66.0)(typescript@6.0.3):
+    dependencies:
+      '@jridgewell/remapping': 2.3.5
+      '@jridgewell/sourcemap-codec': 1.6.0
+      convert-source-map: 2.0.0
+      magic-string: 0.30.21
+      rollup: 4.66.0
+      typescript: 6.0.3
+    optionalDependencies:
+      '@babel/code-frame': 8.0.6
 
   rollup@4.66.0:
     dependencies:

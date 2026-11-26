@@ -32,6 +32,38 @@
       "types": "./strings/index.ts",
       "default": "./strings/index.ts"
     },
+    "./context": {
+      "types": "./src/context.ts",
+      "default": "./src/context.ts"
+    },
+    "./contracts/routing-provider": {
+      "types": "./src/contracts/routing-provider.ts",
+      "default": "./src/contracts/routing-provider.ts"
+    },
+    "./contracts/transit-provider": {
+      "types": "./src/contracts/transit-provider.ts",
+      "default": "./src/contracts/transit-provider.ts"
+    },
+    "./cursor": {
+      "types": "./src/cursor.ts",
+      "default": "./src/cursor.ts"
+    },
+    "./http-error": {
+      "types": "./src/http-error.ts",
+      "default": "./src/http-error.ts"
+    },
+    "./provider-execution": {
+      "types": "./src/provider-execution.ts",
+      "default": "./src/provider-execution.ts"
+    },
+    "./query": {
+      "types": "./src/query.ts",
+      "default": "./src/query.ts"
+    },
+    "./upstream-runtime": {
+      "types": "./src/upstream-runtime.ts",
+      "default": "./src/upstream-runtime.ts"
+    },
     "./provider-daily-budget": {
       "types": "./src/provider-daily-budget.ts",
       "default": "./src/provider-daily-budget.ts"

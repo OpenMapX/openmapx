@@ -202,6 +202,42 @@
       "types": "./src/http/safe-download.ts",
       "default": "./src/http/safe-download.ts"
     },
+    "./http/safe-fetch-error": {
+      "types": "./src/http/safe-fetch-error.ts",
+      "default": "./src/http/safe-fetch-error.ts"
+    },
+    "./http/fetchJson": {
+      "types": "./src/http/fetchJson.ts",
+      "default": "./src/http/fetchJson.ts"
+    },
+    "./utils/errors": {
+      "types": "./src/utils/errors.ts",
+      "default": "./src/utils/errors.ts"
+    },
+    "./places/addressEvidence": {
+      "types": "./src/places/addressEvidence.ts",
+      "default": "./src/places/addressEvidence.ts"
+    },
+    "./types/identified": {
+      "types": "./src/types/identified.ts",
+      "default": "./src/types/identified.ts"
+    },
+    "./types/place": {
+      "types": "./src/types/place.ts",
+      "default": "./src/types/place.ts"
+    },
+    "./types/address": {
+      "types": "./src/types/address.ts",
+      "default": "./src/types/address.ts"
+    },
+    "./types/dataSource": {
+      "types": "./src/types/dataSource.ts",
+      "default": "./src/types/dataSource.ts"
+    },
+    "./types/roadConditions": {
+      "types": "./src/types/roadConditions.ts",
+      "default": "./src/types/roadConditions.ts"
+    },
     "./utils/geo-server": {
       "types": "./src/utils/geo-server.ts",
       "default": "./src/utils/geo-server.ts"

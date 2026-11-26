@@ -1,14 +1,15 @@
-export { ConfigurationError, FetchJsonHttpError } from "@openmapx/core";
-export { SafeFetchHttpError } from "@openmapx/core/http/safe-download";
+export { FetchJsonHttpError } from "@openmapx/core/http/fetchJson";
+export { SafeFetchHttpError } from "@openmapx/core/http/safe-fetch-error";
+export { ConfigurationError } from "@openmapx/core/utils/errors";
+export { RoutingProviderError } from "@openmapx/integration-framework/contracts/routing-provider";
+export { TransitTripResolutionUnsupportedError } from "@openmapx/integration-framework/contracts/transit-provider";
+export { OpaqueCursorError } from "@openmapx/integration-framework/cursor";
 export {
   classifyProviderFailure,
-  OpaqueCursorError,
   ProviderCancelledError,
   ProviderInputError,
   ProviderPayloadError,
   ProviderRetiredError,
   ProviderTimeoutError,
-  QueryValidationError,
-  RoutingProviderError,
-  TransitTripResolutionUnsupportedError,
-} from "@openmapx/integration-framework";
+} from "@openmapx/integration-framework/provider-execution";
+export { QueryValidationError } from "@openmapx/integration-framework/query";
