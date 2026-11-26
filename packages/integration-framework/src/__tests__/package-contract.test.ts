@@ -31,10 +31,13 @@ function sourceTree(): string {
       platform: "1.0",
       description: "Fixture integration used by the packaging contract test.",
       domains: ["fixture"],
+      backend: { entry: "dist/backend/index.mjs" },
+      database: { migrations: true },
     }),
   );
 
   // Everything below is source-tree residue that must never be packaged.
+  writeFileSync(join(directory, "index.ts"), "export function setup() {}");
   writeFileSync(join(directory, ".env"), "SECRET=fixture-packaging-secret");
   writeFileSync(join(directory, ".env.local"), "SECRET=fixture-packaging-secret");
   writeFileSync(join(directory, "private.key"), "fixture-private-key-material");
@@ -57,6 +60,12 @@ function sourceTree(): string {
   writeFileSync(join(directory, "strings", "NOT-A-LOCALE.json"), "{}");
   writeFileSync(join(directory, "LICENSE"), "MIT");
   writeFileSync(join(directory, "NOTICE"), "notice");
+  mkdirSync(join(directory, "dist", "backend"), { recursive: true });
+  writeFileSync(join(directory, "dist", "backend", "index.mjs"), "export default {};");
+  mkdirSync(join(directory, "migrations"), { recursive: true });
+  writeFileSync(join(directory, "migrations", "0001_init.sql"), "create table t (id int);");
+  mkdirSync(join(directory, "assets", "icons"), { recursive: true });
+  writeFileSync(join(directory, "assets", "icons", "pin.svg"), "<svg/>");
 
   return directory;
 }
@@ -136,16 +145,18 @@ describe("integration packaging contract", () => {
       .filter(Boolean)
       .sort();
 
-    expect(listing).toEqual(
-      [
-        "LICENSE",
-        "NOTICE",
-        "manifest.json",
-        "openmapx-artifact.json",
-        "strings/de.json",
-        "strings/en.json",
-      ].sort(),
-    );
+    expect(result.files).toEqual([
+      "LICENSE",
+      "NOTICE",
+      "assets/icons/pin.svg",
+      "assets/unreferenced.png",
+      "dist/backend/index.mjs",
+      "manifest.json",
+      "migrations/0001_init.sql",
+      "openmapx-artifact.json",
+      "strings/de.json",
+      "strings/en.json",
+    ]);
     expect(result.files).toEqual(listing);
 
     const joined = listing.join("\n");
@@ -155,10 +166,10 @@ describe("integration packaging contract", () => {
       "private.key",
       "package.json",
       "pnpm-lock.yaml",
+      "index.ts",
       "helper.ts",
       "helper.test.ts",
       ".git",
-      "assets",
       ".map",
       "NOT-A-LOCALE",
     ]) {

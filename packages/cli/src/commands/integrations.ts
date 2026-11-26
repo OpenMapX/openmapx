@@ -179,7 +179,7 @@ export function registerIntegrationsCommands(program: Command): void {
 
   integrations
     .command("install [source]")
-    .description("Install a declarative community integration from source or a .tar.gz artifact")
+    .description("Install a community integration from source or a .tar.gz artifact")
     .option("--ref <ref>", "Branch or tag to clone (Git sources only)")
     .option("--artifact", "Treat source as a prebuilt OpenMapX integration artifact")
     .option("--sha256 <hash>", "Expected sha256 for an artifact install")
@@ -301,7 +301,7 @@ export function registerIntegrationsCommands(program: Command): void {
 
   integrations
     .command("package <source>")
-    .description("Create a declarative .tar.gz artifact for admin/production installs")
+    .description("Create a .tar.gz artifact for admin/production installs")
     .requiredOption("--out <file>", "Artifact output path")
     .action(async (source: string, options: { out: string }) => {
       const paths = repoPaths();

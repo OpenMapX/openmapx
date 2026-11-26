@@ -1,6 +1,14 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, sep } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 
 const clone = vi.hoisted(() => vi.fn());
@@ -72,12 +80,17 @@ it("retains the once-resolved source commit through actual declarative publicati
     ).id,
   ).toBe("source-fixture");
 });
-it("rejects executable source without publishing it", async () => {
-  const root = mkdtempSync(join(tmpdir(), "openmapx-source-rejection-"));
+/** A root whose next clone holds `files` beside a manifest that may declare a backend. */
+function cloneRoot(
+  prefix: string,
+  files: Record<string, string>,
+  manifest: Record<string, unknown> = {},
+): string {
+  const root = mkdtempSync(join(tmpdir(), prefix));
   roots.push(root);
   mkdirSync(join(root, "services"));
   clone.mockImplementation(async ({ targetDir }: { targetDir: string }) => {
-    mkdirSync(targetDir);
+    mkdirSync(targetDir, { mode: 0o755 });
     writeFileSync(
       join(targetDir, "manifest.json"),
       JSON.stringify({
@@ -87,21 +100,65 @@ it("rejects executable source without publishing it", async () => {
         platform: "1.0",
         quality: "community",
         domains: ["map-overlay"],
+        ...manifest,
       }),
+      { mode: 0o644 },
     );
-    writeFileSync(join(targetDir, "index.js"), "throw Error('never execute')");
+    for (const [path, contents] of Object.entries(files)) {
+      mkdirSync(dirname(join(targetDir, path)), { recursive: true, mode: 0o755 });
+      writeFileSync(join(targetDir, path), contents, { mode: 0o644 });
+    }
     return {
       directory: targetDir,
       canonicalUrl: "https://github.com/public/fixture.git",
       commit: "a".repeat(40),
     };
   });
-  await expect(
-    prepareIntegrationSource(
-      { repository: "https://github.com/public/fixture.git", signal: new AbortController().signal },
-      createIntegrationArtifactPreparation({ rootDir: root }),
-    ),
-  ).rejects.toThrow(/code|declarative|executable/i);
+  return root;
+}
+
+function prepareFrom(root: string) {
+  return prepareIntegrationSource(
+    { repository: "https://github.com/public/fixture.git", signal: new AbortController().signal },
+    createIntegrationArtifactPreparation({ rootDir: root }),
+  );
+}
+
+const BACKEND = { backend: { entry: "dist/backend/index.mjs" } };
+
+it("rejects a repository that holds unbundled source beside the bundle", async () => {
+  const root = cloneRoot(
+    "openmapx-source-rejection-",
+    { "index.ts": "export function setup() {}", "dist/backend/index.mjs": "export default {};" },
+    BACKEND,
+  );
+  await expect(prepareFrom(root)).rejects.toThrow(/Unbundled backend source cannot be installed/);
+  expect(existsSync(join(root, "custom_integrations", "source-fixture"))).toBe(false);
+});
+
+it("publishes a repository that holds the built layout", async () => {
+  const root = cloneRoot(
+    "openmapx-source-built-",
+    { "dist/backend/index.mjs": "export default { setup() {} };" },
+    BACKEND,
+  );
+  const signal = new AbortController().signal;
+  const { prepared } = await prepareFrom(root);
+  const publication = await publishPreparedIntegration(prepared, {
+    transactionId: "5f0a3f5e-07c4-4f4e-8f8e-6f0f3c1f2b11",
+    expectedPreviousContentDigest: null,
+    signal,
+  });
+  await settleIntegrationPublication(publication, "commit", signal);
+  const listing = readdirSync(join(root, "custom_integrations", "source-fixture"), {
+    recursive: true,
+  }).map((path) => String(path).split(sep).join("/"));
+  expect(listing).toContain("dist/backend/index.mjs");
+});
+
+it("rejects a source that declares backend.entry without the built bundle", async () => {
+  const root = cloneRoot("openmapx-source-unbuilt-", {}, BACKEND);
+  await expect(prepareFrom(root)).rejects.toThrow(/dist\/backend\/index\.mjs is missing/);
 });
 
 it("admits a GitHub shorthand source as the canonical allowed Git URL", async () => {

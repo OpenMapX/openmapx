@@ -57,6 +57,8 @@ const baseManifest = {
 function writeTarGz(sourceDir: string, artifactPath: string): void {
   const result = spawnSync("tar", ["-czf", artifactPath, "-C", sourceDir, "."], {
     stdio: "pipe",
+    // macOS tar would otherwise add AppleDouble `._*` members beside each file.
+    env: { ...process.env, COPYFILE_DISABLE: "1" },
   });
   if (result.status !== 0) {
     throw new Error(result.stderr.toString() || `tar exited with ${result.status}`);
@@ -362,18 +364,19 @@ describe("installIntegration (local source)", () => {
     expect(existsSync(join(tmp, "custom_integrations", "frontend-demo"))).toBe(false);
   });
 
-  it("rejects community backend source instead of installing it into the API trust domain", async () => {
+  it("rejects unbundled backend source in a local directory", async () => {
     const src = join(tmp, "backend-int");
-    mkdirSync(src, { recursive: true });
+    mkdirSync(join(src, "dist", "backend"), { recursive: true });
     writeFileSync(
       join(src, "manifest.json"),
       JSON.stringify({
         ...baseManifest,
         id: "backend-demo",
-        backend: { routes: true },
+        backend: { routes: true, entry: "dist/backend/index.mjs" },
       }),
       "utf-8",
     );
+    writeFileSync(join(src, "dist", "backend", "index.mjs"), "export default {};", "utf-8");
     writeFileSync(
       join(src, "index.ts"),
       [
@@ -388,7 +391,7 @@ describe("installIntegration (local source)", () => {
     writeFileSync(join(src, "message.ts"), 'export const message = "hello";', "utf-8");
 
     await expect(installIntegration({ source: src, rootDir: tmp })).rejects.toThrow(
-      /Executable community integration code cannot be installed.*isolated service/s,
+      /Unbundled backend source/,
     );
     expect(existsSync(join(tmp, "custom_integrations", "backend-demo"))).toBe(false);
   });
@@ -784,30 +787,86 @@ describe("installIntegration (artifact source)", () => {
     expect(existsSync(join(tmp, "custom_integrations", "broken-artifact"))).toBe(false);
   });
 
-  it("rejects backend artifacts before they enter the privileged runtime mount", async () => {
-    const src = join(tmp, "broken-backend-artifact-src");
+  /** An artifact holding `files` beside a manifest extended by `manifest`. */
+  function backendArtifact(
+    id: string,
+    manifest: Record<string, unknown>,
+    files: Record<string, string>,
+  ): string {
+    const src = join(tmp, `${id}-src`);
     mkdirSync(src, { recursive: true });
     writeFileSync(
       join(src, "manifest.json"),
-      JSON.stringify({
-        ...baseManifest,
-        id: "broken-backend-artifact",
-        backend: { routes: true },
-      }),
+      JSON.stringify({ ...baseManifest, id, ...manifest }),
       "utf-8",
     );
-    writeFileSync(
-      join(src, "index.ts"),
-      "export function setup() { /* intentionally unbundled */ }",
-      "utf-8",
-    );
-    const artifact = join(tmp, "broken-backend-artifact.tar.gz");
+    for (const [path, contents] of Object.entries(files)) {
+      mkdirSync(join(src, path, ".."), { recursive: true });
+      writeFileSync(join(src, path), contents, "utf-8");
+    }
+    const artifact = join(tmp, `${id}.tar.gz`);
     writeTarGz(src, artifact);
+    return artifact;
+  }
+  const declaredBackend = {
+    backend: { entry: "dist/backend/index.mjs" },
+    database: { migrations: true },
+  };
 
-    await expect(
-      installIntegration({ source: artifact, sourceKind: "artifact", rootDir: tmp }),
-    ).rejects.toThrow(/Executable community integration code cannot be installed/);
-    expect(existsSync(join(tmp, "custom_integrations", "broken-backend-artifact"))).toBe(false);
+  it("installs an artifact with a declared backend bundle", async () => {
+    const artifact = backendArtifact("backend-artifact", declaredBackend, {
+      "dist/backend/index.mjs": "export default { setup() {} };",
+      "migrations/0001_init.sql": "create table t (id int);",
+      "migrations/0002_index.sql": "create index on t (id);",
+      "assets/icons/pin.svg": '<svg xmlns="http://www.w3.org/2000/svg"/>',
+    });
+
+    await installIntegration({ source: artifact, sourceKind: "artifact", rootDir: tmp });
+
+    const installed = join(tmp, "custom_integrations", "backend-artifact");
+    expect(readFileSync(join(installed, "dist", "backend", "index.mjs"), "utf-8")).toContain(
+      "setup",
+    );
+    expect(readdirSync(join(installed, "migrations")).sort()).toEqual([
+      "0001_init.sql",
+      "0002_index.sql",
+    ]);
+    expect(existsSync(join(installed, "assets", "icons", "pin.svg"))).toBe(true);
+  });
+
+  it("rejects a bundle the manifest does not declare", async () => {
+    const artifact = backendArtifact(
+      "undeclared-backend",
+      {},
+      { "dist/backend/index.mjs": "export default {};" },
+    );
+    await expectArtifactRejection(
+      artifact,
+      "undeclared-backend",
+      /does not declare backend\.entry/,
+    );
+  });
+
+  it("rejects a native add-on", async () => {
+    const artifact = backendArtifact("native-addon", declaredBackend, {
+      "dist/backend/index.mjs": "export default {};",
+      "dist/backend/binding.node": "\u007fELF",
+      "migrations/0001_init.sql": "select 1;",
+    });
+    await expectArtifactRejection(artifact, "native-addon", /Native add-ons/);
+  });
+
+  it("rejects migrations that skip a number", async () => {
+    const artifact = backendArtifact("skipped-migration", declaredBackend, {
+      "dist/backend/index.mjs": "export default {};",
+      "migrations/0001_init.sql": "select 1;",
+      "migrations/0003_later.sql": "select 3;",
+    });
+    await expectArtifactRejection(
+      artifact,
+      "skipped-migration",
+      /numbered from 0001 without gaps: expected 0002, found 0003/,
+    );
   });
 
   it("rejects a web entry bundle that the manifest declares", async () => {
