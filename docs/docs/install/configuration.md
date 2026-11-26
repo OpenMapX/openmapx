@@ -130,7 +130,8 @@ API's or the superuser's rights. Two structural rules keep it that way:
   tables, in a session of that role (see
   [Backup & restore](../administration/backup-and-restore.md#restoring)).
 
-The API may create only the schemas `data_manager` and `drizzle`, so it cannot
+The API may create only the schemas `data_manager` and `drizzle`, and schemas
+named `ext_<id>` for installed integrations, so it cannot
 take a name that data-manager, the tile server or the superuser trusts. It may
 install no extension, whose script would run as the superuser and find names
 through the `public` schema the API owns. PostGIS's own superuser SQL and the CLI's restore steps

@@ -334,7 +334,7 @@ CREATE OR REPLACE FUNCTION openmapx_guard.check_ddl()
 AS \$\$
 DECLARE
   data_manager_schemas constant text := '^((osm_search|notable_places|overture_places)(__staging|__previous)?|ambient_places|overture_embeddings)\$';
-  api_schemas constant text := '^(data_manager|drizzle)\$';
+  api_schemas constant text := '^(data_manager|drizzle|ext_[a-z0-9_]{1,48})\$';
   command record;
 BEGIN
   FOR command IN SELECT object_type, object_identity FROM pg_event_trigger_ddl_commands() LOOP

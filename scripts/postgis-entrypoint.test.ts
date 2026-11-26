@@ -316,6 +316,9 @@ describe("PostGIS entrypoint child ownership", () => {
         "AND p.proname IN ('lo_create', 'lo_creat', 'lo_from_bytea', 'lo_import')",
       );
       expect(roles).toContain("tg_tag IN ('CREATE EXTENSION', 'ALTER EXTENSION')");
+      expect(roles).toContain(
+        "api_schemas constant text := '^(data_manager|drizzle|ext_[a-z0-9_]{1,48})$';",
+      );
       expect(roles).toContain("AS $$");
       expect(roles).toContain(
         "'^((osm_search|notable_places|overture_places)(__staging|__previous)?|ambient_places|overture_embeddings)$'",
