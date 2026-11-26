@@ -32,6 +32,12 @@ const sdkManifest = JSON.parse(readFileSync(join(sdkDirectory, "package.json"), 
 const TYPE_PACKAGES = Object.keys(sdkManifest.dependencies)
   .filter((name) => name.startsWith("@types/"))
   .map((name) => name.slice("@types/".length));
+// The declarations use Web platform globals such as `AbortSignal` and
+// `RequestInit`. A backend author gets them from Node's types, which the SDK
+// names as a peer, not from the DOM library.
+const PEER_TYPE_PACKAGES = Object.keys(sdkManifest.peerDependencies ?? {})
+  .filter((name) => name.startsWith("@types/"))
+  .map((name) => name.slice("@types/".length));
 
 class CheckFailure extends Error {}
 
@@ -134,7 +140,9 @@ try {
   packInto("@openmapx/extension-contracts", join(consumerModules, "@openmapx/extension-contracts"));
   linkInstalled("zod", sdkDirectory);
   linkInstalled("typescript", sdkDirectory);
-  for (const typePackage of TYPE_PACKAGES) linkInstalled(`@types/${typePackage}`, sdkDirectory);
+  for (const typePackage of [...TYPE_PACKAGES, ...PEER_TYPE_PACKAGES]) {
+    linkInstalled(`@types/${typePackage}`, sdkDirectory);
+  }
   for (const dependency of Object.keys(
     JSON.parse(readFileSync(join(contractsDirectory, "package.json"), "utf8")).dependencies,
   )) {
@@ -162,17 +170,28 @@ export function fail(): never {
 `,
   );
   const compiler = join(consumerModules, "typescript/bin/tsc");
+  const compile = [
+    "--noEmit",
+    "--module",
+    "nodenext",
+    "--moduleResolution",
+    "nodenext",
+    "--strict",
+  ];
+  attempt(() => run(process.execPath, [compiler, ...compile, "provider.ts"], consumer));
+  // TypeScript's default library includes the DOM, which would hide a global
+  // that only a browser provides. This run sees the ECMAScript library and the
+  // peer type packages, nothing else.
   attempt(() =>
     run(
       process.execPath,
       [
         compiler,
-        "--noEmit",
-        "--module",
-        "nodenext",
-        "--moduleResolution",
-        "nodenext",
-        "--strict",
+        ...compile,
+        "--lib",
+        "es2024",
+        "--types",
+        PEER_TYPE_PACKAGES.join(","),
         "provider.ts",
       ],
       consumer,

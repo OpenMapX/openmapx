@@ -63,6 +63,9 @@
     "@types/geojson": "^7946.0.16",
     "zod": "^4.6.7"
   },
+  "peerDependencies": {
+    "@types/node": ">=24"
+  },
   "devDependencies": {
     "@types/node": "^26.6.6",
     "rollup": "4.66.0",
