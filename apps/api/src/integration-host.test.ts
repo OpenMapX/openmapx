@@ -46,6 +46,7 @@ import {
   getAllIntegrations,
   getIntegration,
   getIntegrationProviders,
+  getIntegrationsByDomain,
   initIntegrations,
   reloadIntegrations,
   shutdownIntegrations,
@@ -53,6 +54,7 @@ import {
   stopIntegrationHealthRefresh,
 } from "./integration-host.js";
 import { registerIntegrationRoute, setIntegrationRouteRateLimits } from "./integration-routes.js";
+import { currentIntegrationScope } from "./integration-scope.js";
 import { processLogger } from "./process-logger";
 import { makeRateLimitTierHook, type RateLimitTiers } from "./server-wiring.js";
 import { secretsKeyProblem } from "./services/secrets.js";
@@ -767,7 +769,11 @@ describe("initIntegrations — loader", () => {
       for (const key of Object.keys(g)) if (key.startsWith("__omxInstalled")) delete g[key];
     });
 
-    function writeInstalled(id: string, bundle: string, options: { declared?: boolean } = {}) {
+    function writeInstalled(
+      id: string,
+      bundle: string,
+      options: { declared?: boolean; domains?: string[] } = {},
+    ) {
       const directory = join(installedRoot, id);
       mkdirSync(join(directory, "dist", "backend"), { recursive: true });
       writeFileSync(
@@ -777,7 +783,7 @@ describe("initIntegrations — loader", () => {
           version: "1.0.0",
           platform: "1.0",
           license: "MIT",
-          domains: ["knowledge"],
+          domains: options.domains ?? ["knowledge"],
           quality: "community",
           ...(options.declared === false ? {} : { backend: { entry: "dist/backend/index.mjs" } }),
         }),
@@ -1015,6 +1021,135 @@ describe("initIntegrations — loader", () => {
       expect(getIntegration("fragile")?.loadState).toBe("loaded");
       expect(getIntegration("demo")?.loadState).toBe("loaded");
       expect((await app.inject("/api/integrations/demo/owned")).statusCode).toBe(200);
+    });
+
+    describe("integration scope and setup deadline", () => {
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      it("leaves out an installed integration whose setup does not settle in 60 seconds", async () => {
+        // Fake timers do not carry the async context into their callbacks the
+        // way Node's timers do, so the late work binds it explicitly.
+        writeInstalled(
+          "hang",
+          [
+            "// leaves out an installed integration whose setup does not settle in 60 seconds",
+            'import { AsyncResource } from "node:async_hooks";',
+            'import { registerPlaceResolver } from "@openmapx/integration-sdk/places";',
+            "const weather = (id) => ({ id, priority: 1, getCurrentWeather: async () => null });",
+            "export async function setup(ctx) {",
+            '  ctx.registerWeatherProvider(weather("p1"));',
+            "  setTimeout(AsyncResource.bind(() => {",
+            '    registerPlaceResolver("late", async () => null);',
+            '    try { ctx.registerWeatherProvider(weather("p2")); }',
+            "    catch (error) { globalThis.__omxInstalledLate = String(error); }",
+            "  }), 61_000);",
+            "  globalThis.__omxInstalledEntered = true;",
+            "  await new Promise(() => {});",
+            "}",
+          ].join("\n"),
+          { domains: ["weather"] },
+        );
+        vi.useFakeTimers({ toFake: ["setTimeout"] });
+
+        const boot = initIntegrations(makeApp(), [installed()]);
+        await vi.waitFor(() => expect(g.__omxInstalledEntered).toBe(true), { timeout: 5_000 });
+        await vi.advanceTimersByTimeAsync(61_000);
+        await boot;
+
+        expect(getIntegration("hang")).toMatchObject({
+          enabled: false,
+          loadState: "failed",
+          loadError: { phase: "deadline" },
+        });
+        expect(getIntegrationsByDomain("weather")).toHaveLength(0);
+        expect(getIntegrationProviders("hang", "weather")).toHaveLength(0);
+        expect(g.__omxInstalledLate).toMatch(/Integration hang was unloaded/);
+        expect(getPlaceResolver("late")).toBeUndefined();
+      });
+
+      it("only warns for a built-in that is slow to set up", async () => {
+        writeBuiltIn(
+          "slow",
+          [
+            "export async function setup(ctx) {",
+            "  globalThis.__omxInstalledSlowEntered = true;",
+            "  await new Promise((resolve) => setTimeout(resolve, 61_000));",
+            '  ctx.registerRoute("GET", "/ok", (_q, reply) => reply.send({ ok: true }));',
+            "}",
+          ].join("\n"),
+        );
+        const app = makeApp();
+        const warn = vi.spyOn(app.log, "warn");
+        vi.useFakeTimers({ toFake: ["setTimeout"] });
+
+        const boot = initIntegrations(app, [builtIn()]);
+        await vi.waitFor(() => expect(g.__omxInstalledSlowEntered).toBe(true), {
+          timeout: 5_000,
+        });
+        await vi.advanceTimersByTimeAsync(61_000);
+        await boot;
+
+        expect(getIntegration("slow")).toMatchObject({ enabled: true, loadState: "loaded" });
+        expect((await app.inject("/api/integrations/slow/ok")).statusCode).toBe(200);
+        const slowWarnings = warn.mock.calls.filter((call) =>
+          call.some((part) => typeof part === "string" && /slow.*10 seconds/.test(part)),
+        );
+        expect(slowWarnings).toHaveLength(1);
+      });
+
+      it("runs route handlers inside the integration's scope", async () => {
+        g.__omxInstalledScope = currentIntegrationScope;
+        writeInstalled(
+          "demo",
+          [
+            "// runs route handlers inside the integration's scope",
+            "export function setup(ctx) {",
+            '  ctx.registerRoute("GET", "/scope", async (_request, reply) => {',
+            "    await new Promise((resolve) => setImmediate(resolve));",
+            "    reply.send({ scope: globalThis.__omxInstalledScope()?.integrationId ?? null });",
+            "  });",
+            "}",
+          ].join("\n"),
+        );
+        const app = makeApp();
+        await initIntegrations(app, [installed()]);
+
+        expect((await app.inject("/api/integrations/demo/scope")).json()).toEqual({
+          scope: "demo",
+        });
+      });
+
+      it("returns the bound provider from the registry", async () => {
+        g.__omxInstalledScope = currentIntegrationScope;
+        writeInstalled(
+          "demo",
+          [
+            "// returns the bound provider from the registry",
+            "export function setup(ctx) {",
+            "  const provider = {",
+            '    id: "w",',
+            "    priority: 1,",
+            "    async getCurrentWeather() { return globalThis.__omxInstalledScope()?.integrationId; },",
+            "  };",
+            "  globalThis.__omxInstalledProvider = provider;",
+            "  ctx.registerWeatherProvider(provider);",
+            "}",
+          ].join("\n"),
+          { domains: ["weather"] },
+        );
+        await initIntegrations(makeApp(), [installed()]);
+
+        const [registered] = getIntegrationProviders<{
+          id: string;
+          getCurrentWeather(): Promise<string | undefined>;
+        }>("demo", "weather");
+        expect(registered).toBeDefined();
+        expect(registered).not.toBe(g.__omxInstalledProvider);
+        expect(registered?.id).toBe("w");
+        expect(await registered?.getCurrentWeather()).toBe("demo");
+      });
     });
 
     it("ignores a bundle the manifest does not declare", async () => {

@@ -32,6 +32,7 @@ import {
   commitPlaceResolverStaging,
   restorePlaceResolvers,
   rollbackPlaceResolverStaging,
+  setPlaceResolverRegistrationGuard,
   snapshotPlaceResolvers,
 } from "@openmapx/place-ids";
 import type { FastifyInstance } from "fastify";
@@ -49,7 +50,7 @@ import {
 } from "./integration-config";
 import { createIntegrationDb } from "./integration-db";
 import { readIntegrationFile, setVerifiedIntegrationFiles } from "./integration-files";
-import { createProviderRegistrars } from "./integration-registrars";
+import { createProviderRegistrars, type ProviderRegistrars } from "./integration-registrars";
 import {
   beginIntegrationRouteStaging,
   commitIntegrationRouteStaging,
@@ -59,6 +60,15 @@ import {
   resetIntegrationRoutes,
   rollbackIntegrationRouteStaging,
 } from "./integration-routes";
+import {
+  assertIntegrationScopeLive,
+  bindProviderToScope,
+  currentIntegrationScope,
+  type IntegrationScope,
+  runInIntegrationScope,
+  SETUP_DEADLINE_MS,
+  SETUP_WARNING_MS,
+} from "./integration-scope";
 import { processLogger } from "./process-logger";
 import { redis } from "./redis";
 import {
@@ -674,6 +684,30 @@ function buildIntegrationContext(args: {
   // on, so nothing it registers may activate before its setup has returned.
   let pendingActivations: Array<{ activate: () => void; rollback?: () => void }> | null =
     integration.isBuiltIn ? null : [];
+  const scope: IntegrationScope = {
+    integrationId: id,
+    isBuiltIn: integration.isBuiltIn,
+    revoked: false,
+  };
+  integrationScopes.set(integration, scope);
+  const inScope =
+    <A extends unknown[], R>(fn: (...args: A) => R) =>
+    (...args: A): R =>
+      runInIntegrationScope(scope, () => fn(...args));
+  // Work an unloaded integration scheduled may still run; it must not reach
+  // the generation that left the integration out.
+  const live =
+    <A extends unknown[], R>(fn: (...args: A) => R) =>
+    (...args: A): R => {
+      assertIntegrationScopeLive(scope);
+      return fn(...args);
+    };
+  const registrars = createProviderRegistrars({
+    integrationId: id,
+    manifest,
+    providers,
+    bind: (domain, provider) => bindProviderToScope(provider, scope, { domain, log: hostLog }),
+  });
   const ctx: IntegrationContext = {
     id,
     manifest,
@@ -703,48 +737,46 @@ function buildIntegrationContext(args: {
         endpointId,
       );
     },
-    ...createProviderRegistrars({
-      integrationId: id,
-      manifest,
-      providers,
-      bind: (_domain, provider) => provider,
+    ...(Object.fromEntries(
+      Object.entries(registrars as unknown as Record<string, (provider: object) => void>).map(
+        ([name, register]) => [name, live(register)],
+      ),
+    ) as unknown as ProviderRegistrars),
+    registerRoute: live((method, path, handler, options) => {
+      registerIntegrationRoute(id, method, path, inScope(handler), options);
     }),
-    registerRoute(method, path, handler, options) {
-      registerIntegrationRoute(id, method, path, handler, options);
-    },
-    registerHealthCheck(fn: CustomHealthCheckFn) {
-      integration.customHealthCheck = fn;
-    },
-    registerDisclosure(disclosure) {
+    registerHealthCheck: live((fn: CustomHealthCheckFn) => {
+      integration.customHealthCheck = inScope(fn);
+    }),
+    registerDisclosure: live((disclosure) => {
       if (!integration.disclosures) integration.disclosures = [];
       integration.disclosures.push(disclosure);
-    },
-    setDataSources(list) {
-      return setRuntimeDataSources(integration, log, list);
-    },
-    emit(event: string, data: unknown) {
+    }),
+    setDataSources: live((list) => setRuntimeDataSources(integration, log, list)),
+    emit: live((event: string, data: unknown) => {
       contextEventBus.emit({
         type: event,
         integrationId: id,
         ...(typeof data === "object" && data !== null ? data : {}),
       } as never);
-    },
-    on(event: string, handler: (data: unknown) => void) {
-      const unsubscribe = contextEventBus.on(event as never, handler as never);
+    }),
+    on: live((event: string, handler: (data: unknown) => void) => {
+      const unsubscribe = contextEventBus.on(event as never, inScope(handler) as never);
       const tracked = () => {
         subscriptions.delete(tracked);
         unsubscribe();
       };
       subscriptions.add(tracked);
       return tracked;
-    },
-    onActivate(activate: () => void, rollback?: () => void) {
-      if (pendingActivations) pendingActivations.push({ activate, rollback });
-      else activationScope.register(activate, rollback);
-    },
-    onShutdown(cleanup: () => Promise<void>) {
-      shutdownHandlers.push(cleanup);
-    },
+    }),
+    onActivate: live((activate: () => void, rollback?: () => void) => {
+      const scoped = { activate: inScope(activate), rollback: rollback && inScope(rollback) };
+      if (pendingActivations) pendingActivations.push(scoped);
+      else activationScope.register(scoped.activate, scoped.rollback);
+    }),
+    onShutdown: live((cleanup: () => Promise<void>) => {
+      shutdownHandlers.push(inScope(cleanup));
+    }),
     getIntegrationsByDomain(domain: string) {
       return integrationsByDomain(domain);
     },
@@ -799,6 +831,86 @@ interface IntegrationContextControl {
 
 const contextControls = new WeakMap<IntegrationContext, IntegrationContextControl>();
 
+/** The scope each loaded integration's code runs in, for this generation. */
+const integrationScopes = new WeakMap<LoadedIntegration, IntegrationScope>();
+
+/**
+ * Revokes the scope of an installed integration that is left out or whose
+ * generation is retired, so the work it scheduled can no longer register.
+ */
+function revokeInstalledScope(integration: LoadedIntegration): void {
+  if (integration.isBuiltIn) return;
+  const scope = integrationScopes.get(integration);
+  if (scope) scope.revoked = true;
+}
+
+/** Host warnings whose second argument is a record of structured log fields. */
+const hostLog: Logger = (() => {
+  const write =
+    (level: "info" | "warn" | "error" | "debug") => (message: string, fields?: unknown) =>
+      (_fastify?.log ?? processLogger)[level](
+        typeof fields === "object" && fields !== null ? fields : {},
+        message,
+      );
+  return { info: write("info"), warn: write("warn"), error: write("error"), debug: write("debug") };
+})();
+
+class SetupDeadlineError extends Error {
+  constructor() {
+    super(`Setup did not finish within ${SETUP_DEADLINE_MS / 1000} seconds`);
+    this.name = "SetupDeadlineError";
+  }
+}
+
+/**
+ * Runs an integration's `setup` in its scope. A setup still running after
+ * `SETUP_WARNING_MS` is named in a warning; an installed integration's setup
+ * still running after `SETUP_DEADLINE_MS` rejects with `SetupDeadlineError`,
+ * and its scope is revoked at that moment, before anything it scheduled can
+ * run, whether or not the setup settles later.
+ */
+function runSetup(
+  integration: LoadedIntegration,
+  scope: IntegrationScope,
+  setup: () => void | Promise<void>,
+): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    let settled = false;
+    const warning = setTimeout(() => {
+      if (settled) return;
+      (_fastify?.log ?? processLogger).warn(
+        { integrationId: integration.id },
+        `Integration ${integration.id} has not finished setting up after ${SETUP_WARNING_MS / 1000} seconds`,
+      );
+    }, SETUP_WARNING_MS);
+    warning.unref?.();
+    const deadline = integration.isBuiltIn
+      ? undefined
+      : setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(warning);
+          scope.revoked = true;
+          reject(new SetupDeadlineError());
+        }, SETUP_DEADLINE_MS);
+    deadline?.unref?.();
+    const finish =
+      <V>(complete: (value: V) => void) =>
+      (value: V) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(warning);
+        clearTimeout(deadline);
+        complete(value);
+      };
+    try {
+      Promise.resolve(runInIntegrationScope(scope, setup)).then(finish(resolve), finish(reject));
+    } catch (error) {
+      finish(reject)(error);
+    }
+  });
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -815,16 +927,20 @@ async function loadIntegrationBackend(args: {
   shutdownHandlers: Array<() => Promise<void>>;
 }): Promise<"loaded" | "left-out"> {
   const { integration, ctx, shutdownHandlers } = args;
+  const scope = integrationScopes.get(integration);
+  if (!scope) throw new Error(`Integration ${integration.id} has no context`);
   let phase: IntegrationLoadError["phase"] = "import";
   if (integration.isBuiltIn) {
     try {
       const entryPoint = resolveBuiltInBackendEntryPoint(integration.directory);
       if (entryPoint) {
-        const mod = (await import(backendEntryImportSpecifier(entryPoint))) as {
+        const specifier = backendEntryImportSpecifier(entryPoint);
+        const mod = (await runInIntegrationScope(scope, () => import(specifier))) as {
           setup?: SetupFunction;
         };
         phase = "setup";
-        if (typeof mod.setup === "function") await mod.setup(ctx);
+        const { setup } = mod;
+        if (typeof setup === "function") await runSetup(integration, scope, () => setup(ctx));
       }
       return "loaded";
     } catch (error) {
@@ -840,14 +956,19 @@ async function loadIntegrationBackend(args: {
   try {
     const specifier = await installedBackendImportSpecifier(integration);
     if (specifier) {
-      const mod = (await import(specifier)) as { setup?: SetupFunction };
+      const mod = (await runInIntegrationScope(scope, () => import(specifier))) as {
+        setup?: SetupFunction;
+      };
       phase = "setup";
-      if (typeof mod.setup === "function") await mod.setup(ctx);
+      const { setup } = mod;
+      if (typeof setup === "function") await runSetup(integration, scope, () => setup(ctx));
     }
     phase = "setup";
     control?.releaseActivations();
     return "loaded";
   } catch (error) {
+    scope.revoked = true;
+    if (error instanceof SetupDeadlineError) phase = "deadline";
     control?.discardActivations();
     control?.unsubscribeAll();
     dropIntegrationRoutes(integration.id);
@@ -908,6 +1029,7 @@ export async function initIntegrations(
   _integrationDirs = normalizeIntegrationDirs(integrationDirs);
   resetIntegrationRoutes();
   codeCache = null;
+  setPlaceResolverRegistrationGuard(() => currentIntegrationScope()?.revoked !== true);
 
   const discovered = await discoverManifests(_integrationDirs);
   const sorted = topologicalSort(discovered);
@@ -1551,6 +1673,7 @@ async function doReloadIntegrations(
     rollbackPlaceResolverStaging();
     stagedEventBus.removeAll();
     for (const integration of next.values()) {
+      revokeInstalledScope(integration);
       for (const handler of integration.shutdownHandlers) {
         try {
           await handler();
@@ -1579,6 +1702,7 @@ async function doReloadIntegrations(
 
   for (const integration of previousIntegrations) {
     previousEventBus.emit({ type: "integration.unloaded", integrationId: integration.id });
+    revokeInstalledScope(integration);
     for (const handler of integration.shutdownHandlers) {
       try {
         await handler();
@@ -1599,6 +1723,7 @@ async function doReloadIntegrations(
 export async function shutdownIntegrations(): Promise<void> {
   for (const integration of integrations.values()) {
     eventBus.emit({ type: "integration.unloaded", integrationId: integration.id });
+    revokeInstalledScope(integration);
 
     for (const handler of integration.shutdownHandlers) {
       try {

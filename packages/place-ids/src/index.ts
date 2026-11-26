@@ -23,6 +23,7 @@ export {
   registerPlaceResolver,
   restorePlaceResolvers,
   rollbackPlaceResolverStaging,
+  setPlaceResolverRegistrationGuard,
   snapshotPlaceResolvers,
 } from "./resolvers";
 export { buildTripadvisorUrl } from "./tripadvisor";

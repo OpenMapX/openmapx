@@ -6,6 +6,7 @@ import {
   registerPlaceResolver,
   restorePlaceResolvers,
   rollbackPlaceResolverStaging,
+  setPlaceResolverRegistrationGuard,
   snapshotPlaceResolvers,
 } from "./resolvers.js";
 
@@ -65,5 +66,21 @@ describe("place resolver snapshots", () => {
     expect(await getPlaceResolver("snapshot-staged-kept")?.("value", {})).toBe("staged");
     expect(getPlaceResolver("snapshot-staged-added")).toBeUndefined();
     expect(getPlaceResolver("snapshot-staged-live")).toBeUndefined();
+  });
+});
+
+describe("place resolver registration guard", () => {
+  it("ignores a registration the guard refuses and accepts it again once cleared", () => {
+    setPlaceResolverRegistrationGuard((scheme) => scheme !== "guard-refused");
+    try {
+      registerPlaceResolver("guard-refused", async () => "refused");
+      registerPlaceResolver("guard-accepted", async () => "accepted");
+      expect(getPlaceResolver("guard-refused")).toBeUndefined();
+      expect(getPlaceResolver("guard-accepted")).toBeTypeOf("function");
+    } finally {
+      setPlaceResolverRegistrationGuard(null);
+    }
+    registerPlaceResolver("guard-refused", async () => "accepted later");
+    expect(getPlaceResolver("guard-refused")).toBeTypeOf("function");
   });
 });

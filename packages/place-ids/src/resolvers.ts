@@ -38,15 +38,29 @@ export type PlaceResolver<TPlace = unknown> = (
 
 const registry = new Map<string, PlaceResolver<unknown>>();
 let stagedRegistry: Map<string, PlaceResolver<unknown>> | null = null;
+let registrationGuard: ((scheme: string) => boolean) | null = null;
+
+/**
+ * Install the host's check for every later registration, or remove it with
+ * `null`. The host refuses registrations made by integration code it has
+ * already unloaded, which may still run work it scheduled.
+ */
+export function setPlaceResolverRegistrationGuard(
+  guard: ((scheme: string) => boolean) | null,
+): void {
+  registrationGuard = guard;
+}
 
 /**
  * Register (or replace) the resolver for a scheme. Idempotent so
- * integrations can re-register on hot reload.
+ * integrations can re-register on hot reload. A registration the host's guard
+ * refuses is ignored.
  */
 export function registerPlaceResolver<TPlace = unknown>(
   scheme: string,
   fn: PlaceResolver<TPlace>,
 ): void {
+  if (registrationGuard && !registrationGuard(scheme)) return;
   (stagedRegistry ?? registry).set(scheme, fn as PlaceResolver<unknown>);
 }
 
