@@ -53,6 +53,12 @@ describe("integration SDK surface", () => {
     expect((await import("@openmapx/integration-sdk/places")).registerPlaceResolver).toBe(
       (await import("@openmapx/place-ids")).registerPlaceResolver,
     );
+    const http = await import("@openmapx/integration-sdk/http");
+    const server = await import("@openmapx/core/server");
+    for (const name of ["safeFetchJson", "safeFetchText", "safeFetchTextResponse"] as const) {
+      expect(http[name], name).toBeTypeOf("function");
+      expect(http[name], name).toBe(server[name]);
+    }
   });
 
   it("has exactly the reviewed entry points", () => {

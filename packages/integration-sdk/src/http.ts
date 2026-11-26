@@ -1,4 +1,10 @@
 export { DEFAULT_FETCH_JSON_MAX_BYTES, fetchJson } from "@openmapx/core/http/fetchJson";
+export {
+  type SafeFetchJsonOptions,
+  safeFetchJson,
+  safeFetchText,
+  safeFetchTextResponse,
+} from "@openmapx/core/http/safe-download";
 export { USER_AGENT, USER_AGENT_CONTACT, USER_AGENT_TRANSIT } from "@openmapx/core/http/userAgent";
 export { isPublicUrl } from "@openmapx/core/http/validate-url";
 export { parseRetryAfterMs } from "@openmapx/core/retry-after";

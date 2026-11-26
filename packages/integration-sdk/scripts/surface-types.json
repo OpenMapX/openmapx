@@ -104,6 +104,7 @@
     "NaturalHazard",
     "NaturalHazardType"
   ],
+  "./http": ["SafeFetchJsonOptions"],
   "./knowledge": [
     "KnowledgeContext",
     "KnowledgeProvider",

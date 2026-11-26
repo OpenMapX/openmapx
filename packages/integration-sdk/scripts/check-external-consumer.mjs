@@ -32,15 +32,17 @@ const ts = createRequire(join(sdkDirectory, "package.json"))("typescript");
 const PUBLIC_PACKAGES = ["zod", "@openmapx/extension-contracts"];
 // Libraries that shared helpers call at run time: address formatting
 // (`./geocoding`), time-zone lookup (`./weather`), and the HTML and SPDX parsing
-// behind the attribution helpers (`./attribution`, `./media`). The build leaves
-// them as imports and the SDK declares them, so an author's package manager
-// installs them; their code is never part of the SDK.
+// behind the attribution helpers (`./attribution`, `./media`), and the pinned
+// transport behind the safe-fetch helpers (`./http`). The build leaves them as
+// imports and the SDK declares them, so an author's package manager installs
+// them; their code is never part of the SDK.
 const RUNTIME_PACKAGES = [
   "@fragaria/address-formatter",
   "@photostructure/tz-lookup",
   "escape-html",
   "parse5",
   "spdx-expression-parse",
+  "undici",
 ];
 const sdkManifest = JSON.parse(readFileSync(join(sdkDirectory, "package.json"), "utf8"));
 const surfaceTypes = JSON.parse(
@@ -226,6 +228,7 @@ try {
     join(consumer, "provider.ts"),
     `import type { IntegrationContext } from "@openmapx/integration-sdk";
 import { ProviderDeclinedError, ProviderTimeoutError } from "@openmapx/integration-sdk/errors";
+import { safeFetchJson, type SafeFetchJsonOptions } from "@openmapx/integration-sdk/http";
 import { registerPlaceResolver } from "@openmapx/integration-sdk/places";
 import type { DirectionsResult, RoutingProvider, TravelMode } from "@openmapx/integration-sdk/routing";
 import { fetchJsonWithTimeout, forecastTimeZone } from "@openmapx/integration-sdk/weather";
@@ -258,6 +261,15 @@ export function setup(ctx: IntegrationContext): void {
   ctx.registerWeatherProvider(weather);
   ctx.registerRoutingProvider(routing);
   ctx.log.info("ready");
+}
+
+// A URL from configuration goes through the SSRF-safe fetch.
+export async function fetchConfiguredFeed(
+  url: string,
+  signal: AbortSignal,
+): Promise<{ items: string[] }> {
+  const options: SafeFetchJsonOptions = { maxBytes: 1_000_000, timeoutMs: 5_000, signal };
+  return safeFetchJson<{ items: string[] }>(url, options);
 }
 
 export function fail(): never {

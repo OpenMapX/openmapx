@@ -210,7 +210,8 @@
         "@photostructure/tz-lookup",
         "escape-html",
         "parse5",
-        "spdx-expression-parse"
+        "spdx-expression-parse",
+        "undici"
       ]
     },
     "packages/presets": {

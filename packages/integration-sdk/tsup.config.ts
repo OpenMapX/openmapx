@@ -20,7 +20,7 @@ const entry = Object.fromEntries(
 
 // Every other dependency is published on npm and installed with the SDK, so it
 // stays an import: zod, the contracts package and the third-party libraries
-// that shared helpers call (address formatting, time-zone lookup).
+// that shared helpers call at run time.
 const external = Object.keys(manifest.dependencies)
   .filter((name) => !name.startsWith("@types/") && !INLINED_WORKSPACE_PACKAGES.test(name))
   .flatMap((name) => [name, new RegExp(`^${name.replaceAll("/", "\\/")}\\/`)]);
