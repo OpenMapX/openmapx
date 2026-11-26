@@ -34,6 +34,7 @@
     "@openmapx/db-schema": "workspace:^",
     "@openmapx/i18n": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
+    "@openmapx/integration-sdk": "workspace:^",
     "@openmapx/mobility-core": "workspace:^",
     "@openmapx/mobility-formats": "workspace:^",
     "@openmapx/place-ids": "workspace:^",

@@ -467,6 +467,18 @@ assert_agent_without_checkout() {
   done <<<"$containers"
 }
 
+# An installed integration's bundle, imported from the integration code cache
+# inside the running API container with the image's paths and the API's user,
+# shares the host's SDK, zod and place resolver registry.
+assert_installed_code_loading() {
+  step "Check that cached integration code shares the API's modules"
+  local api_container
+  api_container="$(docker ps --quiet --filter "label=com.docker.compose.project=$project" --filter "label=com.docker.compose.service=api")"
+  [[ -n "$api_container" ]] || fail "no api container is running"
+  docker exec -i "$api_container" node --import tsx/esm --input-type=module - < scripts/smoke/installed-code-loading.mjs | tail -n 1 | grep -qx '{"ok":true}' ||
+    fail "a bundle imported from the integration code cache did not share the API's modules"
+}
+
 start_infrastructure() {
   step "Start the infrastructure services"
   logged start openmapx services start postgis redis traefik api data-manager ||
@@ -486,6 +498,7 @@ case_install() {
   logged up openmapx compose up || fail "compose up failed"
   assert_stack_healthy
   assert_agent_without_checkout
+  assert_installed_code_loading
   assert_check_clean
 }
 

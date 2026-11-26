@@ -29,6 +29,7 @@ COPY packages/i18n/package.json packages/i18n/
 COPY packages/transitous-core/package.json packages/transitous-core/
 COPY packages/air-quality/package.json packages/air-quality/
 COPY packages/integration-framework/package.json packages/integration-framework/
+COPY packages/integration-sdk/package.json packages/integration-sdk/
 COPY packages/mangrove-client/package.json packages/mangrove-client/
 COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
 COPY packages/openconditions-contrib-client/package.json packages/openconditions-contrib-client/
@@ -62,6 +63,7 @@ COPY packages/i18n/package.json packages/i18n/
 COPY packages/transitous-core/package.json packages/transitous-core/
 COPY packages/air-quality/package.json packages/air-quality/
 COPY packages/integration-framework/package.json packages/integration-framework/
+COPY packages/integration-sdk/package.json packages/integration-sdk/
 COPY packages/mangrove-client/package.json packages/mangrove-client/
 COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
 COPY packages/openconditions-contrib-client/package.json packages/openconditions-contrib-client/
@@ -179,6 +181,7 @@ COPY packages/motis-feed-proxy-config/ packages/motis-feed-proxy-config/
 COPY packages/hey-api-client-fetch/ packages/hey-api-client-fetch/
 COPY packages/air-quality/ packages/air-quality/
 COPY packages/integration-framework/ packages/integration-framework/
+COPY packages/integration-sdk/ packages/integration-sdk/
 COPY packages/mangrove-client/ packages/mangrove-client/
 COPY packages/noaa-coops-data/ packages/noaa-coops-data/
 COPY packages/openconditions-contrib-client/ packages/openconditions-contrib-client/
@@ -197,6 +200,7 @@ COPY --from=prod-deps /app/packages/entur-client/node_modules ./packages/entur-c
 COPY --from=prod-deps /app/packages/otp-client/node_modules ./packages/otp-client/node_modules
 COPY --from=prod-deps /app/packages/air-quality/node_modules ./packages/air-quality/node_modules
 COPY --from=prod-deps /app/packages/integration-framework/node_modules ./packages/integration-framework/node_modules
+COPY --from=prod-deps /app/packages/integration-sdk/node_modules ./packages/integration-sdk/node_modules
 COPY --from=prod-deps /app/packages/mangrove-client/node_modules ./packages/mangrove-client/node_modules
 COPY --from=prod-deps /app/packages/noaa-coops-data/node_modules ./packages/noaa-coops-data/node_modules
 COPY --from=prod-deps /app/packages/openconditions-contrib-client/node_modules ./packages/openconditions-contrib-client/node_modules
