@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { subjectDataSourceSchema } from "./codes";
 import {
   type SubjectDataRegistration,
   subjectDataRegistrationSchema,
@@ -27,6 +28,10 @@ const completeRegistration: SubjectDataRegistration = {
 describe("subject data contracts", () => {
   it("accepts a complete strict registration", () => {
     expect(subjectDataRegistrationSchema.parse(completeRegistration)).toEqual(completeRegistration);
+  });
+
+  it("accepts an extension as the source of a registration", () => {
+    expect(subjectDataSourceSchema.parse("extension")).toBe("extension");
   });
 
   it.each([

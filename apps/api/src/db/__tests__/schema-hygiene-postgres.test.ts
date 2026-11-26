@@ -90,7 +90,7 @@ const CLOSED_VALUE_SETS: Record<string, { table: string; column: string; values:
   data_subject_request_task_source_check: {
     table: "data_subject_request_task",
     column: "source",
-    values: ["openmapx-db", "redis", "managed-service", "operator"],
+    values: ["openmapx-db", "redis", "managed-service", "operator", "extension"],
   },
   data_subject_request_locator_type_check: {
     table: "data_subject_request",
@@ -894,6 +894,8 @@ integration("schema hygiene", () => {
 
   it("admits a cancel_pending admin job and refuses an unknown status or type", async () => {
     await fixture.sql`INSERT INTO admin_job (type, status) VALUES ('integration.reload', 'cancel_pending')`;
+    for (const type of ["extension.enable", "extension.disable", "extension.purge"])
+      await fixture.sql`INSERT INTO admin_job (type) VALUES (${type})`;
     await expect(
       fixture.sql`INSERT INTO admin_job (type, status) VALUES ('integration.reload', 'cancelling')`,
     ).rejects.toMatchObject({ constraint_name: "admin_job_status_check" });

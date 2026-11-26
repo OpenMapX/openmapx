@@ -108,7 +108,7 @@ CREATE TABLE "admin_job" (
 	"started_at" timestamp with time zone,
 	"finished_at" timestamp with time zone,
 	CONSTRAINT "admin_job_status_check" CHECK ("admin_job"."status" IN ('queued', 'running', 'cancel_pending', 'succeeded', 'failed', 'cancelled')),
-	CONSTRAINT "admin_job_type_check" CHECK ("admin_job"."type" IN ('artifact.export', 'artifact.import', 'artifact.validate', 'backup.operation.run', 'backup.prune', 'compose.render', 'compose.start', 'configuration.apply', 'configuration.migration.apply', 'configuration.migration.preview', 'credential.import', 'data.operation.run', 'extension.install', 'extension.remove', 'integration.binding.apply', 'integration.reload', 'platform.apply', 'release.clear', 'service.apply', 'service.batch.run', 'service.core.restart', 'service.image.pull', 'service.restart', 'service.start', 'service.stop', 'standalone.install', 'standalone.preview', 'standalone.remove', 'system.diagnostics.collect', 'system.update'))
+	CONSTRAINT "admin_job_type_check" CHECK ("admin_job"."type" IN ('artifact.export', 'artifact.import', 'artifact.validate', 'backup.operation.run', 'backup.prune', 'compose.render', 'compose.start', 'configuration.apply', 'configuration.migration.apply', 'configuration.migration.preview', 'credential.import', 'data.operation.run', 'extension.disable', 'extension.enable', 'extension.install', 'extension.purge', 'extension.remove', 'integration.binding.apply', 'integration.reload', 'platform.apply', 'release.clear', 'service.apply', 'service.batch.run', 'service.core.restart', 'service.image.pull', 'service.restart', 'service.start', 'service.stop', 'standalone.install', 'standalone.preview', 'standalone.remove', 'system.diagnostics.collect', 'system.update'))
 );
 --> statement-breakpoint
 CREATE TABLE "admin_job_log" (
@@ -415,7 +415,7 @@ CREATE TABLE "data_subject_request_task" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "data_subject_request_task_status_check" CHECK ("data_subject_request_task"."status" in ('open', 'resolved')),
-	CONSTRAINT "data_subject_request_task_source_check" CHECK ("data_subject_request_task"."source" in ('openmapx-db', 'redis', 'managed-service', 'operator'))
+	CONSTRAINT "data_subject_request_task_source_check" CHECK ("data_subject_request_task"."source" in ('openmapx-db', 'redis', 'managed-service', 'operator', 'extension'))
 );
 --> statement-breakpoint
 CREATE TABLE "health_history" (
@@ -898,7 +898,7 @@ CREATE TABLE "system_setting" (
 	"value" jsonb NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_by_user_id" text,
-	CONSTRAINT "system_setting_key_check" CHECK ("system_setting"."key" in ('auth.emailVerificationRequired','auth.sessionDurationHours','auth.twoFaEnabled','auth.passwordMinLength','email.fromAddress','emaillabs.smtpAccount','smtp.host','smtp.port','smtp.user','smtp.security','basemap.provider','dataUse.allowNonCommercial','dataUse.allowGreyArea','legal.controller.name','legal.controller.street','legal.controller.postalCode','legal.controller.city','legal.controller.country','legal.controller.email','legal.controller.phone','legal.dataRequestEmail','legal.hosting.provider','legal.hosting.locations','legal.supervisoryAuthority.name','legal.supervisoryAuthority.url','legal.deploymentJurisdiction','legal.privacySources','retention.serverLogDays','retention.privacyCaseDays','retention.auditLogDays','retention.adminJobDays','platform.configuration'))
+	CONSTRAINT "system_setting_key_check" CHECK ("system_setting"."key" in ('auth.emailVerificationRequired','auth.sessionDurationHours','auth.twoFaEnabled','auth.passwordMinLength','email.fromAddress','emaillabs.smtpAccount','smtp.host','smtp.port','smtp.user','smtp.security','basemap.provider','dataUse.allowNonCommercial','dataUse.allowGreyArea','extensions.catalogSource','extensions.revocationCheck','extensions.remoteDisable','extensions.prereleaseOptIn','legal.controller.name','legal.controller.street','legal.controller.postalCode','legal.controller.city','legal.controller.country','legal.controller.email','legal.controller.phone','legal.dataRequestEmail','legal.hosting.provider','legal.hosting.locations','legal.supervisoryAuthority.name','legal.supervisoryAuthority.url','legal.deploymentJurisdiction','legal.privacySources','retention.serverLogDays','retention.privacyCaseDays','retention.auditLogDays','retention.adminJobDays','platform.configuration'))
 );
 --> statement-breakpoint
 CREATE TABLE "transit_credential_preview" (

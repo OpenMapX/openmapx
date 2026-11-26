@@ -140,6 +140,7 @@ describe("GET /admin/settings", () => {
       "map",
       "policy",
       "legal",
+      "extensions",
     ]);
     const email = body.groups.find((g: { id: string }) => g.id === "email");
     expect(email.settings.find((s: { key: string }) => s.key === "smtp.security")).toMatchObject({

@@ -1,6 +1,6 @@
 {
-  "id": "8284679e-bb8c-4e13-b62e-27924218fe6a",
-  "prevId": "0f9cfa3a-1702-47c1-862a-8502dd613aea",
+  "id": "0aa34746-8e60-4a55-afe7-a66708f36785",
+  "prevId": "f4754d6e-3247-41d9-b8e1-89584678e387",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1107,7 +1107,7 @@
         },
         "admin_job_type_check": {
           "name": "admin_job_type_check",
-          "value": "\"admin_job\".\"type\" IN ('artifact.export', 'artifact.import', 'artifact.validate', 'backup.operation.run', 'backup.prune', 'compose.render', 'compose.start', 'configuration.apply', 'configuration.migration.apply', 'configuration.migration.preview', 'credential.import', 'data.operation.run', 'extension.install', 'extension.remove', 'integration.binding.apply', 'integration.reload', 'platform.apply', 'release.clear', 'service.apply', 'service.batch.run', 'service.core.restart', 'service.image.pull', 'service.restart', 'service.start', 'service.stop', 'standalone.install', 'standalone.preview', 'standalone.remove', 'system.diagnostics.collect', 'system.update')"
+          "value": "\"admin_job\".\"type\" IN ('artifact.export', 'artifact.import', 'artifact.validate', 'backup.operation.run', 'backup.prune', 'compose.render', 'compose.start', 'configuration.apply', 'configuration.migration.apply', 'configuration.migration.preview', 'credential.import', 'data.operation.run', 'extension.disable', 'extension.enable', 'extension.install', 'extension.purge', 'extension.remove', 'integration.binding.apply', 'integration.reload', 'platform.apply', 'release.clear', 'service.apply', 'service.batch.run', 'service.core.restart', 'service.image.pull', 'service.restart', 'service.start', 'service.stop', 'standalone.install', 'standalone.preview', 'standalone.remove', 'system.diagnostics.collect', 'system.update')"
         }
       },
       "isRLSEnabled": false
@@ -3843,7 +3843,7 @@
         },
         "data_subject_request_task_source_check": {
           "name": "data_subject_request_task_source_check",
-          "value": "\"data_subject_request_task\".\"source\" in ('openmapx-db', 'redis', 'managed-service', 'operator')"
+          "value": "\"data_subject_request_task\".\"source\" in ('openmapx-db', 'redis', 'managed-service', 'operator', 'extension')"
         }
       },
       "isRLSEnabled": false
@@ -7854,7 +7854,7 @@
       "checkConstraints": {
         "system_setting_key_check": {
           "name": "system_setting_key_check",
-          "value": "\"system_setting\".\"key\" in ('auth.emailVerificationRequired','auth.sessionDurationHours','auth.twoFaEnabled','auth.passwordMinLength','email.fromAddress','emaillabs.smtpAccount','smtp.host','smtp.port','smtp.user','smtp.security','basemap.provider','dataUse.allowNonCommercial','dataUse.allowGreyArea','legal.controller.name','legal.controller.street','legal.controller.postalCode','legal.controller.city','legal.controller.country','legal.controller.email','legal.controller.phone','legal.dataRequestEmail','legal.hosting.provider','legal.hosting.locations','legal.supervisoryAuthority.name','legal.supervisoryAuthority.url','legal.deploymentJurisdiction','legal.privacySources','retention.serverLogDays','retention.privacyCaseDays','retention.auditLogDays','retention.adminJobDays','platform.configuration')"
+          "value": "\"system_setting\".\"key\" in ('auth.emailVerificationRequired','auth.sessionDurationHours','auth.twoFaEnabled','auth.passwordMinLength','email.fromAddress','emaillabs.smtpAccount','smtp.host','smtp.port','smtp.user','smtp.security','basemap.provider','dataUse.allowNonCommercial','dataUse.allowGreyArea','extensions.catalogSource','extensions.revocationCheck','extensions.remoteDisable','extensions.prereleaseOptIn','legal.controller.name','legal.controller.street','legal.controller.postalCode','legal.controller.city','legal.controller.country','legal.controller.email','legal.controller.phone','legal.dataRequestEmail','legal.hosting.provider','legal.hosting.locations','legal.supervisoryAuthority.name','legal.supervisoryAuthority.url','legal.deploymentJurisdiction','legal.privacySources','retention.serverLogDays','retention.privacyCaseDays','retention.auditLogDays','retention.adminJobDays','platform.configuration')"
         }
       },
       "isRLSEnabled": false
