@@ -1,6 +1,6 @@
 -- Database objects drizzle-kit cannot generate: roles and grants, the account
--- role CHECK on Better Auth's "user" table, the last-administrator invariant
--- and the account erasure trigger. Everything else is declared in the schema
+-- role CHECK on Better Auth's "user" table, the approved-grants CHECK, the
+-- last-administrator invariant and the account erasure trigger. Everything else is declared in the schema
 -- code.
 
 -- Data-manager connects as its own role and may change only its own tables.
@@ -37,6 +37,25 @@ ALTER TABLE "user" ADD CONSTRAINT user_role_check CHECK (role IS NULL OR role IN
 -- "user" table, so drizzle-kit cannot generate this foreign key. Deleting an
 -- account clears it from the jobs the API started for it.
 ALTER TABLE "data_manager"."job" ADD CONSTRAINT job_triggered_by_user_id_fkey FOREIGN KEY ("triggered_by_user_id") REFERENCES "user"("id") ON DELETE SET NULL;--> statement-breakpoint
+
+-- An extension's approved grants have one stored form, so a stored approval
+-- can never be read two ways: an object whose every value is a list of
+-- strings, each strictly after the one before it. "C" compares bytes, which
+-- for the ASCII-only grant identifiers is the code-unit order in which the
+-- API sorts them; the database's default collation would order them
+-- differently. A CHECK cannot hold a subquery, hence the function.
+CREATE FUNCTION openmapx_approved_grants_valid(grants jsonb) RETURNS boolean
+LANGUAGE sql IMMUTABLE SECURITY INVOKER SET search_path = public, pg_temp AS $$
+  SELECT jsonb_typeof(grants) = 'object' AND NOT EXISTS (
+    SELECT FROM jsonb_each(grants) AS service(id, list)
+    WHERE jsonb_typeof(service.list) <> 'array' OR EXISTS (
+      SELECT FROM jsonb_array_elements(service.list) WITH ORDINALITY AS grant_id(value, position)
+      WHERE jsonb_typeof(grant_id.value) <> 'string'
+         OR (grant_id.position > 1
+             AND (service.list ->> (grant_id.position - 2)::int) COLLATE "C"
+                 >= (grant_id.value #>> '{}') COLLATE "C")))
+$$;--> statement-breakpoint
+ALTER TABLE installed_extension ADD CONSTRAINT installed_extension_approved_grants_check CHECK (openmapx_approved_grants_valid(approved_grants));--> statement-breakpoint
 
 -- At least one active administrator always remains. The guard row counts the
 -- active administrators; the trigger keeps it in step with every insert and
@@ -133,6 +152,11 @@ BEGIN
   -- An impersonation session must not outlive the administrator who started
   -- it as an ordinary-looking session of the impersonated account.
   DELETE FROM session WHERE impersonated_by = OLD.id;
+  -- Integrations that hold data about the account erase it after the commit;
+  -- each gets one pending erasure the API works off.
+  INSERT INTO subject_erasure_pending (integration_id, subject_user_id)
+  SELECT integration_id, OLD.id FROM integration_subject_handler
+  ON CONFLICT DO NOTHING;
   RETURN OLD;
 END $$;--> statement-breakpoint
 CREATE TRIGGER openmapx_erase_user_residue BEFORE DELETE ON "user" FOR EACH ROW EXECUTE FUNCTION openmapx_erase_user_residue();

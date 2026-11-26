@@ -369,7 +369,12 @@ export {
   captureStreetLevelProviderContributors,
 } from "./media-attribution";
 export { matchesMediaHost, parseMediaHostEntry } from "./media-hosts";
-export { PLATFORM_VERSION, satisfiesPlatformVersion } from "./platform";
+export {
+  PLATFORM_VERSION,
+  satisfiesPlatformVersion,
+  satisfiesWebPlatformVersion,
+  WEB_PLATFORM_VERSION,
+} from "./platform";
 export {
   type PlatformEndpointIntegration,
   type RequiredServiceLookup,

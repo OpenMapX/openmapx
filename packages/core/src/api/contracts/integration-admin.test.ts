@@ -2,6 +2,7 @@ import { createRequire } from "node:module";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { routeJsonSchema } from "../schema";
 import * as contracts from "./index";
+import { attentionInputSchema, attentionItemSchema } from "./integration-admin";
 
 beforeEach(() =>
   vi.stubGlobal("fetch", () => {
@@ -60,6 +61,8 @@ const inventory = [
   ["setAdminIntegrationCredential", "PUT", "/api/admin/credentials/:integrationId/:key"],
   ["deleteAdminIntegrationCredential", "DELETE", "/api/admin/credentials/:integrationId/:key"],
   ["getAdminOverview", "GET", "/api/admin/overview"],
+  ["listAdminAttention", "GET", "/api/admin/attention"],
+  ["acknowledgeAdminAttention", "POST", "/api/admin/attention/:key/acknowledge"],
 ];
 const health = {
   id: "sample",
@@ -197,6 +200,7 @@ function success(
     | "installAdminStandaloneIntegration"
     | "listAdminStandaloneIntegrations"
     | "removeAdminStandaloneIntegration"
+    | "acknowledgeAdminAttention"
   >,
   value: unknown,
 ) {
@@ -324,6 +328,22 @@ describe("integration administration canonical producer contracts", () => {
         reason: "integration_disabled",
       },
       getAdminOverview: overview,
+      listAdminAttention: {
+        items: [
+          {
+            key: "storage-low:data",
+            severity: "warning",
+            source: "operations",
+            title: "Disk space low (data)",
+            detail: null,
+            action: { label: "Open", href: "/admin/system/storage" },
+            clearance: "condition",
+            acknowledgedAt: at,
+            raisedAt: at,
+            updatedAt: at,
+          },
+        ],
+      },
     };
     for (const [id, fixture] of Object.entries(fixtures))
       expect(success(id as keyof typeof fixtures, fixture)).toEqual(fixture);
@@ -621,3 +641,74 @@ it.each(["previewAdminStandaloneIntegration", "installAdminStandaloneIntegration
     );
   },
 );
+
+describe("attention list contracts", () => {
+  it("limits an attention action to the admin area", () => {
+    const input = {
+      key: "extensions.revoked:demo",
+      severity: "critical",
+      source: "extensions",
+      title: "Demo was disabled",
+    };
+    expect(
+      attentionInputSchema.safeParse({
+        ...input,
+        action: { label: "Open", href: "/admin/extensions/demo?tab=security" },
+      }).success,
+    ).toBe(true);
+    for (const href of [
+      "https://example.org/",
+      "//example.org/admin",
+      "/administer",
+      "/admin/../api",
+      "javascript:alert(1)",
+    ])
+      expect(
+        attentionInputSchema.safeParse({ ...input, action: { label: "Open", href } }).success,
+        href,
+      ).toBe(false);
+    for (const key of [
+      "extension-incompatible:demo",
+      "extension-advisory:demo",
+      "extension-withdrawn:demo",
+      "subject-erasure-pending:demo-adapter",
+    ])
+      expect(attentionInputSchema.safeParse({ ...input, key }).success, key).toBe(true);
+    expect(attentionInputSchema.safeParse({ ...input, key: "Has Spaces" }).success).toBe(false);
+    expect(attentionInputSchema.safeParse({ ...input, severity: "error" }).success).toBe(false);
+  });
+
+  it("accepts a clearance and a bounded occurrence reference", () => {
+    const input = {
+      key: "job-failed:application:service.restart",
+      severity: "warning",
+      source: "operations",
+      title: "Restart failed",
+    };
+    expect(
+      attentionInputSchema.safeParse({
+        ...input,
+        clearance: "acknowledge",
+        occurrenceRef: "r".repeat(128),
+      }).success,
+    ).toBe(true);
+    expect(attentionInputSchema.safeParse({ ...input, clearance: "condition" }).success).toBe(true);
+    expect(attentionInputSchema.safeParse({ ...input, clearance: "dismiss" }).success).toBe(false);
+    expect(
+      attentionInputSchema.safeParse({ ...input, occurrenceRef: "r".repeat(129) }).success,
+    ).toBe(false);
+    expect(attentionInputSchema.safeParse({ ...input, occurrenceRef: "" }).success).toBe(false);
+    const item = {
+      ...input,
+      detail: null,
+      action: null,
+      raisedAt: "2026-11-25T00:00:00.000Z",
+      updatedAt: "2026-11-25T00:00:00.000Z",
+    };
+    expect(
+      attentionItemSchema.safeParse({ ...item, clearance: "acknowledge", acknowledgedAt: null })
+        .success,
+    ).toBe(true);
+    expect(attentionItemSchema.safeParse(item).success).toBe(false);
+  });
+});

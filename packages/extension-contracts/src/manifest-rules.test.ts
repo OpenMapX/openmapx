@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { validateExtensionManifest } from "./extension";
+import { DATABASE_SCHEMA_NAME_PATTERN } from "./grants";
 import { COMPONENT_ID_PATTERN, componentIdSchema, isComponentId } from "./identifiers";
-import { validateManifest } from "./integration";
+import { validateDataSource, validateManifest } from "./integration";
 import { compareSemver, isSemver } from "./semver";
 import { validateServiceManifest } from "./service";
 
@@ -73,7 +74,7 @@ describe("component ids", () => {
     expect(
       validateExtensionManifest({
         ...extension,
-        config: [{ key: "k", target: `integration:${"x".repeat(49)}` }],
+        config: [{ key: "k", targets: [{ component: `integration:${"x".repeat(49)}`, key: "k" }] }],
       }).valid,
     ).toBe(false);
   });
@@ -129,6 +130,165 @@ describe("community integration manifests", () => {
   });
 });
 
+describe("code, migration, panel and slot declarations", () => {
+  const base = { id: "demo", version: "1.0.0", platform: "1.0", domains: ["knowledge"] };
+  const validSource = {
+    sourceId: "example-feed",
+    name: "Example publisher",
+    url: "https://example.test/",
+    providerCountry: "DE",
+    providerPrivacyUrl: "https://example.test/privacy",
+    licensing: {
+      version: 1,
+      bindings: [
+        { scope: "data", subject: "Readings", license: { kind: "spdx", expression: "CC-BY-4.0" } },
+      ],
+    },
+  };
+
+  it("refuses the removed backend.cron by name", () => {
+    const result = validateManifest({ ...base, backend: { cron: "0 * * * *" } }, community);
+    expect(result.valid).toBe(false);
+    expect(result.errors.join("\n")).toMatch(/backend.*cron/);
+  });
+
+  it("accepts a full code-bearing community manifest", () => {
+    expect(
+      validateManifest(
+        {
+          ...base,
+          webPlatform: "1.0",
+          backend: { routes: true, entry: "dist/backend/index.mjs" },
+          database: { migrations: true },
+          frontend: {
+            entry: "dist/web/index.mjs",
+            mapLayer: true,
+            legend: true,
+            legendKind: "toolbar",
+            panel: { detents: "place" },
+            mapControl: true,
+            layerSelector: { group: "map-details", labelKey: "layer", section: "transport" },
+            overlay: { id: "demo-reports" },
+          },
+          subjectData: {
+            storesPersonalData: true,
+            strategy: "collector",
+            registrationIds: ["demo-reports"],
+            operatorInstructions: null,
+            registrations: [{ id: "demo-reports" }],
+          },
+        },
+        community,
+      ),
+    ).toEqual({ valid: true, errors: [] });
+    expect(validateManifest({ ...base, frontend: { panel: {} } }, community).valid).toBe(true);
+  });
+
+  it("accepts declarations without an entry and migrations without a postgis requirement", () => {
+    for (const fields of [
+      { backend: { routes: true } },
+      { frontend: { mapLayer: true } },
+      { frontend: { legend: true } },
+      { database: { migrations: true } },
+    ])
+      expect(validateManifest({ ...base, ...fields }, community), JSON.stringify(fields)).toEqual({
+        valid: true,
+        errors: [],
+      });
+  });
+
+  it.each([
+    [{ backend: { entry: "dist/backend/main.mjs" } }, "backend.entry"],
+    [
+      { frontend: { entry: "dist/web/index.mjs" } },
+      "manifest.webPlatform: required when frontend.entry is set",
+    ],
+    [{ frontend: { panel: true } }, "frontend.panel"],
+    [{ frontend: { panel: false } }, "frontend.panel"],
+    [{ frontend: { panel: { detents: "tall" } } }, "frontend.panel.detents"],
+    [{ frontend: { panel: { titleKey: "panel.title" } } }, "titleKey"],
+    [
+      { frontend: { legendKind: "toolbar" } },
+      "manifest.frontend.legendKind: needs frontend.legend",
+    ],
+    [{ frontend: { legend: true, legendKind: "legend" } }, "frontend.legendKind"],
+    [
+      { frontend: { layerSelector: { group: "map-details", labelKey: "l", section: "food" } } },
+      "section",
+    ],
+    [{ database: { migrations: false } }, "database.migrations"],
+    [{ frontend: { overlay: { id: "Demo_Reports" } } }, "frontend.overlay.id"],
+    [
+      {
+        subjectData: {
+          storesPersonalData: false,
+          strategy: "not_personal",
+          registrationIds: [],
+          operatorInstructions: null,
+          registrations: [{ id: "x" }],
+        },
+      },
+      "registrations need storesPersonalData",
+    ],
+  ])("refuses %j", (fields, message) => {
+    const result = validateManifest({ ...base, ...fields }, community);
+    expect(result.valid).toBe(false);
+    expect(result.errors.join("\n")).toContain(message);
+  });
+
+  it("keeps built-ins on their own slots and their own catalogue", () => {
+    expect(
+      validateManifest(
+        {
+          id: "demo",
+          domains: ["knowledge"],
+          backend: { routes: true },
+          frontend: { mapLayer: true, legend: true },
+        },
+        { firstParty: true },
+      ).valid,
+    ).toBe(true);
+    expect(
+      validateManifest(
+        { id: "demo", domains: ["knowledge"], frontend: { panel: false } },
+        { firstParty: true },
+      ).valid,
+    ).toBe(false);
+    expect(
+      validateManifest(
+        {
+          id: "demo",
+          domains: ["knowledge"],
+          subjectData: {
+            storesPersonalData: true,
+            strategy: "collector",
+            registrationIds: ["x"],
+            operatorInstructions: null,
+            registrations: [{ id: "x" }],
+          },
+        },
+        { firstParty: true },
+      ).errors.join("\n"),
+    ).toContain(
+      "manifest.subjectData.registrations: built-in integrations register in the catalogue",
+    );
+  });
+
+  it("accepts a logo only as an image file under assets/", () => {
+    const source = (logoAsset: string) =>
+      validateDataSource({ ...validSource, logoAsset }, ["knowledge"]);
+    expect(source("assets/logos/acme.svg").valid).toBe(true);
+    for (const path of [
+      "https://example.org/logo.svg",
+      "logos/acme.svg",
+      "assets/../logo.svg",
+      "assets/acme.gif",
+      "assets/a b.png",
+    ])
+      expect(source(path).valid, path).toBe(false);
+  });
+});
+
 describe("community service manifests", () => {
   it("accept a manifest that states protocol and semantic version", () => {
     expect(validateServiceManifest(communityService, community)).toEqual({
@@ -178,6 +338,199 @@ describe("community service manifests", () => {
       'provides[2]: "router" is neither a well-known capability nor namespaced as "<vendor>/<name>" (e.g. "acme/router")',
       'produces[0].type: "blob" is neither a well-known data type nor namespaced as "<vendor>/<name>" (e.g. "acme/blob")',
     ]);
+  });
+});
+
+describe("service requests", () => {
+  const svc = {
+    id: "demo-engine",
+    name: "Demo engine",
+    version: "1.0.0",
+    platform: "1.0",
+    quality: "community",
+    container: { image: "ghcr.io/example/demo", tag: "1", memory: "512m" },
+    ownsSchema: "demo",
+  };
+
+  it("accepts every kind of request", () => {
+    expect(
+      validateServiceManifest(
+        {
+          ...svc,
+          requests: {
+            hostPaths: [{ source: "/srv/gps", target: "/data/gps", readOnly: true }],
+            platformServices: ["postgis", "overpass"],
+            reachableByPlatform: true,
+            peerServices: true,
+            database: {
+              roles: [
+                {
+                  name: "demo_ingest",
+                  privileges: ["create-schema:demo", "use-schema:extensions"],
+                },
+                { name: "demo_reader", privileges: ["use-schema:demo"], connectionKey: "READ_URL" },
+                { name: "demo_login", privileges: [], connectionKey: "LOGIN_URL" },
+              ],
+            },
+          },
+        },
+        community,
+      ),
+    ).toEqual({ valid: true, errors: [] });
+  });
+
+  const secretField = (key: string) => ({
+    configSchema: {
+      type: "object",
+      properties: { [key]: { type: "string", "x-openmapx-secret": true } },
+    },
+  });
+
+  it.each([
+    [
+      {},
+      { hostPaths: [{ source: "srv/gps", target: "/data", readOnly: true }] },
+      "must be an absolute host path",
+    ],
+    [
+      {},
+      { hostPaths: [{ source: "/srv/../etc", target: "/data", readOnly: true }] },
+      "must not contain '.' or '..' segments",
+    ],
+    [
+      {},
+      { hostPaths: [{ source: "/srv/a:b", target: "/data", readOnly: true }] },
+      "must be an absolute host path",
+    ],
+    [{}, { hostPaths: [{ source: "/srv/gps", target: "/data" }] }, "readOnly"],
+    [{}, { platformServices: ["postgis", "postgis"] }, 'requests: duplicate "postgis"'],
+    [
+      {},
+      { database: { roles: [{ name: "openmapx_api", privileges: [] }] } },
+      'role "openmapx_api" is a reserved name',
+    ],
+    [
+      {},
+      { database: { roles: [{ name: "ab", privileges: [] }] } },
+      "must be a lowercase PostgreSQL role name",
+    ],
+    [
+      {},
+      { database: { roles: [{ name: "demo", privileges: ["superuser"] }] } },
+      "unknown database privilege",
+    ],
+    [
+      {},
+      { database: { roles: [{ name: "demo", privileges: ["create-schema"] }] } },
+      "unknown database privilege",
+    ],
+    [
+      {},
+      { database: { roles: [{ name: "demo", privileges: ["usage:extensions"] }] } },
+      "unknown database privilege",
+    ],
+    [
+      {},
+      { database: { roles: [{ name: "demo", privileges: ["member-of:demo_readers"] }] } },
+      "unknown database privilege",
+    ],
+    [
+      {},
+      {
+        database: {
+          roles: [
+            { name: "demo_a", privileges: [] },
+            { name: "demo_b", privileges: [] },
+          ],
+        },
+      },
+      'requests.database: role "demo_b" needs its own connectionKey',
+    ],
+    [
+      {},
+      {
+        database: {
+          roles: [
+            { name: "demo_a", privileges: [], connectionKey: "DATABASE_URL" },
+            { name: "demo_b", privileges: [] },
+          ],
+        },
+      },
+      'requests.database: role "demo_b" needs its own connectionKey',
+    ],
+    [
+      secretField("DATABASE_URL"),
+      { database: { roles: [{ name: "demo", privileges: [] }] } },
+      'requests.database: "DATABASE_URL" is filled by the platform and must not be a configSchema property',
+    ],
+    [
+      secretField("READ_URL"),
+      { database: { roles: [{ name: "demo", privileges: [], connectionKey: "READ_URL" }] } },
+      'requests.database: "READ_URL" is filled by the platform and must not be a configSchema property',
+    ],
+    [{}, { routes: [] }, "requests"],
+  ])("refuses %j with requests %j", (extra, requests, message) => {
+    const result = validateServiceManifest({ ...svc, ...extra, requests }, community);
+    expect(result.valid).toBe(false);
+    expect(result.errors.join("\n")).toContain(message);
+  });
+
+  it("lets a setting that is not a connection key stay in configSchema", () => {
+    expect(
+      validateServiceManifest(
+        {
+          ...svc,
+          ...secretField("API_TOKEN"),
+          requests: { database: { roles: [{ name: "demo", privileges: [] }] } },
+        },
+        community,
+      ).valid,
+    ).toBe(true);
+  });
+
+  it("accepts only an ownsSchema a create-schema privilege can name", () => {
+    expect(
+      validateServiceManifest({ ...svc, ownsSchema: `a${"b".repeat(62)}` }, community).valid,
+    ).toBe(true);
+    for (const ownsSchema of ["_demo", `a${"b".repeat(63)}`, "1demo"]) {
+      expect(DATABASE_SCHEMA_NAME_PATTERN.test(ownsSchema)).toBe(false);
+      expect(
+        validateServiceManifest({ ...svc, ownsSchema }, community).errors.join("\n"),
+      ).toContain("ownsSchema: must be a lowercase Postgres identifier");
+    }
+  });
+
+  it("refuses a reserved schema, requests on a built-in, a long device and the removed authRequired", () => {
+    expect(
+      validateServiceManifest({ ...svc, ownsSchema: "ext_other" }, community).errors.join("\n"),
+    ).toContain('ownsSchema: "ext_other" is a reserved name');
+    expect(
+      validateServiceManifest(
+        { ...svc, quality: "built-in", requests: { peerServices: true } },
+        { firstParty: true },
+      ).errors.join("\n"),
+    ).toContain("requests: built-in services use their existing fields");
+    expect(
+      validateServiceManifest(
+        {
+          ...svc,
+          quality: "built-in",
+          container: { ...svc.container, devices: [`/dev/${"a".repeat(251)}`] },
+        },
+        { firstParty: true },
+      ).valid,
+    ).toBe(false);
+    const proxied = validateServiceManifest(
+      {
+        ...svc,
+        quality: "built-in",
+        container: { ...svc.container, expose: [8080] },
+        exposure: { proxy: { enabled: true, authRequired: true } },
+      },
+      { firstParty: true },
+    );
+    expect(proxied.valid).toBe(false);
+    expect(proxied.errors.join("\n")).toMatch(/authRequired/);
   });
 });
 

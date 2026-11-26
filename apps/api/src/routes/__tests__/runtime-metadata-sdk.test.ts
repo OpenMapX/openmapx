@@ -58,7 +58,7 @@ function richIntegration(): LoadedIntegration {
         mapLayer: true,
         sharedMapLayer: "shared-transit",
         legend: true,
-        panel: true,
+        panel: { detents: "place" },
         searchCategory: {
           id: "transit",
           label: "Transit",

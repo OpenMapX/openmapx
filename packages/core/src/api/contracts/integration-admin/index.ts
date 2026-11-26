@@ -1,4 +1,5 @@
 export * from "./application";
+export * from "./attention";
 export * from "./common";
 export * from "./configuration-migration";
 export * from "./credential-transfer";

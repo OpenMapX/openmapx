@@ -2391,13 +2391,21 @@ const EXECUTABLE_COMMUNITY_CODE_PATHS = [
   "legend.tsx",
   "panel.tsx",
   "dist/frontend/index.js",
+  "dist/web/index.mjs",
 ] as const;
 
 function manifestDeclaresFrontendCode(manifest: Record<string, unknown>): boolean {
   const frontend = manifest.frontend;
   if (!frontend || typeof frontend !== "object") return false;
   const declaration = frontend as Record<string, unknown>;
-  return declaration.mapLayer === true || declaration.legend === true || declaration.panel === true;
+  return (
+    declaration.mapLayer === true ||
+    declaration.legend === true ||
+    declaration.panel === true ||
+    (typeof declaration.panel === "object" && declaration.panel !== null) ||
+    typeof declaration.entry === "string" ||
+    declaration.mapControl === true
+  );
 }
 
 function assertNoExecutableCommunityCode(

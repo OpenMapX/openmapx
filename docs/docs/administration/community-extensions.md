@@ -324,7 +324,10 @@ anything:
 - a `manifest.json` larger than 128 KiB or not UTF-8;
 - a configuration schema the agent does not accept;
 - an id longer than 64 characters, or the id of a built-in integration;
-- more than 128 files, or more than 4,096 across all installed integrations.
+- more than 1,024 files, or more than 4,096 across all installed integrations;
+- file paths and artifact URLs that, across all installed integrations, would
+  not fit in the agent's one-shot inventory of them (about 640 KiB of paths,
+  digests and URLs as JSON).
 
 Installed files get fixed modes (`0755` for directories, `0644` for files),
 whatever the archive declares.

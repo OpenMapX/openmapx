@@ -553,7 +553,6 @@ Enabling the proxy requires `container.expose` to declare at least one port
 | `stripPrefix`      | boolean  | If `true`, the prefix is stripped before forwarding.                                                                                                                                                                                 |
 | `middleware`       | string[] | Traefik middleware names (e.g. `tiles-cache@file`).                                                                                                                                                                                  |
 | `priority`         | number   | Higher wins when rules overlap. Use a low value for catch-all routes.                                                                                                                                                                |
-| `authRequired`     | boolean  | Reserved for a future forward-auth integration.                                                                                                                                                                                      |
 | `additionalRoutes` | array    | Extra routers pointing at the same backend. Each entry sets exactly one of `path` (exact match) or `pathPrefix`, plus optional `middleware`.                                                                                         |
 
 A proxy with `host` routes by the resolved hostname and can also use a
@@ -656,7 +655,8 @@ documentation surfaced in the admin UI: it is **not** enforced.
 ## `ownsSchema`
 
 Declares the Postgres schema this service owns and migrates itself, idempotently,
-on boot. The value must be a valid lowercase Postgres identifier (`[a-z_][a-z0-9_]*`).
+on boot. The value must be a lowercase Postgres identifier that starts with a letter and
+has at most 63 characters (`[a-z][a-z0-9_]{0,62}`).
 
 ```json
 "ownsSchema": "conditions"

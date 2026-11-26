@@ -51,7 +51,6 @@ export interface ServiceProxyExposure {
   pathPrefix?: string;
   stripPrefix?: boolean;
   middleware?: string[];
-  authRequired?: boolean;
   /**
    * Traefik router priority. Higher wins when multiple rules could match the
    * same path. Useful for catch-all routes like the `web` service's (priority 1) so that
@@ -295,6 +294,30 @@ export function getProvidedCapabilityNames(provides: ServiceProvides[] | undefin
   return normalizeProvides(provides).map((p) => p.capability);
 }
 
+export interface ServiceHostPathRequest {
+  /** Absolute host path, without `:` and without `.` or `..` segments. */
+  source: string;
+  /** Absolute path inside the container. */
+  target: string;
+  readOnly: boolean;
+}
+
+export interface ServiceDatabaseRoleRequest {
+  name: string;
+  /** `create-schema:<schema>` or `use-schema:<schema>`; empty for a role that only logs in. */
+  privileges: string[];
+  /** Variable the platform fills with the role's connection URL; `DATABASE_URL` when absent. */
+  connectionKey?: string;
+}
+
+export interface ServiceRequests {
+  hostPaths?: ServiceHostPathRequest[];
+  platformServices?: string[];
+  reachableByPlatform?: boolean;
+  peerServices?: boolean;
+  database?: { roles: ServiceDatabaseRoleRequest[] };
+}
+
 export interface ServiceManifest {
   id: string;
   name: string;
@@ -328,6 +351,8 @@ export interface ServiceManifest {
   volumes?: ServiceVolume[];
   bindMounts?: ServiceBindMount[];
   exposure?: ServiceExposure;
+  /** Community only: capabilities the operator is asked to grant. */
+  requests?: ServiceRequests;
 
   buildCommand?: string;
   /** Digest-pinned helper images the build handler runs, keyed by role. */

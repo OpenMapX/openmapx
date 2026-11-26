@@ -56,6 +56,7 @@ const BROWSER = [
 const SERVER = [
   "./ambient-places-server",
   "./api-schema",
+  "./attention",
   "./build-artifacts",
   "./build-artifacts/motis-destination",
   "./build-artifacts/motis-portable",

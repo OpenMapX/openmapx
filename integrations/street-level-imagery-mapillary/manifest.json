@@ -9,7 +9,6 @@
     "mapLayer": true,
     "sharedMapLayer": "street-level-imagery",
     "legend": true,
-    "panel": false,
     "layerSelector": {
       "group": "map-details",
       "labelKey": "streetLevelImagery",

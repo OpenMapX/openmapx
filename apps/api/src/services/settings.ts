@@ -46,6 +46,7 @@ const GROUP_LABELS: Record<string, string> = {
   map: "Map",
   policy: "Data-Use Policy",
   legal: "Legal",
+  extensions: "Extensions",
 };
 
 const DEFS_BY_KEY: ReadonlyMap<string, SettingDef> = new Map(

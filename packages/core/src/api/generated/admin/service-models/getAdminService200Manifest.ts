@@ -10,6 +10,7 @@ import type { GetAdminService200ManifestExposure } from "./getAdminService200Man
 import type { GetAdminService200ManifestProducesItem } from "./getAdminService200ManifestProducesItem";
 import type { GetAdminService200ManifestProvidesItem } from "./getAdminService200ManifestProvidesItem";
 import type { GetAdminService200ManifestQuality } from "./getAdminService200ManifestQuality";
+import type { GetAdminService200ManifestRequests } from "./getAdminService200ManifestRequests";
 import type { GetAdminService200ManifestSubjectData } from "./getAdminService200ManifestSubjectData";
 import type { GetAdminService200ManifestUi } from "./getAdminService200ManifestUi";
 import type { GetAdminService200ManifestVolumesItem } from "./getAdminService200ManifestVolumesItem";
@@ -54,11 +55,12 @@ export type GetAdminService200Manifest = {
   platformNetwork?: boolean;
   configSchema?: GetAdminService200ManifestConfigSchema;
   envVars?: GetAdminService200ManifestEnvVarsItem[];
-  /** @pattern ^[a-z_][a-z0-9_]*$ */
+  /** @pattern ^[a-z][a-z0-9_]{0,62}$ */
   ownsSchema?: string;
   volumes?: GetAdminService200ManifestVolumesItem[];
   bindMounts?: GetAdminService200ManifestBindMountsItem[];
   exposure?: GetAdminService200ManifestExposure;
+  requests?: GetAdminService200ManifestRequests;
   buildCommand?: string;
   buildImages?: GetAdminService200ManifestBuildImages;
   ui?: GetAdminService200ManifestUi;

@@ -1,3 +1,4 @@
+import { isComponentId } from "@openmapx/core/component-id";
 import { type PrivacySource, privacySourceSchema } from "@openmapx/core/privacy";
 import { camelToUpperSnake } from "@openmapx/core/services/config-env-names";
 
@@ -282,6 +283,49 @@ export const SETTING_DEFS: readonly SettingDef[] = [
     type: "boolean",
     env: true,
     default: true,
+  },
+  // Extensions: per-instance administrator choices, so the environment
+  // does not set them.
+  {
+    group: "extensions",
+    key: "extensions.catalogSource",
+    label: "Extension catalogue source",
+    description:
+      "Latest reads the reviewed catalogue as it is today, so a verified extension's fix arrives after its review. Pinned reads the catalogue at the commit this release recorded.",
+    type: "select",
+    options: ["latest", "pinned"],
+    default: "latest",
+  },
+  {
+    group: "extensions",
+    key: "extensions.revocationCheck",
+    label: "Check the extension revocation list daily",
+    description:
+      "Once a day the instance requests the public revocation list from the catalogue's host. Turn off to make no such request; revoked extensions are then only reported when the store is opened.",
+    type: "boolean",
+    default: true,
+  },
+  {
+    group: "extensions",
+    key: "extensions.remoteDisable",
+    label: "Disable an installed extension on a critical advisory",
+    description:
+      "When the revocation list marks an installed extension's version as critical, disable it and report it. Nothing is uninstalled or deleted, and an administrator can enable it again.",
+    type: "boolean",
+    default: true,
+  },
+  {
+    group: "extensions",
+    key: "extensions.prereleaseOptIn",
+    label: "Extensions that show pre-releases",
+    description: "Ids of the extensions whose pre-release versions the store offers.",
+    type: "object",
+    default: [],
+    validate: (value) =>
+      Array.isArray(value) &&
+      value.length <= 256 &&
+      value.every(isComponentId) &&
+      new Set(value).size === value.length,
   },
   // Legal pages — facts published on /privacy that vary by hosting setup,
   // read by the public /legal-config endpoint that the privacy page fetches.

@@ -6,8 +6,7 @@
   "domains": ["knowledge"],
   "frontend": {
     "mapLayer": false,
-    "legend": false,
-    "panel": false
+    "legend": false
   },
   "backend": {
     "routes": true

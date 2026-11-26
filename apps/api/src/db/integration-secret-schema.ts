@@ -24,6 +24,8 @@ export const integrationSecret = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
     updatedByUserId: text("updated_by_user_id"),
+    // The owning extension, kept without a foreign key as on integration_config.
+    ownerExtensionId: text("owner_extension_id"),
   },
   (table) => [
     primaryKey({ name: "integration_secret_pkey", columns: [table.integrationId, table.key] }),

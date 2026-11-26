@@ -498,6 +498,33 @@ describe.skipIf(skipDatabase)("user erasure as the API role", () => {
     ).toEqual([{ target_id: otherId }]);
   });
 
+  it("records a pending erasure for every integration that registered a handler", async () => {
+    const suffix = randomUUID();
+    const first = { id: `pending-first-${suffix}` };
+    const second = { id: `pending-second-${suffix}` };
+    await insertUser(first.id, `${first.id}@example.test`);
+    await insertUser(second.id, `${second.id}@example.test`);
+
+    await api`DELETE FROM "user" WHERE id = ${first.id}`;
+    expect(
+      await api`SELECT 1 FROM subject_erasure_pending WHERE subject_user_id = ${first.id}`,
+    ).toHaveLength(0);
+    await api`INSERT INTO integration_subject_handler (integration_id) VALUES ('demo-adapter'), ('demo-other')`;
+    await api`INSERT INTO subject_erasure_pending (integration_id, subject_user_id, attempts, last_error)
+      VALUES ('demo-adapter', ${second.id}, 3, 'timeout')`;
+    await api`DELETE FROM "user" WHERE id = ${second.id}`;
+    expect(
+      await api`SELECT integration_id, attempts, last_error FROM subject_erasure_pending
+        WHERE subject_user_id = ${second.id} ORDER BY 1`,
+    ).toEqual([
+      { integration_id: "demo-adapter", attempts: 3, last_error: "timeout" },
+      { integration_id: "demo-other", attempts: 0, last_error: null },
+    ]);
+
+    await api`DELETE FROM subject_erasure_pending WHERE subject_user_id = ${second.id}`;
+    await api`DELETE FROM integration_subject_handler WHERE integration_id IN ('demo-adapter', 'demo-other')`;
+  });
+
   it("erases mentions of the deleted address as a whole address, not of longer ones", async () => {
     const userId = `whole-address-${randomUUID()}`;
     const tag = `whole-address-${randomUUID()}`;

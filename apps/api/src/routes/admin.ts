@@ -7,6 +7,7 @@ import { adminAuditEntry } from "../utils/admin-audit-entry";
 import { requireAdmin } from "../utils/require-admin";
 import { resolveActors } from "../utils/resolve-actor";
 import { declareRouteAuth } from "../utils/route-auth.js";
+import { adminAttentionRoute } from "./admin-attention";
 import { adminIntegrationCredentialsRoute } from "./admin-integration-credentials";
 import { adminIntegrationsRoute } from "./admin-integrations";
 import { adminOverviewRoute } from "./admin-overview";
@@ -58,6 +59,7 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
   });
 
   await app.register(adminOverviewRoute);
+  await app.register(adminAttentionRoute);
   await app.register(adminIntegrationsRoute);
   await app.register(adminIntegrationCredentialsRoute);
 

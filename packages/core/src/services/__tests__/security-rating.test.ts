@@ -14,16 +14,16 @@ function svc(overrides: Partial<ServiceManifest>): ServiceManifest {
 }
 
 describe("computeServiceSecurityRating", () => {
-  it("rewards a contained service (no host ports, owns schema, auth)", () => {
+  it("rewards a contained service (no host ports, owns schema)", () => {
     const r = computeServiceSecurityRating(
       svc({
         container: { image: "ghcr.io/x/y", tag: "1", expose: [8080] },
         ownsSchema: "conditions",
-        exposure: { proxy: { enabled: true, authRequired: true } },
+        exposure: { proxy: { enabled: true } },
       }),
     );
-    // base 5 +1 auth +1 no-host-ports +1 owns-schema = 8 (clamped max)
-    expect(r.score).toBe(8);
+    // base 5 +1 no-host-ports +1 owns-schema = 7
+    expect(r.score).toBe(7);
     expect(r.requiresBuiltIn).toBe(false);
     expect(r.hostPorts).toBe(0);
   });

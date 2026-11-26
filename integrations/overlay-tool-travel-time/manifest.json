@@ -10,7 +10,6 @@
   "frontend": {
     "mapLayer": true,
     "legend": true,
-    "panel": false,
     "layerSelector": {
       "group": "map-tools",
       "labelKey": "travelTime",

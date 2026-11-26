@@ -524,8 +524,8 @@ manifest without it, but host admission rejects an unpinned community image.
 Use the digest produced by your build/publish workflow; the illustrative image
 above is not a deployable artifact.
 
-`ownsSchema` must be a valid lowercase Postgres identifier
-(`[a-z_][a-z0-9_]*`). The platform applies no migration and grants nothing,
+`ownsSchema` must be a lowercase Postgres identifier that starts with a letter
+and has at most 63 characters (`[a-z][a-z0-9_]{0,62}`). The platform applies no migration and grants nothing,
 it is entirely your service's responsibility.
 
 ### Set resource limits
@@ -599,15 +599,6 @@ registration is needed.
 
 ## Wire them together
 
-### Declare readiness in the extension manifest
-
-The companion service owns, migrates, and serves its data. Use the
-`extension.json` `readiness.requires` list to make installation readiness depend
-on that service. A community integration artifact cannot bridge the service into
-the API with `setup(ctx)`; exposing a new host-facing route or provider requires
-either an existing versioned host protocol or a reviewed built-in adapter.
-Version and document that boundary alongside the bundle.
-
 ### Bundle it as an extension
 
 A coupled extension uses one `extension.json` to identify the integration
@@ -624,14 +615,14 @@ openmapx-ext bundle \
   --out extension.json
 ```
 
-To author configuration and readiness along with the components, use a complete source document:
+To author configuration along with the components, use a complete source document:
 
 ```sh
 openmapx-ext bundle --input extension.source.json --out extension.json
 openmapx-ext validate extension.json --kind extension
 ```
 
-The input can include `config` and `readiness`. Do not combine `--input` with metadata or component flags. Validation finishes before the output file is written.
+The input can include `config`. Do not combine `--input` with metadata or component flags. Validation finishes before the output file is written.
 
 Publish `extension.json` at an HTTPS URL after the artifacts and service revision it references are available. Catalog verification binds the exact manifest bytes to a SHA-256 pin; a moving URL or catalog inclusion alone does not establish verified trust. Updates to verified content require reviewed pins for the new version. Direct-URL installs remain community trust. See [Community extensions](../administration/community-extensions.md) for the current catalog and update rules.
 

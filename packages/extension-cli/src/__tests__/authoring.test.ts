@@ -19,22 +19,35 @@ const doc = {
   version: "0.1.0",
   platform: "1.0",
   services: [{ repo: "https://github.com/example/demo", ref: "v0.1.0", service: "demo-service" }],
-  config: [{ key: "DEMO_MODE", target: "service:demo-service", default: "fixture" }],
-  readiness: { requires: ["service:demo-service"] },
+  config: [
+    {
+      key: "demoMode",
+      targets: [{ component: "service:demo-service", key: "DEMO_MODE" }],
+      default: "fixture",
+    },
+  ],
 };
 
 describe("complete authoring input", () => {
-  it("validates and emits config/readiness from a complete input document", () => {
+  it("validates and emits config from a complete input document", () => {
     const input = join(dir, "source.json");
     const out = join(dir, "extension.json");
     writeFileSync(input, JSON.stringify(doc));
     runBundle({ input, out });
     expect(JSON.parse(readFileSync(out, "utf8"))).toEqual(doc);
   });
-  it("rejects undeclared readiness before creating an output file", () => {
+  it("rejects a config target outside the bundle before creating an output file", () => {
     const input = join(dir, "source.json");
     const out = join(dir, "extension.json");
-    writeFileSync(input, JSON.stringify({ ...doc, readiness: { requires: ["service:missing"] } }));
+    writeFileSync(
+      input,
+      JSON.stringify({
+        ...doc,
+        config: [
+          { ...doc.config[0], targets: [{ component: "service:missing", key: "DEMO_MODE" }] },
+        ],
+      }),
+    );
     expect(() => runBundle({ input, out })).toThrow(/declared component/);
     expect(existsSync(out)).toBe(false);
   });

@@ -10,7 +10,6 @@ export type ListAdminServices200ServicesItemExposureProxy = {
   pathPrefix?: string;
   stripPrefix?: boolean;
   middleware?: string[];
-  authRequired?: boolean;
   /**
    * @minimum 0
    * @maximum 1000000

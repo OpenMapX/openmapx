@@ -266,7 +266,7 @@ function resolveBackendEntryPoint(directory: string, isBuiltIn: boolean): string
 }
 
 function hasBlockedCommunityBackend(directory: string, manifest: IntegrationManifest): boolean {
-  if (manifest.backend?.routes || manifest.backend?.cron) return true;
+  if (manifest.backend?.routes || manifest.backend?.entry) return true;
   return [
     integrationBackendBundlePath(directory),
     join(directory, "index.ts"),

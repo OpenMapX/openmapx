@@ -3,6 +3,11 @@
 import type { GetAdminIntegration200ManifestFrontendOverlayLegend } from "./getAdminIntegration200ManifestFrontendOverlayLegend";
 
 export type GetAdminIntegration200ManifestFrontendOverlay = {
+  /**
+   * @maxLength 48
+   * @pattern ^[a-z0-9]+(?:-[a-z0-9]+)*$
+   */
+  id?: string;
   excludes?: string[];
   minZoom?: number;
   legend?: GetAdminIntegration200ManifestFrontendOverlayLegend;

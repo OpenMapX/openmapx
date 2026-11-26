@@ -40,6 +40,7 @@ export const AUDIT_ACTIONS = {
   "ambient_places.enabled.set": target("ambient_places"),
   "ambient_places.resume": target("ambient_places"),
   "ambient_places.rollback": target("ambient_places"),
+  "attention.acknowledge": target("system"),
   "auth.policy.apply": target("auth_policy"),
   "backup.create": target("backup"),
   "backup.delete": target("backup"),

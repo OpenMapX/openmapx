@@ -10,6 +10,7 @@ export const ExportAdminAuditLogAction = {
   ambient_placesenabledset: "ambient_places.enabled.set",
   ambient_placesresume: "ambient_places.resume",
   ambient_placesrollback: "ambient_places.rollback",
+  attentionacknowledge: "attention.acknowledge",
   authpolicyapply: "auth.policy.apply",
   backupcreate: "backup.create",
   backupdelete: "backup.delete",

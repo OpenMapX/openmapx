@@ -92,11 +92,6 @@ export function computeServiceSecurityRating(manifest: ServiceManifest): Service
     usesEnvFile ||
     usesComposeVarBind;
 
-  if (manifest.exposure?.proxy?.authRequired) {
-    score += 1;
-    factors.push("+1 authentication required in front of exposed routes");
-  }
-
   if (hostPorts === 0) {
     score += 1;
     factors.push("+1 no host ports published (inter-container only)");

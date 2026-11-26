@@ -88,7 +88,7 @@ CREATE TABLE "admin_audit_log" (
 	"ip_address" text,
 	"user_agent" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "admin_audit_log_action_check" CHECK ("admin_audit_log"."action" in ('ambient_places.build', 'ambient_places.discard', 'ambient_places.enabled.set', 'ambient_places.resume', 'ambient_places.rollback', 'auth.policy.apply', 'backup.create', 'backup.delete', 'backup.prune', 'backup.restore', 'cache.clear', 'compose.render', 'configuration.migration.apply', 'credential.export', 'credential.import', 'credential.import.preview', 'data.operation.run', 'data_manager.job.cancel', 'dawarich.oidc_secret.rotate', 'dawarich.provision', 'extension.catalog.refresh', 'extension.install', 'extension.remove', 'extension.source.add', 'extension.source.remove', 'extension.update', 'integration.binding.remove', 'integration.binding.set', 'integration.config.update', 'integration.credential.delete', 'integration.credential.set', 'integration.disable', 'integration.enable', 'integration.reload', 'integration.reload_all', 'job.cancel', 'platform.configuration.save', 'provider.reset', 'release.clear', 'service.apply', 'service.build', 'service.config.update', 'service.credential.delete', 'service.credential.set', 'service.health.check', 'service.image.pull', 'service.log.read', 'service.restart', 'service.selection.update', 'service.start', 'service.stop', 'service.update', 'setting.test_email.send', 'setting.update', 'standalone.install', 'standalone.preview', 'standalone.remove', 'system.diagnostics.collect', 'system.update', 'system.update.check', 'timeline.connect', 'timeline.disconnect', 'timeline.switch', 'timeline.test', 'transit.catalog.activate', 'transit.catalog.cancel', 'transit.catalog.propose', 'transit.catalog.validate', 'transit.credential.update', 'transit.lock.bump', 'transit.source.add', 'transit.source.disable', 'transit.source.enable', 'transit.source.remove', 'user.ban', 'user.create', 'user.delete', 'user.email.verify', 'user.email_verification.send', 'user.impersonate', 'user.invitation.send', 'user.password.reset', 'user.password.set', 'user.password_reset.send', 'user.role.change', 'user.session.revoke', 'user.session.revoke_all', 'user.unban')),
+	CONSTRAINT "admin_audit_log_action_check" CHECK ("admin_audit_log"."action" in ('ambient_places.build', 'ambient_places.discard', 'ambient_places.enabled.set', 'ambient_places.resume', 'ambient_places.rollback', 'attention.acknowledge', 'auth.policy.apply', 'backup.create', 'backup.delete', 'backup.prune', 'backup.restore', 'cache.clear', 'compose.render', 'configuration.migration.apply', 'credential.export', 'credential.import', 'credential.import.preview', 'data.operation.run', 'data_manager.job.cancel', 'dawarich.oidc_secret.rotate', 'dawarich.provision', 'extension.catalog.refresh', 'extension.install', 'extension.remove', 'extension.source.add', 'extension.source.remove', 'extension.update', 'integration.binding.remove', 'integration.binding.set', 'integration.config.update', 'integration.credential.delete', 'integration.credential.set', 'integration.disable', 'integration.enable', 'integration.reload', 'integration.reload_all', 'job.cancel', 'platform.configuration.save', 'provider.reset', 'release.clear', 'service.apply', 'service.build', 'service.config.update', 'service.credential.delete', 'service.credential.set', 'service.health.check', 'service.image.pull', 'service.log.read', 'service.restart', 'service.selection.update', 'service.start', 'service.stop', 'service.update', 'setting.test_email.send', 'setting.update', 'standalone.install', 'standalone.preview', 'standalone.remove', 'system.diagnostics.collect', 'system.update', 'system.update.check', 'timeline.connect', 'timeline.disconnect', 'timeline.switch', 'timeline.test', 'transit.catalog.activate', 'transit.catalog.cancel', 'transit.catalog.propose', 'transit.catalog.validate', 'transit.credential.update', 'transit.lock.bump', 'transit.source.add', 'transit.source.disable', 'transit.source.enable', 'transit.source.remove', 'user.ban', 'user.create', 'user.delete', 'user.email.verify', 'user.email_verification.send', 'user.impersonate', 'user.invitation.send', 'user.password.reset', 'user.password.set', 'user.password_reset.send', 'user.role.change', 'user.session.revoke', 'user.session.revoke_all', 'user.unban')),
 	CONSTRAINT "admin_audit_log_target_type_check" CHECK ("admin_audit_log"."target_type" in ('ambient_places', 'auth_policy', 'backup', 'cache', 'configuration', 'configuration_migration', 'credential_transfer', 'data_manager_job', 'data_operation', 'extension', 'integration', 'job', 'personal_timeline_connection', 'platform', 'provider', 'release', 'service', 'setting', 'system', 'transit', 'transit_credential', 'transit_source', 'user'))
 );
 --> statement-breakpoint
@@ -108,7 +108,7 @@ CREATE TABLE "admin_job" (
 	"started_at" timestamp with time zone,
 	"finished_at" timestamp with time zone,
 	CONSTRAINT "admin_job_status_check" CHECK ("admin_job"."status" IN ('queued', 'running', 'cancel_pending', 'succeeded', 'failed', 'cancelled')),
-	CONSTRAINT "admin_job_type_check" CHECK ("admin_job"."type" IN ('artifact.export', 'artifact.import', 'artifact.validate', 'backup.operation.run', 'backup.prune', 'compose.render', 'compose.start', 'configuration.apply', 'configuration.migration.apply', 'configuration.migration.preview', 'credential.import', 'data.operation.run', 'extension.install', 'extension.remove', 'integration.binding.apply', 'integration.reload', 'platform.apply', 'release.clear', 'service.apply', 'service.batch.run', 'service.core.restart', 'service.image.pull', 'service.restart', 'service.start', 'service.stop', 'standalone.install', 'standalone.preview', 'standalone.remove', 'system.diagnostics.collect', 'system.update'))
+	CONSTRAINT "admin_job_type_check" CHECK ("admin_job"."type" IN ('artifact.export', 'artifact.import', 'artifact.validate', 'backup.operation.run', 'backup.prune', 'compose.render', 'compose.start', 'configuration.apply', 'configuration.migration.apply', 'configuration.migration.preview', 'credential.import', 'data.operation.run', 'extension.disable', 'extension.enable', 'extension.install', 'extension.purge', 'extension.remove', 'integration.binding.apply', 'integration.reload', 'platform.apply', 'release.clear', 'service.apply', 'service.batch.run', 'service.core.restart', 'service.image.pull', 'service.restart', 'service.start', 'service.stop', 'standalone.install', 'standalone.preview', 'standalone.remove', 'system.diagnostics.collect', 'system.update'))
 );
 --> statement-breakpoint
 CREATE TABLE "admin_job_log" (
@@ -129,6 +129,49 @@ CREATE TABLE "app_log" (
 	"message" text NOT NULL,
 	"metadata" jsonb,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "attention_item" (
+	"key" text PRIMARY KEY NOT NULL,
+	"severity" text NOT NULL,
+	"source" text NOT NULL,
+	"title" text NOT NULL,
+	"detail" text,
+	"action" jsonb,
+	"raised_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"clearance" text DEFAULT 'condition' NOT NULL,
+	"acknowledged_at" timestamp with time zone,
+	"occurrence_ref" text,
+	CONSTRAINT "attention_item_severity_check" CHECK ("attention_item"."severity" in ('info', 'warning', 'critical')),
+	CONSTRAINT "attention_item_clearance_check" CHECK ("attention_item"."clearance" in ('condition', 'acknowledge'))
+);
+--> statement-breakpoint
+CREATE TABLE "attention_notification" (
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
+	"attention_key" text NOT NULL,
+	"occurrence" text NOT NULL,
+	"channel" text NOT NULL,
+	"severity" text NOT NULL,
+	"status" text DEFAULT 'pending' NOT NULL,
+	"attempts" integer DEFAULT 0 NOT NULL,
+	"due_at" timestamp with time zone NOT NULL,
+	"sent_at" timestamp with time zone,
+	"last_error_code" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "attention_notification_channel_check" CHECK ("attention_notification"."channel" in ('email', 'webhook')),
+	CONSTRAINT "attention_notification_severity_check" CHECK ("attention_notification"."severity" in ('warning', 'critical')),
+	CONSTRAINT "attention_notification_status_check" CHECK ("attention_notification"."status" in ('pending', 'sending', 'sent', 'retryable', 'failed', 'canceled'))
+);
+--> statement-breakpoint
+CREATE TABLE "attention_observation" (
+	"key" text PRIMARY KEY NOT NULL,
+	"bad_count" integer DEFAULT 0 NOT NULL,
+	"good_count" integer DEFAULT 0 NOT NULL,
+	"since" timestamp with time zone NOT NULL,
+	"data" jsonb,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "auth_policy_application" (
@@ -154,6 +197,7 @@ CREATE TABLE "capability_binding" (
 	"service_id" text NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"owner_extension_id" text,
 	CONSTRAINT "capability_binding_pkey" PRIMARY KEY("integration_id","capability")
 );
 --> statement-breakpoint
@@ -415,7 +459,68 @@ CREATE TABLE "data_subject_request_task" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "data_subject_request_task_status_check" CHECK ("data_subject_request_task"."status" in ('open', 'resolved')),
-	CONSTRAINT "data_subject_request_task_source_check" CHECK ("data_subject_request_task"."source" in ('openmapx-db', 'redis', 'managed-service', 'operator'))
+	CONSTRAINT "data_subject_request_task_source_check" CHECK ("data_subject_request_task"."source" in ('openmapx-db', 'redis', 'managed-service', 'operator', 'extension'))
+);
+--> statement-breakpoint
+CREATE TABLE "extension_advisory_ack" (
+	"extension_id" text NOT NULL,
+	"advisory_key" text NOT NULL,
+	"acknowledged_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "extension_advisory_ack_pkey" PRIMARY KEY("extension_id","advisory_key"),
+	CONSTRAINT "extension_advisory_ack_advisory_key_check" CHECK ("extension_advisory_ack"."advisory_key" ~ '^[a-f0-9]{64}$')
+);
+--> statement-breakpoint
+CREATE TABLE "extension_catalog_source" (
+	"url" text PRIMARY KEY NOT NULL,
+	"label" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "extension_migration" (
+	"integration_id" text NOT NULL,
+	"name" text NOT NULL,
+	"sha256" text NOT NULL,
+	"applied_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "extension_migration_pkey" PRIMARY KEY("integration_id","name"),
+	CONSTRAINT "extension_migration_name_check" CHECK ("extension_migration"."name" ~ '^[0-9]{4}_[a-z0-9]+(_[a-z0-9]+)*\.sql$'),
+	CONSTRAINT "extension_migration_sha256_check" CHECK ("extension_migration"."sha256" ~ '^[a-f0-9]{64}$')
+);
+--> statement-breakpoint
+CREATE TABLE "extension_name_claim" (
+	"kind" text NOT NULL,
+	"name" text NOT NULL,
+	"extension_id" text NOT NULL,
+	"source" text NOT NULL,
+	"claimed_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "extension_name_claim_pkey" PRIMARY KEY("kind","name"),
+	CONSTRAINT "extension_name_claim_kind_check" CHECK ("extension_name_claim"."kind" in ('service', 'integration', 'database-role', 'database-schema'))
+);
+--> statement-breakpoint
+CREATE TABLE "extension_revocation_snapshot" (
+	"id" integer PRIMARY KEY NOT NULL,
+	"snapshot" jsonb NOT NULL,
+	"fetched_at" timestamp with time zone NOT NULL,
+	CONSTRAINT "extension_revocation_snapshot_singleton_check" CHECK ("extension_revocation_snapshot"."id" = 1),
+	CONSTRAINT "extension_revocation_snapshot_snapshot_check" CHECK (coalesce(jsonb_typeof("extension_revocation_snapshot"."snapshot"->'removed') = 'array' and jsonb_typeof("extension_revocation_snapshot"."snapshot"->'critical') = 'array', false))
+);
+--> statement-breakpoint
+CREATE TABLE "extension_setting" (
+	"extension_id" text NOT NULL,
+	"key" text NOT NULL,
+	"value" text,
+	"ciphertext" text,
+	"iv" text,
+	"tag" text,
+	"key_version" integer,
+	"targets" jsonb NOT NULL,
+	"generated" boolean DEFAULT false NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "extension_setting_pkey" PRIMARY KEY("extension_id","key"),
+	CONSTRAINT "extension_setting_key_check" CHECK ("extension_setting"."key" ~ '^[a-z][a-z0-9]*([A-Z][a-z0-9]+)*$' and char_length("extension_setting"."key") <= 64),
+	CONSTRAINT "extension_setting_value_check" CHECK (("extension_setting"."value" is not null and "extension_setting"."ciphertext" is null and "extension_setting"."iv" is null and "extension_setting"."tag" is null and "extension_setting"."key_version" is null) or ("extension_setting"."value" is null and "extension_setting"."ciphertext" is not null and "extension_setting"."iv" is not null and "extension_setting"."tag" is not null and "extension_setting"."key_version" is not null)),
+	CONSTRAINT "extension_setting_targets_check" CHECK (jsonb_typeof("extension_setting"."targets") = 'array'),
+	CONSTRAINT "extension_setting_generated_check" CHECK (not "extension_setting"."generated" or "extension_setting"."ciphertext" is not null)
 );
 --> statement-breakpoint
 CREATE TABLE "health_history" (
@@ -441,6 +546,8 @@ CREATE TABLE "installed_extension" (
 	"installed_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"installed_by_user_id" text,
+	"enabled" boolean DEFAULT true NOT NULL,
+	"approved_grants" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	CONSTRAINT "installed_extension_source_trust_check" CHECK ("installed_extension"."source_trust" in ('built-in','verified','community')),
 	CONSTRAINT "installed_extension_installation_kind_check" CHECK ("installed_extension"."installation_kind" in ('catalog','standalone')),
 	CONSTRAINT "installed_extension_standalone_provenance_check" CHECK ("installed_extension"."installation_kind" <> 'standalone' or coalesce(("installed_extension"."source_trust" = 'community' and "installed_extension"."id" ~ '^local-[0-9a-f-]{36}$' and jsonb_typeof("installed_extension"."provenance") = 'object' and "installed_extension"."provenance"->>'kind' in ('artifact','source','uploaded-artifact') and "installed_extension"."provenance"->>'contentDigest' ~ '^[a-f0-9]{64}$'),false))
@@ -450,8 +557,12 @@ CREATE TABLE "installed_extension_component" (
 	"extension_id" text NOT NULL,
 	"kind" text NOT NULL,
 	"component_id" text NOT NULL,
+	"resolved_commit" text,
+	"image_digest" text,
 	CONSTRAINT "installed_extension_component_pkey" PRIMARY KEY("extension_id","kind","component_id"),
-	CONSTRAINT "installed_extension_component_kind_check" CHECK ("installed_extension_component"."kind" in ('integration','service'))
+	CONSTRAINT "installed_extension_component_kind_check" CHECK ("installed_extension_component"."kind" in ('integration','service')),
+	CONSTRAINT "installed_extension_component_resolved_commit_check" CHECK ("installed_extension_component"."resolved_commit" ~ '^[a-f0-9]{40}$'),
+	CONSTRAINT "installed_extension_component_image_digest_check" CHECK ("installed_extension_component"."image_digest" ~ '^sha256:[a-f0-9]{64}$')
 );
 --> statement-breakpoint
 CREATE TABLE "installed_integration" (
@@ -470,7 +581,10 @@ CREATE TABLE "integration_config" (
 	"integration_id" text PRIMARY KEY NOT NULL,
 	"config" jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"owner_extension_id" text,
+	"schema_version" integer DEFAULT 1 NOT NULL,
+	CONSTRAINT "integration_config_schema_version_check" CHECK ("integration_config"."schema_version" > 0)
 );
 --> statement-breakpoint
 CREATE TABLE "integration_secret" (
@@ -483,7 +597,24 @@ CREATE TABLE "integration_secret" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_by_user_id" text,
+	"owner_extension_id" text,
 	CONSTRAINT "integration_secret_pkey" PRIMARY KEY("integration_id","key")
+);
+--> statement-breakpoint
+CREATE TABLE "integration_subject_handler" (
+	"integration_id" text PRIMARY KEY NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "integration_task_run" (
+	"id" uuid PRIMARY KEY DEFAULT uuidv7() NOT NULL,
+	"integration_id" text NOT NULL,
+	"task_name" text NOT NULL,
+	"status" text DEFAULT 'running' NOT NULL,
+	"started_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"finished_at" timestamp with time zone,
+	"error" text,
+	CONSTRAINT "integration_task_run_status_check" CHECK ("integration_task_run"."status" in ('running', 'succeeded', 'failed')),
+	CONSTRAINT "integration_task_run_finished_at_check" CHECK (("integration_task_run"."status" = 'running') = ("integration_task_run"."finished_at" is null))
 );
 --> statement-breakpoint
 CREATE TABLE "jwks" (
@@ -810,7 +941,10 @@ CREATE TABLE "service_config" (
 	"service_id" text PRIMARY KEY NOT NULL,
 	"config" jsonb NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"owner_extension_id" text,
+	"schema_version" integer DEFAULT 1 NOT NULL,
+	CONSTRAINT "service_config_schema_version_check" CHECK ("service_config"."schema_version" > 0)
 );
 --> statement-breakpoint
 CREATE TABLE "service_repository" (
@@ -833,6 +967,7 @@ CREATE TABLE "service_secret" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_by_user_id" text,
+	"owner_extension_id" text,
 	CONSTRAINT "service_secret_pkey" PRIMARY KEY("service_id","key")
 );
 --> statement-breakpoint
@@ -881,6 +1016,16 @@ CREATE TABLE "share_link" (
 	CONSTRAINT "share_link_snapshot_version_check" CHECK (("share_link"."snapshot" is null) = ("share_link"."snapshot_version" is null) and ("share_link"."snapshot_version" is null or "share_link"."snapshot_version" = 1))
 );
 --> statement-breakpoint
+CREATE TABLE "subject_erasure_pending" (
+	"integration_id" text NOT NULL,
+	"subject_user_id" text NOT NULL,
+	"requested_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"attempts" integer DEFAULT 0 NOT NULL,
+	"last_error" text,
+	CONSTRAINT "subject_erasure_pending_pkey" PRIMARY KEY("integration_id","subject_user_id"),
+	CONSTRAINT "subject_erasure_pending_attempts_check" CHECK ("subject_erasure_pending"."attempts" >= 0)
+);
+--> statement-breakpoint
 CREATE TABLE "system_secret" (
 	"key" text NOT NULL,
 	"ciphertext" text NOT NULL,
@@ -898,7 +1043,7 @@ CREATE TABLE "system_setting" (
 	"value" jsonb NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_by_user_id" text,
-	CONSTRAINT "system_setting_key_check" CHECK ("system_setting"."key" in ('auth.emailVerificationRequired','auth.sessionDurationHours','auth.twoFaEnabled','auth.passwordMinLength','email.fromAddress','emaillabs.smtpAccount','smtp.host','smtp.port','smtp.user','smtp.security','basemap.provider','dataUse.allowNonCommercial','dataUse.allowGreyArea','legal.controller.name','legal.controller.street','legal.controller.postalCode','legal.controller.city','legal.controller.country','legal.controller.email','legal.controller.phone','legal.dataRequestEmail','legal.hosting.provider','legal.hosting.locations','legal.supervisoryAuthority.name','legal.supervisoryAuthority.url','legal.deploymentJurisdiction','legal.privacySources','retention.serverLogDays','retention.privacyCaseDays','retention.auditLogDays','retention.adminJobDays','platform.configuration'))
+	CONSTRAINT "system_setting_key_check" CHECK ("system_setting"."key" in ('auth.emailVerificationRequired','auth.sessionDurationHours','auth.twoFaEnabled','auth.passwordMinLength','email.fromAddress','emaillabs.smtpAccount','smtp.host','smtp.port','smtp.user','smtp.security','basemap.provider','dataUse.allowNonCommercial','dataUse.allowGreyArea','extensions.catalogSource','extensions.revocationCheck','extensions.remoteDisable','extensions.prereleaseOptIn','legal.controller.name','legal.controller.street','legal.controller.postalCode','legal.controller.city','legal.controller.country','legal.controller.email','legal.controller.phone','legal.dataRequestEmail','legal.hosting.provider','legal.hosting.locations','legal.supervisoryAuthority.name','legal.supervisoryAuthority.url','legal.deploymentJurisdiction','legal.privacySources','retention.serverLogDays','retention.privacyCaseDays','retention.auditLogDays','retention.adminJobDays','platform.configuration'))
 );
 --> statement-breakpoint
 CREATE TABLE "transit_credential_preview" (
@@ -1004,6 +1149,7 @@ ALTER TABLE "data_subject_request_notification" ADD CONSTRAINT "data_subject_req
 ALTER TABLE "data_subject_request_notification" ADD CONSTRAINT "data_subject_request_notification_recipient_user_id_fkey" FOREIGN KEY ("recipient_user_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "data_subject_request_preservation" ADD CONSTRAINT "data_subject_request_preservation_request_id_fkey" FOREIGN KEY ("request_id") REFERENCES "public"."data_subject_request"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "data_subject_request_task" ADD CONSTRAINT "data_subject_request_task_request_id_fkey" FOREIGN KEY ("request_id") REFERENCES "public"."data_subject_request"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "extension_advisory_ack" ADD CONSTRAINT "extension_advisory_ack_extension_id_fkey" FOREIGN KEY ("extension_id") REFERENCES "public"."installed_extension"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "installed_extension" ADD CONSTRAINT "installed_extension_installed_by_user_id_fkey" FOREIGN KEY ("installed_by_user_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "installed_extension_component" ADD CONSTRAINT "installed_extension_component_extension_id_fkey" FOREIGN KEY ("extension_id") REFERENCES "public"."installed_extension"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "installed_integration" ADD CONSTRAINT "installed_integration_installed_by_user_id_fkey" FOREIGN KEY ("installed_by_user_id") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
@@ -1064,6 +1210,8 @@ CREATE INDEX "admin_job_created_at_idx" ON "admin_job" USING btree ("created_at"
 CREATE UNIQUE INDEX "admin_job_active_system_maintenance_key" ON "admin_job" USING btree ((true)) WHERE "admin_job"."type" IN ('system.update', 'system.diagnostics.collect') AND "admin_job"."status" IN ('queued', 'running', 'cancel_pending');--> statement-breakpoint
 CREATE UNIQUE INDEX "admin_job_log_job_id_source_event_id_key" ON "admin_job_log" USING btree ("job_id","source_event_id") WHERE "admin_job_log"."source_event_id" IS NOT NULL;--> statement-breakpoint
 CREATE INDEX "app_log_created_at_idx" ON "app_log" USING btree ("created_at");--> statement-breakpoint
+CREATE UNIQUE INDEX "attention_notification_attention_key_occurrence_channel_key" ON "attention_notification" USING btree ("attention_key","occurrence","channel");--> statement-breakpoint
+CREATE INDEX "attention_notification_status_due_at_idx" ON "attention_notification" USING btree ("status","due_at");--> statement-breakpoint
 CREATE INDEX "auth_policy_application_actor_user_id_idx" ON "auth_policy_application" USING btree ("actor_user_id");--> statement-breakpoint
 CREATE INDEX "auth_policy_application_created_at_idx" ON "auth_policy_application" USING btree ("created_at");--> statement-breakpoint
 CREATE INDEX "auth_policy_state_activated_by_user_id_idx" ON "auth_policy_state" USING btree ("activated_by_user_id");--> statement-breakpoint
@@ -1102,12 +1250,15 @@ CREATE UNIQUE INDEX "data_subject_request_preservation_request_registration_key"
 CREATE INDEX "data_subject_request_preservation_registration_id_status_idx" ON "data_subject_request_preservation" USING btree ("registration_id","status");--> statement-breakpoint
 CREATE UNIQUE INDEX "data_subject_request_task_request_id_registration_id_key" ON "data_subject_request_task" USING btree ("request_id","registration_id");--> statement-breakpoint
 CREATE INDEX "data_subject_request_task_status_idx" ON "data_subject_request_task" USING btree ("status");--> statement-breakpoint
+CREATE INDEX "extension_name_claim_extension_id_idx" ON "extension_name_claim" USING btree ("extension_id");--> statement-breakpoint
 CREATE INDEX "health_history_service_id_checked_at_idx" ON "health_history" USING btree ("service_id","checked_at");--> statement-breakpoint
 CREATE INDEX "health_history_checked_at_idx" ON "health_history" USING btree ("checked_at");--> statement-breakpoint
 CREATE INDEX "installed_extension_installed_by_user_id_idx" ON "installed_extension" USING btree ("installed_by_user_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "installed_extension_component_kind_component_id_key" ON "installed_extension_component" USING btree ("kind","component_id");--> statement-breakpoint
 CREATE INDEX "installed_integration_installed_by_user_id_idx" ON "installed_integration" USING btree ("installed_by_user_id");--> statement-breakpoint
 CREATE INDEX "integration_secret_updated_by_user_id_idx" ON "integration_secret" USING btree ("updated_by_user_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "integration_task_run_running_key" ON "integration_task_run" USING btree ("integration_id","task_name") WHERE "integration_task_run"."status" = 'running';--> statement-breakpoint
+CREATE INDEX "integration_task_run_started_at_idx" ON "integration_task_run" USING btree ("started_at");--> statement-breakpoint
 CREATE INDEX "mangrove_keypair_wrap_user_id_idx" ON "mangrove_keypair_wrap" USING btree ("user_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "mangrove_keypair_wrap_user_id_passphrase_key" ON "mangrove_keypair_wrap" USING btree ("user_id") WHERE "mangrove_keypair_wrap"."wrap_type" = 'passphrase';--> statement-breakpoint
 CREATE INDEX "mobile_auth_handoff_user_id_expires_at_idx" ON "mobile_auth_handoff" USING btree ("user_id","expires_at");--> statement-breakpoint

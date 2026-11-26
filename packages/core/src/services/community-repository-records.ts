@@ -9,6 +9,7 @@ import {
   readSync,
 } from "node:fs";
 import { join, resolve } from "node:path";
+import { type ApprovedGrants, approvedGrantsSchema } from "@openmapx/extension-contracts/grants";
 import { COMPONENT_ID_PATTERN } from "../component-id";
 import { agentStatePaths } from "./agent-state";
 import { readRegularFileBytes } from "./built-in-service-source";
@@ -37,7 +38,11 @@ const COMMIT = /^[a-f0-9]{40}$/;
 const SERVICE_ID = COMPONENT_ID_PATTERN;
 const SHA256 = /^[a-f0-9]{64}$/;
 const RECORD = /^\.repository-([a-f0-9]{16})\.json$/;
-const MAX_RECORD_BYTES = 256 * 1024;
+/**
+ * A record holds a source up to three times; one source, with its most
+ * grants and manifests at their longest, takes about 150 KiB.
+ */
+const MAX_RECORD_BYTES = 1024 * 1024;
 const MAX_RECORDED_MANIFESTS = 64;
 const MAX_PATH_DEPTH = 4;
 const MAX_SEGMENT_LENGTH = 255;
@@ -85,6 +90,8 @@ export interface CommunityRepositorySource {
   extensionId: string | null;
   /** The manifests of `commit`; `null` when no checkout is installed. */
   manifests: RecordedManifest[] | null;
+  /** Grants the administrator approved, by service id; `{}` when none. */
+  approvedGrants: ApprovedGrants;
 }
 
 export interface CommunityRepositoryRecovery {
@@ -102,7 +109,13 @@ export interface CommunityRepositoryPending {
   phase: "prepared" | "published" | "rolledBack";
   /** What the checkout held before; null when the repository is new. */
   previous: CommunityRepositorySource | null;
-  next: { url: string; commit: string; extensionId: string; manifests: RecordedManifest[] };
+  next: {
+    url: string;
+    commit: string;
+    extensionId: string;
+    manifests: RecordedManifest[];
+    approvedGrants: ApprovedGrants;
+  };
   recovery: CommunityRepositoryRecovery;
 }
 
@@ -174,11 +187,15 @@ function parseSource(value: unknown): CommunityRepositorySource | null {
   if (manifests === undefined || (manifests !== null && (url === null || commit === null))) {
     return null;
   }
+  // The parsed value, never the raw one: it is what the schema checked.
+  const approvedGrants = approvedGrantsSchema.safeParse(source.approvedGrants);
+  if (!approvedGrants.success) return null;
   return {
     url: url as string | null,
     commit: commit as string | null,
     extensionId: extensionId as string | null,
     manifests,
+    approvedGrants: approvedGrants.data,
   };
 }
 
@@ -242,6 +259,7 @@ export function parseCommunityRepositoryRecord(
         commit: next.commit,
         extensionId: next.extensionId,
         manifests: next.manifests,
+        approvedGrants: next.approvedGrants,
       },
       recovery: {
         selectionBefore: before,
@@ -256,7 +274,7 @@ export function parseCommunityRepositoryRecord(
 /**
  * Reads the record of `repository` from `communityDir`, or returns `null` when
  * there is none. The record must be a regular file with one link, owned by
- * `uid`, that neither its group nor others can write, and of at most 256 KiB.
+ * `uid`, that neither its group nor others can write, and of at most 1 MiB.
  */
 export function readCommunityRepositoryRecord(
   communityDir: string,

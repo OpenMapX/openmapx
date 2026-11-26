@@ -595,6 +595,28 @@ integration("code planted for another role", () => {
       "CREATE SCHEMA tiles_shadow",
     ])
       await permissionDenied(roles.api.unsafe(statement));
+    // Each installed integration's tables live in its own ext_ schema.
+    await roles.api.unsafe(`
+      CREATE SCHEMA ext_demo_overlay;
+      CREATE TABLE ext_demo_overlay.report (id uuid PRIMARY KEY DEFAULT uuidv7(), body text NOT NULL);
+      ALTER SCHEMA ext_demo_overlay RENAME TO ext_demo_overlay_2;
+      DROP SCHEMA ext_demo_overlay_2 CASCADE;
+    `);
+    await roles.api.unsafe(
+      `CREATE SCHEMA ext_${"a".repeat(48)}; DROP SCHEMA ext_${"a".repeat(48)};`,
+    );
+    for (const statement of [
+      'CREATE SCHEMA "ext_"',
+      'CREATE SCHEMA "ext_Demo"',
+      'CREATE SCHEMA "ext-demo"',
+      `CREATE SCHEMA ext_${"a".repeat(49)}`,
+      "CREATE SCHEMA extensions_shadow",
+    ])
+      await permissionDenied(roles.api.unsafe(statement));
+    await roles.api.unsafe("CREATE SCHEMA ext_rename_probe");
+    await permissionDenied(roles.api.unsafe("ALTER SCHEMA ext_rename_probe RENAME TO conditions"));
+    await roles.api.unsafe("DROP SCHEMA ext_rename_probe");
+    await permissionDenied(roles.dataManager.unsafe("CREATE SCHEMA ext_demo_overlay"));
     // What the migrations themselves create stays possible.
     await roles.api.unsafe(`
       CREATE FUNCTION public.openmapx_probe() RETURNS int LANGUAGE sql IMMUTABLE AS 'SELECT 1';

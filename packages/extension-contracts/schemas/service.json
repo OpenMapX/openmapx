@@ -138,7 +138,8 @@
           "type": "array",
           "items": {
             "type": "string",
-            "pattern": "^\\/dev\\/[a-zA-Z0-9_\\-/]+$"
+            "maxLength": 255,
+            "pattern": "^\\/dev\\/[A-Za-z0-9_\\-/]+$"
           }
         },
         "gpu": {
@@ -430,7 +431,7 @@
     },
     "ownsSchema": {
       "type": "string",
-      "pattern": "^[a-z_][a-z0-9_]*$"
+      "pattern": "^[a-z][a-z0-9_]{0,62}$"
     },
     "volumes": {
       "type": "array",
@@ -557,9 +558,6 @@
                 "type": "string"
               }
             },
-            "authRequired": {
-              "type": "boolean"
-            },
             "priority": {
               "type": "integer",
               "minimum": 0,
@@ -588,9 +586,91 @@
               }
             }
           },
-          "required": ["enabled"]
+          "required": ["enabled"],
+          "additionalProperties": false
         }
       }
+    },
+    "requests": {
+      "type": "object",
+      "properties": {
+        "hostPaths": {
+          "minItems": 1,
+          "maxItems": 16,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "source": {
+                "type": "string",
+                "maxLength": 255,
+                "pattern": "^\\/(?:[A-Za-z0-9._-]+(?:\\/[A-Za-z0-9._-]+)*)?$"
+              },
+              "target": {
+                "type": "string",
+                "pattern": "^\\/[^\\s]+$"
+              },
+              "readOnly": {
+                "type": "boolean"
+              }
+            },
+            "required": ["source", "target", "readOnly"],
+            "additionalProperties": false
+          }
+        },
+        "platformServices": {
+          "minItems": 1,
+          "maxItems": 16,
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 48,
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+          }
+        },
+        "reachableByPlatform": {
+          "type": "boolean"
+        },
+        "peerServices": {
+          "type": "boolean"
+        },
+        "database": {
+          "type": "object",
+          "properties": {
+            "roles": {
+              "minItems": 1,
+              "maxItems": 8,
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "pattern": "^[a-z][a-z0-9_]{2,62}$"
+                  },
+                  "privileges": {
+                    "maxItems": 16,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^(create-schema|use-schema):([a-z][a-z0-9_]{0,62})$"
+                    }
+                  },
+                  "connectionKey": {
+                    "type": "string",
+                    "pattern": "^[A-Z][A-Z0-9_]*$"
+                  }
+                },
+                "required": ["name", "privileges"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": ["roles"],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
     },
     "buildCommand": {
       "type": "string"

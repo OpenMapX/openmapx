@@ -74,6 +74,16 @@
       "import": "./src/artifact.ts",
       "default": "./src/artifact.ts"
     },
+    "./archive": {
+      "types": "./src/archive.ts",
+      "import": "./src/archive.ts",
+      "default": "./src/archive.ts"
+    },
+    "./grants": {
+      "types": "./src/grants.ts",
+      "import": "./src/grants.ts",
+      "default": "./src/grants.ts"
+    },
     "./schemas": {
       "types": "./src/schemas.ts",
       "import": "./src/schemas.ts",
@@ -148,6 +158,14 @@
       "./artifact": {
         "types": "./dist/artifact.d.ts",
         "import": "./dist/artifact.js"
+      },
+      "./archive": {
+        "types": "./dist/archive.d.ts",
+        "import": "./dist/archive.js"
+      },
+      "./grants": {
+        "types": "./dist/grants.d.ts",
+        "import": "./dist/grants.js"
       },
       "./schemas": {
         "types": "./dist/schemas.d.ts",

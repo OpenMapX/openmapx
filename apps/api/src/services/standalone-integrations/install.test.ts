@@ -387,7 +387,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           .from(schema.installedExtensionComponent)
           .where(eq(schema.installedExtensionComponent.componentId, "standalone-http-fixture")),
       ).toEqual([
-        { extensionId: parent.id, kind: "integration", componentId: "standalone-http-fixture" },
+        {
+          extensionId: parent.id,
+          kind: "integration",
+          componentId: "standalone-http-fixture",
+          resolvedCommit: null,
+          imageDigest: null,
+        },
       ]);
       expect(
         (
@@ -609,7 +615,15 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           .select()
           .from(schema.installedExtensionComponent)
           .where(eq(schema.installedExtensionComponent.componentId, id)),
-      ).toEqual([{ extensionId: parentId, kind: "integration", componentId: id }]);
+      ).toEqual([
+        {
+          extensionId: parentId,
+          kind: "integration",
+          componentId: id,
+          resolvedCommit: null,
+          imageDigest: null,
+        },
+      ]);
       const [integration] = await state.fixture.db
         .select()
         .from(schema.installedIntegration)

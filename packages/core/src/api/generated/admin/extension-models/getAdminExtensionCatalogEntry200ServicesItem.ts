@@ -11,5 +11,6 @@ export type GetAdminExtensionCatalogEntry200ServicesItem = {
    * @pattern ^[a-z0-9]+(-[a-z0-9]+)*$
    */
   service: string;
+  optional?: boolean;
   [key: string]: unknown;
 };

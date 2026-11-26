@@ -45,7 +45,6 @@ const registry = new IntegrationRegistry([
     frontend: {
       mapLayer: true,
       legend: true,
-      panel: false,
       layerSelector: {
         group: "map-tools",
         labelKey: "measure",
@@ -64,7 +63,6 @@ const registry = new IntegrationRegistry([
     frontend: {
       mapLayer: true,
       legend: true,
-      panel: false,
       layerSelector: {
         group: "map-tools",
         labelKey: "travelTime",

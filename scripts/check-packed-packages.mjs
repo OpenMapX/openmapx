@@ -117,7 +117,7 @@ assert(validateArtifactMetadata({schemaVersion:1,id:"demo",platformVersion:"1.0"
 assert(!satisfiesPlatformVersion("bogus"));
 assert.deepEqual(parseContributors([]),[]);
 assert.equal(createAuthoringSchemas().extension.type,"object");
-for (const subpath of ["", "/identifiers", "/semver", "/media-hosts", "/capabilities", "/licensing", "/attribution"]) {
+for (const subpath of ["", "/identifiers", "/semver", "/media-hosts", "/capabilities", "/licensing", "/attribution", "/archive", "/grants"]) {
   await import("@openmapx/extension-contracts" + subpath);
 }
 for (const name of ["integration", "service", "extension", "artifact"]) {
@@ -250,8 +250,13 @@ void artifact; void receipts; void serviceCheck;
           id: "packed-demo",
         },
       ],
-      config: [{ key: "DEMO", target: "service:packed-service", default: "fixture" }],
-      readiness: { requires: ["service:packed-service"] },
+      config: [
+        {
+          key: "demo",
+          default: "fixture",
+          targets: [{ component: "service:packed-service", key: "DEMO" }],
+        },
+      ],
     }),
   );
   run(process.execPath, [cli, "bundle", "--input", source, "--out", out], consumer);

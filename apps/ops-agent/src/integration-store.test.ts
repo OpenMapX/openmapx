@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
   copyFileSync,
   existsSync,
+  fsyncSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -27,8 +28,15 @@ import { openOpsJobJournal } from "./journal";
 import { createUnavailableRuntime } from "./runtime";
 import { buildOpsAgentServer } from "./server";
 
+vi.mock("node:fs", async (original) => {
+  const actual = await original<typeof import("node:fs")>();
+  return { ...actual, fsyncSync: vi.fn(actual.fsyncSync) };
+});
+const realFs = await vi.importActual<typeof import("node:fs")>("node:fs");
+
 const roots: string[] = [];
 afterEach(() => {
+  vi.mocked(fsyncSync).mockImplementation(realFs.fsyncSync);
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
@@ -171,6 +179,29 @@ function paxRecord(key: string, value: string): Buffer {
     if (next === length) return Buffer.concat([Buffer.from(`${length} `), body]);
     length = next;
   }
+}
+
+/** An artifact pin for a raw archive holding `manifest(id)` and one small file per path. */
+function artifactWithPaths(
+  f: Fixture,
+  id: string,
+  paths: string[],
+  url = "",
+): { kind: "artifact"; url: string; sha256: string } {
+  const entries: RawEntry[] = [{ name: "manifest.json", data: JSON.stringify(manifest(id)) }];
+  for (const [index, path] of paths.entries()) {
+    if (Buffer.byteLength(path) > 100) {
+      entries.push({ name: "PaxHeader", type: "x", data: paxRecord("path", path) });
+    }
+    entries.push({ name: path, data: String(index) });
+  }
+  const bytes = tarGz(entries);
+  const path = join(f.root, "..", `${id}-${Math.random()}.tar.gz`);
+  roots.push(path);
+  writeFileSync(path, bytes);
+  const locator = url || `https://artifacts.example.test/${id}/${sha256(bytes).slice(0, 8)}.tar.gz`;
+  f.artifacts.set(locator, path);
+  return { kind: "artifact", url: locator, sha256: sha256(bytes) };
 }
 
 function record(f: Fixture, id: string) {
@@ -934,5 +965,86 @@ describe("integration store", () => {
       readdirSync(join(f.root, "infra", "docker", "state", "ops-agent", "custom-integrations")),
     ).toEqual(["weather-radar"]);
     expect(update.transactionId).toMatch(/^itx1_/);
+  });
+
+  const publish = (f: Fixture, id: string, source: ReturnType<typeof artifactWithPaths>) =>
+    f.store.publish(
+      { kind: "catalogIntegration.publish", integrationId: id, source, extensionId: "bundle" },
+      signal,
+    );
+  const files = (count: number) => Array.from({ length: count }, (_, i) => `assets/f${i}.bin`);
+  /** These tests count files and bytes; flushing each extracted file to disk only slows them. */
+  const skipFsync = () => vi.mocked(fsyncSync).mockImplementation(() => undefined);
+
+  it("installs an integration with 1,024 files and refuses 1,025", async () => {
+    skipFsync();
+    const f = fixture();
+    // manifest.json plus 1,023 files, then plus 1,024
+    await expect(
+      publish(f, "many-files", artifactWithPaths(f, "many-files", files(1_023))),
+    ).resolves.toMatchObject({ integrationId: "many-files" });
+    await expect(
+      publish(f, "too-many", artifactWithPaths(f, "too-many", files(1_024))),
+    ).rejects.toThrow("An integration may hold at most 1024 regular files");
+  });
+
+  it("refuses an install whose paths would overflow one inspection", async () => {
+    skipFsync();
+    const f = fixture();
+    const deep = Array.from({ length: 6 }, () => "a".repeat(100)).join("/");
+    const paths = Array.from({ length: 1_000 }, (_, i) => `assets/${deep}/${i}.bin`);
+    // 1,000 entries of about 620 + 96 bytes: 716 KB against a budget of 640 KiB
+    await expect(
+      publish(f, "long-paths", artifactWithPaths(f, "long-paths", paths)),
+    ).rejects.toThrow("Installed integrations would exceed what one inspection can report");
+  });
+
+  it("counts a path's JSON escapes against the inspection budget", async () => {
+    skipFsync();
+    const f = fixture();
+    const quotes = Array.from({ length: 2 }, () => '"'.repeat(200)).join("/");
+    const paths = Array.from({ length: 800 }, (_, i) => `${quotes}/${i}`);
+    // About 405 bytes each in UTF-8 (400 KB in all) but about 805 as JSON (720 KB).
+    await expect(
+      publish(f, "quoted-paths", artifactWithPaths(f, "quoted-paths", paths)),
+    ).rejects.toThrow("Installed integrations would exceed what one inspection can report");
+  });
+
+  it("counts an artifact's URL against the inspection budget", async () => {
+    skipFsync();
+    const f = fixture();
+    // manifest.json (109 bytes) and 1,023 entries of 544 + 96 bytes: 531 bytes below the budget.
+    const paths = Array.from(
+      { length: 1_023 },
+      (_, i) =>
+        `${"a".repeat(250)}/${"b".repeat(250)}/${String(i).padStart(4, "0")}${"x".repeat(38)}`,
+    );
+    expect(
+      services.recordedInventoryBytes([
+        { path: "manifest.json", sha256: "0".repeat(64) },
+        ...paths.map((path) => ({ path, sha256: "0".repeat(64) })),
+      ]),
+    ).toBe(services.MAX_RECORDED_INVENTORY_BYTES - 531);
+    const longUrl = `https://artifacts.example.test/${"u".repeat(600)}/url-budget.tar.gz`;
+    await expect(
+      publish(f, "url-budget", artifactWithPaths(f, "url-budget", paths, longUrl)),
+    ).rejects.toThrow("Installed integrations would exceed what one inspection can report");
+    await expect(
+      publish(f, "url-budget", artifactWithPaths(f, "url-budget", paths)),
+    ).resolves.toMatchObject({ integrationId: "url-budget" });
+  });
+
+  it("measures an inventory entry as its path as JSON plus 96 bytes", () => {
+    const entry = (path: string) => [{ path, sha256: "0".repeat(64) }];
+    expect(services.recordedInventoryBytes(entry("manifest.json"))).toBe(109);
+    expect(services.recordedInventoryBytes(entry('"'.repeat(10)))).toBe(20 + 96);
+    expect(
+      services.recordedSourceBytes({
+        kind: "artifact",
+        url: "https://example.test/a.tar.gz",
+        sha256: "0".repeat(64),
+      }),
+    ).toBe(31);
+    expect(services.recordedSourceBytes({ kind: "upload", sha256: "0".repeat(64) })).toBe(0);
   });
 });

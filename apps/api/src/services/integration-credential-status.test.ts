@@ -40,6 +40,8 @@ vi.mock("./administrative-configuration-writer-owner", () => ({
             config: { apiKey: "synthetic-db" },
             createdAt: date,
             updatedAt: date,
+            ownerExtensionId: null,
+            schemaVersion: 1,
           },
         ],
         integrationSecretRows: [
@@ -50,6 +52,7 @@ vi.mock("./administrative-configuration-writer-owner", () => ({
             updatedAt: date,
             createdAt: date,
             updatedByUserId: "fixture-actor",
+            ownerExtensionId: null,
           },
         ],
       });

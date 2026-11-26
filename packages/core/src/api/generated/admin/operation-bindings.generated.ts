@@ -9,6 +9,13 @@ import {
   bindAdminStreamOperation,
 } from "../../admin-sdk-transport";
 
+const acknowledgeAdminAttentionBound = bindAdminOperation("acknowledgeAdminAttention");
+export async function acknowledgeAdminAttentionRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return acknowledgeAdminAttentionBound<T>(url, options);
+}
 const activateAdminTransitPinsBound = bindAdminOperation("activateAdminTransitPins");
 export async function activateAdminTransitPinsRequest<T>(
   url: string,
@@ -654,6 +661,13 @@ export async function listAdminArtifactTransfersRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return listAdminArtifactTransfersBound<T>(url, options);
+}
+const listAdminAttentionBound = bindAdminOperation("listAdminAttention");
+export async function listAdminAttentionRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return listAdminAttentionBound<T>(url, options);
 }
 const listAdminAuditLogBound = bindAdminOperation("listAdminAuditLog");
 export async function listAdminAuditLogRequest<T>(

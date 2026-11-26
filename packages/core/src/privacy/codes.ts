@@ -16,6 +16,7 @@ export const SUBJECT_DATA_SOURCES = [
   "redis",
   "managed-service",
   "operator",
+  "extension",
 ] as const;
 export const subjectDataSourceSchema = z.enum(SUBJECT_DATA_SOURCES);
 export type SubjectDataSource = z.infer<typeof subjectDataSourceSchema>;

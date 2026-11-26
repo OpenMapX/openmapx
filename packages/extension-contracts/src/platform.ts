@@ -1,6 +1,11 @@
 import z from "zod/v4";
 /** Extension protocol version, independent of product and package versions. */
 export const PLATFORM_VERSION = "1.0";
+/**
+ * Web extension protocol version: the browser-side module contract, versioned
+ * apart from the backend protocol so either can change without the other.
+ */
+export const WEB_PLATFORM_VERSION = "1.0";
 const PLATFORM_VERSION_PATTERN = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
 export const platformVersionSchema = z
   .string()
@@ -21,4 +26,10 @@ export function satisfiesPlatformVersion(required: string, current = PLATFORM_VE
   )
     return false;
   return requiredMajor === currentMajor && currentMinor >= requiredMinor;
+}
+export function satisfiesWebPlatformVersion(
+  required: string,
+  current: string = WEB_PLATFORM_VERSION,
+): boolean {
+  return satisfiesPlatformVersion(required, current);
 }

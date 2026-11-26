@@ -26,6 +26,11 @@ export type GetAdminIntegration200ManifestDataSourcesItem = {
   mediaHosts?: string[];
   licensing: GetAdminIntegration200ManifestDataSourcesItemLicensing;
   attribution?: string;
+  /**
+   * @maxLength 256
+   * @pattern \.(?:svg|png|webp)$
+   */
+  logoAsset?: string;
   notes?: string;
   commercialUse?: GetAdminIntegration200ManifestDataSourcesItemCommercialUse;
   redistribution?: GetAdminIntegration200ManifestDataSourcesItemRedistribution;

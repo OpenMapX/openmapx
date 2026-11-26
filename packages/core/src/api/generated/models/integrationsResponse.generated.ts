@@ -5,6 +5,11 @@ import { IntegrationsResponseSchema0 } from "./integrationsResponseSchema0.gener
 
 export const integrationsResponseIntegrationsItemFrontendLayerSelectorPreviewOneMax = 256;
 
+export const integrationsResponseIntegrationsItemFrontendOverlayIdMax = 48;
+
+export const integrationsResponseIntegrationsItemFrontendOverlayIdRegExp = new RegExp(
+  "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+);
 export const integrationsResponseIntegrationsItemDataSourcesItemSourceIdRegExp = new RegExp(
   "^[a-z0-9]+(-[a-z0-9]+)*$",
 );
@@ -70,6 +75,11 @@ export const integrationsResponseIntegrationsItemDataSourcesItemLicensingDeclara
 
 export const integrationsResponseIntegrationsItemDataSourcesItemLicensingDeclarationsMax = 64;
 
+export const integrationsResponseIntegrationsItemDataSourcesItemLogoAssetMax = 256;
+
+export const integrationsResponseIntegrationsItemDataSourcesItemLogoAssetRegExp = new RegExp(
+  "\\.(?:svg|png|webp)$",
+);
 export const integrationsResponseIntegrationsItemDataSourcesItemUsageConditionsItemMax = 1000;
 
 export const integrationsResponseIntegrationsItemDataSourcesItemUsageConditionsMax = 32;
@@ -87,10 +97,17 @@ export const IntegrationsResponse = zod.strictObject({
       domains: zod.array(zod.string()),
       frontend: zod
         .strictObject({
+          entry: zod.enum(["dist/web/index.mjs"]).optional(),
           mapLayer: zod.boolean().optional(),
           sharedMapLayer: zod.string().optional(),
           legend: zod.boolean().optional(),
-          panel: zod.boolean().optional(),
+          legendKind: zod.enum(["card", "toolbar"]).optional(),
+          panel: zod
+            .strictObject({
+              detents: zod.enum(["list", "place"]).optional(),
+            })
+            .optional(),
+          mapControl: zod.boolean().optional(),
           searchCategory: zod
             .strictObject({
               id: zod.string(),
@@ -114,10 +131,16 @@ export const IntegrationsResponse = zod.strictObject({
                 ])
                 .optional(),
               quickSelector: zod.boolean().optional(),
+              section: zod.enum(["transport", "outdoors", "weatherEnvironment"]).optional(),
             })
             .optional(),
           overlay: zod
             .strictObject({
+              id: zod
+                .string()
+                .max(integrationsResponseIntegrationsItemFrontendOverlayIdMax)
+                .regex(integrationsResponseIntegrationsItemFrontendOverlayIdRegExp)
+                .optional(),
               excludes: zod.array(zod.string()).optional(),
               minZoom: zod.number().optional(),
               legend: zod
@@ -394,6 +417,11 @@ export const IntegrationsResponse = zod.strictObject({
                 .optional(),
             }),
             attribution: zod.string().optional(),
+            logoAsset: zod
+              .string()
+              .max(integrationsResponseIntegrationsItemDataSourcesItemLogoAssetMax)
+              .regex(integrationsResponseIntegrationsItemDataSourcesItemLogoAssetRegExp)
+              .optional(),
             notes: zod.string().optional(),
             commercialUse: zod.enum(["yes", "no", "conditional", "unknown"]).optional(),
             redistribution: zod

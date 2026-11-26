@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { normalizeGrants } from "@openmapx/extension-contracts/grants";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   COMMUNITY_RECORD_VERSION,
@@ -48,6 +49,7 @@ function fixture() {
     commit: "1".repeat(40),
     extensionId: "one",
     manifests: [{ path: "svc", sha256: digest("svc") }],
+    approvedGrants: {},
     pending: null,
     ...overrides,
   });
@@ -81,6 +83,7 @@ describe("community repository records", () => {
       commit: "2".repeat(40),
       extensionId: "one",
       manifests: [{ path: "svc", sha256: manifestSha256(Buffer.from(manifest("community-two"))) }],
+      approvedGrants: {},
     };
     const pending = record({
       manifests: previous.manifests,
@@ -92,6 +95,7 @@ describe("community repository records", () => {
           commit: previous.commit,
           extensionId: previous.extensionId,
           manifests: previous.manifests,
+          approvedGrants: previous.approvedGrants,
         },
         next,
         recovery: { selectionBefore: null, touchedServiceIds: [], previouslyEnabledServiceIds: [] },
@@ -162,6 +166,96 @@ describe("community repository records", () => {
     expect(() => loadRecordedCommunityServices(root)).toThrow(
       `Community repository ${REPOSITORY} no longer matches the service manifests the operations agent recorded when it installed it. Delete infra/docker/state/ops-agent/community/${REPOSITORY} and infra/docker/state/ops-agent/community/.repository-${REPOSITORY}.json, then install its extension again.`,
     );
+  });
+
+  it("requires the approved grants of a repository in normal form", () => {
+    const f = fixture();
+    const parse = (approvedGrants: unknown) =>
+      parseCommunityRepositoryRecord({ ...f.record(), approvedGrants }, REPOSITORY);
+    expect(parse({ "community-one": ["gpu", "peer-services"] }).approvedGrants).toEqual({
+      "community-one": ["gpu", "peer-services"],
+    });
+    expect(parse({}).approvedGrants).toEqual({});
+    for (const value of [
+      undefined,
+      null,
+      ["gpu"],
+      { "community-one": ["peer-services", "gpu"] },
+      { "community-one": ["gpu", "gpu"] },
+      { "community-one": ["root"] },
+      { Bad_Id: ["gpu"] },
+    ])
+      expect(() => parse(value)).toThrow(`Repository record ${REPOSITORY} is invalid`);
+  });
+
+  it("requires approved grants on both sides of a pending transaction", () => {
+    const f = fixture();
+    const source = {
+      url: "https://example.test/one.git",
+      commit: "2".repeat(40),
+      extensionId: "one",
+      manifests: [{ path: "svc", sha256: f.digest("svc") }],
+    };
+    const pending = (next: object) => ({
+      transactionId: `txn1_${"a".repeat(24)}`,
+      phase: "prepared",
+      previous: null,
+      next,
+      recovery: { selectionBefore: null, touchedServiceIds: [], previouslyEnabledServiceIds: [] },
+    });
+    const parsed = parseCommunityRepositoryRecord(
+      {
+        ...f.record(),
+        pending: pending({ ...source, approvedGrants: { "community-one": ["gpu"] } }),
+      },
+      REPOSITORY,
+    );
+    expect(parsed.pending?.next.approvedGrants).toEqual({ "community-one": ["gpu"] });
+    expect(() =>
+      parseCommunityRepositoryRecord({ ...f.record(), pending: pending(source) }, REPOSITORY),
+    ).toThrow();
+  });
+
+  it("holds the largest source three times within the record limit", () => {
+    const f = fixture();
+    const approvedGrants = Object.fromEntries(
+      Array.from({ length: 4 }, (_, i) => [
+        `svc-${i}`,
+        normalizeGrants(
+          Array.from(
+            { length: 64 },
+            (_, j) => `host-path:/${String(j).padStart(2, "0")}${"p".repeat(252)}:ro` as const,
+          ),
+        ),
+      ]),
+    );
+    const manifests = Array.from({ length: 64 }, (_, i) => ({
+      path: Array.from({ length: 4 }, () => `${String(i).padStart(2, "0")}${"m".repeat(253)}`).join(
+        "/",
+      ),
+      sha256: "0".repeat(64),
+    }));
+    const source = {
+      url: "https://example.test/one.git",
+      commit: "2".repeat(40),
+      extensionId: "one",
+      manifests,
+      approvedGrants,
+    };
+    f.write({
+      ...f.record(),
+      ...source,
+      pending: {
+        transactionId: `txn1_${"a".repeat(24)}`,
+        phase: "published",
+        previous: source,
+        next: source,
+        recovery: { selectionBefore: null, touchedServiceIds: [], previouslyEnabledServiceIds: [] },
+      },
+    });
+    expect(
+      readCommunityRepositoryRecord(f.community, REPOSITORY)?.pending?.next.approvedGrants,
+    ).toEqual(approvedGrants);
   });
 
   it("loads nothing without a community directory", () => {

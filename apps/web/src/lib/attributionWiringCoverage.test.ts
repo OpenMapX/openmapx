@@ -129,11 +129,11 @@ function collectCandidates(): Candidate[] {
     const manifestPath = path.join(INTEGRATIONS_DIR, id, "manifest.json");
     if (!fs.existsSync(manifestPath)) return [];
     const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as {
-      frontend?: { mapLayer?: boolean; panel?: boolean };
+      frontend?: { mapLayer?: boolean; panel?: unknown };
       dataSources?: unknown[];
     };
     const mapLayer = manifest.frontend?.mapLayer === true;
-    const panel = manifest.frontend?.panel === true;
+    const panel = manifest.frontend?.panel !== undefined;
     return mapLayer || panel
       ? [{ id, mapLayer, panel, hasDataSources: (manifest.dataSources ?? []).length > 0 }]
       : [];

@@ -73,6 +73,8 @@ export const USER_ID_COLUMNS_WITHOUT_USER_FOREIGN_KEY: Record<string, string> = 
   "data_manager.offline_package_artifact_reference.principal":
     "API delete hook (HMAC of the id under an API-only key); otherwise retention",
   "mangrove_keypair_wrap.user_id": "foreign key CASCADE to mangrove_keypair.user_id",
+  "subject_erasure_pending.subject_user_id":
+    "erasure trigger writes the row: the deleted account's id, kept until the integration's erase handler has run; then the row is deleted",
 };
 
 /** Columns whose name looks like an account reference but holds none. */

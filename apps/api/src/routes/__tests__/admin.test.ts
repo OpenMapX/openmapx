@@ -1,6 +1,7 @@
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import type { FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { listAttention } from "../../services/attention";
 import { applyTrustedConfiguration } from "../../services/trusted-config-operations";
 import { TrustedConfigurationApplyError } from "../../services/trusted-config-outcome";
 import { createAdminTestApp, installAdminRouteMocks } from "./admin-test-helpers.js";
@@ -221,6 +222,8 @@ vi.mock("../../utils/validate-config-body.js", () => ({
   getSecretFields: (...args: unknown[]) => mockGetSecretFields(...args),
 }));
 
+vi.mock("../../services/attention.js", () => ({ listAttention: vi.fn(async () => []) }));
+
 let app: FastifyInstance;
 
 beforeAll(async () => {
@@ -241,6 +244,30 @@ afterEach(() => {
 });
 
 describe("GET /admin/overview", () => {
+  it("shows stored items first, with critical as an error", async () => {
+    vi.mocked(listAttention).mockResolvedValueOnce([
+      {
+        key: "extensions.revoked:demo",
+        severity: "critical",
+        source: "extensions",
+        title: "Demo was disabled",
+        detail: "Advisory 1",
+        action: { label: "Open", href: "/admin/extensions/demo" },
+        clearance: "condition",
+        acknowledgedAt: null,
+        raisedAt: "2026-11-25T00:00:00.000Z",
+        updatedAt: "2026-11-25T00:00:00.000Z",
+      },
+    ]);
+    const res = await app.inject({ method: "GET", url: "/admin/overview" });
+    expect(res.json().attention[0]).toEqual({
+      type: "stored",
+      severity: "error",
+      message: "Demo was disabled: Advisory 1",
+      target: "/admin/extensions/demo",
+    });
+  });
+
   it("returns system health overview with integration stats", async () => {
     // DB queries in overview: user count, banned count, active sessions, and
     // recent audit. The default chains resolve to [] and the handler uses

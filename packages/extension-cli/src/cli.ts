@@ -95,7 +95,7 @@ program
   .option("--version <version>", "Bundle version (SemVer)")
   .option(
     "--input <file>",
-    "Complete extension manifest, including config and readiness; excludes other input flags",
+    "Complete extension manifest, including config; excludes other input flags",
   )
   .option("--platform <version>", "Minimum extension protocol version")
   .option("--description <text>", "Description")

@@ -86,6 +86,10 @@
       "types": "./src/jobs/vocabulary.ts",
       "default": "./src/jobs/vocabulary.ts"
     },
+    "./attention": {
+      "types": "./src/attention/attention-sql.ts",
+      "default": "./src/attention/attention-sql.ts"
+    },
     "./published-data": {
       "types": "./src/published-data/schema-versions.ts",
       "default": "./src/published-data/schema-versions.ts"

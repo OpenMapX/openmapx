@@ -24,6 +24,7 @@ import {
 export * from "./catalog";
 export * from "./common";
 export * from "./installed";
+export * from "./platform-contracts";
 export * from "./preview";
 
 /** Complete finite JSON family. Authentication metadata never grants access. */

@@ -119,7 +119,7 @@ example for the route-only feature:
   "author": "You",
   "license": "MIT",
   "domains": ["knowledge"],
-  "frontend": { "mapLayer": false, "legend": false, "panel": false },
+  "frontend": { "mapLayer": false, "legend": false },
   "backend": { "routes": true },
   "quality": "built-in",
   "healthCheck": {

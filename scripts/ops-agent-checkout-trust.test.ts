@@ -505,6 +505,7 @@ function installCommunityRepository(checkout: string): string {
           ),
         },
       ],
+      approvedGrants: {},
       pending: null,
     }),
     { mode: 0o644 },

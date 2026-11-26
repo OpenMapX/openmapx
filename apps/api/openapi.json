@@ -169,6 +169,12 @@
                 "frontend": {
                   "type": "object",
                   "properties": {
+                    "entry": {
+                      "type": "string",
+                      "enum": [
+                        "dist/web/index.mjs"
+                      ]
+                    },
                     "mapLayer": {
                       "type": "boolean"
                     },
@@ -178,7 +184,27 @@
                     "legend": {
                       "type": "boolean"
                     },
+                    "legendKind": {
+                      "type": "string",
+                      "enum": [
+                        "card",
+                        "toolbar"
+                      ]
+                    },
                     "panel": {
+                      "type": "object",
+                      "properties": {
+                        "detents": {
+                          "type": "string",
+                          "enum": [
+                            "list",
+                            "place"
+                          ]
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    "mapControl": {
                       "type": "boolean"
                     },
                     "searchCategory": {
@@ -233,6 +259,14 @@
                         },
                         "quickSelector": {
                           "type": "boolean"
+                        },
+                        "section": {
+                          "type": "string",
+                          "enum": [
+                            "transport",
+                            "outdoors",
+                            "weatherEnvironment"
+                          ]
                         }
                       },
                       "required": [
@@ -244,6 +278,11 @@
                     "overlay": {
                       "type": "object",
                       "properties": {
+                        "id": {
+                          "type": "string",
+                          "maxLength": 48,
+                          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                        },
                         "excludes": {
                           "type": "array",
                           "items": {
@@ -741,6 +780,11 @@
                       },
                       "attribution": {
                         "type": "string"
+                      },
+                      "logoAsset": {
+                        "type": "string",
+                        "maxLength": 256,
+                        "pattern": "\\.(?:svg|png|webp)$"
                       },
                       "notes": {
                         "type": "string"
@@ -45348,6 +45392,1613 @@
         "x-openmapx-auth": "admin"
       }
     },
+    "/api/admin/attention": {
+      "get": {
+        "operationId": "listAdminAttention",
+        "responses": {
+          "200": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "key": {
+                            "type": "string"
+                          },
+                          "severity": {
+                            "type": "string",
+                            "enum": [
+                              "info",
+                              "warning",
+                              "critical"
+                            ]
+                          },
+                          "source": {
+                            "type": "string"
+                          },
+                          "title": {
+                            "type": "string"
+                          },
+                          "detail": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "action": {
+                            "anyOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "label": {
+                                    "type": "string",
+                                    "minLength": 1,
+                                    "maxLength": 120
+                                  },
+                                  "href": {
+                                    "type": "string",
+                                    "maxLength": 512,
+                                    "pattern": "^\\/admin(?:\\/(?!\\.\\.?(?:[/?]|$))[A-Za-z0-9._~-]+)*(?:\\?[A-Za-z0-9._~=&-]*)?$"
+                                  }
+                                },
+                                "required": [
+                                  "label",
+                                  "href"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "clearance": {
+                            "type": "string",
+                            "enum": [
+                              "condition",
+                              "acknowledge"
+                            ]
+                          },
+                          "acknowledgedAt": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "raisedAt": {
+                            "type": "string"
+                          },
+                          "updatedAt": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "key",
+                          "severity",
+                          "source",
+                          "title",
+                          "detail",
+                          "action",
+                          "clearance",
+                          "acknowledgedAt",
+                          "raisedAt",
+                          "updatedAt"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "items"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "pattern": "^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "REQUIRED_SETTINGS_MISSING"
+                          ]
+                        },
+                        "missingSettings": {
+                          "minItems": 1,
+                          "maxItems": 256,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "serviceId": {
+                                "type": "string",
+                                "pattern": "^(?=.{1,48}$)[a-z0-9]+(?:-[a-z0-9]+)*$"
+                              },
+                              "keys": {
+                                "minItems": 1,
+                                "maxItems": 64,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
+                                }
+                              }
+                            },
+                            "required": [
+                              "serviceId",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "error",
+                        "code",
+                        "missingSettings"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "pattern": "^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "REQUIRED_SETTINGS_MISSING"
+                          ]
+                        },
+                        "missingSettings": {
+                          "minItems": 1,
+                          "maxItems": 256,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "serviceId": {
+                                "type": "string",
+                                "pattern": "^(?=.{1,48}$)[a-z0-9]+(?:-[a-z0-9]+)*$"
+                              },
+                              "keys": {
+                                "minItems": 1,
+                                "maxItems": 64,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
+                                }
+                              }
+                            },
+                            "required": [
+                              "serviceId",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "error",
+                        "code",
+                        "missingSettings"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "pattern": "^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "REQUIRED_SETTINGS_MISSING"
+                          ]
+                        },
+                        "missingSettings": {
+                          "minItems": 1,
+                          "maxItems": 256,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "serviceId": {
+                                "type": "string",
+                                "pattern": "^(?=.{1,48}$)[a-z0-9]+(?:-[a-z0-9]+)*$"
+                              },
+                              "keys": {
+                                "minItems": 1,
+                                "maxItems": 64,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
+                                }
+                              }
+                            },
+                            "required": [
+                              "serviceId",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "error",
+                        "code",
+                        "missingSettings"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "pattern": "^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "REQUIRED_SETTINGS_MISSING"
+                          ]
+                        },
+                        "missingSettings": {
+                          "minItems": 1,
+                          "maxItems": 256,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "serviceId": {
+                                "type": "string",
+                                "pattern": "^(?=.{1,48}$)[a-z0-9]+(?:-[a-z0-9]+)*$"
+                              },
+                              "keys": {
+                                "minItems": 1,
+                                "maxItems": 64,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
+                                }
+                              }
+                            },
+                            "required": [
+                              "serviceId",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "error",
+                        "code",
+                        "missingSettings"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "pattern": "^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "REQUIRED_SETTINGS_MISSING"
+                          ]
+                        },
+                        "missingSettings": {
+                          "minItems": 1,
+                          "maxItems": 256,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "serviceId": {
+                                "type": "string",
+                                "pattern": "^(?=.{1,48}$)[a-z0-9]+(?:-[a-z0-9]+)*$"
+                              },
+                              "keys": {
+                                "minItems": 1,
+                                "maxItems": 64,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
+                                }
+                              }
+                            },
+                            "required": [
+                              "serviceId",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "error",
+                        "code",
+                        "missingSettings"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Response",
+            "headers": {
+              "retry-after": {
+                "schema": {
+                  "type": "string",
+                  "pattern": "^\\d+$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "pattern": "^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$"
+                    },
+                    "retryAfter": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "retryAfter"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "pattern": "^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "REQUIRED_SETTINGS_MISSING"
+                          ]
+                        },
+                        "missingSettings": {
+                          "minItems": 1,
+                          "maxItems": 256,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "serviceId": {
+                                "type": "string",
+                                "pattern": "^(?=.{1,48}$)[a-z0-9]+(?:-[a-z0-9]+)*$"
+                              },
+                              "keys": {
+                                "minItems": 1,
+                                "maxItems": 64,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
+                                }
+                              }
+                            },
+                            "required": [
+                              "serviceId",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "error",
+                        "code",
+                        "missingSettings"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "integration-admin"
+        ],
+        "x-openmapx-auth": "admin"
+      }
+    },
+    "/api/admin/attention/{key}/acknowledge": {
+      "post": {
+        "operationId": "acknowledgeAdminAttention",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9._:-]{0,199}$"
+            },
+            "in": "path",
+            "name": "key",
+            "required": true
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Response"
+          },
+          "400": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "pattern": "^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "REQUIRED_SETTINGS_MISSING"
+                          ]
+                        },
+                        "missingSettings": {
+                          "minItems": 1,
+                          "maxItems": 256,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "serviceId": {
+                                "type": "string",
+                                "pattern": "^(?=.{1,48}$)[a-z0-9]+(?:-[a-z0-9]+)*$"
+                              },
+                              "keys": {
+                                "minItems": 1,
+                                "maxItems": 64,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
+                                }
+                              }
+                            },
+                            "required": [
+                              "serviceId",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "error",
+                        "code",
+                        "missingSettings"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "pattern": "^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "REQUIRED_SETTINGS_MISSING"
+                          ]
+                        },
+                        "missingSettings": {
+                          "minItems": 1,
+                          "maxItems": 256,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "serviceId": {
+                                "type": "string",
+                                "pattern": "^(?=.{1,48}$)[a-z0-9]+(?:-[a-z0-9]+)*$"
+                              },
+                              "keys": {
+                                "minItems": 1,
+                                "maxItems": 64,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
+                                }
+                              }
+                            },
+                            "required": [
+                              "serviceId",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "error",
+                        "code",
+                        "missingSettings"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "pattern": "^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "REQUIRED_SETTINGS_MISSING"
+                          ]
+                        },
+                        "missingSettings": {
+                          "minItems": 1,
+                          "maxItems": 256,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "serviceId": {
+                                "type": "string",
+                                "pattern": "^(?=.{1,48}$)[a-z0-9]+(?:-[a-z0-9]+)*$"
+                              },
+                              "keys": {
+                                "minItems": 1,
+                                "maxItems": 64,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
+                                }
+                              }
+                            },
+                            "required": [
+                              "serviceId",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "error",
+                        "code",
+                        "missingSettings"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "pattern": "^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "REQUIRED_SETTINGS_MISSING"
+                          ]
+                        },
+                        "missingSettings": {
+                          "minItems": 1,
+                          "maxItems": 256,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "serviceId": {
+                                "type": "string",
+                                "pattern": "^(?=.{1,48}$)[a-z0-9]+(?:-[a-z0-9]+)*$"
+                              },
+                              "keys": {
+                                "minItems": 1,
+                                "maxItems": 64,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
+                                }
+                              }
+                            },
+                            "required": [
+                              "serviceId",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "error",
+                        "code",
+                        "missingSettings"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "pattern": "^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "REQUIRED_SETTINGS_MISSING"
+                          ]
+                        },
+                        "missingSettings": {
+                          "minItems": 1,
+                          "maxItems": 256,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "serviceId": {
+                                "type": "string",
+                                "pattern": "^(?=.{1,48}$)[a-z0-9]+(?:-[a-z0-9]+)*$"
+                              },
+                              "keys": {
+                                "minItems": 1,
+                                "maxItems": 64,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
+                                }
+                              }
+                            },
+                            "required": [
+                              "serviceId",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "error",
+                        "code",
+                        "missingSettings"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "pattern": "^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "REQUIRED_SETTINGS_MISSING"
+                          ]
+                        },
+                        "missingSettings": {
+                          "minItems": 1,
+                          "maxItems": 256,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "serviceId": {
+                                "type": "string",
+                                "pattern": "^(?=.{1,48}$)[a-z0-9]+(?:-[a-z0-9]+)*$"
+                              },
+                              "keys": {
+                                "minItems": 1,
+                                "maxItems": 64,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
+                                }
+                              }
+                            },
+                            "required": [
+                              "serviceId",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "error",
+                        "code",
+                        "missingSettings"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Response",
+            "headers": {
+              "retry-after": {
+                "schema": {
+                  "type": "string",
+                  "pattern": "^\\d+$"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "pattern": "^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$"
+                    },
+                    "retryAfter": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "error",
+                    "retryAfter"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "pattern": "^[A-Z][A-Z0-9]*(?:_[A-Z0-9]+)*$"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "jobId": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string",
+                          "enum": [
+                            "REQUIRED_SETTINGS_MISSING"
+                          ]
+                        },
+                        "missingSettings": {
+                          "minItems": 1,
+                          "maxItems": 256,
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "serviceId": {
+                                "type": "string",
+                                "pattern": "^(?=.{1,48}$)[a-z0-9]+(?:-[a-z0-9]+)*$"
+                              },
+                              "keys": {
+                                "minItems": 1,
+                                "maxItems": 64,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1,
+                                  "maxLength": 128
+                                }
+                              }
+                            },
+                            "required": [
+                              "serviceId",
+                              "keys"
+                            ],
+                            "additionalProperties": false
+                          }
+                        }
+                      },
+                      "required": [
+                        "error",
+                        "code",
+                        "missingSettings"
+                      ],
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "statusCode": {
+                          "type": "integer",
+                          "minimum": 400,
+                          "maximum": 599
+                        },
+                        "error": {
+                          "type": "string"
+                        },
+                        "message": {
+                          "type": "string"
+                        },
+                        "code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "statusCode",
+                        "error",
+                        "message"
+                      ],
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "integration-admin"
+        ],
+        "x-openmapx-auth": "admin"
+      }
+    },
     "/api/admin/audit": {
       "get": {
         "operationId": "listAdminAuditLog",
@@ -45361,6 +47012,7 @@
                 "ambient_places.enabled.set",
                 "ambient_places.resume",
                 "ambient_places.rollback",
+                "attention.acknowledge",
                 "auth.policy.apply",
                 "backup.create",
                 "backup.delete",
@@ -45591,6 +47243,7 @@
                               "ambient_places.enabled.set",
                               "ambient_places.resume",
                               "ambient_places.rollback",
+                              "attention.acknowledge",
                               "auth.policy.apply",
                               "backup.create",
                               "backup.delete",
@@ -46458,6 +48111,7 @@
                 "ambient_places.enabled.set",
                 "ambient_places.resume",
                 "ambient_places.rollback",
+                "attention.acknowledge",
                 "auth.policy.apply",
                 "backup.create",
                 "backup.delete",
@@ -79513,6 +81167,9 @@
                                   "type": "string",
                                   "maxLength": 48,
                                   "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+                                },
+                                "optional": {
+                                  "type": "boolean"
                                 }
                               },
                               "required": [
@@ -80495,6 +82152,9 @@
                             "type": "string",
                             "maxLength": 48,
                             "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+                          },
+                          "optional": {
+                            "type": "boolean"
                           }
                         },
                         "required": [
@@ -91792,6 +93452,10 @@
                           "type": "string",
                           "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
                         },
+                        "webPlatform": {
+                          "type": "string",
+                          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"
+                        },
                         "domains": {
                           "type": "array",
                           "items": {
@@ -91832,6 +93496,12 @@
                         "frontend": {
                           "type": "object",
                           "properties": {
+                            "entry": {
+                              "type": "string",
+                              "enum": [
+                                "dist/web/index.mjs"
+                              ]
+                            },
                             "mapLayer": {
                               "type": "boolean"
                             },
@@ -91841,7 +93511,34 @@
                             "legend": {
                               "type": "boolean"
                             },
+                            "legendKind": {
+                              "type": "string",
+                              "enum": [
+                                "card",
+                                "toolbar"
+                              ]
+                            },
                             "panel": {
+                              "type": "object",
+                              "properties": {
+                                "detents": {
+                                  "type": "string",
+                                  "enum": [
+                                    "list",
+                                    "place"
+                                  ]
+                                }
+                              },
+                              "additionalProperties": {
+                                "description": "Recursive JSON. Objects with an own __proto__ key are rejected at every depth.",
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/Admin_getAdminIntegration_200___schema0"
+                                  }
+                                ]
+                              }
+                            },
+                            "mapControl": {
                               "type": "boolean"
                             },
                             "searchCategory": {
@@ -91903,6 +93600,14 @@
                                 },
                                 "quickSelector": {
                                   "type": "boolean"
+                                },
+                                "section": {
+                                  "type": "string",
+                                  "enum": [
+                                    "transport",
+                                    "outdoors",
+                                    "weatherEnvironment"
+                                  ]
                                 }
                               },
                               "required": [
@@ -91921,6 +93626,11 @@
                             "overlay": {
                               "type": "object",
                               "properties": {
+                                "id": {
+                                  "type": "string",
+                                  "maxLength": 48,
+                                  "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+                                },
                                 "excludes": {
                                   "type": "array",
                                   "items": {
@@ -92039,13 +93749,35 @@
                             "routes": {
                               "type": "boolean"
                             },
-                            "cron": {
-                              "type": [
-                                "string",
-                                "null"
+                            "entry": {
+                              "type": "string",
+                              "enum": [
+                                "dist/backend/index.mjs"
                               ]
                             }
                           },
+                          "additionalProperties": {
+                            "description": "Recursive JSON. Objects with an own __proto__ key are rejected at every depth.",
+                            "allOf": [
+                              {
+                                "$ref": "#/components/schemas/Admin_getAdminIntegration_200___schema0"
+                              }
+                            ]
+                          }
+                        },
+                        "database": {
+                          "type": "object",
+                          "properties": {
+                            "migrations": {
+                              "type": "boolean",
+                              "enum": [
+                                true
+                              ]
+                            }
+                          },
+                          "required": [
+                            "migrations"
+                          ],
                           "additionalProperties": {
                             "description": "Recursive JSON. Objects with an own __proto__ key are rejected at every depth.",
                             "allOf": [
@@ -92680,6 +94412,11 @@
                               "attribution": {
                                 "type": "string"
                               },
+                              "logoAsset": {
+                                "type": "string",
+                                "maxLength": 256,
+                                "pattern": "\\.(?:svg|png|webp)$"
+                              },
                               "notes": {
                                 "type": "string"
                               },
@@ -92831,6 +94568,14 @@
                               "items": {
                                 "type": "string",
                                 "pattern": "^[a-z0-9][a-z0-9-]*$"
+                              }
+                            },
+                            "registrations": {
+                              "maxItems": 64,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "additionalProperties": {}
                               }
                             },
                             "operatorInstructions": {
@@ -121736,9 +123481,6 @@
                                       "type": "string"
                                     }
                                   },
-                                  "authRequired": {
-                                    "type": "boolean"
-                                  },
                                   "priority": {
                                     "type": "integer",
                                     "minimum": 0,
@@ -135400,7 +137142,8 @@
                               "type": "array",
                               "items": {
                                 "type": "string",
-                                "pattern": "^\\/dev\\/[a-zA-Z0-9_\\-/]+$"
+                                "maxLength": 255,
+                                "pattern": "^\\/dev\\/[A-Za-z0-9_\\-/]+$"
                               }
                             },
                             "gpu": {
@@ -135812,7 +137555,7 @@
                         },
                         "ownsSchema": {
                           "type": "string",
-                          "pattern": "^[a-z_][a-z0-9_]*$"
+                          "pattern": "^[a-z][a-z0-9_]{0,62}$"
                         },
                         "volumes": {
                           "type": "array",
@@ -135988,9 +137731,6 @@
                                     "type": "string"
                                   }
                                 },
-                                "authRequired": {
-                                  "type": "boolean"
-                                },
                                 "priority": {
                                   "type": "integer",
                                   "minimum": 0,
@@ -136029,6 +137769,124 @@
                               },
                               "required": [
                                 "enabled"
+                              ],
+                              "additionalProperties": {
+                                "description": "Recursive JSON. Objects with an own __proto__ key are rejected at every depth.",
+                                "allOf": [
+                                  {
+                                    "$ref": "#/components/schemas/Admin_getAdminService_200___schema0"
+                                  }
+                                ]
+                              }
+                            }
+                          },
+                          "additionalProperties": {
+                            "description": "Recursive JSON. Objects with an own __proto__ key are rejected at every depth.",
+                            "allOf": [
+                              {
+                                "$ref": "#/components/schemas/Admin_getAdminService_200___schema0"
+                              }
+                            ]
+                          }
+                        },
+                        "requests": {
+                          "type": "object",
+                          "properties": {
+                            "hostPaths": {
+                              "minItems": 1,
+                              "maxItems": 16,
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "source": {
+                                    "type": "string",
+                                    "maxLength": 255,
+                                    "pattern": "^\\/(?:[A-Za-z0-9._-]+(?:\\/[A-Za-z0-9._-]+)*)?$"
+                                  },
+                                  "target": {
+                                    "type": "string",
+                                    "pattern": "^\\/[^\\s]+$"
+                                  },
+                                  "readOnly": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "source",
+                                  "target",
+                                  "readOnly"
+                                ],
+                                "additionalProperties": {
+                                  "description": "Recursive JSON. Objects with an own __proto__ key are rejected at every depth.",
+                                  "allOf": [
+                                    {
+                                      "$ref": "#/components/schemas/Admin_getAdminService_200___schema0"
+                                    }
+                                  ]
+                                }
+                              }
+                            },
+                            "platformServices": {
+                              "minItems": 1,
+                              "maxItems": 16,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "maxLength": 48,
+                                "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+                              }
+                            },
+                            "reachableByPlatform": {
+                              "type": "boolean"
+                            },
+                            "peerServices": {
+                              "type": "boolean"
+                            },
+                            "database": {
+                              "type": "object",
+                              "properties": {
+                                "roles": {
+                                  "minItems": 1,
+                                  "maxItems": 8,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "name": {
+                                        "type": "string",
+                                        "pattern": "^[a-z][a-z0-9_]{2,62}$"
+                                      },
+                                      "privileges": {
+                                        "maxItems": 16,
+                                        "type": "array",
+                                        "items": {
+                                          "type": "string",
+                                          "pattern": "^(create-schema|use-schema):([a-z][a-z0-9_]{0,62})$"
+                                        }
+                                      },
+                                      "connectionKey": {
+                                        "type": "string",
+                                        "pattern": "^[A-Z][A-Z0-9_]*$"
+                                      }
+                                    },
+                                    "required": [
+                                      "name",
+                                      "privileges"
+                                    ],
+                                    "additionalProperties": {
+                                      "description": "Recursive JSON. Objects with an own __proto__ key are rejected at every depth.",
+                                      "allOf": [
+                                        {
+                                          "$ref": "#/components/schemas/Admin_getAdminService_200___schema0"
+                                        }
+                                      ]
+                                    }
+                                  }
+                                }
+                              },
+                              "required": [
+                                "roles"
                               ],
                               "additionalProperties": {
                                 "description": "Recursive JSON. Objects with an own __proto__ key are rejected at every depth.",

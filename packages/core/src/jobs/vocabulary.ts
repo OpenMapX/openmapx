@@ -52,6 +52,10 @@ export const JOB_STAGE_STATUSES = [
 ] as const;
 export type JobStageStatus = (typeof JOB_STAGE_STATUSES)[number];
 
+/** How one run of an integration's scheduled task ended, or that it is still running. */
+export const INTEGRATION_TASK_RUN_STATUSES = ["running", "succeeded", "failed"] as const;
+export type IntegrationTaskRunStatus = (typeof INTEGRATION_TASK_RUN_STATUSES)[number];
+
 /**
  * What started a data job: the API (for an administrator or the service
  * token), the operations agent, the host CLI, data-manager's own schedule or
@@ -78,7 +82,10 @@ export const ADMIN_JOB_TYPES = [
   "configuration.migration.preview",
   "credential.import",
   "data.operation.run",
+  "extension.disable",
+  "extension.enable",
   "extension.install",
+  "extension.purge",
   "extension.remove",
   "integration.binding.apply",
   "integration.reload",

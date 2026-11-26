@@ -26,6 +26,19 @@ export function isComponentId(value: unknown): value is string {
   );
 }
 
+/**
+ * PostgreSQL schema owned by one installed integration. The `ext_` prefix plus
+ * a 48-character id stays within PostgreSQL's 63-byte identifier limit, and
+ * the lowercase alphabet keeps the name valid without quoting.
+ */
+export const EXTENSION_SCHEMA_PATTERN = /^ext_[a-z0-9_]{1,48}$/;
+
+/** The schema name of an integration: `ext_` and its id with hyphens as underscores. */
+export function extensionSchemaName(integrationId: string): string {
+  if (!isComponentId(integrationId)) throw new Error("Invalid integration id");
+  return `ext_${integrationId.replaceAll("-", "_")}`;
+}
+
 /** Extension, service and integration id: a lowercase slug of at most 48 characters. */
 export const componentIdSchema = z
   .string()

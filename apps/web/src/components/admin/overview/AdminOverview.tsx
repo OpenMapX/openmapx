@@ -37,8 +37,7 @@ import { CompactAlert } from "../shared/CompactAlert";
 import { CompactAlertList } from "../shared/CompactAlertList";
 import { jobStatusColor } from "../shared/jobStatus";
 import { useJobTypeLabel } from "../shared/jobTypeLabel";
-
-type AttentionItem = import("@openmapx/core/api-contracts").AdminOverview["attention"][number];
+import { attentionHref, type OverviewAttentionEntry } from "./attentionHref";
 
 // Components
 
@@ -108,15 +107,6 @@ function HealthBadge({ status }: { status: "pass" | "degraded" | "down" }) {
 }
 
 const ATTENTION_TYPES = new Set(["health_check_failed", "service_unhealthy"]);
-
-function attentionHref(item: AttentionItem): string {
-  if (item.type === "missing_credentials" || item.type === "health_check_failed") {
-    return `/admin/integrations/${item.target}`;
-  }
-  if (item.type === "job_failed") return "/admin/activity";
-  if (item.type === "service_unhealthy") return "/admin/system/services";
-  return "/admin";
-}
 
 // Main
 
@@ -189,7 +179,7 @@ export function AdminOverview() {
   const generalAttention = data.attention.filter((item) => item.type !== "missing_credentials");
   const integrationNames = new Map(credentials.map((entry) => [entry.integrationId, entry.name]));
   /** Known attention codes are worded here; the server's English stays for codes added later. */
-  const attentionMessage = (item: AttentionItem) =>
+  const attentionMessage = (item: OverviewAttentionEntry) =>
     item.job
       ? t("jobAttention", { jobLabel: jobTypeLabel(item.job.type) })
       : ATTENTION_TYPES.has(item.type)

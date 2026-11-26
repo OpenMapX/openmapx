@@ -2,6 +2,9 @@ import {
   ADMIN_REAUTH_PURPOSES,
   AUDIT_ACTION_NAMES,
   AUDIT_TARGET_TYPES,
+  approvedGrantsSchema,
+  type GrantId,
+  normalizeGrants,
 } from "@openmapx/core/api-contracts";
 import { ACTIVE_JOB_STATUSES, ADMIN_JOB_TYPES } from "@openmapx/core/jobs";
 import { and, asc, eq, getTableName, inArray, is, type SQL } from "drizzle-orm";
@@ -68,6 +71,31 @@ const CLOSED_VALUE_SETS: Record<string, { table: string; column: string; values:
     column: "stream",
     values: ["stdout", "stderr"],
   },
+  attention_item_severity_check: {
+    table: "attention_item",
+    column: "severity",
+    values: ["info", "warning", "critical"],
+  },
+  attention_item_clearance_check: {
+    table: "attention_item",
+    column: "clearance",
+    values: ["condition", "acknowledge"],
+  },
+  attention_notification_channel_check: {
+    table: "attention_notification",
+    column: "channel",
+    values: ["email", "webhook"],
+  },
+  attention_notification_severity_check: {
+    table: "attention_notification",
+    column: "severity",
+    values: ["warning", "critical"],
+  },
+  attention_notification_status_check: {
+    table: "attention_notification",
+    column: "status",
+    values: ["pending", "sending", "sent", "retryable", "failed", "canceled"],
+  },
   data_subject_request_event_event_type_check: {
     table: "data_subject_request_event",
     column: "event_type",
@@ -90,7 +118,7 @@ const CLOSED_VALUE_SETS: Record<string, { table: string; column: string; values:
   data_subject_request_task_source_check: {
     table: "data_subject_request_task",
     column: "source",
-    values: ["openmapx-db", "redis", "managed-service", "operator"],
+    values: ["openmapx-db", "redis", "managed-service", "operator", "extension"],
   },
   data_subject_request_locator_type_check: {
     table: "data_subject_request",
@@ -112,6 +140,11 @@ const CLOSED_VALUE_SETS: Record<string, { table: string; column: string; values:
     column: "validation_status",
     values: ["ok", "warning", "error"],
   },
+  extension_name_claim_kind_check: {
+    table: "extension_name_claim",
+    column: "kind",
+    values: ["service", "integration", "database-role", "database-schema"],
+  },
   health_history_status_check: {
     table: "health_history",
     column: "status",
@@ -131,6 +164,11 @@ const CLOSED_VALUE_SETS: Record<string, { table: string; column: string; values:
     table: "installed_integration",
     column: "source_type",
     values: ["registry", "artifact", "source", "uploaded-artifact"],
+  },
+  integration_task_run_status_check: {
+    table: "integration_task_run",
+    column: "status",
+    values: ["running", "succeeded", "failed"],
   },
   mangrove_keypair_wrap_wrap_type_check: {
     table: "mangrove_keypair_wrap",
@@ -241,6 +279,7 @@ const NAMED_BY_PURPOSE: Record<string, string> = {
   data_subject_request_notification_recipient_created_at_idx: "data_subject_request_notification",
   data_subject_request_preservation_request_registration_key: "data_subject_request_preservation",
   data_subject_request_user_id_kind_active_key: "data_subject_request",
+  integration_task_run_running_key: "integration_task_run",
   mangrove_keypair_wrap_user_id_passphrase_key: "mangrove_keypair_wrap",
   offline_package_job_request_key_live_key: "offline_package_job",
   personal_vehicle_user_id_default_key: "personal_vehicle",
@@ -483,12 +522,24 @@ integration("schema hygiene", () => {
     }
   });
 
-  it("records extension ownership only as component links and keeps no constant columns", async () => {
-    const columns = await fixture.sql<{ table: string; column: string }[]>`
+  it("records the owning extension on configuration rows and keeps no constant columns", async () => {
+    const constants = await fixture.sql<{ table: string; column: string }[]>`
       SELECT table_name AS table, column_name AS column FROM information_schema.columns
       WHERE table_schema = 'public'
         AND column_name IN ('managed_by_extension', 'activation_version')`;
-    expect(columns).toEqual([]);
+    expect(constants).toEqual([]);
+    const owned = await fixture.sql<{ table: string; nullable: string }[]>`
+      SELECT table_name AS table, is_nullable AS nullable FROM information_schema.columns
+      WHERE table_schema = 'public' AND column_name = 'owner_extension_id' ORDER BY 1`;
+    expect(owned).toEqual(
+      [
+        "capability_binding",
+        "integration_config",
+        "integration_secret",
+        "service_config",
+        "service_secret",
+      ].map((table) => ({ table, nullable: "YES" })),
+    );
   });
 
   it("indexes the prune paths and active admin jobs", async () => {
@@ -894,6 +945,8 @@ integration("schema hygiene", () => {
 
   it("admits a cancel_pending admin job and refuses an unknown status or type", async () => {
     await fixture.sql`INSERT INTO admin_job (type, status) VALUES ('integration.reload', 'cancel_pending')`;
+    for (const type of ["extension.enable", "extension.disable", "extension.purge"])
+      await fixture.sql`INSERT INTO admin_job (type) VALUES (${type})`;
     await expect(
       fixture.sql`INSERT INTO admin_job (type, status) VALUES ('integration.reload', 'cancelling')`,
     ).rejects.toMatchObject({ constraint_name: "admin_job_status_check" });
@@ -917,6 +970,288 @@ integration("schema hygiene", () => {
       SELECT recipient_user_id AS recipient FROM data_subject_request_notification
       WHERE request_id = ${request?.id ?? null}`;
     expect(alerts).toEqual([{ recipient: null }, { recipient: null }]);
+  });
+
+  describe("extension platform rows", () => {
+    const refused = (statement: Promise<unknown>, constraint: string) =>
+      expect(statement).rejects.toMatchObject({ constraint_name: constraint });
+    const demo = () =>
+      fixture.sql`INSERT INTO installed_extension (id, name, installed_version) VALUES ('demo', 'Demo', '1.0.0')
+        ON CONFLICT DO NOTHING`;
+
+    it("installed extensions carry their state, approvals and pins", async () => {
+      await demo();
+      const [extension] =
+        await fixture.sql`SELECT enabled, approved_grants FROM installed_extension WHERE id = 'demo'`;
+      expect(extension).toEqual({ enabled: true, approved_grants: {} });
+      await refused(
+        fixture.sql`UPDATE installed_extension SET approved_grants = '["gpu"]'::jsonb WHERE id = 'demo'`,
+        "installed_extension_approved_grants_check",
+      );
+      const component = (kind: string, id: string, commit: string | null, digest: string | null) =>
+        fixture.sql`INSERT INTO installed_extension_component (extension_id, kind, component_id, resolved_commit, image_digest)
+          VALUES ('demo', ${kind}, ${id}, ${commit}, ${digest})`;
+      await component("service", "demo-engine", "a".repeat(40), `sha256:${"b".repeat(64)}`);
+      await component("service", "demo-plain", null, null);
+      await component("integration", "demo-adapter", "a".repeat(40), null);
+      await refused(
+        component("service", "demo-tag", "v1.0.0", null),
+        "installed_extension_component_resolved_commit_check",
+      );
+      await refused(
+        component("service", "demo-digest", null, "b".repeat(64)),
+        "installed_extension_component_image_digest_check",
+      );
+    });
+
+    it("approved grants are stored only in their one normalised form", async () => {
+      await demo();
+      const store = (grants: unknown) =>
+        fixture.sql`UPDATE installed_extension SET approved_grants = ${JSON.stringify(grants)}::jsonb
+          WHERE id = 'demo'`;
+      for (const grants of [
+        { svc: "gpu" },
+        { svc: [1, 2] },
+        { svc: ["privileged", "gpu"] },
+        { svc: ["gpu", "gpu"] },
+        { svc: { a: 1 } },
+        { svc: ["gpu", null] },
+        ["gpu"],
+      ])
+        await refused(store(grants), "installed_extension_approved_grants_check");
+      await store({});
+      await store({ svc: ["gpu", "privileged"], other: [] });
+
+      // Grant identifiers mixing every character class a grant may hold: the
+      // database's order must be the code-unit order the API sorts in.
+      const identifiers: GrantId[] = [
+        "gpu",
+        "host-network",
+        "logging",
+        "peer-services",
+        "privileged",
+        "reachable-by-platform",
+        "host-path:/srv/data:ro",
+        "host-path:/srv/data:rw",
+        "host-path:/srv/data/2:ro",
+        "host-path:/srv/data/A:ro",
+        "host-path:/srv/data/a:ro",
+        "host-path:/srv/data-2:ro",
+        "host-path:/srv/data.2:ro",
+        "host-path:/srv/data_2:ro",
+        "host-path:/srv/dataA:ro",
+        "host-path:/srv/Data:ro",
+        "host-path:/srv/data0:ro",
+        "host-path:/srv/data9:ro",
+        "device:/dev/dri/renderD128",
+        "device:/dev/tty-a",
+        "device:/dev/tty_a",
+        "device:/dev/ttyA",
+        "device:/dev/ttya",
+        "device:/dev/tty0",
+        "device:/dev/tty/a",
+        "capability:NET_ADMIN",
+        "capability:NET_RAW",
+        "capability:SYS_TIME",
+        "capability:_",
+        "platform-service:redis",
+        "platform-service:demo-engine",
+        "platform-service:demo0",
+        "database-role:demo_role",
+        "database-role:demo2_role",
+        "database-role:demorole",
+      ];
+      const sorted = normalizeGrants(identifiers);
+      const byDatabase = await fixture.sql<{ id: string }[]>`
+        SELECT id FROM unnest(${identifiers}::text[]) AS id ORDER BY id COLLATE "C"`;
+      expect(byDatabase.map((row) => row.id)).toEqual(sorted);
+      const parsed = approvedGrantsSchema.parse({ "demo-engine": sorted, "demo-plain": [] });
+      await store(parsed);
+      expect(
+        await fixture.sql`SELECT approved_grants FROM installed_extension WHERE id = 'demo'`,
+      ).toEqual([{ approved_grants: parsed }]);
+      // Each neighbouring pair swapped is refused by both, so they agree on
+      // every adjacent comparison, not only on the whole list.
+      for (let i = 1; i < sorted.length; i++) {
+        const swapped = [...sorted];
+        [swapped[i - 1], swapped[i]] = [swapped[i] as GrantId, swapped[i - 1] as GrantId];
+        expect(approvedGrantsSchema.safeParse({ "demo-engine": swapped }).success, `${i}`).toBe(
+          false,
+        );
+        await refused(
+          store({ "demo-engine": swapped }),
+          "installed_extension_approved_grants_check",
+        );
+      }
+    });
+
+    it("configuration rows carry an owner and a schema version, and outlive the extension", async () => {
+      await demo();
+      await fixture.sql`INSERT INTO service_config (service_id, config, owner_extension_id) VALUES ('demo-engine', '{}'::jsonb, 'demo')`;
+      expect(
+        await fixture.sql`SELECT schema_version FROM service_config WHERE service_id = 'demo-engine'`,
+      ).toEqual([{ schema_version: 1 }]);
+      await refused(
+        fixture.sql`UPDATE service_config SET schema_version = 0 WHERE service_id = 'demo-engine'`,
+        "service_config_schema_version_check",
+      );
+      await refused(
+        fixture.sql`INSERT INTO integration_config (integration_id, config, schema_version) VALUES ('demo-adapter', '{}'::jsonb, 0)`,
+        "integration_config_schema_version_check",
+      );
+      const targets = JSON.stringify([
+        { component: "service:demo-engine", key: "INSTANCE_ID" },
+        { capability: "acme/feed" },
+      ]);
+      await fixture.sql`INSERT INTO extension_setting (extension_id, key, value, targets) VALUES ('demo', 'instanceId', 'maps.example.org', ${targets}::jsonb)`;
+      await fixture.sql`INSERT INTO extension_setting (extension_id, key, ciphertext, iv, tag, key_version, targets, generated)
+        VALUES ('demo', 'relayToken', 'c', 'i', 't', 1, ${targets}::jsonb, true)`;
+      await refused(
+        fixture.sql`INSERT INTO extension_setting (extension_id, key, value, ciphertext, iv, tag, key_version, targets)
+          VALUES ('demo', 'both', 'v', 'c', 'i', 't', 1, '[]'::jsonb)`,
+        "extension_setting_value_check",
+      );
+      await refused(
+        fixture.sql`INSERT INTO extension_setting (extension_id, key, targets) VALUES ('demo', 'neither', '[]'::jsonb)`,
+        "extension_setting_value_check",
+      );
+      await refused(
+        fixture.sql`INSERT INTO extension_setting (extension_id, key, value, targets, generated) VALUES ('demo', 'plain', 'v', '[]'::jsonb, true)`,
+        "extension_setting_generated_check",
+      );
+      await refused(
+        fixture.sql`INSERT INTO extension_setting (extension_id, key, value, targets) VALUES ('demo', 'object', 'v', '{}'::jsonb)`,
+        "extension_setting_targets_check",
+      );
+      for (const key of ["RELAY_TOKEN", "relay_token", "relayTOKEN", `k${"a".repeat(64)}`])
+        await refused(
+          fixture.sql`INSERT INTO extension_setting (extension_id, key, value, targets) VALUES ('demo', ${key}, 'v', '[]'::jsonb)`,
+          "extension_setting_key_check",
+        );
+      await refused(
+        fixture.sql`INSERT INTO extension_setting (extension_id, key, value, targets) VALUES ('demo', 'instanceId', 'other', '[]'::jsonb)`,
+        "extension_setting_pkey",
+      );
+      await fixture.sql`INSERT INTO extension_advisory_ack (extension_id, advisory_key) VALUES ('demo', ${"d".repeat(64)})`;
+      await refused(
+        fixture.sql`INSERT INTO extension_advisory_ack (extension_id, advisory_key) VALUES ('demo', 'advisory-1')`,
+        "extension_advisory_ack_advisory_key_check",
+      );
+      await refused(
+        fixture.sql`INSERT INTO extension_advisory_ack (extension_id, advisory_key) VALUES ('absent', ${"d".repeat(64)})`,
+        "extension_advisory_ack_extension_id_fkey",
+      );
+      await fixture.sql`DELETE FROM installed_extension WHERE id = 'demo'`;
+      expect(
+        await fixture.sql`SELECT 1 FROM extension_advisory_ack WHERE extension_id = 'demo'`,
+      ).toHaveLength(0);
+      expect(
+        await fixture.sql`SELECT 1 FROM extension_setting WHERE extension_id = 'demo'`,
+      ).toHaveLength(2);
+      expect(
+        await fixture.sql`SELECT owner_extension_id FROM service_config WHERE service_id = 'demo-engine'`,
+      ).toEqual([{ owner_extension_id: "demo" }]);
+    });
+
+    it("task runs allow one running row per task, and migrations a numbered name", async () => {
+      const run = (status: string, finished: string | null) =>
+        fixture.sql`INSERT INTO integration_task_run (integration_id, task_name, status, finished_at)
+          VALUES ('demo-adapter', 'import', ${status}, ${finished}) RETURNING id`;
+      const [first] = await run("running", null);
+      await refused(run("running", null), "integration_task_run_running_key");
+      await refused(run("succeeded", null), "integration_task_run_finished_at_check");
+      await refused(
+        run("interrupted", "2026-11-25T00:00:00Z"),
+        "integration_task_run_status_check",
+      );
+      await fixture.sql`UPDATE integration_task_run SET status = 'failed', finished_at = now(), error = 'interrupted by a restart'
+        WHERE id = ${first?.id ?? null}`;
+      await run("running", null);
+      const migration = (name: string, sha256: string) =>
+        fixture.sql`INSERT INTO extension_migration (integration_id, name, sha256) VALUES ('demo-adapter', ${name}, ${sha256})`;
+      await migration("0001_create_reports.sql", "0".repeat(64));
+      await refused(migration("create.sql", "0".repeat(64)), "extension_migration_name_check");
+      await refused(migration("0002_a__b.sql", "0".repeat(64)), "extension_migration_name_check");
+      await refused(migration("0002_more.sql", "abc"), "extension_migration_sha256_check");
+      await refused(
+        migration("0001_create_reports.sql", "1".repeat(64)),
+        "extension_migration_pkey",
+      );
+    });
+
+    it("name claims, catalogue sources and the revocation snapshot keep their keys", async () => {
+      const claim = (kind: string, name: string, extension: string) =>
+        fixture.sql`INSERT INTO extension_name_claim (kind, name, extension_id, source) VALUES (${kind}, ${name}, ${extension}, 'verified')`;
+      await claim("service", "demo-engine", "demo");
+      await claim("database-role", "demo-engine", "demo");
+      await refused(claim("service", "demo-engine", "other"), "extension_name_claim_pkey");
+      await refused(claim("volume", "demo-data", "demo"), "extension_name_claim_kind_check");
+      await fixture.sql`INSERT INTO extension_catalog_source (url, label) VALUES ('https://example.org/catalog.json', 'Example')`;
+      const snapshot = (id: number, body: string) =>
+        fixture.sql`INSERT INTO extension_revocation_snapshot (id, snapshot, fetched_at) VALUES (${id}, ${body}::jsonb, now())`;
+      await snapshot(1, '{"removed":[],"critical":[["demo",{"reason":"advisory"}]]}');
+      await refused(
+        snapshot(2, '{"removed":[],"critical":[]}'),
+        "extension_revocation_snapshot_singleton_check",
+      );
+      await fixture.sql`DELETE FROM extension_revocation_snapshot`;
+      await refused(snapshot(1, '{"removed":{}}'), "extension_revocation_snapshot_snapshot_check");
+      await refused(snapshot(1, "{}"), "extension_revocation_snapshot_snapshot_check");
+    });
+
+    it("pending erasures count attempts, and attention rows have closed value sets", async () => {
+      await fixture.sql`INSERT INTO subject_erasure_pending (integration_id, subject_user_id) VALUES ('demo-adapter', 'user-1')`;
+      expect(await fixture.sql`SELECT attempts, last_error FROM subject_erasure_pending`).toEqual([
+        { attempts: 0, last_error: null },
+      ]);
+      await refused(
+        fixture.sql`UPDATE subject_erasure_pending SET attempts = -1`,
+        "subject_erasure_pending_attempts_check",
+      );
+      await refused(
+        fixture.sql`INSERT INTO subject_erasure_pending (integration_id, subject_user_id) VALUES ('demo-adapter', 'user-1')`,
+        "subject_erasure_pending_pkey",
+      );
+      await fixture.sql`INSERT INTO integration_subject_handler (integration_id) VALUES ('demo-adapter')`;
+      await refused(
+        fixture.sql`INSERT INTO integration_subject_handler (integration_id) VALUES ('demo-adapter')`,
+        "integration_subject_handler_pkey",
+      );
+      await refused(
+        fixture.sql`INSERT INTO attention_item (key, severity, source, title) VALUES ('k', 'error', 's', 't')`,
+        "attention_item_severity_check",
+      );
+      await refused(
+        fixture.sql`INSERT INTO attention_item (key, severity, source, title, clearance) VALUES ('k', 'info', 's', 't', 'dismiss')`,
+        "attention_item_clearance_check",
+      );
+      await fixture.sql`INSERT INTO attention_item (key, severity, source, title) VALUES ('k', 'info', 's', 't')`;
+      expect(
+        await fixture.sql`SELECT clearance, acknowledged_at, occurrence_ref FROM attention_item WHERE key = 'k'`,
+      ).toEqual([{ clearance: "condition", acknowledged_at: null, occurrence_ref: null }]);
+      await fixture.sql`INSERT INTO attention_observation (key, since) VALUES ('k', now())`;
+      expect(
+        await fixture.sql`SELECT bad_count, good_count, data FROM attention_observation WHERE key = 'k'`,
+      ).toEqual([{ bad_count: 0, good_count: 0, data: null }]);
+      const notification = (channel: string, severity: string, status = "pending") =>
+        fixture.sql`INSERT INTO attention_notification (attention_key, occurrence, channel, severity, status, due_at)
+          VALUES ('k', 'o1', ${channel}, ${severity}, ${status}, now())`;
+      await notification("email", "warning");
+      await refused(
+        notification("email", "critical"),
+        "attention_notification_attention_key_occurrence_channel_key",
+      );
+      await refused(notification("sms", "warning"), "attention_notification_channel_check");
+      await refused(notification("webhook", "info"), "attention_notification_severity_check");
+      await refused(
+        notification("webhook", "warning", "cancelled"),
+        "attention_notification_status_check",
+      );
+      await fixture.sql`DELETE FROM attention_item WHERE key = 'k'`;
+      expect(
+        await fixture.sql`SELECT status, attempts FROM attention_notification WHERE attention_key = 'k'`,
+      ).toEqual([{ status: "pending", attempts: 0 }]);
+    });
   });
 });
 

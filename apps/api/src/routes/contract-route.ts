@@ -102,6 +102,10 @@ export function createContractRouteRegistrar<const R extends Registry>(
           : media
             ? { content: { [media]: { schema: body } } }
             : {}),
+        // Without `type: "null"` the document generator gives a bodiless
+        // response its default JSON content, which tells generated clients to
+        // parse an empty body.
+        ...(contract.kind === "empty" ? { type: "null" } : {}),
         ...(headers ? { headers: headers.properties } : {}),
       };
     }

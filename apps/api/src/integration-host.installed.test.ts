@@ -35,7 +35,6 @@ const MANIFEST = {
   frontend: {
     mapLayer: false,
     legend: false,
-    panel: false,
     layerSelector: { group: "map-details", labelKey: "delta", preview: "preview.svg" },
   },
 };

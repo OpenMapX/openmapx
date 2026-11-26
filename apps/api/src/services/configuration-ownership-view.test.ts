@@ -76,6 +76,8 @@ describe("effective configuration ownership metadata", () => {
           config: { REGION: "saved" },
           createdAt: now,
           updatedAt: now,
+          ownerExtensionId: null,
+          schemaVersion: 1,
         },
       ],
       integrationSecretRows: [
@@ -86,6 +88,7 @@ describe("effective configuration ownership metadata", () => {
           createdAt: now,
           updatedAt: now,
           updatedByUserId: null,
+          ownerExtensionId: null,
         },
       ],
     });
