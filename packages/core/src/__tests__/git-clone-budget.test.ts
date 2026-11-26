@@ -78,6 +78,26 @@ describe("assertGitTreeMetadataWithinBudget", () => {
       ]),
     ).toThrow(/file larger/i);
   });
+
+  it("refuses a blob the size filter left out as a file over the per-file limit", () => {
+    // With lazy fetching off, `ls-tree -l` prints `BAD` for a blob it does not have.
+    expect(() =>
+      assertGitTreeMetadataWithinBudget([
+        `100644 blob ${"a".repeat(40)}      12\tREADME.md`,
+        `100644 blob ${"b".repeat(40)}     BAD\tdata/huge.bin`,
+      ]),
+    ).toThrow(
+      new GitCloneQuotaError(
+        `Repository contains a file larger than ${GIT_CLONE_MAX_FILE_BYTES} bytes at data/huge.bin`,
+      ),
+    );
+  });
+
+  it("still reports an unsupported entry before a missing size", () => {
+    expect(() =>
+      assertGitTreeMetadataWithinBudget([`120000 blob ${"a".repeat(40)}     BAD\tescape`]),
+    ).toThrow(/unsupported entry type/i);
+  });
 });
 
 describe("spawnWithBufferedLogs redaction", () => {
