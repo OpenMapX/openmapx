@@ -473,7 +473,9 @@ assert_agent_without_checkout() {
 assert_installed_code_loading() {
   step "Check that cached integration code shares the API's modules"
   local api_container
-  api_container="$(docker ps --quiet --filter "label=com.docker.compose.project=$project" --filter "label=com.docker.compose.service=api")"
+  api_container="$(docker ps --quiet --filter "label=com.docker.compose.project=$project" \
+    --filter "label=com.docker.compose.service=api")" ||
+    fail "docker ps could not list the api containers"
   [[ -n "$api_container" ]] || fail "no api container is running"
   docker exec -i "$api_container" node --import tsx/esm --input-type=module - < scripts/smoke/installed-code-loading.mjs | tail -n 1 | grep -qx '{"ok":true}' ||
     fail "a bundle imported from the integration code cache did not share the API's modules"

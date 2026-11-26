@@ -3,6 +3,7 @@ import {
   chmodSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   renameSync,
@@ -12,7 +13,7 @@ import {
 } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { isComponentId } from "@openmapx/core/component-id";
 
 export interface IntegrationCodeCache {
@@ -25,11 +26,30 @@ export interface IntegrationCodeCache {
 }
 
 const SHA256_HEX = /^[0-9a-f]{64}$/;
+// Written into every root this module prepares. A non-empty directory without
+// it was not made by this module, so a mistaken setting is refused instead of
+// deleting whatever the directory holds.
+const ROOT_MARKER = ".openmapx-integration-code-cache";
 
-function defaultRoot(): string {
-  return (
-    process.env.OPENMAPX_INTEGRATION_CODE_CACHE_DIR ?? join(tmpdir(), "openmapx-integration-code")
+function cacheRoot(root: string | undefined): string {
+  const resolved = resolve(
+    root ||
+      process.env.OPENMAPX_INTEGRATION_CODE_CACHE_DIR ||
+      join(tmpdir(), "openmapx-integration-code"),
   );
+  if (dirname(resolved) === resolved) {
+    throw new Error("The integration code cache cannot be the filesystem root");
+  }
+  if (
+    existsSync(resolved) &&
+    readdirSync(resolved).length > 0 &&
+    !existsSync(join(resolved, ROOT_MARKER))
+  ) {
+    throw new Error(
+      `${resolved} is not empty and was not prepared as an integration code cache; refusing to delete it`,
+    );
+  }
+  return resolved;
 }
 
 function packageRoot(entry: string, name: string): string {
@@ -64,12 +84,13 @@ function hostPackageDirectories(): { sdk: string; zod: string } {
  * imported, and links the host packages bundles import into its `node_modules`.
  */
 export function prepareIntegrationCodeCache(options: { root?: string } = {}): IntegrationCodeCache {
-  const root = options.root ?? defaultRoot();
+  const root = cacheRoot(options.root);
   const packages = hostPackageDirectories();
 
   rmSync(root, { recursive: true, force: true });
   mkdirSync(root, { recursive: true, mode: 0o700 });
   chmodSync(root, 0o700);
+  writeFileSync(join(root, ROOT_MARKER), "", { mode: 0o400 });
   const scope = join(root, "node_modules", "@openmapx");
   mkdirSync(scope, { recursive: true, mode: 0o700 });
   symlinkSync(packages.sdk, join(scope, "integration-sdk"), "dir");
