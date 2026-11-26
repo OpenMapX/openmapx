@@ -3,13 +3,12 @@ import { tmpdir } from "node:os";
 import { join, relative, resolve } from "node:path";
 import { dts } from "rollup-plugin-dts";
 import ts from "typescript";
+import { INLINED_WORKSPACE_PACKAGES } from "./inlined-packages.mjs";
 
 // Bundles the SDK's declarations so the published `.d.ts` files name only its
 // public dependencies. TypeScript first emits declarations for every module the
-// entries reach; rollup then inlines the private workspace packages' modules and
-// leaves zod, the public contracts package and third-party type packages as
-// imports.
-const PUBLIC = /^@openmapx\/extension-contracts(\/|$)/;
+// entries reach; rollup then inlines the modules of the workspace packages that
+// the JavaScript build inlines too, and leaves everything else as imports.
 const sdkDirectory = import.meta.dirname;
 const packagesDirectory = resolve(sdkDirectory, "..");
 
@@ -17,9 +16,9 @@ const entries = readdirSync(join(sdkDirectory, "src"))
   .filter((file) => file.endsWith(".ts"))
   .map((file) => join(sdkDirectory, "src", file));
 
-// Each private workspace export key mapped to its source file. Resolving them
-// through `paths` instead of `node_modules` makes TypeScript treat them as the
-// program's own files, which it emits declarations for.
+// Each export key of an inlined workspace package mapped to its source file.
+// Resolving them through `paths` instead of `node_modules` makes TypeScript
+// treat them as the program's own files, which it emits declarations for.
 function workspaceSources() {
   const sources = {};
   for (const name of readdirSync(packagesDirectory)) {
@@ -27,7 +26,9 @@ function workspaceSources() {
     const manifestPath = join(directory, "package.json");
     if (!existsSync(manifestPath)) continue;
     const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-    if (!manifest.name?.startsWith("@openmapx/") || PUBLIC.test(manifest.name)) continue;
+    if (typeof manifest.name !== "string" || !INLINED_WORKSPACE_PACKAGES.test(manifest.name)) {
+      continue;
+    }
     const exports = manifest.exports ?? { ".": manifest.types ?? manifest.main };
     for (const [key, target] of Object.entries(exports)) {
       const file = typeof target === "string" ? target : (target?.types ?? target?.default);
@@ -72,7 +73,31 @@ function emitDeclarations(sources, outDir) {
     messages.push(ts.flattenDiagnosticMessageText(diagnostic.messageText, "\n"));
     diagnosed.set(declaration, messages);
   }
+  checkTypes(program);
   return { rootDir: options.rootDir, diagnosed };
+}
+
+// Emitting does not check types, and a type error can silently widen an
+// inferred type in the output to `any`. Every module the program reaches is
+// held to this, tree-shaken or not, because an inferred type can come from a
+// module that does not itself reach the output. It runs after the emit because
+// checking first changes the order in which the emitted types list members.
+function checkTypes(program) {
+  const errors = [
+    ...program.getOptionsDiagnostics(),
+    ...program.getGlobalDiagnostics(),
+    ...program.getSyntacticDiagnostics(),
+    ...program.getSemanticDiagnostics(),
+  ].filter((diagnostic) => diagnostic.category === ts.DiagnosticCategory.Error);
+  if (errors.length === 0) return;
+  const host = {
+    getCanonicalFileName: (fileName) => fileName,
+    getCurrentDirectory: () => sdkDirectory,
+    getNewLine: () => "\n",
+  };
+  throw new Error(
+    `the SDK's declarations would be built from code with type errors:\n${ts.formatDiagnostics(errors, host)}`,
+  );
 }
 
 function declarationPath(rootDir, outDir, sourceFile) {
@@ -107,7 +132,14 @@ function removeDirectory(directory) {
 
 const outDir = mkdtempSync(join(tmpdir(), "openmapx-integration-sdk-dts-"));
 const sources = workspaceSources();
-const { rootDir, diagnosed } = emitDeclarations(sources, outDir);
+let emitted;
+try {
+  emitted = emitDeclarations(sources, outDir);
+} catch (error) {
+  rmSync(outDir, { recursive: true, force: true });
+  throw error;
+}
+const { rootDir, diagnosed } = emitted;
 
 export default {
   input: Object.fromEntries(
