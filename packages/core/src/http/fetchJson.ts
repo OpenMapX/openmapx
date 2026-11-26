@@ -1,5 +1,8 @@
+import { FetchJsonHttpError } from "./fetch-json-error";
 import { parseRetryAfterMs } from "./retry-after";
 import { USER_AGENT } from "./userAgent";
+
+export { FetchJsonHttpError } from "./fetch-json-error";
 
 /** Default HTTP timeout for upstream JSON APIs. */
 export const DEFAULT_FETCH_TIMEOUT_MS = 10_000;
@@ -328,19 +331,6 @@ export interface FetchJsonOptions {
   nullOnError?: boolean;
   /** Extra `fetch` init (e.g. `method`, `body`). `signal` and `headers` are managed here. */
   init?: Omit<RequestInit, "signal" | "headers">;
-}
-
-/** Structured non-2xx response so callers can distinguish a missing resource from throttling. */
-export class FetchJsonHttpError extends Error {
-  readonly status: number;
-  readonly retryAfterMs?: number;
-
-  constructor(message: string, status: number, retryAfterMs?: number) {
-    super(message);
-    this.name = "FetchJsonHttpError";
-    this.status = status;
-    this.retryAfterMs = retryAfterMs;
-  }
 }
 
 async function request<T>(url: string, options: FetchJsonOptions): Promise<T> {

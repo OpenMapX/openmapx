@@ -70,7 +70,7 @@ const SERVER = [
   "./deployment-secret-policy",
   "./erasure-journal",
   "./feed-id",
-  "./http/fetchJson",
+  "./http/fetch-json-error",
   "./http/safe-download",
   "./http/safe-fetch-error",
   "./ids/uuidv7",

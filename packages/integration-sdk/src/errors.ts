@@ -1,4 +1,4 @@
-export { FetchJsonHttpError } from "@openmapx/core/http/fetchJson";
+export { FetchJsonHttpError } from "@openmapx/core/http/fetch-json-error";
 export { SafeFetchHttpError } from "@openmapx/core/http/safe-fetch-error";
 export { ConfigurationError } from "@openmapx/core/utils/errors";
 export { RoutingProviderError } from "@openmapx/integration-framework/contracts/routing-provider";

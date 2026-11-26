@@ -206,9 +206,9 @@
       "types": "./src/http/safe-fetch-error.ts",
       "default": "./src/http/safe-fetch-error.ts"
     },
-    "./http/fetchJson": {
-      "types": "./src/http/fetchJson.ts",
-      "default": "./src/http/fetchJson.ts"
+    "./http/fetch-json-error": {
+      "types": "./src/http/fetch-json-error.ts",
+      "default": "./src/http/fetch-json-error.ts"
     },
     "./utils/errors": {
       "types": "./src/utils/errors.ts",
