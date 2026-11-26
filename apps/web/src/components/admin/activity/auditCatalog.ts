@@ -119,6 +119,7 @@ export const AUDIT_ACTION_GROUPS: ReadonlyArray<{
       "system.update.check",
       "system.update",
       "system.diagnostics.collect",
+      "attention.acknowledge",
       "dawarich.provision",
       "dawarich.oidc_secret.rotate",
     ],

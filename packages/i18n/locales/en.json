@@ -6738,6 +6738,7 @@
       "ambient_places_enabled_set": "Nearby places switched on or off",
       "ambient_places_resume": "Nearby places build resumed",
       "ambient_places_rollback": "Nearby places rolled back",
+      "attention_acknowledge": "Acknowledged an attention item",
       "auth_policy_apply": "Authentication policy applied",
       "backup_create": "Backup created",
       "backup_delete": "Backup deleted",

@@ -133,6 +133,11 @@ BEGIN
   -- An impersonation session must not outlive the administrator who started
   -- it as an ordinary-looking session of the impersonated account.
   DELETE FROM session WHERE impersonated_by = OLD.id;
+  -- Integrations that hold data about the account erase it after the commit;
+  -- each gets one pending erasure the API works off.
+  INSERT INTO subject_erasure_pending (integration_id, subject_user_id)
+  SELECT integration_id, OLD.id FROM integration_subject_handler
+  ON CONFLICT DO NOTHING;
   RETURN OLD;
 END $$;--> statement-breakpoint
 CREATE TRIGGER openmapx_erase_user_residue BEFORE DELETE ON "user" FOR EACH ROW EXECUTE FUNCTION openmapx_erase_user_residue();

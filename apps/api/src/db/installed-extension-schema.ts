@@ -1,6 +1,8 @@
+import type { ApprovedGrants } from "@openmapx/core/api-contracts";
 import type { StandaloneIntegrationProvenance } from "@openmapx/core/ops";
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   check,
   foreignKey,
   index,
@@ -37,6 +39,10 @@ export const installedExtension = pgTable(
     installedAt: timestamp("installed_at", { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
     installedByUserId: text("installed_by_user_id"),
+    enabled: boolean("enabled").notNull().default(true),
+    // Keyed by service id: an approval is one decision about the whole
+    // extension. The agent's record is authoritative; this row is the panel's.
+    approvedGrants: jsonb("approved_grants").$type<ApprovedGrants>().notNull().default({}),
   },
   (table) => [
     foreignKey({
@@ -57,6 +63,10 @@ export const installedExtension = pgTable(
       "installed_extension_standalone_provenance_check",
       sql`${table.installationKind} <> 'standalone' or coalesce((${table.sourceTrust} = 'community' and ${table.id} ~ '^local-[0-9a-f-]{36}$' and jsonb_typeof(${table.provenance}) = 'object' and ${table.provenance}->>'kind' in ('artifact','source','uploaded-artifact') and ${table.provenance}->>'contentDigest' ~ '^[a-f0-9]{64}$'),false)`,
     ),
+    check(
+      "installed_extension_approved_grants_check",
+      sql`jsonb_typeof(${table.approvedGrants}) = 'object'`,
+    ),
   ],
 );
 
@@ -69,6 +79,11 @@ export const installedExtensionComponent = pgTable(
     extensionId: text("extension_id").notNull(),
     kind: text("kind").notNull(), // "integration" | "service"
     componentId: text("component_id").notNull(),
+    // Pins of what was installed; which component kinds carry them is decided
+    // where components are installed. A service whose manifest names no digest
+    // has none.
+    resolvedCommit: text("resolved_commit"),
+    imageDigest: text("image_digest"),
   },
   (table) => [
     primaryKey({
@@ -90,6 +105,14 @@ export const installedExtensionComponent = pgTable(
     uniqueIndex("installed_extension_component_kind_component_id_key").on(
       table.kind,
       table.componentId,
+    ),
+    check(
+      "installed_extension_component_resolved_commit_check",
+      sql`${table.resolvedCommit} ~ '^[a-f0-9]{40}$'`,
+    ),
+    check(
+      "installed_extension_component_image_digest_check",
+      sql`${table.imageDigest} ~ '^sha256:[a-f0-9]{64}$'`,
     ),
   ],
 );

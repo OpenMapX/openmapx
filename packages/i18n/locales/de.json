@@ -6738,6 +6738,7 @@
       "ambient_places_enabled_set": "Orte in der Nähe ein- oder ausgeschaltet",
       "ambient_places_resume": "Erstellung der Orte in der Nähe fortgesetzt",
       "ambient_places_rollback": "Orte in der Nähe zurückgesetzt",
+      "attention_acknowledge": "Hinweis bestätigt",
       "auth_policy_apply": "Anmelderichtlinie angewendet",
       "backup_create": "Sicherung erstellt",
       "backup_delete": "Sicherung gelöscht",

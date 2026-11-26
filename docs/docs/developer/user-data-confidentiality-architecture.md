@@ -130,7 +130,9 @@ foreign keys, clears attribution columns through `ON DELETE SET NULL` keys, and
 runs the `BEFORE DELETE` trigger `openmapx_erase_user_residue()` on `user`. The
 trigger clears what no key reaches: verification challenges, audit IP
 addresses, user agents and details, log entries, data-job actors, pending
-account confirmations and impersonation sessions. Every delete path runs it,
+account confirmations and impersonation sessions. It also records one pending
+erasure for each integration that registered a personal-data handler; the API
+then calls the handler and deletes the record. Every delete path runs it,
 including the restore replay and plain SQL; `TRUNCATE` does not. The API's
 delete hook adds the offline-package rows, which name the account by a keyed
 hash the database cannot compute. Deletion does not retroactively rewrite

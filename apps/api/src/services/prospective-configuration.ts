@@ -1451,6 +1451,8 @@ async function mergeOverlay(
           config: {},
           createdAt: now,
           updatedAt: now,
+          ownerExtensionId: null,
+          schemaVersion: 1,
         };
         rows.serviceRows.push(row);
       }
@@ -1464,6 +1466,8 @@ async function mergeOverlay(
           config: {},
           createdAt: now,
           updatedAt: now,
+          ownerExtensionId: null,
+          schemaVersion: 1,
         };
         rows.integrationRows.push(row);
       }
@@ -1481,6 +1485,7 @@ async function mergeOverlay(
           createdAt: now,
           updatedAt: now,
           updatedByUserId: null,
+          ownerExtensionId: null,
         });
     } else {
       rows.integrationSecretRows = rows.integrationSecretRows.filter(
@@ -1494,6 +1499,7 @@ async function mergeOverlay(
           createdAt: now,
           updatedAt: now,
           updatedByUserId: null,
+          ownerExtensionId: null,
         });
     }
   }

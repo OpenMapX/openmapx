@@ -530,6 +530,13 @@ const DERIVED_ACTIONS: Record<string, (file: string) => string[]> = {
   "apps/api/src/utils/audit-log.ts action": () => [],
 };
 
+/**
+ * Audit actions registered, grouped and worded before the API writes them,
+ * because registering one changes the database baseline. An entry must go
+ * once its writer exists.
+ */
+const AUDIT_ACTIONS_AHEAD_OF_THEIR_WRITER = ["attention.acknowledge"];
+
 function auditActions(): string[] {
   const { codes, unreadable, unusedDerivations } = collectAuditCodes(
     apiSources,
@@ -538,7 +545,11 @@ function auditActions(): string[] {
   );
   expect(unreadable, "audit writers this test cannot read").toEqual([]);
   expect(unusedDerivations, "derivations no audit writer uses").toEqual([]);
-  return codes;
+  expect(
+    AUDIT_ACTIONS_AHEAD_OF_THEIR_WRITER.filter((action) => codes.includes(action)),
+    "audit actions listed as ahead of their writer that the API now writes",
+  ).toEqual([]);
+  return sorted([...codes, ...AUDIT_ACTIONS_AHEAD_OF_THEIR_WRITER]);
 }
 
 /** Catalogue keys cannot hold `.` or `-`; the label helpers read `_` instead. */

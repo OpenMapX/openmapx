@@ -8,6 +8,8 @@ export const capabilityBinding = pgTable(
     serviceId: text("service_id").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    // The owning extension, kept without a foreign key as on integration_config.
+    ownerExtensionId: text("owner_extension_id"),
   },
   (t) => [
     primaryKey({ name: "capability_binding_pkey", columns: [t.integrationId, t.capability] }),

@@ -31,6 +31,8 @@ export const serviceSecret = pgTable(
       .$onUpdate(() => new Date())
       .notNull(),
     updatedByUserId: text("updated_by_user_id"),
+    // The owning extension, kept without a foreign key as on service_config.
+    ownerExtensionId: text("owner_extension_id"),
   },
   (table) => [
     primaryKey({ name: "service_secret_pkey", columns: [table.serviceId, table.key] }),
