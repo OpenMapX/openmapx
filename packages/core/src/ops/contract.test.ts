@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { createCatalogPinSet } from "../catalog-pins/generation";
+import {
+  MAX_RECORDED_INVENTORY_BYTES,
+  recordedInventoryBytes,
+  recordedSourceBytes,
+} from "../services/integration-records";
 import { prepareConfigurationCandidate } from "./configuration-preparation";
 import {
   authorizeOpsOperation,
@@ -1115,6 +1120,38 @@ describe("ops contract", () => {
     expect(() =>
       parseOpsResult("serviceRepository.inspect", { ...inspection, checkout: "/srv" }),
     ).toThrow();
+  });
+
+  it("reports the largest set of installed integrations the agent admits in one inspection", () => {
+    // 256 integrations with the longest ids, reason and artifact URL, each with
+    // one file of quotes so that the inventory budget is used to the byte.
+    const id = (prefix: string, i: number) => `${prefix.repeat(44)}${String(i).padStart(4, "0")}`;
+    const url = `https://artifacts.example.test/${"u".repeat(2048 - 31)}`;
+    const integrations = Array.from({ length: 256 }, (_, i) => ({
+      integrationId: id("a", i),
+      extensionId: id("e", i),
+      status: "needs_reinstall" as const,
+      reason: "r".repeat(1_024),
+      source: { kind: "artifact" as const, url, sha256: "0".repeat(64) },
+      files: [{ path: '"'.repeat(207), sha256: "0".repeat(64) }],
+      pending: { transactionId: `itx1_${"0".repeat(24)}` },
+    }));
+    expect(
+      integrations.reduce(
+        (total, entry) =>
+          total + recordedInventoryBytes(entry.files) + recordedSourceBytes(entry.source),
+        0,
+      ),
+    ).toBe(MAX_RECORDED_INVENTORY_BYTES);
+    const result = {
+      integrations,
+      unrecorded: Array.from({ length: 256 }, (_, i) => id("d", i)),
+    };
+    const bytes = new TextEncoder().encode(
+      JSON.stringify(parseOpsResult("installedIntegrations.inspect", result)),
+    ).byteLength;
+    expect(bytes).toBeLessThan(OPS_KIND_POLICIES["installedIntegrations.inspect"].maxResultBytes);
+    expect(() => parseBoundedOpsResult("installedIntegrations.inspect", result)).not.toThrow();
   });
 });
 

@@ -30,10 +30,11 @@ export const MAX_RECORDED_FILES = 1_024;
 /** Files all installed integrations together may hold, so one inspection reports them all. */
 export const MAX_TOTAL_RECORDED_FILES = 4_096;
 /**
- * Bytes the file inventories of all installed integrations may take in one
- * inspection result of at most 1 MiB. The rest of that result, up to 256
- * integrations with a reason of up to 1,024 characters each, a source and
- * framing, takes about 300 KiB at most.
+ * Bytes the file paths, digests and artifact locators of all installed
+ * integrations may take, as JSON, in one inspection result of at most 1 MiB.
+ * The remaining fields of 256 integrations, each with a reason of up to 1,024
+ * characters, and the list of unrecorded directories take at most about
+ * 360 KiB, which leaves the result under its limit.
  */
 export const MAX_RECORDED_INVENTORY_BYTES = 640 * 1024;
 /** The hash and JSON framing of one inventory entry in the inspection result. */
@@ -93,13 +94,26 @@ export interface IntegrationRecord extends IntegrationInstallation {
   pending: IntegrationPending | null;
 }
 
-/** The bytes `files` take in an inspection result: each path in UTF-8, plus its hash and framing. */
+/** The bytes a string takes as JSON text, its quotes and escapes included. */
+function jsonBytes(value: string): number {
+  return Buffer.byteLength(JSON.stringify(value), "utf8");
+}
+
+/**
+ * The bytes `files` take in an inspection result: each path as JSON encodes
+ * it (a quote or backslash takes two bytes), plus its hash and framing.
+ */
 export function recordedInventoryBytes(files: readonly IntegrationFileDigest[]): number {
   let bytes = 0;
   for (const file of files) {
-    bytes += Buffer.byteLength(file.path, "utf8") + INVENTORY_ENTRY_OVERHEAD_BYTES;
+    bytes += jsonBytes(file.path) - 2 + INVENTORY_ENTRY_OVERHEAD_BYTES;
   }
   return bytes;
+}
+
+/** The bytes an artifact locator takes as JSON in an inspection result; 0 for an upload. */
+export function recordedSourceBytes(source: IntegrationSource | null): number {
+  return source?.kind === "artifact" ? jsonBytes(source.url) : 0;
 }
 
 export function integrationRecordsDirectory(infraDir: string): string {

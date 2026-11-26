@@ -60,6 +60,7 @@ const {
   MAX_TOTAL_RECORDED_FILES,
   readIntegrationRecords,
   recordedInventoryBytes,
+  recordedSourceBytes,
   sha256Hex,
 } = coreServices;
 type IntegrationRecord = coreServices.IntegrationRecord;
@@ -111,6 +112,7 @@ interface Staged {
   integrationId: string;
   manifest: Record<string, unknown>;
   files: IntegrationFileDigest[];
+  source: IntegrationSource;
 }
 
 function syncDirectory(path: string): void {
@@ -322,7 +324,7 @@ export class IntegrationStore {
       if (!files) {
         throw new Error(`An integration may hold at most ${MAX_RECORDED_FILES} regular files`);
       }
-      return { work, tree, integrationId: id, manifest, files };
+      return { work, tree, integrationId: id, manifest, files, source: normalizedSource };
     } catch (error) {
       rmSync(work, { recursive: true, force: true });
       throw error;
@@ -360,11 +362,11 @@ export class IntegrationStore {
   private conflicts(integrationId: string, staged: Staged): string[] {
     const { records } = this.reading();
     let files = staged.files.length;
-    let inventoryBytes = recordedInventoryBytes(staged.files);
+    let inventoryBytes = recordedInventoryBytes(staged.files) + recordedSourceBytes(staged.source);
     for (const [id, record] of records) {
       if (id === integrationId) continue;
       files += record.files.length;
-      inventoryBytes += recordedInventoryBytes(record.files);
+      inventoryBytes += recordedInventoryBytes(record.files) + recordedSourceBytes(record.source);
     }
     const problems: string[] = [];
     if (files > MAX_TOTAL_RECORDED_FILES) {

@@ -249,6 +249,7 @@ export {
   parseIntegrationRecord,
   readIntegrationRecords,
   recordedInventoryBytes,
+  recordedSourceBytes,
   sha256Hex,
 } from "./integration-records";
 export { findServiceManifestDirs } from "./manifest-discovery";
