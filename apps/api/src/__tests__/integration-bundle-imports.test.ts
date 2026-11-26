@@ -1,7 +1,18 @@
-import { describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
+import * as acorn from "acorn";
+import { describe, expect, it, vi } from "vitest";
 import { assertBundleImports } from "../integration-bundle-imports";
 
+vi.mock("acorn", async (importOriginal) => {
+  const original = await importOriginal<typeof import("acorn")>();
+  return { ...original, parse: vi.fn(original.parse) };
+});
+
 const bundle = (source: string): Uint8Array => Buffer.from(source, "utf8");
+
+const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
+
+const check = (bytes: Uint8Array) => assertBundleImports(bytes, sha256(bytes));
 
 const HOST_ALIAS = "@integrations/x";
 const HOST_SOURCE = "file:///app/packages/place-ids/src/index.ts";
@@ -80,7 +91,7 @@ describe("installed backend bundle imports", () => {
     "class A { #p = 1; static s = 2; static { this.t = 3; } has(o) { return #p in o; } }",
     "await Promise.resolve(); { using r = { [Symbol.dispose]() {} }; }",
   ])("accepts %s", (source) => {
-    expect(() => assertBundleImports(bundle(source))).not.toThrow();
+    expect(() => check(bundle(source))).not.toThrow();
   });
 
   it.each([
@@ -97,7 +108,7 @@ describe("installed backend bundle imports", () => {
     ['await import("file:///etc/passwd");', "file:///etc/passwd"],
     ['import "node:not-a-module";', "node:not-a-module"],
   ])("refuses %s", (source, specifier) => {
-    expect(() => assertBundleImports(bundle(source))).toThrow(JSON.stringify(specifier));
+    expect(() => check(bundle(source))).toThrow(JSON.stringify(specifier));
   });
 
   describe("with whitespace and line terminators beyond ASCII", () => {
@@ -110,22 +121,22 @@ describe("installed backend bundle imports", () => {
         [`${name} before export * from`, `const a = 1;${character}export * from "${HOST_ALIAS}";`],
       ]),
     )("refuses an import hidden by %s", (_label, source) => {
-      expect(() => assertBundleImports(bundle(source))).toThrow(JSON.stringify(HOST_ALIAS));
+      expect(() => check(bundle(source))).toThrow(JSON.stringify(HOST_ALIAS));
     });
 
     it("refuses an import after a line comment that U+2028 ends", () => {
       const source = `// note${LINE_SEPARATOR}import "${HOST_ALIAS}";`;
-      expect(() => assertBundleImports(bundle(source))).toThrow(JSON.stringify(HOST_ALIAS));
+      expect(() => check(bundle(source))).toThrow(JSON.stringify(HOST_ALIAS));
     });
 
     it("refuses an import after a hashbang that U+2028 ends", () => {
       const source = `#!/usr/bin/env node${LINE_SEPARATOR}import "${HOST_ALIAS}";`;
-      expect(() => assertBundleImports(bundle(source))).toThrow(JSON.stringify(HOST_ALIAS));
+      expect(() => check(bundle(source))).toThrow(JSON.stringify(HOST_ALIAS));
     });
 
     it("refuses a file: URL of host source", () => {
       const source = `${LINE_SEPARATOR}import "${HOST_SOURCE}";`;
-      expect(() => assertBundleImports(bundle(source))).toThrow(JSON.stringify(HOST_SOURCE));
+      expect(() => check(bundle(source))).toThrow(JSON.stringify(HOST_SOURCE));
     });
 
     it("refuses an import behind a byte order mark", () => {
@@ -133,7 +144,7 @@ describe("installed backend bundle imports", () => {
         Buffer.from([0xef, 0xbb, 0xbf]),
         Buffer.from(`import "${HOST_ALIAS}";`),
       ]);
-      expect(() => assertBundleImports(bytes)).toThrow(JSON.stringify(HOST_ALIAS));
+      expect(() => check(bytes)).toThrow(JSON.stringify(HOST_ALIAS));
     });
   });
 
@@ -142,8 +153,8 @@ describe("installed backend bundle imports", () => {
     ["hexadecimal and code point escapes", 'import "\\x40integrations\\u{2F}x";'],
     ["a line continuation", 'import "@integrations/\\\nx";'],
   ])("judges a specifier written with %s by its value", (_label, source) => {
-    expect(() => assertBundleImports(bundle(source))).toThrow(JSON.stringify(HOST_ALIAS));
-    expect(() => assertBundleImports(bundle(hidden(source)))).toThrow(JSON.stringify(HOST_ALIAS));
+    expect(() => check(bundle(source))).toThrow(JSON.stringify(HOST_ALIAS));
+    expect(() => check(bundle(hidden(source)))).toThrow(JSON.stringify(HOST_ALIAS));
   });
 
   it.each([
@@ -156,8 +167,8 @@ describe("installed backend bundle imports", () => {
       `await import("zod", { with: { type: await import("${HOST_ALIAS}") } });`,
     ],
   ])("refuses %s", (_label, source) => {
-    expect(() => assertBundleImports(bundle(source))).toThrow(JSON.stringify(HOST_ALIAS));
-    expect(() => assertBundleImports(bundle(hidden(source)))).toThrow(JSON.stringify(HOST_ALIAS));
+    expect(() => check(bundle(source))).toThrow(JSON.stringify(HOST_ALIAS));
+    expect(() => check(bundle(hidden(source)))).toThrow(JSON.stringify(HOST_ALIAS));
   });
 
   it.each([
@@ -171,9 +182,7 @@ describe("installed backend bundle imports", () => {
     ["CommonJS with a sloppy-mode octal", "var mode = 0644;\nmodule.exports = { mode };"],
     ["CommonJS with a with statement", 'with (require("zod")) { module.exports = z; }'],
   ])("refuses %s as not a valid ES module", (_label, source) => {
-    expect(() => assertBundleImports(bundle(source))).toThrow(
-      /^backend bundle is not a valid ES module: /,
-    );
+    expect(() => check(bundle(source))).toThrow(/^backend bundle is not a valid ES module: /);
   });
 
   it("refuses bytes that are not valid UTF-8", () => {
@@ -182,16 +191,45 @@ describe("installed backend bundle imports", () => {
       Buffer.from([0xff]),
       Buffer.from('"; import "zod";'),
     ]);
-    expect(() => assertBundleImports(bytes)).toThrow(
+    expect(() => check(bytes)).toThrow(
       "backend bundle is not a valid ES module: it is not valid UTF-8",
     );
   });
 
+  describe("on a repeated load", () => {
+    const parse = vi.mocked(acorn.parse);
+
+    it("does not parse bytes that already passed, and parses changed bytes", () => {
+      const first = bundle('import { z } from "zod"; export const version = 1;');
+      const changed = bundle('import { z } from "zod"; export const version = 2;');
+
+      parse.mockClear();
+      check(first);
+      expect(parse).toHaveBeenCalledTimes(1);
+
+      check(first);
+      expect(parse).toHaveBeenCalledTimes(1);
+
+      check(changed);
+      expect(parse).toHaveBeenCalledTimes(2);
+    });
+
+    it("scans a refused bundle again and refuses it with the same message", () => {
+      const refused = bundle(`import "${HOST_ALIAS}"; export const version = 3;`);
+      const message = `backend bundle imports ${JSON.stringify(HOST_ALIAS)}, which is not an entry of @openmapx/integration-sdk, zod or a Node built-in`;
+
+      parse.mockClear();
+      expect(() => check(refused)).toThrow(message);
+      expect(() => check(refused)).toThrow(message);
+      expect(parse).toHaveBeenCalledTimes(2);
+    });
+  });
+
   it("scans a bundle as large as the largest backend entry", { timeout: 30_000 }, () => {
     const source = largeBundle(8 * 1024 * 1024);
-    expect(() => assertBundleImports(bundle(source))).not.toThrow();
-    expect(() =>
-      assertBundleImports(bundle(`${source}${LINE_SEPARATOR}import "${HOST_ALIAS}";\n`)),
-    ).toThrow(JSON.stringify(HOST_ALIAS));
+    expect(() => check(bundle(source))).not.toThrow();
+    expect(() => check(bundle(`${source}${LINE_SEPARATOR}import "${HOST_ALIAS}";\n`))).toThrow(
+      JSON.stringify(HOST_ALIAS),
+    );
   });
 });

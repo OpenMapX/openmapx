@@ -90,19 +90,44 @@ function notAModule(reason: string): Error {
 }
 
 /**
+ * SHA-256 values of the bundles that passed the scan in this process. Each one
+ * stands for a module Node already holds for the life of the process, so the
+ * set grows no faster than those modules do and needs no bound of its own.
+ * Failures are not remembered: a refused bundle is scanned again on its next
+ * load and fails with the same message.
+ */
+const acceptedBundles = new Set<string>();
+
+/**
  * Refuses an installed backend bundle that imports anything other than the
  * integration SDK's entries, zod or a Node built-in, before it is imported.
  *
- * Checked here rather than left to resolution from the code cache, because the
- * API's TypeScript runner applies the host's path aliases to every import,
- * so a specifier such as `@integrations/...` would otherwise reach host source.
- * A full ECMAScript parser reads whitespace, line terminators, comments and
- * string escapes by the language's rules, as Node does. A bundle it cannot
- * parse as a module is refused rather than imported unchecked.
- * A dynamic `import()` whose argument is not a string literal cannot be
- * checked without running the code and is left to resolution.
+ * The scan is a packaging aid, not a security boundary. Installed code is
+ * trusted and runs with full access to the API process; it can reach any module
+ * through an `import()` whose argument is computed, and a parser other than
+ * Node's own can be made to read crafted source differently from Node. What the
+ * scan catches is an honest mistake: a dependency left out of the bundle, or an
+ * import of host internals, which the API's TypeScript runner would otherwise
+ * resolve through the host's path aliases (`@integrations/...`) and run. Such a
+ * bundle fails to load with a message naming the import instead of working by
+ * accident or failing somewhere less clear.
+ *
+ * `sha256` is the digest of `bytes`; a bundle whose bytes already passed in this
+ * process is not parsed again, so a reload of unchanged code costs no scan.
  */
-export function assertBundleImports(bytes: Uint8Array): void {
+export function assertBundleImports(bytes: Uint8Array, sha256: string): void {
+  if (acceptedBundles.has(sha256)) return;
+  scanBundleImports(bytes);
+  acceptedBundles.add(sha256);
+}
+
+/**
+ * Reads whitespace, line terminators, comments and string escapes by the
+ * language's rules. A bundle that does not parse as a module is refused rather
+ * than imported unchecked. An `import()` whose argument is not a string literal
+ * cannot be judged without running the code and is left to resolution.
+ */
+function scanBundleImports(bytes: Uint8Array): void {
   let source: string;
   try {
     source = utf8.decode(bytes);
