@@ -859,12 +859,16 @@ describe("integration administration generation", () => {
         responses: Object.fromEntries(
           Object.entries(operation.responses).map(([status, response]) => [
             status,
-            {
-              description: "Synthetic contract fixture",
-              content: {
-                "application/json": { schema: schema(response.schema, `${id}Response${status}`) },
-              },
-            },
+            "schema" in response
+              ? {
+                  description: "Synthetic contract fixture",
+                  content: {
+                    "application/json": {
+                      schema: schema(response.schema, `${id}Response${status}`),
+                    },
+                  },
+                }
+              : { description: "Synthetic contract fixture" },
           ]),
         ),
       };

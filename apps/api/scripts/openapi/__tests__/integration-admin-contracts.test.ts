@@ -2,7 +2,7 @@ import { integrationAdminOperations } from "@openmapx/core/api-contracts";
 import { expect, it, vi } from "vitest";
 import { generateDocument } from "../document";
 
-it("collects exactly all 32 actual integration producers, complete statuses, headers and admin auth", async () => {
+it("collects exactly all 34 actual integration producers, complete statuses, headers and admin auth", async () => {
   const network = vi.spyOn(globalThis, "fetch").mockImplementation(() => {
     throw Error("Network denied");
   });
@@ -11,15 +11,17 @@ it("collects exactly all 32 actual integration producers, complete statuses, hea
     const tagged = Object.values(document.paths)
       .flatMap((item) => Object.values(item as object))
       .filter((value) => (value as { tags?: string[] }).tags?.includes("integration-admin"));
-    expect(tagged).toHaveLength(32);
+    expect(tagged).toHaveLength(34);
     for (const [id, contract] of Object.entries(integrationAdminOperations)) {
       const actual =
         document.paths[contract.path.replace(/:([^/]+)/g, "{$1}")][contract.method.toLowerCase()];
       expect(actual.operationId).toBe(id);
       expect(actual["x-openmapx-auth"]).toBe("admin");
       expect(Object.keys(actual.responses).sort()).toEqual(Object.keys(contract.responses).sort());
-      for (const status of Object.keys(contract.responses))
-        expect(Object.keys(actual.responses[status].content)).toEqual(["application/json"]);
+      for (const [status, response] of Object.entries(contract.responses))
+        if (response.kind === "empty")
+          expect(actual.responses[status]).not.toHaveProperty("content");
+        else expect(Object.keys(actual.responses[status].content)).toEqual(["application/json"]);
       expect(actual.responses["429"].headers).toHaveProperty("retry-after");
     }
     const hours = document.paths["/api/admin/integrations/{id}/health/history"].get.parameters.find(
