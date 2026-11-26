@@ -261,6 +261,43 @@ describe("integration packaging contract", () => {
     ).rejects.toThrow("Artifact holds more than 512 asset files");
   });
 
+  it("counts a preview below assets/ that the asset pattern does not collect", async () => {
+    const source = sourceTree();
+    const file = join(source, "manifest.json");
+    writeFileSync(
+      file,
+      JSON.stringify({
+        ...JSON.parse(readFileSync(file, "utf8")),
+        frontend: {
+          layerSelector: {
+            group: "map-details",
+            labelKey: "layer",
+            preview: "assets/.preview.svg",
+          },
+        },
+      }),
+    );
+    rmSync(join(source, "assets"), { recursive: true });
+    mkdirSync(join(source, "assets"));
+    writeFileSync(join(source, "assets", ".preview.svg"), "<svg/>");
+    for (let index = 0; index < 511; index++) {
+      writeFileSync(join(source, "assets", `icon-${index}.svg`), "<svg/>");
+    }
+
+    const target = outFile();
+    const result = await packageIntegration({ rootDir: source, source, outFile: target });
+    expect(result.files).toContain("assets/.preview.svg");
+    const host = mkdtempSync(join(tmpdir(), "omx-"));
+    roots.push(host);
+    await installIntegration({ rootDir: host, source: target, sourceKind: "artifact" });
+
+    // One more asset is refused when packaging, as it would be when installing.
+    writeFileSync(join(source, "assets", "icon-511.svg"), "<svg/>");
+    await expect(
+      packageIntegration({ rootDir: source, source, outFile: outFile(), dryRun: true }),
+    ).rejects.toThrow("Artifact holds more than 512 asset files");
+  });
+
   it("refuses, before reading any contents, an artifact no install accepts", async () => {
     const source = sourceTree();
     // 25 sparse assets at the per-asset limit add up to exactly 200 MiB of

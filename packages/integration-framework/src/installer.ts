@@ -2395,7 +2395,14 @@ function collectArtifactFiles(
 
   // A layer-selector preview stored under `assets/` is already staged above.
   const staged = new Set(files.map((file) => file.relativePath));
-  files.push(...collectAssetFiles(directory).filter((file) => !staged.has(file.relativePath)));
+  const assets = collectAssetFiles(directory).filter((file) => !staged.has(file.relativePath));
+  // An install counts every file below `assets/`, including a preview whose
+  // name the asset pattern would not have collected.
+  const stagedUnderAssets = files.filter((file) => file.relativePath.startsWith("assets/")).length;
+  if (assets.length + stagedUnderAssets > INTEGRATION_ARCHIVE_LIMITS.assetFiles) {
+    throw tooManyAssetFiles();
+  }
+  files.push(...assets);
 
   const seen = new Set<string>();
   for (const file of files) {
@@ -2770,19 +2777,24 @@ export async function packageIntegration(opts: PackageOptions): Promise<PackageR
   // Built in memory from the exact allowlisted set. Platform `tar` dialects
   // disagree about the flags that make output reproducible, so the archive is
   // written with fixed ustar headers instead of shelling out.
-  mkdirSync(dirname(resolve(opts.outFile)), { recursive: true });
-  writeFileSync(
-    resolve(opts.outFile),
-    createDeterministicTarGz(
-      files.map((file) => ({
-        path: file.relativePath,
-        contents:
-          file.absoluteSource === null
-            ? Buffer.from(file.contents ?? "", "utf-8")
-            : readFileSync(file.absoluteSource),
-      })),
-    ),
+  const artifact = createDeterministicTarGz(
+    files.map((file) => ({
+      path: file.relativePath,
+      contents:
+        file.absoluteSource === null
+          ? Buffer.from(file.contents ?? "", "utf-8")
+          : readFileSync(file.absoluteSource),
+    })),
   );
+  // Every install also bounds the compressed file, and gzip enlarges
+  // incompressible content such as already-compressed images or tiles.
+  if (artifact.length > DEFAULT_MAX_ARTIFACT_BYTES) {
+    throw new Error(
+      `Artifact would be ${artifact.length} bytes; an install accepts at most ${DEFAULT_MAX_ARTIFACT_BYTES}`,
+    );
+  }
+  mkdirSync(dirname(resolve(opts.outFile)), { recursive: true });
+  writeFileSync(resolve(opts.outFile), artifact);
 
   return {
     id: manifest.id,
