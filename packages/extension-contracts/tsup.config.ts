@@ -4,6 +4,7 @@ export default defineConfig({
     schemas: "src/schemas.ts",
     artifact: "src/artifact.ts",
     archive: "src/archive.ts",
+    grants: "src/grants.ts",
     index: "src/index.ts",
     integration: "src/integration.ts",
     service: "src/service.ts",

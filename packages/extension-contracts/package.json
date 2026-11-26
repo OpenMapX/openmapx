@@ -79,6 +79,11 @@
       "import": "./src/archive.ts",
       "default": "./src/archive.ts"
     },
+    "./grants": {
+      "types": "./src/grants.ts",
+      "import": "./src/grants.ts",
+      "default": "./src/grants.ts"
+    },
     "./schemas": {
       "types": "./src/schemas.ts",
       "import": "./src/schemas.ts",
@@ -157,6 +162,10 @@
       "./archive": {
         "types": "./dist/archive.d.ts",
         "import": "./dist/archive.js"
+      },
+      "./grants": {
+        "types": "./dist/grants.d.ts",
+        "import": "./dist/grants.js"
       },
       "./schemas": {
         "types": "./dist/schemas.d.ts",

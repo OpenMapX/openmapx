@@ -13,6 +13,23 @@ export {
   extensionManifestSchema,
   validateExtensionManifest,
 } from "./extension";
+export type { ApprovedGrants, GrantId } from "./grants";
+export {
+  approvedGrantsSchema,
+  DATABASE_PRIVILEGE_PATTERN,
+  DATABASE_ROLE_NAME_PATTERN,
+  DATABASE_SCHEMA_NAME_PATTERN,
+  DEVICE_PATH_PATTERN,
+  GRANT_ID_MAX_LENGTH,
+  grantIdSchema,
+  HOST_PATH_MAX_LENGTH,
+  HOST_PATH_PATTERN,
+  isGrantId,
+  isReservedDatabaseName,
+  MAX_APPROVED_GRANTS,
+  MAX_GRANTS_PER_SERVICE,
+  normalizeGrants,
+} from "./grants";
 export {
   COMPONENT_ID_MAX_LENGTH,
   componentIdSchema,
