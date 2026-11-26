@@ -51,11 +51,8 @@ forwarder_name="openmapx-update-smoke-registry-forwarder"
 registry_image="registry:2.8.3"
 registry="localhost:5000/openmapx"
 release_counter=0
-cookie_file=""
 registry_certs=""
 update_timeout_seconds="${UPDATE_SMOKE_UPDATE_TIMEOUT_SECONDS:-1200}"
-admin_email="update-smoke@openmapx.org"
-admin_password=""
 release_images=(api web data-manager ops-agent transitous-runner)
 cases="${UPDATE_SMOKE_CASES:-happy unhealthy}"
 
@@ -234,29 +231,6 @@ install_release_one() {
   [[ "$(image_id_of api)" == "$(expected_image_id api update-smoke-r1)" ]] ||
     fail "the API does not run release N"
   create_admin_session
-}
-
-# An administrator account and its session cookie, as an operator creates them.
-create_admin_session() {
-  step "Create an administrator session"
-  admin_password="$(openssl rand -hex 24)"
-  local api="https://localhost"
-  curl --silent --show-error --insecure --fail --max-time 30 \
-    --header "content-type: application/json" --header "origin: $api" \
-    --data @- "$api/api/auth/sign-up/email" >/dev/null \
-    <<<"{\"email\":\"$admin_email\",\"password\":\"$admin_password\",\"name\":\"Update smoke\"}" ||
-    fail "administrator sign-up failed"
-  openmapx users verify "$admin_email" >/dev/null || fail "users verify failed"
-  openmapx users promote "$admin_email" >/dev/null || fail "users promote failed"
-  local jar="$work/cookies"
-  curl --silent --show-error --insecure --fail --max-time 30 --cookie-jar "$jar" \
-    --header "content-type: application/json" --header "origin: $api" \
-    --data @- "$api/api/auth/sign-in/email" >/dev/null \
-    <<<"{\"email\":\"$admin_email\",\"password\":\"$admin_password\"}" ||
-    fail "administrator sign-in failed"
-  cookie_file="$work/session-cookie"
-  (umask 077 && awk '$6 ~ /better-auth\.session_token$/ { print $6 "=" $7 }' "$jar" >"$cookie_file")
-  [[ -s "$cookie_file" ]] || fail "no session cookie was issued"
 }
 
 # Checks the published release and prints "<release id> <manifest digest>".
