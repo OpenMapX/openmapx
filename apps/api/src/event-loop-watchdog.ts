@@ -151,6 +151,8 @@ export function startEventLoopWatchdog(options: {
   runtimeDir: string;
   log: Pick<Logger, "error" | "warn">;
   pid?: number;
+  /** For tests, which scale thresholds and blocks down with it; the API keeps the default. */
+  heartbeatMs?: number;
 }): EventLoopWatchdog | null {
   if (active) return active;
   if (!(options.thresholdMs > 0)) return null;
@@ -167,12 +169,13 @@ export function startEventLoopWatchdog(options: {
   const buffer = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT * SLOTS);
   const shared = new Int32Array(buffer);
   Atomics.store(shared, THRESHOLD, Math.round(options.thresholdMs));
+  const heartbeatMs = options.heartbeatMs ?? HEARTBEAT_MS;
   const heartbeat = setInterval(() => {
     Atomics.add(shared, HEARTBEATS, 1);
     Atomics.store(shared, DEBUGGER, inspector.url() === undefined ? 0 : 1);
-  }, HEARTBEAT_MS);
+  }, heartbeatMs);
   heartbeat.unref();
-  const worker = startWatchdogWorker(buffer, options.runtimeDir);
+  const worker = startWatchdogWorker(buffer, options.runtimeDir, heartbeatMs);
   worker.on("error", (error: unknown) => {
     options.log.error(`event-loop watchdog stopped: ${describeThrown(error)}`);
   });
@@ -199,16 +202,20 @@ export function startEventLoopWatchdog(options: {
 }
 
 /**
- * The watchdog's thread on `buffer`, laid out as `WATCHDOG_SLOTS`. It does
- * not keep the process alive.
+ * The watchdog's thread on `buffer`, laid out as `WATCHDOG_SLOTS`, ticking
+ * every `heartbeatMs`. It does not keep the process alive.
  */
-export function startWatchdogWorker(buffer: SharedArrayBuffer, runtimeDir: string): Worker {
+export function startWatchdogWorker(
+  buffer: SharedArrayBuffer,
+  runtimeDir: string,
+  heartbeatMs = HEARTBEAT_MS,
+): Worker {
   const worker = new Worker(WORKER_SOURCE, {
     eval: true,
     workerData: {
       buffer,
       markerPath: join(runtimeDir, BOOT_MARKER_FILE),
-      heartbeatMs: HEARTBEAT_MS,
+      heartbeatMs,
     },
   });
   worker.unref();

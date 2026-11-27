@@ -3,7 +3,11 @@ import { createApp } from "./app";
 import { extensionSql, integrationSql, sql } from "./db/index";
 import type { MigrationRun } from "./db/migration-runner";
 import { cancelRunningExtensionMigrations } from "./extension-migrations";
-import { createFatalHandler, createStartupStopHandler } from "./process-lifecycle";
+import {
+  createFatalHandler,
+  createGracefulStopHandler,
+  createStartupStopHandler,
+} from "./process-lifecycle";
 import { processLogger } from "./process-logger";
 import { redis } from "./redis";
 import { cancelStartupMigrations } from "./server-wiring";
@@ -50,13 +54,13 @@ const app = await createApp({
 });
 await app.start();
 
-// Graceful shutdown
+const stopGracefully = createGracefulStopHandler({
+  stop: () => app.stop(),
+  disconnect: async () => redis?.disconnect(),
+  pools: [sql, integrationSql, extensionSql],
+  exit: (code) => process.exit(code),
+});
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.off(signal, stopDuringStartup);
-  process.on(signal, async () => {
-    await app.stop();
-    await redis?.disconnect();
-    await Promise.all([sql.end(), integrationSql.end(), extensionSql.end()]);
-    process.exit(0);
-  });
+  process.on(signal, stopGracefully);
 }

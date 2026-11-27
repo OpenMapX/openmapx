@@ -2,13 +2,21 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { apiModule, runChild, startChild } from "./support/child-process.js";
+import { beginBoot } from "../safe-mode.js";
+import {
+  apiModule,
+  childTestTimeout,
+  killLeftoverChildren,
+  runChild,
+  startChild,
+} from "./support/child-process.js";
 
 const SCOPE = apiModule("integration-scope.ts");
 const SAFE_MODE = apiModule("safe-mode.ts");
 const PROCESS_LIFECYCLE = apiModule("process-lifecycle.ts");
-const CHILD_TIMEOUT_MS = 30_000;
-const TEST_TIMEOUT_MS = 60_000;
+/** How long a child may run once started; every child here ends within a second. */
+const CHILD_TIMEOUT_MS = 15_000;
+const TEST_TIMEOUT_MS = childTestTimeout(CHILD_TIMEOUT_MS);
 
 let runtimeDir: string;
 
@@ -17,6 +25,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  killLeftoverChildren();
   rmSync(runtimeDir, { recursive: true, force: true });
 });
 
@@ -121,14 +130,7 @@ describe("the integration a fatal error is attributed to", () => {
         installedCodeStarted: true,
         lastFatal: { integrationId: null },
       });
-      const next = await runChild(
-        `
-          import { beginBoot } from ${JSON.stringify(SAFE_MODE)};
-          beginBoot(${JSON.stringify(runtimeDir)}, new Date());
-        `,
-        { timeoutMs: CHILD_TIMEOUT_MS },
-      );
-      expect(next.code).toBe(0);
+      beginBoot(runtimeDir, new Date());
       expect(readMarker().uncleanExits).toEqual([{ at: expect.any(String), integrationId: null }]);
     },
     TEST_TIMEOUT_MS,
@@ -137,18 +139,30 @@ describe("the integration a fatal error is attributed to", () => {
 
 describe("automatic safe mode across processes", () => {
   it(
-    "starts the fourth process in safe mode after three crashes and names the integration",
+    "starts the third process in safe mode after two crashes and the first exit, naming the integration",
     async () => {
+      // One unclean exit without a name before these processes; the boot
+      // marker's own tests pin the counting, this one that crashes count.
+      writeFileSync(
+        join(runtimeDir, "boot-marker.json"),
+        JSON.stringify({
+          version: 1,
+          running: false,
+          installedCodeStarted: false,
+          current: null,
+          lastFatal: null,
+          uncleanExits: [{ at: new Date().toISOString(), integrationId: null }],
+        }),
+      );
       const boots: unknown[] = [];
-      for (let attempt = 0; attempt < 4; attempt += 1) {
+      for (let attempt = 0; attempt < 3; attempt += 1) {
         const { code, stdout } = await runChild(crashingProcess(runtimeDir), {
           timeoutMs: CHILD_TIMEOUT_MS,
         });
         boots.push(JSON.parse(stdout.trim().split("\n")[0] ?? "null"));
-        if (attempt < 3) expect(code).toBe(1);
+        if (attempt < 2) expect(code).toBe(1);
       }
       expect(boots).toEqual([
-        { enterSafeMode: false, integrationId: null },
         { enterSafeMode: false, integrationId: null },
         { enterSafeMode: false, integrationId: null },
         { enterSafeMode: true, integrationId: "acme" },
@@ -185,14 +199,10 @@ describe("automatic safe mode across processes", () => {
       running.child.kill("SIGKILL");
       expect((await running.exited).signal).toBe("SIGKILL");
 
-      const next = await runChild(
-        `
-          import { beginBoot } from ${JSON.stringify(SAFE_MODE)};
-          console.log(JSON.stringify(beginBoot(${JSON.stringify(runtimeDir)}, new Date())));
-        `,
-        { timeoutMs: CHILD_TIMEOUT_MS },
-      );
-      expect(JSON.parse(next.stdout)).toEqual({ enterSafeMode: false, integrationId: null });
+      expect(beginBoot(runtimeDir, new Date())).toEqual({
+        enterSafeMode: false,
+        integrationId: null,
+      });
       expect(readMarker().uncleanExits).toEqual([]);
     },
     TEST_TIMEOUT_MS,

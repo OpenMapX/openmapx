@@ -143,6 +143,16 @@ describe("install smoke script", () => {
     expect(assertion).toContain(`[[ "$verdict" == '{"ok":true}' ]]`);
     expect(script).toMatch(/\n {2}assert_installed_code_loading\n/);
   });
+
+  it("checks in the api container that the API can write its runtime directory", () => {
+    const assertion = script.slice(
+      script.indexOf("assert_installed_code_loading() {"),
+      script.indexOf("start_infrastructure() {"),
+    );
+    expect(assertion).toContain(
+      `docker exec "$api_container" sh -c 'test -w /var/lib/openmapx/runtime && test -s /var/lib/openmapx/runtime/boot-marker.json' ||\n    fail "the api cannot write its runtime directory"`,
+    );
+  });
 });
 
 /** Runs `body` in a shell that has sourced the install smoke script. */

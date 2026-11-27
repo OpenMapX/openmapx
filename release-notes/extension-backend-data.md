@@ -11,7 +11,8 @@ and export, and the API can now start without them when one of them stops it.
 `database.migrations: true` gets `ctx.db` with `transaction(fn, { timeoutMs })`
 besides `execute`. Transactions run on a separate API pool,
 `openmapx-api-extensions`, of at most 2 connections, so each API process now opens
-up to 16 database connections instead of 14. A transaction ends with
+up to 16 database connections instead of 14, and one more while an integration's
+migrations run at a start, reload or install. A transaction ends with
 `ProviderTimeoutError` and rolls back when the wait for a connection, the
 transaction, one of its statements or a pause between them outlasts its timeout
 (default 30 seconds, at most 15 minutes), unless its callback has finished and the
@@ -142,8 +143,8 @@ data.
 
 ## Required action
 
-Make sure PostgreSQL's `max_connections` covers 16 connections per API process
-plus the data manager and other clients. Run one API process per instance. Keep
+Make sure PostgreSQL's `max_connections` covers 17 connections per API process
+(16 pooled, one for migrations) plus the data manager and other clients. Run one API process per instance. Keep
 `infra/docker/data/api-runtime` with the deployment; `openmapx compose` creates it
 when it renders the stack. Update admin API clients for the new status values, fields, Activity
 source, case event type and audit action. Extension authors whose extension keeps

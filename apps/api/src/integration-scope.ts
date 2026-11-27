@@ -85,9 +85,10 @@ export const SHUTDOWN_HANDLER_DEADLINE_MS = 10_000;
 
 /**
  * The longest the host waits, in all, for the shutdown handlers of every
- * installed integration as the process stops. They run side by side, and the
- * budget stays well inside the container's stop grace period, so the
- * database pools still close before the process is killed.
+ * installed integration as the process stops. They run side by side; with
+ * the rest of the stop sequence (see `SHUTDOWN_GRACE_MS` in `app.ts`) the
+ * budget fits the container's 20-second stop grace period, so the database
+ * pools still close before the process is killed.
  */
 export const PROCESS_SHUTDOWN_BUDGET_MS = 5_000;
 

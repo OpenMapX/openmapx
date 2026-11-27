@@ -158,8 +158,11 @@ export interface AppStartupControl {
 
 /**
  * Open event streams never end on their own, so shutdown cuts the connections
- * still open after this long. Both together stay under the ten seconds a
- * container runtime allows before it kills the process.
+ * still open after this long. With the cancelled migration before them (at
+ * most 5 seconds), the installed integrations' shutdown budget after them
+ * (5 seconds) and the end of the database pools (2 seconds), a stop takes at
+ * most 19 seconds plus whatever built-in shutdown handlers take, inside the
+ * 20-second stop grace period of `services/api/service.json`.
  */
 const SHUTDOWN_GRACE_MS = 5_000;
 const SHUTDOWN_FORCE_MS = 2_000;

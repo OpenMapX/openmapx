@@ -482,6 +482,10 @@ assert_installed_code_loading() {
     verdict=""
   [[ "$verdict" == '{"ok":true}' ]] ||
     fail "the installed-code check in the api container failed: ${verdict:-no verdict}"
+  # Without a writable runtime mount the API only logs a warning and runs
+  # without automatic safe mode.
+  docker exec "$api_container" sh -c 'test -w /var/lib/openmapx/runtime && test -s /var/lib/openmapx/runtime/boot-marker.json' ||
+    fail "the api cannot write its runtime directory"
 }
 
 start_infrastructure() {

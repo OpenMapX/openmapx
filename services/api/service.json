@@ -169,6 +169,7 @@
     },
     "memory": "2g",
     "restart": "unless-stopped",
+    "stopGracePeriod": "20s",
     "dependsOn": [
       {
         "service": "postgis",

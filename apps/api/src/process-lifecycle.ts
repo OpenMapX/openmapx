@@ -24,6 +24,37 @@ export function createFatalHandler(
   };
 }
 
+/** A database pool as the stop sees it. */
+interface ClosablePool {
+  end(options?: { timeout?: number }): Promise<void>;
+}
+
+/**
+ * How long, in seconds, the stop waits for queries still running before it
+ * closes their connections. A scheduled task's transaction may run for
+ * minutes; the server rolls back what the closed connections left open.
+ */
+const POOL_END_TIMEOUT_SECONDS = 2;
+
+/**
+ * The handler for a stop request once the API serves: stop the app, close
+ * Redis and the database pools, then exit, without waiting for extension
+ * database work still in flight.
+ */
+export function createGracefulStopHandler(options: {
+  stop: () => Promise<void>;
+  disconnect: () => Promise<unknown>;
+  pools: readonly ClosablePool[];
+  exit: (code: number) => void;
+}): () => Promise<void> {
+  return async () => {
+    await options.stop();
+    await options.disconnect();
+    await Promise.all(options.pools.map((pool) => pool.end({ timeout: POOL_END_TIMEOUT_SECONDS })));
+    options.exit(0);
+  };
+}
+
 /**
  * The handler for a stop request that arrives before the API serves. Every
  * signal marks the stop and stops the watchdog first, also one that arrives
