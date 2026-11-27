@@ -20,6 +20,8 @@ export interface DirectionsQueryParams extends BikeRoutingOptions {
   departAt?: string;
   /** Wall-clock arrival time `YYYY-MM-DDTHH:mm`. Mutually exclusive with `departAt`. */
   arriveBy?: string;
+  /** Routing integration the request is pinned to, instead of the operator's order. */
+  provider?: string;
 }
 
 // Highways and tolls only apply to driving; the UI hides their toggles for
@@ -54,6 +56,7 @@ export function directionsQueryKey({
   bikePreferQuietRoads,
   bikePreferSmoothSurfaces,
   bikeSpeedKmh,
+  provider,
 }: DirectionsQueryParams): (string | number | boolean | undefined)[] {
   const waypointsStr = waypoints.map(([lng, lat]) => `${lng},${lat}`).join(";");
   const eff = effectiveAvoid(mode, avoidHighways, avoidTolls);
@@ -80,6 +83,8 @@ export function directionsQueryKey({
           }),
         )
       : []),
+    // Only a pinned request carries the integration, so unpinned keys stay as they were.
+    ...(provider ? [`provider:${provider}`] : []),
   ];
 }
 
@@ -114,6 +119,7 @@ export function directionsRequestFor(params: DirectionsQueryParams): FetchDirect
     departAt,
     arriveBy,
     ...bicycleOptions(mode, params),
+    ...(params.provider && { provider: params.provider }),
   };
 }
 

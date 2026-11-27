@@ -52,6 +52,7 @@ export interface GroundRequestInput extends BikeRoutingOptions {
   lang: string;
   departAt?: string;
   arriveBy?: string;
+  provider?: string;
 }
 
 /** The displayed route's request without its waypoints; a stop detour compares with exactly this. */
@@ -71,6 +72,7 @@ export function buildGroundRequest(input: GroundRequestInput): GroundRouteReques
     lang: input.lang,
     departAt: input.departAt,
     arriveBy: input.arriveBy,
+    ...(input.provider && { provider: input.provider }),
   };
 }
 

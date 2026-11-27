@@ -107,6 +107,21 @@
                   "items": {
                     "type": "string"
                   }
+                },
+                "modes": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "trafficProof": {
+                  "type": "boolean"
+                },
+                "timeAware": {
+                  "type": "boolean"
+                },
+                "exclusions": {
+                  "type": "boolean"
                 }
               },
               "required": [

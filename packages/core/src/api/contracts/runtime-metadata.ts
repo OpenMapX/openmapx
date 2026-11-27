@@ -15,6 +15,15 @@ export const serviceCapabilitySchema = z.strictObject({
   healthy: z.boolean(),
   available: z.boolean(),
   domains: z.array(z.string()),
+  /**
+   * Present only on an integration that registers a routing engine: the travel
+   * modes it plans, and whether it carries traffic proofs, honours a departure
+   * or arrival time, and honours exclusion geometry.
+   */
+  modes: z.array(z.string()).optional(),
+  trafficProof: z.boolean().optional(),
+  timeAware: z.boolean().optional(),
+  exclusions: z.boolean().optional(),
 });
 export const capabilitiesResponseSchema = z.strictObject({
   services: z.record(z.string(), serviceCapabilitySchema),

@@ -1,8 +1,14 @@
 import type { RoadConditionRouteImpact, Route } from "@openmapx/core";
 
+/** What the capabilities and integration metadata say about each routing integration. */
+export type RoutingEngineLabels = Readonly<
+  Record<string, { readonly name: string; readonly trafficProof: boolean }>
+>;
+
 export interface RouteTrafficStatusValue {
   application: "verified" | "expired" | "limited" | "unavailable" | "unverified";
-  source: "localValhalla" | "hostedValhalla" | "valhalla" | "osrm" | "unknown";
+  /** The routing integration that produced the route; null when the answer names none. */
+  source: { integrationId: string; name: string; hosted: boolean } | null;
   deadline: number | null;
 }
 
@@ -14,25 +20,23 @@ export function routeTrafficStatus(
   route: Route,
   impact: RoadConditionRouteImpact | undefined,
   provider: string | undefined,
+  engines: RoutingEngineLabels,
   nowMs: number,
 ): RouteTrafficStatusValue | null {
   if (route.mode !== "driving" && route.mode !== "motorcycle") return null;
+  // A hosted engine answers from a graph this server's traffic writer never touched.
   const hosted = route.sourceIds?.includes("stadia-maps") === true;
-  const source =
-    provider === "routing-valhalla"
-      ? hosted
-        ? "hostedValhalla"
-        : "valhalla"
-      : provider === "routing-osrm"
-        ? "osrm"
-        : "unknown";
+  const engine = provider && Object.hasOwn(engines, provider) ? engines[provider] : undefined;
+  const source = provider
+    ? { integrationId: provider, name: engine?.name ?? provider, hosted }
+    : null;
   const result: RouteTrafficStatusValue = { application: "unverified", source, deadline: null };
   if (impact?.availability === "expired") return { ...result, application: "expired" };
   if (impact?.availability === "limited") return { ...result, application: "limited" };
   if (impact?.availability === "unavailable" || impact?.availability === "unsupported")
     return { ...result, application: "unavailable" };
   const p = route.trafficProof;
-  if (provider !== "routing-valhalla" || hosted || !p || impact?.availability !== "current")
+  if (engine?.trafficProof !== true || hosted || !p || impact?.availability !== "current")
     return result;
   if (
     p.schemaVersion !== 1 ||
@@ -63,7 +67,7 @@ export function routeTrafficStatus(
   if (assessmentDeadline > proofDeadline) return result;
   return {
     application: "verified",
-    source: "localValhalla",
+    source,
     deadline: Math.min(proofDeadline, assessmentDeadline),
   };
 }

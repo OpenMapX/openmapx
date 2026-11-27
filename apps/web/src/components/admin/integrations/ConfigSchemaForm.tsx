@@ -6,6 +6,7 @@ import type {
 } from "@openmapx/core/api-contracts";
 import { useMutation } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
+import { useMemo } from "react";
 import { useIntegrationAdmin } from "@/lib/admin/integrationAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
 import { SchemaConfigForm } from "../shared/SchemaConfigForm";
@@ -14,6 +15,8 @@ const excludedKeys = ["enabled"];
 
 interface ConfigSchemaFormProps {
   integrationId: string;
+  /** Keys another control on the page edits, beside `enabled`. */
+  excludeKeys?: readonly string[];
   /** The manifest configSchema object. */
   schema: Record<string, unknown> | undefined;
   /** Resolved config values with source annotations. */
@@ -32,6 +35,7 @@ interface ConfigSchemaFormProps {
  */
 export function ConfigSchemaForm({
   integrationId,
+  excludeKeys,
   schema,
   resolvedConfig,
   ownership,
@@ -40,6 +44,10 @@ export function ConfigSchemaForm({
   const t = useTranslations("adminIntegrations");
   const admin = useIntegrationAdmin();
   const owner = useAdminMutationOwner(admin.client, integrationId);
+  const excluded = useMemo(
+    () => (excludeKeys?.length ? [...excludedKeys, ...excludeKeys] : excludedKeys),
+    [excludeKeys],
+  );
 
   const saveMutation = useMutation({
     retry: false,
@@ -58,7 +66,7 @@ export function ConfigSchemaForm({
       schema={schema}
       resolvedConfig={resolvedConfig}
       ownership={ownership}
-      excludeKeys={excludedKeys}
+      excludeKeys={excluded}
       onSave={async (diff) => {
         await saveMutation.mutateAsync(diff);
       }}

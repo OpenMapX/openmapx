@@ -2,13 +2,30 @@ import {
   type CapabilitiesResponse,
   capabilitiesResponseSchema,
 } from "@openmapx/core/api-contracts";
-import { toIntegrationMeta } from "@openmapx/integration-framework";
+import { type RoutingProvider, toIntegrationMeta } from "@openmapx/integration-framework";
 import type { FastifyPluginAsync } from "fastify";
 import { getAllIntegrations } from "../integration-host.js";
 import { isIntegrationHealthy } from "../services/integration-health.js";
 import { osmContributionsPubliclyEnabled } from "../utils/osm-config.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
 import { runtimeMetadataJsonSchema } from "./runtime-metadata-schemas";
+
+/**
+ * What a client needs to decide, without knowing engine ids, which routing
+ * integration can serve a request and whose traffic proofs it may verify.
+ */
+function routingCapability(
+  providers: readonly unknown[] | undefined,
+): Partial<CapabilitiesResponse["services"][string]> {
+  const engines = (providers ?? []) as RoutingProvider[];
+  if (engines.length === 0) return {};
+  return {
+    modes: [...new Set(engines.flatMap((engine) => engine.supportedModes ?? []))],
+    trafficProof: engines.some((engine) => engine.supportsTrafficProof === true),
+    timeAware: engines.some((engine) => engine.supportsTimeAware === true),
+    exclusions: engines.some((engine) => engine.supportsExclusions === true),
+  };
+}
 
 export const capabilitiesRoute: FastifyPluginAsync = async (fastify) => {
   declareRouteAuth(fastify, "public");
@@ -34,6 +51,7 @@ export const capabilitiesRoute: FastifyPluginAsync = async (fastify) => {
           healthy,
           available: meta.enabled && (healthy || !integration.manifest.healthCheck),
           domains: meta.domains,
+          ...routingCapability(integration.providers.get("routing")),
         };
       }
 

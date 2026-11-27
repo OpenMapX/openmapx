@@ -5,6 +5,15 @@ import { NextIntlClientProvider } from "next-intl";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { RouteTrafficStatus } from "./RouteTrafficStatus";
 
+vi.mock("@/lib/useRoutingEngines", () => {
+  const engine = { available: true, modes: ["driving"], timeAware: true, exclusions: true };
+  const engines = [
+    { ...engine, id: "routing-valhalla", name: "Valhalla", trafficProof: true },
+    { ...engine, id: "routing-osrm", name: "OSRM", trafficProof: false },
+  ];
+  return { useRoutingEngines: () => engines };
+});
+
 const now = Date.parse("2026-10-07T02:00:00Z");
 const route: Route = {
   mode: "driving",
@@ -76,6 +85,21 @@ it("replaces old status on a new provider/route without proof", () => {
     "Available road updates were used",
   );
 });
+it("names a hosted engine as hosted and an unnamed source as unknown", () => {
+  const rendered = render(view({ ...route, sourceIds: ["stadia-maps"] }));
+  fireEvent.click(screen.getByRole("button", { name: "About traffic" }));
+  expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
+    "Route provider: Hosted Valhalla (Stadia Maps)",
+  );
+  rendered.rerender(
+    <NextIntlClientProvider locale="en" messages={en}>
+      <RouteTrafficStatus route={route} impact={impact} />
+    </NextIntlClientProvider>,
+  );
+  expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
+    "Route provider: Routing source unknown",
+  );
+});
 it("removes a prior successful claim on failed assessment", () => {
   const rendered = render(view());
   fireEvent.click(screen.getByRole("button", { name: "About traffic" }));
@@ -112,7 +136,7 @@ it("rearms expiry when a clock correction makes the first callback early", () =>
 it("keeps provider and application details out of the default summary", () => {
   render(view());
   expect(screen.queryByText("Traffic data unavailable")).toBeNull();
-  expect(screen.queryByText(/Self-hosted Valhalla/)).toBeNull();
+  expect(screen.queryByText(/Route provider: Valhalla/)).toBeNull();
   expect(screen.queryByText("Available road updates were used for this route.")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "About traffic" }));
   expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
@@ -120,6 +144,9 @@ it("keeps provider and application details out of the default summary", () => {
   );
   expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
     "Available road updates were used for this route.",
+  );
+  expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
+    "Route provider: Valhalla",
   );
   fireEvent.click(screen.getByRole("button", { name: "Close" }));
   expect(screen.queryByRole("dialog")).toBeNull();

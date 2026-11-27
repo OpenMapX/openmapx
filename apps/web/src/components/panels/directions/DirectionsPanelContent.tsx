@@ -88,7 +88,14 @@ export function DirectionsPanelContent() {
     useDirectionsStore.getState().setMode(nextMode);
     details.leave();
   };
-  const recovery = useRouteRecovery({ focusWaypoint: fields.focusWaypoint, switchMode });
+  const recovery = useRouteRecovery({
+    focusWaypoint: fields.focusWaypoint,
+    switchMode,
+    // An empty answer names its engine; a failed one is known only when it was pinned.
+    failedEngine: ground.directionsQuery.isError
+      ? ground.groundRequest.provider
+      : ground.directionsQuery.data?.provider,
+  });
 
   const transitDetails = openTransitItinerary(transit, details);
   if (transitDetails) {

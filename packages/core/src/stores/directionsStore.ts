@@ -130,6 +130,12 @@ export interface DirectionsState {
   avoidHighways: boolean;
   avoidTolls: boolean;
   avoidFerries: boolean;
+  /**
+   * The routing integration a ground route is pinned to after a failed or
+   * empty answer offered another engine. Any change to the trip releases it.
+   */
+  routingProvider: string | null;
+  setRoutingProvider: (integrationId: string | null) => void;
   transitItineraries: TripItinerary[];
   transitTimeMode: "now" | "depart" | "arrive";
   transitReference: TransitReferenceParams | null;
@@ -245,21 +251,33 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
     "bikeHillPreference",
     "deutschlandticketOnly",
   ]);
+  const pinnedRequestKeys = new Set([
+    ...routingKeys,
+    "avoidHighways",
+    "avoidTolls",
+    "avoidFerries",
+    "bikeProfile",
+    "bikePreferQuietRoads",
+    "bikePreferSmoothSurfaces",
+    "bikeSpeedKmh",
+  ]);
   const update = (patch: Partial<DirectionsState>) => {
     const release =
       (get().pendingTransitSelection || get().transitReference) &&
       Object.keys(patch).some((key) => routingKeys.has(key));
-    set(
-      release
-        ? {
-            ...patch,
-            pendingTransitSelection: null,
-            transitReference: null,
-            transitItineraries: [],
-            activeItineraryIndex: 0,
-          }
-        : patch,
-    );
+    const unpin =
+      get().routingProvider !== null &&
+      Object.keys(patch).some((key) => pinnedRequestKeys.has(key));
+    set({
+      ...patch,
+      ...(release && {
+        pendingTransitSelection: null,
+        transitReference: null,
+        transitItineraries: [],
+        activeItineraryIndex: 0,
+      }),
+      ...(unpin && { routingProvider: null }),
+    });
   };
 
   return {
@@ -276,6 +294,8 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
     avoidHighways: readBool(AVOID_HIGHWAYS_STORAGE_KEY),
     avoidTolls: readBool(AVOID_TOLLS_STORAGE_KEY),
     avoidFerries: readBool(AVOID_FERRIES_STORAGE_KEY),
+    routingProvider: null,
+    setRoutingProvider: (routingProvider) => set({ routingProvider, activeRouteIndex: 0 }),
     transitItineraries: [],
     transitTimeMode: "now",
     transitReference: null,

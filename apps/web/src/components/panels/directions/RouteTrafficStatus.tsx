@@ -3,10 +3,11 @@
 import Typography from "@mui/material/Typography";
 import type { RoadConditionRouteImpact, Route } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { TrafficInfo } from "@/integration-api/components/TrafficInfo";
-import { routeTrafficStatus } from "@/lib/route-traffic-status";
+import { type RoutingEngineLabels, routeTrafficStatus } from "@/lib/route-traffic-status";
 import { useRouteTrafficPresentation } from "@/lib/useRouteTrafficPresentation";
+import { useRoutingEngines } from "@/lib/useRoutingEngines";
 
 export function RouteTrafficStatus({
   route,
@@ -20,7 +21,13 @@ export function RouteTrafficStatus({
   const t = useTranslations("trafficStatus");
   const [revision, setRevision] = useState(0);
   void revision;
-  const status = routeTrafficStatus(route, impact, provider, Date.now());
+  const engines = useRoutingEngines();
+  const labels = useMemo<RoutingEngineLabels>(
+    () =>
+      Object.fromEntries(engines.map(({ id, name, trafficProof }) => [id, { name, trafficProof }])),
+    [engines],
+  );
+  const status = routeTrafficStatus(route, impact, provider, labels, Date.now());
   const deadline = status?.deadline;
   useEffect(() => {
     if (deadline == null) return;
@@ -56,7 +63,13 @@ export function RouteTrafficStatus({
         {t(`application.${status.application}`)}
       </Typography>
       <Typography variant="caption" sx={{ color: "text.secondary" }}>
-        {t("provider", { source: t(`source.${status.source}`) })}
+        {t("provider", {
+          source: !status.source
+            ? t("sourceUnknown")
+            : status.source.hosted
+              ? t("sourceHosted", { name: status.source.name })
+              : status.source.name,
+        })}
       </Typography>
     </TrafficInfo>
   );

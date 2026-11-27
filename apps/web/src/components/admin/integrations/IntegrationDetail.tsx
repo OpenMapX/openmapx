@@ -34,6 +34,7 @@ import Tabs from "@mui/material/Tabs";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { buildLicensingHtml, safeHref } from "@openmapx/core";
+import { ORCHESTRATOR_BY_DOMAIN } from "@openmapx/integration-framework";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
@@ -58,12 +59,15 @@ import { CredentialSetupGuide } from "./CredentialSetupGuide";
 import { DomainChip } from "./DomainChip";
 import { HealthHistoryChart } from "./HealthHistoryChart";
 import { IntegrationStatusDot } from "./IntegrationStatusDot";
+import { ProviderOrderEditor } from "./ProviderOrderEditor";
 import { RequiredServicesPanel } from "./RequiredServicesPanel";
 import { SetCredentialDialog } from "./SetCredentialDialog";
 import { StatusBadge } from "./StatusBadge";
 
 type CredentialStatus = import("@openmapx/core/api-contracts").AdminIntegrationCredential;
 type IntegrationDetailData = import("@openmapx/core/api-contracts").AdminIntegrationDetail;
+
+const PROVIDER_ORDER_KEYS = ["providerOrder"] as const;
 
 const SOURCE_COLOR: Record<string, "default" | "primary" | "secondary" | "success" | "info"> = {
   default: "default",
@@ -330,6 +334,11 @@ function ConfigTab({
   const sourceLabel = useConfigSourceLabel();
   const entries = Object.entries(data.resolvedConfig);
   const { paged: pagedEntries, paginationProps: entriesPagination } = useClientPagination(entries);
+  const orderedDomains = Object.entries(ORCHESTRATOR_BY_DOMAIN).flatMap(([domain, owner]) =>
+    owner === integrationId ? [domain] : [],
+  );
+  // The editor owns the setting; the generic form must not offer it a second time.
+  const editorKeys = orderedDomains.length > 0 ? PROVIDER_ORDER_KEYS : undefined;
 
   return (
     <Stack
@@ -337,6 +346,11 @@ function ConfigTab({
         gap: 3,
       }}
     >
+      {orderedDomains.map((domain) => (
+        <Box key={domain} sx={{ maxWidth: 760 }}>
+          <ProviderOrderEditor orchestratorId={integrationId} domain={domain} />
+        </Box>
+      ))}
       {/* Editable config form */}
       {data.manifest.configSchema && (
         <Box sx={{ maxWidth: 760 }}>
@@ -352,6 +366,7 @@ function ConfigTab({
             </Typography>
             <ConfigSchemaForm
               integrationId={integrationId}
+              excludeKeys={editorKeys}
               schema={data.manifest.configSchema}
               resolvedConfig={data.resolvedConfig}
               ownership={data.ownership}

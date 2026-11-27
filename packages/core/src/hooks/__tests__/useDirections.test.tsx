@@ -162,6 +162,16 @@ describe("directionsQueryKey", () => {
     expect(key[3]).toBe(false);
     expect(key[4]).toBe(false);
   });
+
+  it("keys a request pinned to one routing integration apart from the unpinned one", () => {
+    const unpinned = directionsQueryKey({ waypoints, lang: "de" });
+    const pinned = directionsQueryKey({ waypoints, lang: "de", provider: "routing-acme" });
+    expect(pinned).toEqual([...unpinned, "provider:routing-acme"]);
+    expect(directionsRequestFor({ waypoints, lang: "de", provider: "routing-acme" })).toMatchObject(
+      { provider: "routing-acme" },
+    );
+    expect(directionsRequestFor({ waypoints, lang: "de" })).not.toHaveProperty("provider");
+  });
 });
 
 describe("directionsRequestFor", () => {

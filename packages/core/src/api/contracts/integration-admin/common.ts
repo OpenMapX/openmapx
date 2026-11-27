@@ -174,6 +174,7 @@ export type AdminIntegrationManifest = z.infer<typeof adminIntegrationManifestSc
 export type AdminIntegrationSummary = z.infer<typeof adminIntegrationSummarySchema>;
 export type AdminIntegrationResolvedConfig = z.infer<typeof adminIntegrationResolvedConfigSchema>;
 export type AdminIntegrationDetail = z.infer<typeof adminIntegrationDetailSchema>;
+export type AdminProviderOrder = z.infer<typeof adminProviderOrderSchema>;
 export type AdminIntegrationEnvVar = z.infer<typeof adminIntegrationEnvVarSchema>;
 export type AdminIntegrationEnvVars = z.infer<typeof adminIntegrationEnvVarsSchema>;
 export type AdminIntegrationConfigPatch = z.infer<typeof adminIntegrationConfigPatchSchema>;

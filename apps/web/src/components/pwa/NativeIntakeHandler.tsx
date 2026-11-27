@@ -29,6 +29,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { usePathname, useRouter } from "next/navigation";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { transitPlanningMetadata } from "@/components/panels/directions/useTransitPlanRequest";
 import Dialog from "@/components/ui/Dialog";
 import { DEEPLINK_OPEN_EVENT } from "@/lib/deepLink";
 import { parseGeoFile } from "@/lib/importGeoFile";
@@ -298,9 +299,7 @@ export function NativeIntakeHandler() {
             wheelchairRequired: directions.wheelchairRequired,
             requireBikeTransport: directions.requireBikeTransport,
             bikeHillPreference: directions.bikeHillPreference,
-            capabilityEpoch:
-              capabilities.providers.find((p) => p.id === "transit-motis-local")?.metadata
-                ?.datasetEpoch || undefined,
+            capabilityEpoch: transitPlanningMetadata(capabilities)?.datasetEpoch || undefined,
           },
         );
         if (!fresh()) return;

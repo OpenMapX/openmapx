@@ -22,6 +22,9 @@ vi.mock("@openmapx/core", async (importOriginal) => {
   return { ...actual, viewerTimeZone: () => "Europe/Berlin" };
 });
 
+// The traffic note names engines from the capabilities query, which these cards do not mount.
+vi.mock("@/lib/useRoutingEngines", () => ({ useRoutingEngines: () => [] }));
+
 // This project does not enable Testing Library's automatic cleanup, so without
 // this every render in the file stays in the document and role queries find
 // several Start buttons.

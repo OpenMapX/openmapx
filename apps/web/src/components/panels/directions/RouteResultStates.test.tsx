@@ -11,6 +11,8 @@ const recovery = {
   onEditDestination: vi.fn(),
   modes: ["walking" as const],
   onSelectMode: vi.fn(),
+  engines: [{ integrationId: "routing-acme", name: "Acme Router" }],
+  onSelectEngine: vi.fn(),
 };
 
 describe("planState", () => {
@@ -84,5 +86,13 @@ describe("RouteResultStates", () => {
     fireEvent.click(screen.getByRole("button", { name: /directions\.tryMode/ }));
     expect(recovery.onEditOrigin).toHaveBeenCalledTimes(1);
     expect(recovery.onSelectMode).toHaveBeenCalledWith("walking");
+    fireEvent.click(screen.getByRole("button", { name: /directions\.tryEngine/ }));
+    expect(recovery.onSelectEngine).toHaveBeenCalledWith("routing-acme");
+  });
+
+  it("offers another engine beside the retry of a failed answer", () => {
+    render(<RouteResultStates state={state("error", new Error("down"))} recovery={recovery} />);
+    expect(screen.getByRole("button", { name: "common.retry" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /directions\.tryEngine/ })).toBeTruthy();
   });
 });

@@ -71,6 +71,7 @@ export function useDrawnDirectionsRoutes(): DrawnDirectionsRoutes {
     bikeSpeedKmh,
     timeMode,
     tripTime,
+    routingProvider,
   } = useDirectionsStore();
   const units = useSettingsStore((s) => s.units);
   const avoidIncidents = useSettingsStore((s) => s.avoidIncidents);
@@ -182,6 +183,7 @@ export function useDrawnDirectionsRoutes(): DrawnDirectionsRoutes {
     // map and the panel keyed different cache entries and drew different routes.
     departAt: tripDepartAt,
     arriveBy: tripArriveBy,
+    provider: routingProvider ?? undefined,
   });
 
   // Independent EV-plan query — built with the exact same request the plan
