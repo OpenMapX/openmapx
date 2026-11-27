@@ -111,7 +111,7 @@ export function createRefreshSession(
       providerId !== undefined &&
       collectOrderedProviders<TransitProvider>(ctx, "transit").some(
         ({ provider }) =>
-          provider.id === providerId && provider.capabilities.planningFeatures?.refresh === true,
+          provider.id === providerId && provider.capabilities?.planningFeatures?.refresh === true,
       )
     );
   }
@@ -185,6 +185,15 @@ export function createRefreshSession(
     let fallbackOccurred = false;
     let resultAttributions = refreshed.attributions;
     let resultFreshness = refreshed.freshness;
+    // The planner the next token names. A refreshed itinerary stays with the
+    // planner that issued the token; a replanned one belongs to whichever
+    // planner answered the new search, with that planner's itinerary id and
+    // epoch, so the next refresh never asks a provider about another's trip.
+    let next: { providerId: string; instance: string; datasetEpoch: string | undefined } = {
+      providerId: state.providerId,
+      instance: state.instance,
+      datasetEpoch: itinerary?.datasetEpoch ?? state.datasetEpoch,
+    };
     if (!itinerary) {
       fallbackOccurred = true;
       const fallback = await orchestrator.planTrip({
@@ -195,6 +204,12 @@ export function createRefreshSession(
       itinerary = fallback.data?.itineraries[0] ?? null;
       resultAttributions = fallback.attributions;
       resultFreshness = fallback.freshness;
+      const planner = itinerary?.source ?? fallback.data?.source;
+      next = {
+        providerId: planner ?? "",
+        instance: fallback.data?.instance ?? planner ?? "",
+        datasetEpoch: itinerary?.datasetEpoch ?? fallback.data?.datasetEpoch,
+      };
     }
     if (!itinerary)
       return {
@@ -206,11 +221,11 @@ export function createRefreshSession(
         undefined,
         itinerary.legs.flatMap((leg) => (leg.tripId ? [leg.tripId] : [])),
       );
-    if (canRefresh(itinerary.source)) {
+    if (next.datasetEpoch && canRefresh(next.providerId)) {
       itinerary.refreshToken = await issueForSearch(itinerary, {
-        providerId: state.providerId,
-        instance: state.instance,
-        datasetEpoch: itinerary.datasetEpoch ?? state.datasetEpoch,
+        providerId: next.providerId,
+        instance: next.instance,
+        datasetEpoch: next.datasetEpoch,
         requestFingerprint: state.requestFingerprint,
         request: state.request,
       });

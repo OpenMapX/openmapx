@@ -439,6 +439,24 @@ it.each(["absent", "unsupported", "disabled"])(
     expect(refresh).not.toHaveBeenCalled();
   },
 );
+it("never sends a refresh for an unloaded planner to another planner", async () => {
+  const refresh = vi.fn(async () => withAttribution({ id: "trip" } as never, ATTR, freshnessNow()));
+  const other = makeProvider({
+    id: "transit-other",
+    prefix: "other:",
+    capabilities: {
+      ...makeProvider({}).capabilities,
+      planningFeatures: { refresh: true } as never,
+    },
+    refreshTrip: refresh,
+  });
+  const orchestrator = createTransitOrchestrator(makeCtx([other], { isHealthy: async () => true }));
+  expect(
+    await orchestrator.refreshTrip("transit-removed", { itineraryId: "bound", datasetEpoch: "e" }),
+  ).toMatchObject({ status: "gone", result: { data: null } });
+  expect(refresh).not.toHaveBeenCalled();
+});
+
 it("discards ordinary refresh data if the source becomes disallowed during acquisition", async () => {
   let disabled = false;
   const provider = makeProvider({

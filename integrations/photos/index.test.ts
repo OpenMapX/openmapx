@@ -23,6 +23,9 @@ describe("photo search route", () => {
     let handler: ((req: unknown, reply: unknown) => Promise<void>) | undefined;
     setup({
       registerPhotoProvider: vi.fn(),
+      getIntegrationsByDomain: () => [],
+      getProviderOrder: () => [],
+      getProviderOrderFingerprint: () => "order",
       registerRoute: (_method: string, _path: string, routeHandler: typeof handler) => {
         handler = routeHandler;
       },

@@ -62,17 +62,43 @@ export function createOsmImagePhotoProvider(
 }
 
 /**
+ * What choosing photo providers reads. The data-use policy is a required
+ * member, not an optional argument, so no caller can ask for providers
+ * without it: a photo carries no reference to the integration that supplied
+ * it, so a disallowed integration can only be left out before acquisition.
+ */
+export type PhotoProviderSource = Pick<
+  IntegrationContext,
+  "getProviderOrder" | "getIntegrationsByDomain"
+> &
+  Pick<Required<IntegrationContext>, "getDisallowedIntegrationIds">;
+
+/**
  * Photo providers in the operator's order. Unlisted ones follow in
  * registration order, street-level imagery (mapillary, panoramax) last. The
  * providers of an integration the data-use policy disallows are left out.
  */
-export function getPhotoProviders(
-  source: Pick<IntegrationContext, "getProviderOrder" | "getIntegrationsByDomain">,
-  disallowedIntegrationIds: ReadonlySet<string> = new Set(),
-): PhotoProvider[] {
+export async function getPhotoProviders(source: PhotoProviderSource): Promise<PhotoProvider[]> {
+  const disallowed = await source.getDisallowedIntegrationIds();
   return collectOrderedProviders<PhotoProvider>(source, "photos")
-    .filter(({ integrationId }) => !disallowedIntegrationIds.has(integrationId))
+    .filter(({ integrationId }) => !disallowed.has(integrationId))
     .map(({ provider }) => provider);
+}
+
+/**
+ * The photo integrations the data-use policy disallows, sorted. A cache of
+ * photos keys by this, so a policy change does not replay a photo of an
+ * integration now disallowed, while gating an integration that supplies no
+ * photos leaves photo caches alone.
+ */
+export async function disallowedPhotoIntegrationIds(
+  source: PhotoProviderSource,
+): Promise<string[]> {
+  const disallowed = await source.getDisallowedIntegrationIds();
+  const photoIntegrations = new Set(
+    source.getIntegrationsByDomain("photos").map((integration) => integration.id),
+  );
+  return [...photoIntegrations].filter((id) => disallowed.has(id)).sort();
 }
 
 /**

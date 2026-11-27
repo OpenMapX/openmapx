@@ -60,10 +60,17 @@ vi.mock("../../services/knowledge/index.js", () => ({
 
 const mockSearchHeroPhotos = vi.fn().mockResolvedValue([]);
 
-vi.mock("@integrations/photos/orchestrator", () => ({
-  getPhotoProviders: vi.fn().mockReturnValue([]),
+// Provider choice stays real, so the data-use policy's integration gate is exercised.
+vi.mock("@integrations/photos/orchestrator", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
   searchHeroPhotos: mockSearchHeroPhotos,
   deduplicatePhotos: vi.fn((photos: unknown[]) => photos),
+}));
+
+const gatedIntegrations = vi.hoisted(() => ({ ids: new Set<string>() }));
+vi.mock("../../services/data-use-policy.js", async (importOriginal) => ({
+  ...(await importOriginal<object>()),
+  getGatedIntegrationIds: async () => gatedIntegrations.ids,
 }));
 
 // Mock reviews orchestrator — `fetchAggregate` would otherwise hit the
@@ -161,7 +168,41 @@ afterEach(() => {
   vi.clearAllMocks();
   mockFetchAggregate.mockReset().mockResolvedValue(null);
   mockSearchHeroPhotos.mockReset().mockResolvedValue([]);
+  gatedIntegrations.ids = new Set();
 });
+
+/** Two loaded photo integrations; the test decides which the policy gates. */
+async function withPhotoIntegrations(run: () => Promise<void>) {
+  const host = await import("../../integration-host.js");
+  const photoIntegration = (id: string, providerId: string) => ({
+    id,
+    manifest: { id, domains: ["photos"] },
+    providers: new Map([["photos", [{ id: providerId, name: providerId, search: vi.fn() }]]]),
+  });
+  vi.mocked(host.getIntegrationsByDomain).mockImplementation(((domain: string) =>
+    domain === "photos"
+      ? [photoIntegration("photos-acme", "acme"), photoIntegration("photos-other", "other")]
+      : []) as never);
+  try {
+    await run();
+  } finally {
+    vi.mocked(host.getIntegrationsByDomain).mockReturnValue([]);
+  }
+}
+
+/** The provider ids `searchHeroPhotos` was handed, per call. */
+function heroProviderIds(): string[][] {
+  return mockSearchHeroPhotos.mock.calls.map((call) =>
+    (call[1] as Array<{ id: string }>).map((provider) => provider.id),
+  );
+}
+
+/** The cache keys `hashKey` built for `prefix`, in call order. */
+function keysFor(prefix: string): string[] {
+  return mockHashKey.mock.results
+    .map((result) => result.value as string)
+    .filter((key) => key.startsWith(`${prefix}:`));
+}
 
 // Fixtures
 
@@ -222,6 +263,23 @@ describe("POST /places/card-enrichment", () => {
       results: [{ id: place.id, outcomes: { rating: { status: "absent" } } }],
     });
     expect(mockSearchHeroPhotos).not.toHaveBeenCalled();
+  });
+
+  it("asks no photo provider of a disallowed integration and does not replay its cached card photo", async () => {
+    await withPhotoIntegrations(async () => {
+      const request = {
+        method: "POST" as const,
+        url: "/places/card-enrichment",
+        payload: { places: [{ ...place, fields: ["photo"] }] },
+      };
+      await app.inject(request);
+      gatedIntegrations.ids = new Set(["photos-acme"]);
+      await app.inject(request);
+      expect(heroProviderIds()).toEqual([["acme", "other"], ["other"]]);
+      const [allowed, gated] = keysFor("cache:card-photo:v3");
+      expect(gated).toBeDefined();
+      expect(gated).not.toBe(allowed);
+    });
   });
 
   it("reports a transient photo failure without hiding a successful rating or caching absence", async () => {
@@ -869,6 +927,26 @@ function qs(params: Record<string, string>): string {
 // Tests
 
 describe("GET /places/:id", () => {
+  it("asks no hero photo provider of a disallowed integration and does not replay its cached place", async () => {
+    mockLookupByOsmRef.mockResolvedValue(MOCK_PLACE);
+    mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
+    mockBuildReviewLinks.mockReturnValue([]);
+    await withPhotoIntegrations(async () => {
+      const url = `/places/${encodeURIComponent("osm:node/12345")}`;
+      expect((await app.inject({ method: "GET", url })).statusCode).toBe(200);
+      gatedIntegrations.ids = new Set(["photos-acme", "unrelated-weather"]);
+      expect((await app.inject({ method: "GET", url })).statusCode).toBe(200);
+      expect(heroProviderIds()).toEqual([["acme", "other"], ["other"]]);
+      const [allowed, gated] = keysFor("cache:place-v4-photo-metadata");
+      expect(gated).toBeDefined();
+      expect(gated).not.toBe(allowed);
+      // Gating an integration that supplies no photos keeps the place cached.
+      gatedIntegrations.ids = new Set(["photos-acme"]);
+      await app.inject({ method: "GET", url });
+      expect(keysFor("cache:place-v4-photo-metadata")[2]).toBe(gated);
+    });
+  });
+
   it("recomputes a reused cached schedule and keeps only its field check date", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     const cached = {

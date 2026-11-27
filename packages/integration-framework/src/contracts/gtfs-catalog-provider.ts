@@ -10,6 +10,11 @@ import type { Licensing } from "@openmapx/mobility-core/licensing";
 export interface GtfsCatalogFeed {
   id: string;
   name: string;
+  /**
+   * The catalogue the feed comes from, 1 to 64 characters (a short slug such
+   * as the integration id). A feed outside that bound is left out of the
+   * catalogue, and the host logs the reason once.
+   */
   source: string;
   countryCode: string;
   url: string;

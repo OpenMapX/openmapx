@@ -1,4 +1,5 @@
 import { lookupByCoords, lookupByNameAndCoords } from "@integrations/geocoding/place-lookup";
+import { disallowedPhotoIntegrationIds } from "@integrations/photos/orchestrator";
 import {
   buildPlaceDetailsRequest,
   type CategoryCardEnrichmentResponse,
@@ -24,6 +25,7 @@ import {
 import {
   enrichPlace,
   PLACE_DETAIL_DEADLINE_MS,
+  photoProviderHost,
   placeEnrichQueue,
 } from "../services/place-details/enrichment.js";
 import { isWorkAdmissionError, type WorkAdmissionError } from "../utils/bounded-work-queue.js";
@@ -124,11 +126,18 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
           parsed?.scheme === "overture" && !getPlaceResolver("overture")
             ? await readAmbientPlaceByGers(sql, parsed.value)
             : null;
+        // The enriched place holds hero photos, so a photo integration the
+        // policy now disallows must not be replayed from the cached place.
+        const disallowedPhotoIntegrations = await disallowedPhotoIntegrationIds(photoProviderHost);
         const cacheKey = hashKey(
           "cache:place-v4-photo-metadata",
           published
-            ? { ...placeRequest.identity, ambientGeneration: published.generation }
-            : placeRequest.identity,
+            ? {
+                ...placeRequest.identity,
+                ambientGeneration: published.generation,
+                disallowedPhotoIntegrations,
+              }
+            : { ...placeRequest.identity, disallowedPhotoIntegrations },
         );
         const resolveAndEnrich = (signal: AbortSignal) =>
           withCache(cacheKey, TTL.places.detail, async () => {

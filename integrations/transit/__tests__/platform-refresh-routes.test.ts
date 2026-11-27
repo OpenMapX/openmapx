@@ -88,7 +88,7 @@ it("retains a bound handle after 503, then replays its exact successor", async (
       : [];
   const id = "verified-state";
   f.values.set(`transit-refresh:${id}`, {
-    providerId: "local",
+    providerId: "transit-motis-local",
     instance: "local",
     datasetEpoch: "epoch",
     itineraryId: "original",
@@ -161,4 +161,57 @@ it("gates a cached response by its declared provider sources without exposing th
   disabled = true;
   expect((await f.call("/plan/refresh", { body: { token } })).status).toBe(409);
   expect(orchestrator.refreshTrip).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+  [true, "issues and redeems"],
+  [false, "issues no"],
+])("with refresh %s, /plan %s tokens for an installed planner", async (refresh) => {
+  const f = fixture();
+  const planner = {
+    id: "transit-acme",
+    prefix: "acme:",
+    capabilities: { planningFeatures: { refresh } },
+  };
+  f.ctx.getIntegrationsByDomain = (domain) =>
+    domain === "transit"
+      ? ([
+          { id: "transit-acme", manifest: {}, providers: new Map([["transit", [planner]]]) },
+        ] as never)
+      : [];
+  const leg = { mode: "rail", from: { stopId: "a" }, to: { stopId: "b" } };
+  orchestrator.planTrip.mockResolvedValue({
+    data: {
+      source: "transit-acme",
+      instance: "acme-instance",
+      datasetEpoch: "acme-epoch",
+      itineraries: [{ id: "acme-itin", source: "transit-acme", legs: [leg] }],
+    },
+    attributions: [],
+    freshness: {},
+  });
+  const planned = await f.call("/plan", {
+    query: { from_lat: "50.85", from_lng: "4.35", to_lat: "51.22", to_lng: "4.42" },
+  });
+  expect(planned.status).toBe(200);
+  const token = (planned.body as { data: { itineraries: Array<{ refreshToken?: string }> } }).data
+    .itineraries[0]?.refreshToken;
+  if (!refresh) {
+    expect(token).toBeUndefined();
+    return;
+  }
+  expect(token).toEqual(expect.any(String));
+  orchestrator.refreshTrip.mockResolvedValue({
+    status: "ok",
+    result: {
+      data: { id: "acme-itin-2", source: "transit-acme", legs: [leg] },
+      attributions: [],
+      freshness: {},
+    },
+  });
+  expect((await f.call("/plan/refresh", { body: { token } })).status).toBe(200);
+  expect(orchestrator.refreshTrip).toHaveBeenCalledWith(
+    "transit-acme",
+    expect.objectContaining({ itineraryId: "acme-itin", datasetEpoch: "acme-epoch" }),
+  );
 });

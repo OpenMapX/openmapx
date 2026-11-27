@@ -2,6 +2,7 @@ import { fetchOsmBoundary } from "@integrations/geocoding/place-lookup";
 import {
   deduplicatePhotos,
   getPhotoProviders,
+  type PhotoProviderSource,
   searchHeroPhotos,
 } from "@integrations/photos/orchestrator";
 import { fetchAggregate, getReviewProviders } from "@integrations/reviews/orchestrator";
@@ -14,6 +15,7 @@ import {
 import { contributorsForField, contributorsForRecords } from "@openmapx/mobility-core/contributors";
 import { getIntegrationsByDomain, getProviderOrder } from "../../integration-host.js";
 import { BoundedWorkQueue } from "../../utils/bounded-work-queue.js";
+import { getGatedIntegrationIds } from "../data-use-policy.js";
 import { getPlaceKnowledge } from "../knowledge/index";
 import { buildReviewLinks } from "../review-links";
 import { captureEnrichedPlaceContributors } from "./contributors.js";
@@ -37,6 +39,16 @@ const ENRICH_CONCURRENCY = Math.max(
 if (!Number.isFinite(ENRICH_CONCURRENCY)) {
   throw new Error("OPENMAPX_PLACE_ENRICH_CONCURRENCY must be finite");
 }
+/**
+ * The host's photo providers with the data-use policy, for every place-details
+ * photo lookup (hero photos here, the card photo, and their cache keys).
+ */
+export const photoProviderHost: PhotoProviderSource = {
+  getProviderOrder,
+  getIntegrationsByDomain,
+  getDisallowedIntegrationIds: getGatedIntegrationIds,
+};
+
 /** The place client stops waiting after 20 seconds, so queue time and work share this budget. */
 export const PLACE_DETAIL_DEADLINE_MS = 20_000;
 // Every provider in one enrichment shares the execution's signal, so the
@@ -89,9 +101,8 @@ export async function enrichPlace(
   lang: string | undefined,
   signal: AbortSignal,
 ): Promise<Place> {
-  const host = { getProviderOrder, getIntegrationsByDomain };
-  const photoProviders = getPhotoProviders(host);
-  const reviewProviders = getReviewProviders(host);
+  const photoProviders = await getPhotoProviders(photoProviderHost);
+  const reviewProviders = getReviewProviders({ getProviderOrder, getIntegrationsByDomain });
   const [plng, plat] = place.coordinates;
   // One scope per full enrichment: knowledge and hero photos share identical
   // Wikimedia JSON, and it is released with this call. Never wired into card

@@ -432,3 +432,34 @@ it.each(["batch empty", "batch no-op", "single null", "single no-op"])(
     expect(out.freshness).toMatchObject({ isPartial: true, hasRealtimeData: false });
   },
 );
+
+it("asks live-transit sources in the operator's order before their priority", async () => {
+  const asked: string[] = [];
+  const source = (id: string, priority: number) =>
+    makeProvider({
+      id,
+      priority,
+      getTripUpdates: vi.fn(async (ids: string[]) => {
+        asked.push(id);
+        return {
+          data: Object.fromEntries(
+            ids.map((tripId): [string, TripUpdate] => [tripId, { tripId, delaySeconds: 60 }]),
+          ),
+          attributions: [],
+          freshness: fresh(),
+        };
+      }),
+    });
+  const integrations = [
+    { id: "live-transit-motis", providers: new Map([["live-transit", [source("motis", 1)]]]) },
+    { id: "live-transit-acme", providers: new Map([["live-transit", [source("acme", 50)]]]) },
+  ];
+  const ctx = {
+    getProviderOrder: (domain: string) => (domain === "live-transit" ? ["live-transit-acme"] : []),
+    getIntegrationsByDomain: (domain: string) => (domain === "live-transit" ? integrations : []),
+  } as unknown as IntegrationContext;
+  const base = { data: [dep({ tripId: "ms:trip-1" })], attributions: [], freshness: fresh() };
+  await enrichDeparturesWithRealtime({ ctx, timed }, base, { stopId: "ms:s" });
+  // The listed source answered every trip, so the higher-priority one is never asked.
+  expect(asked).toEqual(["acme"]);
+});

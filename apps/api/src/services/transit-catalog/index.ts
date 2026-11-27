@@ -62,6 +62,40 @@ function credentialFreeDiscoveryUrl(raw: string): boolean {
     return false;
   }
 }
+/**
+ * Feeds are listed on every catalogue read, long after registration, so a
+ * feed the contract does not accept (a `source` outside 1 to 64 characters,
+ * say) cannot be refused when the provider registers. It is left out and its
+ * reason logged once per provider and reason, so an extension author can see
+ * why without a warning on every read. Bounded, as reasons come from
+ * installed code.
+ */
+const warnedRejections = new Set<string>();
+const MAX_WARNED_REJECTIONS = 256;
+function warnRejectedFeedOnce(
+  providerId: string,
+  candidate: unknown,
+  issues: ReadonlyArray<{ path: PropertyKey[]; message: string }>,
+): void {
+  const reason = issues
+    .map((issue) => `${issue.path.map(String).join(".") || "feed"}: ${issue.message}`)
+    .join("; ");
+  const key = `${providerId}\u0000${reason}`;
+  if (warnedRejections.has(key) || warnedRejections.size >= MAX_WARNED_REJECTIONS) return;
+  warnedRejections.add(key);
+  const feedId =
+    candidate && typeof candidate === "object" && "id" in candidate ? candidate.id : undefined;
+  processLogger.warn(
+    {
+      component: "transit-catalog",
+      providerId,
+      feedId: typeof feedId === "string" ? feedId.slice(0, 200) : undefined,
+      reason: reason.slice(0, 1000),
+    },
+    "A transit catalog provider returned a feed that is not accepted",
+  );
+}
+
 async function discoveryCatalog(): Promise<TransitCatalogFeed[]> {
   const feeds: TransitCatalogFeed[] = [];
   for (const integration of getIntegrationsByDomain("gtfs-catalog")) {
@@ -72,8 +106,11 @@ async function discoveryCatalog(): Promise<TransitCatalogFeed[]> {
         if (!Array.isArray(candidates)) continue;
         for (const candidate of candidates) {
           const parsed = discoveryFeedSchema.safeParse(candidate);
-          if (parsed.success && credentialFreeDiscoveryUrl(parsed.data.url))
-            feeds.push(parsed.data);
+          if (!parsed.success) {
+            warnRejectedFeedOnce(provider.id, candidate, parsed.error.issues);
+            continue;
+          }
+          if (credentialFreeDiscoveryUrl(parsed.data.url)) feeds.push(parsed.data);
         }
       } catch (error) {
         processLogger.warn(

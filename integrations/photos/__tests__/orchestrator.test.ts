@@ -1,9 +1,13 @@
 import { createHash } from "node:crypto";
 import { effectiveProviderOrder, type LoadedIntegration } from "@openmapx/integration-framework";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  routeRequest,
+} from "@openmapx/integration-framework/testing";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import type { PhotoProvider } from "@openmapx/provider-kit/photos";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { setup } from "../index.js";
 import {
   createOsmImagePhotoProvider,
   getPhotoProviders,
@@ -40,21 +44,27 @@ function loadedIntegration(
   };
 }
 
-/** A host-like source over `integrations`, as the host's own accessors filter them. */
-function hostLike(integrations: LoadedIntegration[], order: readonly string[] = []) {
+/** A host-like context over `integrations`, as the host's own accessors filter them. */
+function hostLike(
+  integrations: LoadedIntegration[],
+  order: readonly string[] = [],
+  disallowed: ReadonlySet<string> = new Set(),
+) {
   const ctx = createMockIntegrationContext({ id: "photos", providerOrder: { photos: order } });
   ctx.getIntegrationsByDomain = (domain) =>
     integrations.filter((entry) => entry.enabled && entry.manifest.domains.includes(domain));
-  return ctx;
+  return Object.assign(ctx, {
+    getDisallowedIntegrationIds: async (): Promise<Set<string>> => new Set(disallowed),
+  });
 }
 
 describe("getPhotoProviders", () => {
-  it("ignores disabled integrations and integrations outside the photos domain", () => {
+  it("ignores disabled integrations and integrations outside the photos domain", async () => {
     const enabledPhoto = photoProvider("enabled-photo");
     const disabledPhoto = photoProvider("disabled-photo");
     const wrongDomain = photoProvider("wrong-domain");
 
-    const providers = getPhotoProviders(
+    const providers = await getPhotoProviders(
       hostLike([
         loadedIntegration("photos-enabled", ["photos"], true, [enabledPhoto]),
         loadedIntegration("photos-disabled", ["photos"], false, [disabledPhoto]),
@@ -65,13 +75,13 @@ describe("getPhotoProviders", () => {
     expect(providers.map((p) => p.id)).toEqual(["enabled-photo"]);
   });
 
-  it("sorts street-level imagery providers after editorial providers", () => {
+  it("sorts street-level imagery providers after editorial providers", async () => {
     const mapillary = photoProvider("mapillary");
     const flickr = photoProvider("flickr");
     const panoramax = photoProvider("panoramax");
     const wikimedia = photoProvider("wikimedia-commons");
 
-    const providers = getPhotoProviders(
+    const providers = await getPhotoProviders(
       hostLike([
         loadedIntegration("a", ["photos"], true, [mapillary, flickr]),
         loadedIntegration("b", ["photos"], true, [panoramax, wikimedia]),
@@ -86,7 +96,7 @@ describe("getPhotoProviders", () => {
     ]);
   });
 
-  it("orders photo sources by the operator's list and keeps the deprioritised ones last", () => {
+  it("orders photo sources by the operator's list and keeps the deprioritised ones last", async () => {
     const integrations = [
       loadedIntegration("photos-mapillary", ["photos"], true, [photoProvider("mapillary")]),
       loadedIntegration("photos-flickr", ["photos"], true, [photoProvider("flickr")]),
@@ -96,7 +106,7 @@ describe("getPhotoProviders", () => {
     ];
     const order = ["photos-panoramax", "photos-acme", "ghost"];
     const ctx = hostLike(integrations, order);
-    const served = getPhotoProviders(ctx).map((p) => p.id);
+    const served = (await getPhotoProviders(ctx)).map((p) => p.id);
     expect(served).toEqual(["panoramax", "acme", "flickr", "wikimedia", "mapillary"]);
     expect(
       effectiveProviderOrder(
@@ -113,14 +123,14 @@ describe("getPhotoProviders", () => {
     );
   });
 
-  it("serves the built-in order with the default configuration", () => {
+  it("serves the built-in order with the default configuration", async () => {
     const integrations = [
       loadedIntegration("photos-mapillary", ["photos"], true, [photoProvider("mapillary")]),
       loadedIntegration("photos", ["photos"], true, [photoProvider("osm-images")]),
       loadedIntegration("photos-panoramax", ["photos"], true, [photoProvider("panoramax")]),
       loadedIntegration("photos-wikimedia", ["photos"], true, [photoProvider("wikimedia")]),
     ];
-    expect(getPhotoProviders(hostLike(integrations)).map((p) => p.id)).toEqual([
+    expect((await getPhotoProviders(hostLike(integrations))).map((p) => p.id)).toEqual([
       "osm-images",
       "wikimedia",
       "mapillary",
@@ -128,14 +138,65 @@ describe("getPhotoProviders", () => {
     ]);
   });
 
-  it("leaves out the providers of a disallowed integration", () => {
+  it("reads the data-use policy itself and leaves out a disallowed integration", async () => {
     const integrations = [
       loadedIntegration("photos-acme", ["photos"], true, [photoProvider("acme")]),
       loadedIntegration("photos-flickr", ["photos"], true, [photoProvider("flickr")]),
     ];
-    expect(
-      getPhotoProviders(hostLike(integrations), new Set(["photos-acme"])).map((p) => p.id),
-    ).toEqual(["flickr"]);
+    const ctx = hostLike(integrations, [], new Set(["photos-acme"]));
+    expect((await getPhotoProviders(ctx)).map((p) => p.id)).toEqual(["flickr"]);
+  });
+});
+
+describe("photo search cache key", () => {
+  function keyRecorder(ctx: ReturnType<typeof hostLike>) {
+    const keys: string[] = [];
+    ctx.cache.withCache = async <T>(key: string) => {
+      keys.push(key);
+      return [] as T;
+    };
+    setup(ctx);
+    const route = ctx.registered.routes.find((entry) => entry.path === "/search");
+    if (!route) throw new Error("missing the photo search route");
+    const reply = {
+      header: () => reply,
+      status: () => reply,
+      send: () => reply,
+      type: () => reply,
+    };
+    return async () => {
+      await route.handler(routeRequest({ query: { lat: "52.5", lng: "13.4" }, body: null }), reply);
+      return keys.at(-1) ?? "";
+    };
+  }
+
+  it("follows only the photo integrations the policy disallows, hashed", async () => {
+    const integrations = [
+      loadedIntegration("photos-acme", ["photos"], true, [photoProvider("acme")]),
+      loadedIntegration("photos-flickr", ["photos"], true, [photoProvider("flickr")]),
+    ];
+    const ctx = hostLike(integrations);
+    const read = keyRecorder(ctx);
+    const open = await read();
+    ctx.getDisallowedIntegrationIds = async () => new Set(["weather-acme", "transit-acme"]);
+    expect(await read()).toBe(open);
+    ctx.getDisallowedIntegrationIds = async () => new Set(["weather-acme", "photos-acme"]);
+    const gated = await read();
+    expect(gated).not.toBe(open);
+    expect(gated).not.toContain("photos-acme");
+  });
+
+  it("follows the photo provider order", async () => {
+    const integrations = [
+      loadedIntegration("photos-acme", ["photos"], true, [photoProvider("acme")]),
+      loadedIntegration("photos-flickr", ["photos"], true, [photoProvider("flickr")]),
+    ];
+    const ctx = hostLike(integrations);
+    const read = keyRecorder(ctx);
+    const first = await read();
+    expect(await read()).toBe(first);
+    ctx.getProviderOrder = () => ["photos-flickr", "photos-acme"];
+    expect(await read()).not.toBe(first);
   });
 });
 

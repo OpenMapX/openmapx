@@ -1166,8 +1166,11 @@ order: provider `priority` ascending for routing, weather and live transit, the
 air-quality orchestrator's own policy, street-level imagery last for photos,
 registry order elsewhere. Transit keeps its roles ahead of the list: baseline,
 regional, fallback, then enrichment providers, each role in the operator's
-order, then by `priority` and id; its planning, prefix lookups and stop search
-all use that one order. It appends the
+order, then by `priority` and id; its planning, prefix and lookup resolution,
+stop search without a bounding box and the provider-priority lookup used to
+deduplicate stops all use that one order. Stop deduplication still ranks by
+`priority` first, so that order only breaks ties between equal priorities.
+It appends the
 others by default; a caller passes `unlisted: UNLISTED_BY_DOMAIN[domain]` (or
 `"exclude"`) to drop them, as geocoding's list is a selection. A listed
 integration that is not loaded is skipped. An order keeps each id once and at

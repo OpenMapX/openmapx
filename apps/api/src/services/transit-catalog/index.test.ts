@@ -255,6 +255,50 @@ it("keeps the feeds of an installed GTFS catalogue", async () => {
   const { searchTransitCatalog } = await import("./index.js");
   expect((await searchTransitCatalog()).map((feed) => feed.source)).toContain("acme-catalogue");
 });
+it("logs once, with the reason, a catalogue feed whose source is not 1 to 64 characters", async () => {
+  discovery.integrations = [
+    {
+      providers: new Map([
+        [
+          "gtfs-catalog",
+          [
+            {
+              id: "acme-long-source",
+              listFeeds: async () => [
+                {
+                  id: "acme:long",
+                  source: "x".repeat(65),
+                  name: "Acme feed",
+                  countryCode: "de",
+                  url: "https://example.test/acme.zip",
+                },
+              ],
+            },
+          ],
+        ],
+      ]),
+    },
+  ];
+  const warn = vi.spyOn(processLogger, "warn").mockImplementation(() => {});
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => Response.json({ sources: [] })),
+  );
+  const { getTransitCatalog } = await import("./index.js");
+  expect(await getTransitCatalog()).toEqual([]);
+  expect(await getTransitCatalog()).toEqual([]);
+  expect(warn).toHaveBeenCalledTimes(1);
+  expect(warn).toHaveBeenCalledWith(
+    expect.objectContaining({
+      component: "transit-catalog",
+      providerId: "acme-long-source",
+      feedId: "acme:long",
+      reason: expect.stringContaining("source"),
+    }),
+    "A transit catalog provider returned a feed that is not accepted",
+  );
+});
+
 it("keeps source601 searchable after building the full installed catalog", async () => {
   const sources = Array.from({ length: 601 }, (_, n) => ({
     id: `catalog:de:${String(n).padStart(4, "0")}`,
