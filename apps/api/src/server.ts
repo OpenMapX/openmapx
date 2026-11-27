@@ -31,8 +31,9 @@ process.on("uncaughtException", onFatal);
 process.on("unhandledRejection", onFatal);
 
 // Until the graceful handlers below are installed, a stop request ends startup.
-// As PID 1 without a handler, Node would ignore SIGTERM until Docker kills it,
-// and a killed migration's statement would keep running in Postgres.
+// In the image tini is PID 1 and forwards SIGTERM to Node, which without a
+// handler would end at once, and a killed migration's statement would keep
+// running in Postgres.
 let migrationRun: MigrationRun | undefined;
 let stoppingDuringStartup = false;
 const stopDuringStartup = (signal: NodeJS.Signals) => {

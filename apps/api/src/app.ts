@@ -20,6 +20,7 @@ import { startAccountMailWorker } from "./account/account-mail-outbox";
 import { auth } from "./auth";
 import { db, openMigrationSession, sql } from "./db/index";
 import { type MigrationRun, startMigrations } from "./db/migration-runner";
+import { eventLoopWatchdogThresholdMs, startEventLoopWatchdog } from "./event-loop-watchdog";
 import { cancelRunningExtensionMigrations } from "./extension-migrations";
 import {
   getAllIntegrations,
@@ -656,7 +657,19 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
     // process is running the exact image pulled by the update job.
     await jobRunner.initialize();
     startAdminJobReconciliation();
+
+    // Only once the API serves: start-up work before it, an extension's
+    // migration among it, may legitimately keep the loop busy for long.
+    const watchdogThresholdMs = eventLoopWatchdogThresholdMs();
+    if (watchdogThresholdMs !== null)
+      eventLoopWatchdog = startEventLoopWatchdog({
+        thresholdMs: watchdogThresholdMs,
+        runtimeDir,
+        log: server.log,
+      });
   }
+
+  let eventLoopWatchdog: { stop(): void } | null = null;
 
   let stopping: Promise<void> | undefined;
 
@@ -664,6 +677,9 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
     // Before anything else: a stop that Docker cuts short with a kill still
     // counts as clean, not as a crash of installed code.
     markCleanStop();
+    // A shutdown that blocks the loop must not end in a kill counted as a crash.
+    eventLoopWatchdog?.stop();
+    eventLoopWatchdog = null;
     stopping ??= (async () => {
       privacyOperationsMonitor.stop();
       privacyNotificationWorker.stop();

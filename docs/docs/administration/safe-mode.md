@@ -33,13 +33,19 @@ reason, and the attention list on the overview shows **Safe mode is on**, or
 **Safe mode after repeated crashes** when the API turned it on by itself (see
 [Automatic safe mode](#automatic-safe-mode)).
 
+Place links of an installed extension whose code the API kept out (safe mode,
+a disabled extension, an incompatible release, or extension state that could
+not be read) open like links of an integration switched off in its settings:
+the place is looked up by its name and coordinates. An extension whose code
+ran and failed keeps answering such links with "not found".
+
 ## Automatic safe mode
 
 The API turns safe mode on by itself when it stopped without being asked to
 three times within ten minutes while installed extension code was loading or
-running. It counts a process that crashed with an error nothing handled and
-one that was killed (for example for running out of memory). It does not
-count:
+running. It counts a process that crashed with an error nothing handled, one
+that was killed (for example for running out of memory) and one the
+[event-loop watchdog](#event-loop-watchdog) ended. It does not count:
 
 - a stop that was requested, such as `docker compose stop`, a restart, an
   update or `Ctrl+C`, even when Docker has to kill a slow shutdown;
@@ -55,7 +61,7 @@ whose code was running when the process failed, when the crashes name one most
 often. When the crashes name none, or several equally often, they say that
 OpenMapX stopped repeatedly while installed extensions were loading or running;
 the end of the API log then names the extension in the error the process
-stopped with.
+stopped with, or shows `event loop blocked for <n> ms; exiting`.
 
 The API keeps its count in `infra/docker/data/api-runtime/boot-marker.json`,
 beside `safe-mode.json`. A marker that cannot be read counts as empty, and one
@@ -64,11 +70,30 @@ but automatic safe mode is then unavailable. Leave automatic safe mode like
 any other: it holds until you leave it, and leaving it forgets the crashes
 counted so far.
 
-Place links of an installed extension whose code the API kept out (safe mode,
-a disabled extension, an incompatible release, or extension state that could
-not be read) open like links of an integration switched off in its settings:
-the place is looked up by its name and coordinates. An extension whose code
-ran and failed keeps answering such links with "not found".
+### Event-loop watchdog
+
+An extension can also freeze the API without crashing it, for example with an
+endless loop: the process keeps running but answers nothing. Once the API
+serves requests, a watchdog thread checks every second that the API's event
+loop still turns. When it has not turned for 30 seconds, the watchdog records
+in the boot marker the extension that was loading, if one was, writes
+`event loop blocked for <n> ms; exiting` to the API log and ends the process.
+Docker restarts the container, and the exit counts towards automatic safe
+mode like a crash.
+
+- Set `OPENMAPX_EVENT_LOOP_WATCHDOG_MS` in `infra/docker/.env` to change the
+  30 seconds (values below 5 seconds are raised to 5 seconds), or to `0` to
+  turn the watchdog off, then run `pnpm openmapx compose up`.
+- It does not watch the start before the API listens, which includes loading
+  the installed extensions and their migrations: an extension that freezes the
+  API while it starts leaves it hanging, and
+  `pnpm openmapx control safe-mode on` starts it without extensions.
+- It stops first when the API is asked to stop, so a slow shutdown is never
+  counted as a freeze.
+- It stays off while a debugger is attached to the API, and does not mistake
+  a suspended host for a frozen API.
+- The image starts Node under `tini`; the watchdog does not start, and logs
+  why, when Node runs as the container's first process.
 
 ## Turn safe mode on
 

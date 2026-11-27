@@ -65,6 +65,21 @@ function materialize(root, integrationId, bytes) {
   return path;
 }
 
+// The event-loop watchdog's SIGKILL cannot end a PID namespace's init, so the
+// image must start Node under tini. This script runs through `docker exec` and
+// is never PID 1 itself, so it reads the container's init.
+let init = "";
+try {
+  init = readFileSync("/proc/1/comm", "utf8").trim();
+} catch (error) {
+  console.error(error);
+}
+if (init !== "tini") {
+  console.error(JSON.stringify({ init }));
+  console.log(JSON.stringify({ ok: false, reason: "pid 1 is not tini" }));
+  process.exit(0);
+}
+
 const hostRequire = createRequire(pathToFileURL(join(process.cwd(), "package.json")));
 const root = mkdtempSync(join(tmpdir(), "openmapx-integration-code-smoke-"));
 let result;

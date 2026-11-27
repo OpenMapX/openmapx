@@ -33,13 +33,14 @@ export interface RunningChild {
  */
 export function startChild(
   source: string,
-  options: { timeoutMs: number; env?: NodeJS.ProcessEnv },
+  options: { timeoutMs: number; env?: NodeJS.ProcessEnv; nodeArgs?: string[] },
 ): RunningChild {
   const directory = mkdtempSync(join(tmpdir(), "omx-child-"));
   const script = join(directory, "child.mts");
   writeFileSync(script, source);
   const tsx = createRequire(import.meta.url).resolve("tsx/esm");
-  const child = spawn(process.execPath, ["--import", tsx, script], {
+  const args = [...(options.nodeArgs ?? []), "--import", tsx, script];
+  const child = spawn(process.execPath, args, {
     cwd: API_DIRECTORY,
     env: { ...process.env, LOG_LEVEL: "silent", ...options.env },
     stdio: ["ignore", "pipe", "pipe"],
@@ -90,7 +91,7 @@ export function startChild(
 
 export function runChild(
   source: string,
-  options: { timeoutMs: number; env?: NodeJS.ProcessEnv },
+  options: { timeoutMs: number; env?: NodeJS.ProcessEnv; nodeArgs?: string[] },
 ): Promise<ChildResult> {
   return startChild(source, options).exited;
 }
