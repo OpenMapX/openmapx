@@ -25,6 +25,7 @@
     "RouteOptions",
     "RouteParams",
     "RouteRequest",
+    "ScheduleOptions",
     "SecretsClient",
     "UpstreamCacheRead",
     "UpstreamCacheTtl",

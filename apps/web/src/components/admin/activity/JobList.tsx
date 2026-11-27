@@ -28,10 +28,13 @@ import { useAdminQueryState } from "@/lib/admin/useAdminQueryState";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
 import { JobStatusChip } from "../shared/JobStatusChip";
-import { useJobTypeLabel } from "../shared/jobTypeLabel";
 import { TableSkeleton } from "../shared/TableSkeleton";
 import { ActorCell } from "./ActorCell";
-import { ACTIVITY_READ_TIMEOUT_MS, useActivityClient } from "./activityQueries";
+import {
+  ACTIVITY_READ_TIMEOUT_MS,
+  useActivityClient,
+  useActivityJobLabel,
+} from "./activityQueries";
 import { JobDetail } from "./JobDetail";
 
 type StatusFilter = "all" | "active" | "completed" | "failed";
@@ -45,9 +48,16 @@ function formatPayload(payload: unknown): string | null {
     .join(", ");
 }
 
-function JobRow({ job, onSelect }: { job: AdminActivityJob; onSelect: () => void }) {
+function JobRow({
+  job,
+  label,
+  onSelect,
+}: {
+  job: AdminActivityJob;
+  label: string;
+  onSelect: () => void;
+}) {
   const t = useTranslations("adminActivity");
-  const jobTypeLabel = useJobTypeLabel();
   const dtf = useDateTimeFormat();
   const payload = formatPayload(job.payload);
 
@@ -73,7 +83,7 @@ function JobRow({ job, onSelect }: { job: AdminActivityJob; onSelect: () => void
               fontWeight: 500,
             }}
           >
-            {jobTypeLabel(job.type)}
+            {label}
           </Typography>
           {payload && (
             <Tooltip title={payload} placement="bottom-start">
@@ -89,6 +99,11 @@ function JobRow({ job, onSelect }: { job: AdminActivityJob; onSelect: () => void
           {job.source === "data-manager" && (
             <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
               {t("dataManager")}
+            </Typography>
+          )}
+          {job.source === "integration-task" && (
+            <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
+              {t("integrationTask")}
             </Typography>
           )}
         </TableCell>
@@ -142,6 +157,7 @@ export function JobList() {
       ),
     refetchInterval: 5000,
   });
+  const jobLabel = useActivityJobLabel(data?.jobs);
 
   return (
     <Stack sx={{ gap: 2 }}>
@@ -275,6 +291,7 @@ export function JobList() {
                   <JobRow
                     key={`${job.source}:${job.id}`}
                     job={job}
+                    label={jobLabel(job)}
                     onSelect={() =>
                       update({ tab: "jobs", job: job.id, source: job.source, returnTo: null })
                     }

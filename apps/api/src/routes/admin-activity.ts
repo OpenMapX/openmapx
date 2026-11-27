@@ -41,6 +41,9 @@ export async function adminActivityRoute(app: FastifyInstance): Promise<void> {
     "cancelAdminActivityJob",
     async (request, reply) => {
       const adminSession = getAdminSession(request);
+      // A scheduled task's run ends at its deadline or when the integration is reloaded.
+      if (request.query.source === "integration-task")
+        return reply.status(409).send({ error: "Integration tasks cannot be canceled" });
       const canceled =
         request.query.source === "data-manager"
           ? await cancelDataManagerActivityJob(request.params.id)

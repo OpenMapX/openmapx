@@ -126,4 +126,40 @@ describe("createMockIntegrationContext", () => {
     );
     expect(ctx.registered.weather).toEqual([weather]);
   });
+
+  it.each([
+    [{ deadlineMs: 5_000 }, /cron or everyMs/],
+    [{ cron: "0 * * * *", everyMs: 60_000, deadlineMs: 5_000 }, /cron or everyMs/],
+    [{ everyMs: 1_000, deadlineMs: 5_000 }, /everyMs/],
+    [{ cron: "not cron", deadlineMs: 5_000 }, /cron/],
+    [{ cron: "* * * * * *", deadlineMs: 5_000 }, /cron/],
+    [{ everyMs: 60_000, deadlineMs: 10 }, /deadlineMs/],
+  ])("refuses the scheduled task options the host refuses: %j", (options, message) => {
+    const ctx = createMockIntegrationContext();
+    expect(() => ctx.schedule("t", options as never, async () => {})).toThrow(message);
+  });
+
+  it("records scheduled tasks and lets a test run one", async () => {
+    const ctx = createMockIntegrationContext();
+    const handler = vi.fn(async (_run: { signal: AbortSignal }) => {});
+    expect(() => ctx.schedule("Bad_Name", { everyMs: 60_000, deadlineMs: 5_000 }, handler)).toThrow(
+      /name/,
+    );
+    ctx.schedule("refresh", { cron: "*/5 * * * *", deadlineMs: 5_000 }, handler);
+    ctx.schedule("nightly", { cron: "@daily", deadlineMs: 5_000 }, handler);
+    expect(() => ctx.schedule("refresh", { everyMs: 60_000, deadlineMs: 5_000 }, handler)).toThrow(
+      /already scheduled/,
+    );
+    expect(ctx.registered.tasks.map(({ name, options }) => ({ name, options }))).toEqual([
+      { name: "refresh", options: { cron: "*/5 * * * *", deadlineMs: 5_000 } },
+      { name: "nightly", options: { cron: "@daily", deadlineMs: 5_000 } },
+    ]);
+
+    await ctx.runScheduledTask("refresh");
+    expect(handler).toHaveBeenCalledWith({ signal: expect.any(AbortSignal) });
+    const aborted = AbortSignal.abort();
+    await ctx.runScheduledTask("refresh", { signal: aborted });
+    expect(handler).toHaveBeenLastCalledWith({ signal: aborted });
+    await expect(ctx.runScheduledTask("missing")).rejects.toThrow(/missing/);
+  });
 });

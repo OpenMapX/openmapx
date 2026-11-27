@@ -22,6 +22,7 @@ export type {
   RouteOptions,
   RouteParams,
   RouteRequest,
+  ScheduleOptions,
   SecretsClient,
 } from "@openmapx/integration-framework/context";
 export { httpError } from "@openmapx/integration-framework/http-error";

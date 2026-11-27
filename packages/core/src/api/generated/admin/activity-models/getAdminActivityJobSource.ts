@@ -7,4 +7,5 @@ export type GetAdminActivityJobSource =
 export const GetAdminActivityJobSource = {
   application: "application",
   "data-manager": "data-manager",
+  "integration-task": "integration-task",
 } as const;

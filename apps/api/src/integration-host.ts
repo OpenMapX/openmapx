@@ -64,6 +64,7 @@ import {
   resetIntegrationRoutes,
   rollbackIntegrationRouteStaging,
 } from "./integration-routes";
+import { createIntegrationScheduler, type IntegrationScheduler } from "./integration-scheduler";
 import {
   bindPlaceResolverToScope,
   bindProviderToScope,
@@ -99,6 +100,7 @@ import {
   integrationRuntimeEvidence,
   stageIntegrationRuntimeEvidence,
 } from "./services/integration-runtime-evidence";
+import { createTaskRunStore } from "./services/integration-task-runs";
 import { getMetricsRecorder } from "./services/metrics/recorder";
 import { cursorCodecFromEnvironment } from "./services/opaque-cursor";
 import {
@@ -787,6 +789,10 @@ function buildIntegrationContext(args: {
     (...args: A): R =>
       ignoredAfterUnload(scope, method, hostLog) ? inert() : fn(...args);
   const nothing = () => undefined;
+  // Tasks are staged while setup runs and start with the generation; a task
+  // scheduled later would belong to no generation.
+  let acceptsTasks = true;
+  let warnedLateTask = false;
   const registrars = createProviderRegistrars({
     integrationId: id,
     manifest,
@@ -894,6 +900,23 @@ function buildIntegrationContext(args: {
       },
       nothing,
     ),
+    schedule: live(
+      "schedule",
+      (name, options, handler) => {
+        if (!acceptsTasks) {
+          if (!warnedLateTask) {
+            warnedLateTask = true;
+            hostLog.warn(`Integration ${id} scheduled task ${name} after setup; ignoring it`, {
+              integrationId: id,
+              task: name,
+            });
+          }
+          return;
+        }
+        integrationScheduler().stage(id, scope, name, options, handler);
+      },
+      nothing,
+    ),
     getIntegrationsByDomain(domain: string) {
       return integrationsByDomain(domain);
     },
@@ -942,6 +965,9 @@ function buildIntegrationContext(args: {
     unsubscribeAll() {
       for (const unsubscribe of [...subscriptions]) unsubscribe();
     },
+    closeTasks() {
+      acceptsTasks = false;
+    },
   });
   return ctx;
 }
@@ -954,9 +980,32 @@ interface IntegrationContextControl {
   discardActivations(): void;
   /** Removes every `ctx.on` subscription the context made. */
   unsubscribeAll(): void;
+  /** Ends `setup`'s chance to schedule tasks; later calls are ignored. */
+  closeTasks(): void;
 }
 
 const contextControls = new WeakMap<IntegrationContext, IntegrationContextControl>();
+
+let scheduler: IntegrationScheduler | null = null;
+
+/** The scheduler of every integration's tasks, created on first use. */
+function integrationScheduler(): IntegrationScheduler {
+  scheduler ??= createIntegrationScheduler({ runs: createTaskRunStore(), log: hostLog });
+  return scheduler;
+}
+
+/**
+ * Fails the task runs a previous API process left running. The server calls
+ * it once at boot, before the first generation starts its tasks.
+ */
+export function recoverInterruptedIntegrationTasks(): Promise<number> {
+  return integrationScheduler().recoverInterrupted();
+}
+
+/** Aborts every scheduled task's run and stops its timers, without waiting for handlers. */
+export function stopIntegrationTasks(): void {
+  scheduler?.stop();
+}
 
 /** The scope each loaded integration's code runs in, for this generation. */
 const integrationScopes = new WeakMap<LoadedIntegration, IntegrationScope>();
@@ -1166,6 +1215,7 @@ async function loadIntegrationBackend(args: {
   const scope = integrationScopes.get(integration);
   if (!scope) throw new Error(`Integration ${integration.id} has no context`);
   let phase: IntegrationLoadError["phase"] = "import";
+  const control = contextControls.get(ctx);
   if (integration.isBuiltIn) {
     try {
       const entryPoint = resolveBuiltInBackendEntryPoint(integration.directory);
@@ -1181,15 +1231,17 @@ async function loadIntegrationBackend(args: {
         const { setup } = mod;
         if (typeof setup === "function") await runSetup(integration, scope, () => setup(ctx));
       }
+      control?.closeTasks();
       return "loaded";
     } catch (error) {
+      control?.closeTasks();
+      integrationScheduler().discard(integration.id);
       integration.loadState = "failed";
       integration.loadError = { phase, message: errorMessage(error) };
       throw error;
     }
   }
 
-  const control = contextControls.get(ctx);
   const resolvers = snapshotPlaceResolvers();
   const declaredDataSources = integration.manifest.dataSources;
   try {
@@ -1212,13 +1264,16 @@ async function loadIntegrationBackend(args: {
       }
     }
     phase = "setup";
+    control?.closeTasks();
     control?.releaseActivations();
     return "loaded";
   } catch (error) {
     scope.revoked = true;
     if (error instanceof LoadDeadlineError) phase = "deadline";
+    control?.closeTasks();
     control?.discardActivations();
     control?.unsubscribeAll();
+    integrationScheduler().discard(integration.id);
     dropIntegrationRoutes(integration.id);
     restorePlaceResolvers(resolvers);
     integration.providers.clear();
@@ -1478,6 +1533,7 @@ export async function initIntegrations(
         fastify.log.warn(rollbackError, `Failed to roll back activation for integration ${id}`);
       }
       fastify.log.error(err, `Failed to load integration ${id}`);
+      integrationScheduler().discard(id);
       integration.enabled = false;
       if (integration.loadState !== "failed") {
         integration.loadState = "failed";
@@ -1491,6 +1547,9 @@ export async function initIntegrations(
       });
     }
   }
+
+  // The integrations that loaded go live now, and their tasks with them.
+  integrationScheduler().activate([...integrations.keys()]);
 
   // The index above was seeded from the manifests on disk; runtime integrations
   // supplied their sources during setup, so re-index from the live registry.
@@ -1734,6 +1793,8 @@ async function doReloadIntegrations(
   const stagedEventBus = new IntegrationEventBus();
   const next = new Map<string, LoadedIntegration>();
   const activationScope = createActivationTransactionScope();
+  /** Integrations whose setup ran for this generation and may have staged tasks. */
+  const staged = new Set<string>();
 
   try {
     beginIntegrationRouteStaging();
@@ -1877,6 +1938,7 @@ async function doReloadIntegrations(
         activationScope,
       });
 
+      staged.add(id);
       try {
         if ((await loadIntegrationBackend({ integration, ctx, shutdownHandlers })) === "left-out") {
           next.set(id, integration);
@@ -1914,10 +1976,15 @@ async function doReloadIntegrations(
     // The previous generation stops serving here. Revoking it before the next
     // await keeps its late work out of the registries just committed.
     for (const integration of previousIntegrations) revokeInstalledScope(integration);
+    // Its tasks stop ticking and their runs are aborted; the new generation's
+    // tasks wait for a run that is still going.
+    for (const integration of previousIntegrations) integrationScheduler().retire(integration.id);
+    integrationScheduler().activate([...next.keys()]);
   } catch (err) {
     for (const rollbackError of activationScope.rollback()) {
       _fastify.log.warn(rollbackError, "Failed to roll back staged integration activation");
     }
+    for (const id of staged) integrationScheduler().discard(id);
     rollbackIntegrationRouteStaging();
     rollbackPlaceResolverStaging();
     stagedEventBus.removeAll();
@@ -1967,6 +2034,8 @@ async function doReloadIntegrations(
  * built-in's handlers are awaited to their end.
  */
 export async function shutdownIntegrations(): Promise<void> {
+  // Before the shutdown handlers: no task starts or keeps running beside them.
+  stopIntegrationTasks();
   const pending = new Set<string>();
   const installedRuns: Promise<void>[] = [];
   let timer: ReturnType<typeof setTimeout> | undefined;

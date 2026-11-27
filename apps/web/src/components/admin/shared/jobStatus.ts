@@ -6,6 +6,8 @@ const JOB_STATUS_COLOR: Record<string, JobStatusColor> = {
   queued: "default",
   running: "primary",
   succeeded: "success",
+  // A scheduled task's run that succeeded.
+  completed: "success",
   failed: "error",
   cancelled: "warning",
   partially_succeeded: "warning",
@@ -24,6 +26,7 @@ const JOB_STATUS_DESCRIPTION_KEY: Record<string, string> = {
   queued: "jobQueued",
   running: "jobRunning",
   succeeded: "jobSucceeded",
+  completed: "jobSucceeded",
   failed: "jobFailed",
   cancelled: "jobCancelled",
   partially_succeeded: "jobPartiallySucceeded",

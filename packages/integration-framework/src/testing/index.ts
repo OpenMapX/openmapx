@@ -26,6 +26,7 @@ import type {
   ResponseOptions,
   RouteHandler,
   RouteOptions,
+  ScheduleOptions,
   SecretsClient,
   StreamHttpResponse,
 } from "../context.js";
@@ -65,6 +66,7 @@ import { resolveIntegrationPlatformEndpoint } from "../platform-endpoints";
 import { providerOrderFingerprintInput, readProviderOrder } from "../provider-order";
 import { createProviderRegistrationCheck } from "../provider-registration";
 import { storedRouteHandler } from "../route-handler";
+import { cronShapeProblem, scheduleRegistrationProblem } from "../schedule";
 
 export interface FakeMobilityHttpRequest {
   kind: "json" | "text";
@@ -518,6 +520,12 @@ export interface CapturedRegistrations {
   disclosures: Disclosure[];
   /** Every list passed to `setDataSources()`, in call order. */
   dataSourceLists: IntegrationDataSource[][];
+  /** Every task passed to `schedule()`, in call order. */
+  tasks: {
+    name: string;
+    options: ScheduleOptions;
+    handler: (run: { signal: AbortSignal }) => Promise<void>;
+  }[];
 }
 
 export interface MockContextOverrides {
@@ -538,6 +546,11 @@ export interface MockContextOverrides {
 export interface MockIntegrationContext extends IntegrationContext {
   /** Captured registrations from `setup()` — drives contract conformance. */
   readonly registered: CapturedRegistrations;
+  /**
+   * Runs the handler of the task `setup()` scheduled under `name` once, as a
+   * tick of its schedule would, with `signal` or one that never aborts.
+   */
+  runScheduledTask(name: string, options?: { signal?: AbortSignal }): Promise<void>;
 }
 
 /**
@@ -580,6 +593,7 @@ export function createMockIntegrationContext(
     healthChecks: [],
     disclosures: [],
     dataSourceLists: [],
+    tasks: [],
   };
   const noop = () => undefined;
   const id = overrides.id ?? "test-integration";
@@ -704,6 +718,22 @@ export function createMockIntegrationContext(
     on: () => () => undefined,
     onActivate: runImmediateActivation,
     onShutdown: noop,
+    // The host's checks, except that only the host parses a cron expression's fields.
+    schedule: (name, options, handler) => {
+      const problem =
+        scheduleRegistrationProblem(name, options) ??
+        (options.cron === undefined ? null : cronShapeProblem(name, options.cron));
+      if (problem) throw new Error(problem);
+      if (registered.tasks.some((task) => task.name === name)) {
+        throw new Error(`Scheduled task ${name} is already scheduled by ${ctx.id}`);
+      }
+      registered.tasks.push({ name, options: { ...options }, handler });
+    },
+    runScheduledTask: async (name, options = {}) => {
+      const task = registered.tasks.find((candidate) => candidate.name === name);
+      if (!task) throw new Error(`createMockIntegrationContext: no task ${name} was scheduled`);
+      await task.handler({ signal: options.signal ?? new AbortController().signal });
+    },
     getIntegrationsByDomain: () => [],
     getProviderOrder: (domain) => {
       const orders = overrides.providerOrder ?? {};

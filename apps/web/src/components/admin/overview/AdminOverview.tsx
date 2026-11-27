@@ -30,6 +30,7 @@ import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { adminJobHref } from "@/lib/admin/adminJobNavigation";
 import { useIntegrationAdmin, useIntegrationReload } from "@/lib/admin/integrationAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
+import { useActivityJobLabel } from "../activity/activityQueries";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";
 import { useAuditActionLabel } from "../shared/auditActionLabel";
@@ -124,6 +125,7 @@ export function AdminOverview() {
 
   const { data, isLoading } = useQuery({ ...admin.queries.overview(), refetchInterval: 60_000 });
   const credentialsOverview = useQuery({ ...admin.queries.credentials(), refetchInterval: 60_000 });
+  const activeJobLabel = useActivityJobLabel(data?.activeJobs);
 
   const healthSweep = useMutation({
     mutationKey: ["integration-health-sweep", admin.apiUrl],
@@ -433,7 +435,7 @@ export function AdminOverview() {
                     noWrap
                     sx={{ flex: 1 }}
                   >
-                    {jobTypeLabel(job.type)}
+                    {activeJobLabel(job)}
                   </Typography>
                   {job.status === "running" && job.progress != null && (
                     <Tooltip title={format.percent(job.progress / 100)}>

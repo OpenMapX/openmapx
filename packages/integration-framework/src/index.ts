@@ -48,6 +48,7 @@ export type {
   RouteOptions,
   RouteParams,
   RouteRequest,
+  ScheduleOptions,
   SecretsClient,
   StreamHttpResponse,
   TransferSafeguard,
@@ -431,6 +432,7 @@ export { IntegrationRegistry } from "./registry";
 export { captureReviewProviderContributors } from "./review-attribution";
 export { storedRouteHandler } from "./route-handler";
 export { withRoutingContributors } from "./routing-contributors";
+export { scheduleRegistrationProblem } from "./schedule";
 export {
   createSiteOrchestrator,
   type SiteOrchestrator,

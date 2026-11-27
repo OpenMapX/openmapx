@@ -284,7 +284,7 @@ export function JobDetail({ jobId, source }: { jobId: string; source: AdminActiv
           </Typography>
         </Box>
       )}
-      {data.source === "data-manager" ? (
+      {data.source === "integration-task" ? null : data.source === "data-manager" ? (
         <DataManagerJobStages
           stages={data.stages}
           emptyMessage={isActive(data.status) ? t("waitingForTheFirstStage") : undefined}

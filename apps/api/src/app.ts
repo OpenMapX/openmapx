@@ -23,6 +23,7 @@ import { type MigrationRun, startMigrations } from "./db/migration-runner";
 import {
   getAllIntegrations,
   initIntegrations,
+  recoverInterruptedIntegrationTasks,
   reloadIntegrations,
   setDisallowedIntegrationResolver,
   setDisallowedSourceResolver,
@@ -33,6 +34,7 @@ import {
   startAttributionLicenseWatch,
   startIntegrationHealthRefresh,
   stopIntegrationHealthRefresh,
+  stopIntegrationTasks,
 } from "./integration-host";
 import { setIntegrationRouteRateLimits } from "./integration-routes";
 import { runPrivacyDatabaseCleanup } from "./privacy/cleanup.js";
@@ -103,6 +105,7 @@ import {
   withExtensionChangeLock,
 } from "./services/extension-recovery";
 import { pruneOldRecords } from "./services/health-history";
+import { pruneIntegrationTaskRuns } from "./services/integration-task-runs";
 import {
   startAdminJobReconciliation,
   stopAdminJobReconciliation,
@@ -408,6 +411,15 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
   registerBuiltinIdSchemeViews();
 
   await cacheInvalidation.start();
+  // Runs a previous process left behind block their tasks until they are
+  // closed, so this happens before the first generation starts its tasks.
+  try {
+    const interrupted = await recoverInterruptedIntegrationTasks();
+    if (interrupted > 0)
+      server.log.warn({ interrupted }, "Marked scheduled task runs of the previous process failed");
+  } catch (err) {
+    server.log.error(err, "Could not close the scheduled task runs of the previous process");
+  }
   await initIntegrations(server, [
     { directory: integrationsDir, isBuiltIn: true },
     { directory: customIntegrationsDir, isBuiltIn: false },
@@ -440,6 +452,9 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
       .catch((err) => server.log.warn(err, "Admin job prune failed"));
     void pruneDataManagerJobs(DATA_MANAGER_JOB_RETENTION_DAYS).catch((err) =>
       server.log.warn(err, "Data-manager job prune failed"),
+    );
+    void pruneIntegrationTaskRuns().catch((err) =>
+      server.log.warn(err, "Scheduled task run prune failed"),
     );
     void retentionDays("serverLog")
       .then(pruneAppLogs)
@@ -619,6 +634,8 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
       stopMigrationStagePruning();
       stopIntegrationHealthRefresh();
       stopDataUsePolicyRefresh();
+      // Returns at once; a handler still running ends with the process.
+      stopIntegrationTasks();
       await shutdownServer(server, {
         graceMs: SHUTDOWN_GRACE_MS,
         forceMs: SHUTDOWN_FORCE_MS,

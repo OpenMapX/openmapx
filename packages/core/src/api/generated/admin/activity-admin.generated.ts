@@ -7,6 +7,7 @@ import type {
   CancelAdminActivityJob400,
   CancelAdminActivityJob401,
   CancelAdminActivityJob403,
+  CancelAdminActivityJob409,
   CancelAdminActivityJob413,
   CancelAdminActivityJob415,
   CancelAdminActivityJob429,
@@ -325,6 +326,11 @@ export type cancelAdminActivityJobResponse403 = {
   status: 403;
 };
 
+export type cancelAdminActivityJobResponse409 = {
+  data: CancelAdminActivityJob409;
+  status: 409;
+};
+
 export type cancelAdminActivityJobResponse413 = {
   data: CancelAdminActivityJob413;
   status: 413;
@@ -352,6 +358,7 @@ export type cancelAdminActivityJobResponseError = (
   | cancelAdminActivityJobResponse400
   | cancelAdminActivityJobResponse401
   | cancelAdminActivityJobResponse403
+  | cancelAdminActivityJobResponse409
   | cancelAdminActivityJobResponse413
   | cancelAdminActivityJobResponse415
   | cancelAdminActivityJobResponse429

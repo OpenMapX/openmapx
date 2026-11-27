@@ -25,6 +25,7 @@ import {
   getAttentionMocks,
   getExtensionMigrationMocks,
   getIntegrationHealthMocks,
+  getTaskRunMocks,
   createIntegrationHostTestApp as makeApp,
 } from "./__tests__/support/integration-host-environment.js";
 
@@ -1224,6 +1225,8 @@ describe("initIntegrations — loader", () => {
           "    const accepted = ctx.setDataSources([]);",
           '    registerPlaceResolver("late", async () => null);',
           "    ctx.onShutdown(async () => {});",
+          '    ctx.schedule("late-task", { everyMs: 60000, deadlineMs: 5000 }, async () => {});',
+          '    ctx.schedule("late-task", { everyMs: 60000, deadlineMs: 5000 }, async () => {});',
           "    globalThis.__omxInstalledLateDone = { accepted };",
           "  }, 0);",
           "}",
@@ -1271,12 +1274,154 @@ describe("initIntegrations — loader", () => {
             "registerPlaceResolver",
             "registerRoute",
             "registerWeatherProvider",
+            "schedule",
             "setDataSources",
           ].map((method) => `Integration late was unloaded; ignoring ${method}`),
         );
       } finally {
         process.off("unhandledRejection", onRejection);
       }
+    });
+
+    describe("scheduled tasks", () => {
+      const taskRuns = getTaskRunMocks();
+
+      beforeEach(() => {
+        taskRuns.rows.length = 0;
+        // Only intervals are faked: the load deadline keeps real time.
+        vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      });
+
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      const ticker = (comment: string, body: string[]) =>
+        [`// ${comment}`, "export function setup(ctx) {", ...body, "}"].join("\n");
+
+      it("starts a task once its generation is live", async () => {
+        writeInstalled(
+          "ticker",
+          ticker("starts a task once its generation is live", [
+            '  ctx.schedule("refresh", { everyMs: 60000, deadlineMs: 5000 }, async ({ signal }) => {',
+            "    (globalThis.__omxInstalledRuns ??= []).push(signal.aborted);",
+            "  });",
+          ]),
+        );
+
+        await initIntegrations(makeApp(), [installed()]);
+        expect(g.__omxInstalledRuns).toBeUndefined();
+        vi.advanceTimersByTime(60_000);
+
+        await vi.waitFor(() => expect(taskRuns.rows[0]?.status).toBe("succeeded"), {
+          timeout: 10_000,
+        });
+        expect(g.__omxInstalledRuns).toEqual([false]);
+        expect(taskRuns.rows).toEqual([
+          expect.objectContaining({ integrationId: "ticker", taskName: "refresh" }),
+        ]);
+      });
+
+      it("fails the load in setup when a task's options are invalid", async () => {
+        writeInstalled(
+          "ticker",
+          ticker("fails the load in setup when a task's options are invalid", [
+            '  ctx.schedule("refresh", { everyMs: 1000, deadlineMs: 5000 }, async () => {});',
+          ]),
+        );
+
+        await initIntegrations(makeApp(), [installed()]);
+
+        expect(getIntegration("ticker")).toMatchObject({
+          loadState: "failed",
+          loadError: { phase: "setup", message: expect.stringMatching(/everyMs/) },
+        });
+      });
+
+      it("drops the tasks of an integration whose setup fails after scheduling them", async () => {
+        writeInstalled(
+          "ticker",
+          ticker("drops the tasks of an integration whose setup fails", [
+            '  ctx.schedule("refresh", { everyMs: 60000, deadlineMs: 5000 }, async () => {',
+            "    globalThis.__omxInstalledRan = true;",
+            "  });",
+            '  throw new Error("setup failed");',
+          ]),
+        );
+
+        await initIntegrations(makeApp(), [installed()]);
+        vi.advanceTimersByTime(180_000);
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(getIntegration("ticker")?.loadState).toBe("failed");
+        expect(taskRuns.store.start).not.toHaveBeenCalled();
+        expect(g.__omxInstalledRan).toBeUndefined();
+      });
+
+      it("ignores a task scheduled after setup with one warning", async () => {
+        writeInstalled(
+          "ticker",
+          ticker("ignores a task scheduled after setup", [
+            "  setTimeout(() => {",
+            "    for (const name of ['late', 'late']) {",
+            "      ctx.schedule(name, { everyMs: 60000, deadlineMs: 5000 }, async () => {",
+            "        globalThis.__omxInstalledRan = true;",
+            "      });",
+            "    }",
+            "    globalThis.__omxInstalledScheduled = true;",
+            "  }, 0);",
+          ]),
+        );
+        const warn = vi.fn();
+        const app = makeApp();
+        // biome-ignore lint/suspicious/noExplicitAny: test-only log patch
+        (app as any).log = { info: vi.fn(), warn, error: vi.fn(), debug: vi.fn() };
+
+        await initIntegrations(app, [installed()]);
+        await vi.waitFor(() => expect(g.__omxInstalledScheduled).toBe(true), { timeout: 10_000 });
+        vi.advanceTimersByTime(180_000);
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(getIntegration("ticker")?.loadState).toBe("loaded");
+        expect(g.__omxInstalledRan).toBeUndefined();
+        const ignored = warn.mock.calls
+          .map(([, message]) => String(message))
+          .filter((message) => message.includes("after setup"));
+        expect(ignored).toEqual([
+          "Integration ticker scheduled task late after setup; ignoring it",
+        ]);
+      });
+
+      it("aborts a running task when a reload replaces its integration", async () => {
+        writeInstalled(
+          "ticker",
+          ticker("aborts a running task when a reload replaces its integration", [
+            "  const generation = (globalThis.__omxInstalledGeneration ?? 0) + 1;",
+            "  globalThis.__omxInstalledGeneration = generation;",
+            '  ctx.schedule("refresh", { everyMs: 60000, deadlineMs: 600000 }, ({ signal }) => {',
+            "    (globalThis.__omxInstalledStarted ??= []).push(generation);",
+            "    return new Promise((resolve) => {",
+            "      if (generation > 1) return resolve();",
+            '      signal.addEventListener("abort", () => {',
+            "        globalThis.__omxInstalledAborted = generation;",
+            "        resolve();",
+            "      });",
+            "    });",
+            "  });",
+          ]),
+        );
+
+        await initIntegrations(makeApp(), [installed()]);
+        vi.advanceTimersByTime(60_000);
+        await vi.waitFor(() => expect(g.__omxInstalledStarted).toEqual([1]), { timeout: 10_000 });
+
+        await reloadIntegrations();
+        await vi.waitFor(() => expect(g.__omxInstalledAborted).toBe(1), { timeout: 10_000 });
+        vi.advanceTimersByTime(60_000);
+        await vi.waitFor(() => expect(g.__omxInstalledStarted).toEqual([1, 2]), {
+          timeout: 10_000,
+        });
+      });
     });
 
     describe("integration scope and setup deadline", () => {

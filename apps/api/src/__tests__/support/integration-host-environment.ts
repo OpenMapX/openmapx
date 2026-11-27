@@ -44,6 +44,48 @@ const attentionMocks = vi.hoisted(() => ({
 
 vi.mock("../../services/attention.js", () => attentionMocks);
 
+/** The run history of scheduled tasks, in memory, with one running row per task at most. */
+const taskRunMocks = vi.hoisted(() => {
+  const rows: Array<{
+    id: string;
+    integrationId: string;
+    taskName: string;
+    status: "running" | "succeeded" | "failed";
+    error: string | null;
+  }> = [];
+  return {
+    rows,
+    store: {
+      start: vi.fn(async (integrationId: string, taskName: string) => {
+        if (
+          rows.some(
+            (row) =>
+              row.integrationId === integrationId &&
+              row.taskName === taskName &&
+              row.status === "running",
+          )
+        )
+          return null;
+        const id = `run-${rows.length + 1}`;
+        rows.push({ id, integrationId, taskName, status: "running", error: null });
+        return id;
+      }),
+      finish: vi.fn(async (runId: string, status: "succeeded" | "failed", error?: string) => {
+        const row = rows.find((candidate) => candidate.id === runId);
+        if (row?.status !== "running") return;
+        row.status = status;
+        row.error = error ?? null;
+      }),
+      failInterrupted: vi.fn(async () => 0),
+    },
+  };
+});
+
+vi.mock("../../services/integration-task-runs.js", () => ({
+  createTaskRunStore: () => taskRunMocks.store,
+  pruneIntegrationTaskRuns: vi.fn(async () => 0),
+}));
+
 vi.mock("../../db/schema.js", () => ({
   integrationConfig: { integrationId: "integrationId", config: "config" },
   integrationSecret: {},
@@ -113,6 +155,11 @@ export function getIntegrationHealthMocks() {
 /** The migration runner the host calls before importing an integration that owns tables. */
 export function getExtensionMigrationMocks() {
   return extensionMigrationMocks;
+}
+
+/** Where the host records the runs of scheduled tasks. */
+export function getTaskRunMocks() {
+  return taskRunMocks;
 }
 
 /** The attention list the host raises the schema-ahead item on. */

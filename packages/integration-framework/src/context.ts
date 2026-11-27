@@ -174,6 +174,17 @@ export interface DatabaseClient {
   readonly schema?: string;
 }
 
+/**
+ * When a task registered with `ctx.schedule` runs: exactly one of `cron` (five
+ * fields, minute precision, evaluated in UTC) and `everyMs` (at least 60 000).
+ * `deadlineMs` (1 000 to 21 600 000) bounds each run.
+ */
+export interface ScheduleOptions {
+  cron?: string;
+  everyMs?: number;
+  deadlineMs: number;
+}
+
 /** A `:name` segment's param name, without a `.png`-style or `-` suffix after it. */
 type RouteParamName<Segment extends string> = Segment extends `${infer Name}.${string}`
   ? RouteParamName<Name>
@@ -744,6 +755,24 @@ export interface IntegrationContext {
    */
   onActivate(activate: () => void, rollback?: () => void): void;
   onShutdown(cleanup: () => Promise<void>): void;
+
+  /**
+   * Runs `handler` on a schedule once the integration's generation is live.
+   * Call it from `setup()`: it throws there on a name that does not match
+   * `^[a-z0-9][a-z0-9-]{0,63}$` or that the integration already scheduled,
+   * and on invalid `options`; a call after `setup()` has returned is ignored
+   * with a warning. An `everyMs` task first runs one interval after the
+   * generation goes live; a tick missed while the API was down is not made up.
+   * A run is skipped while the task's previous run has not settled. The run's
+   * `signal` aborts at `deadlineMs`, when a reload replaces the integration and
+   * when the API stops; a run still going at its deadline is recorded as
+   * failed. Each run is listed in the administration's Activity.
+   */
+  schedule(
+    name: string,
+    options: ScheduleOptions,
+    handler: (run: { signal: AbortSignal }) => Promise<void>,
+  ): void;
 
   /** Query all enabled integrations registered under a domain. */
   getIntegrationsByDomain(domain: string): LoadedIntegration[];
