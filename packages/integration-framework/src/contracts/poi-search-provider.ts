@@ -15,9 +15,13 @@ export interface PoiSearchProvider {
   readonly categories: string[];
   /**
    * How a category search fuses this provider's results when several cover
-   * the category: the first provider in the operator's order that declares
-   * `"base"` supplies the authoritative set (OSM, say), and every other one
-   * augments it. Without a declared base, the first provider is the base.
+   * the category. The first provider in the operator's order that declares
+   * `"base"` (or, when none does, the first that does not declare
+   * `"augment"`) is the base: for the categories it covers it supplies the
+   * authoritative set (OSM, say) and every other covering provider augments
+   * it. For a category the base does not cover there is no base, and every
+   * covering provider augments an empty set. A provider declaring
+   * `"augment"` is never the base.
    */
   readonly fusionRole?: "base" | "augment";
   search(

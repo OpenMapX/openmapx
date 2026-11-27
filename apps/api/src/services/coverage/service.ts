@@ -321,9 +321,11 @@ function evidenceForProvider(
     return catalogForProvider();
   }
   if (operationId === "pois.overture-enrichment") {
+    // Any provider that offers details is reported as supporting enrichment,
+    // so it cites what it declares, as it does for search.
     return provider.integrationId === "poi-overture" && provider.providerId === "overture"
       ? byKey("service:data-manager:overture-places")
-      : [];
+      : catalogForProvider();
   }
   if (operationId === "traffic.flow") return catalogForProvider();
   if (operationId === "traffic.road-conditions") return catalogForProvider();

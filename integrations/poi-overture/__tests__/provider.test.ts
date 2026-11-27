@@ -83,6 +83,13 @@ describe("poi-overture setup", () => {
     expect(ctx.registered.healthChecks).toHaveLength(1);
   });
 
+  it("declares itself an augment, so it fills gaps and is never the fusion base", async () => {
+    const ctx = createMockIntegrationContext({ db: makeFakeDb([]) });
+    const { setup } = await import("../index.js");
+    setup(ctx);
+    expect((nth(ctx.registered.poiSearch, 0) as PoiSearchProvider).fusionRole).toBe("augment");
+  });
+
   it("no-ops (logs warn) when ctx.db is undefined", async () => {
     const warnSpy = vi.fn();
     const ctx = createMockIntegrationContext({

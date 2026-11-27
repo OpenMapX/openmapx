@@ -177,6 +177,18 @@ function finalize(run: ProviderRun, bbox: BoundingBox): PoiSearchResponse {
 
 export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
   /** Every POI provider, in the operator's order. */
+  /**
+   * The provider whose results are authoritative in a fused category search:
+   * the first in the operator's order that declares `"base"` (OSM via
+   * Overpass, built in), else the first that does not declare `"augment"`.
+   */
+  function fusionBase(providers: readonly PoiSearchProvider[]): PoiSearchProvider | undefined {
+    return (
+      providers.find((p) => p.fusionRole === "base") ??
+      providers.find((p) => p.fusionRole !== "augment")
+    );
+  }
+
   function getProviders(): PoiSearchProvider[] {
     return collectOrderedProviders<PoiSearchProvider>(ctx, "poi-search").map(
       ({ provider }) => provider,
@@ -223,11 +235,13 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
       return finalize(run, bbox);
     }
 
-    // The first matching provider in order that declares itself the base (OSM
-    // via Overpass, built in) supplies the authoritative set; every other one
-    // augments it (Overture gap-fill, built in). Without a declared base the
-    // first matching provider takes that place.
-    const baseProvider = matching.find((p) => p.fusionRole === "base") ?? matching[0];
+    // One base identity for the whole request, chosen over every provider and
+    // not per category, so a provider is never promoted just because the base
+    // lacks a category: it is the base only for categories it covers, and
+    // without it every matching provider augments an empty set.
+    const designatedBase = fusionBase(providers);
+    const baseProvider =
+      designatedBase && matching.includes(designatedBase) ? designatedBase : undefined;
     const augmentProviders = matching.filter((p) => p !== baseProvider);
 
     const basePromise = baseProvider

@@ -1,8 +1,12 @@
 import { createHash } from "node:crypto";
 import { effectiveProviderOrder, type LoadedIntegration } from "@openmapx/integration-framework";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  routeRequest,
+} from "@openmapx/integration-framework/testing";
 import type { PoiSearchProvider, PoiSearchResult } from "@openmapx/provider-kit/poi-search";
 import { describe, expect, it, vi } from "vitest";
+import { setup } from "../index";
 import { createPoiSearchOrchestrator } from "../orchestrator";
 
 const BBOX = { south: 52.49, west: 13.38, north: 52.53, east: 13.43 };
@@ -48,14 +52,16 @@ describe("POI providers without provider ids", () => {
     const augment = poiProvider("overpass", [result("osm:node/1", 13.39)], {
       fusionRole: "augment",
     });
-    const base = poiProvider("acme-pois", [result("acme:1", 13.42)], { fusionRole: "base" });
+    const base = poiProvider("acme-pois", [result("osm:node/2", 13.42)], { fusionRole: "base" });
     const execute = vi.fn(async (_query: string, _params?: unknown[]) => []);
     const ctx = hostLike([integration("poi-overpass", augment), integration("poi-acme", base)]);
     Object.assign(ctx, { db: { execute } });
     const response = await createPoiSearchOrchestrator(ctx).search("cafes", BBOX);
-    expect(response.results.map((entry) => entry.id).sort()).toEqual(["acme:1", "osm:node/1"]);
+    expect(response.results.map((entry) => entry.id).sort()).toEqual(["osm:node/1", "osm:node/2"]);
     // Conflation links are looked up for the base's results only.
-    expect(execute).not.toHaveBeenCalled();
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute.mock.calls[0]?.[1]).toEqual(expect.arrayContaining(["node", 2n]));
+    expect(execute.mock.calls[0]?.[1]).not.toEqual(expect.arrayContaining([1n]));
     const baseFails = poiProvider("acme-pois", [], { fusionRole: "base" });
     baseFails.search = vi.fn(async () => {
       throw new Error("base unavailable");
@@ -80,6 +86,44 @@ describe("POI providers without provider ids", () => {
     // Only a base's results are looked up in the conflation link table.
     expect(execute).toHaveBeenCalledTimes(1);
     expect(execute.mock.calls[0]?.[1]).toEqual(expect.arrayContaining(["node", 7n]));
+  });
+
+  it("has no base for a category the declared base does not cover", async () => {
+    const overpass = poiProvider("overpass", [], { fusionRole: "base", categories: ["bakeries"] });
+    const acme = poiProvider("acme-pois", [result("osm:node/4", 13.39)], {
+      fusionRole: "augment",
+    });
+    const overture = poiProvider("overture", [result("osm:node/5", 13.42)]);
+    const execute = vi.fn(async (_query: string, _params?: unknown[]) => []);
+    const ctx = hostLike(
+      [
+        integration("poi-overpass", overpass),
+        integration("poi-overture", overture),
+        integration("poi-acme", acme),
+      ],
+      ["poi-acme", "poi-overture"],
+    );
+    Object.assign(ctx, { db: { execute } });
+    const response = await createPoiSearchOrchestrator(ctx).search("cafes", BBOX);
+    expect(response.results.map((entry) => entry.id).sort()).toEqual(["osm:node/4", "osm:node/5"]);
+    // Neither covering provider is promoted: every one augments an empty set.
+    expect(execute).not.toHaveBeenCalled();
+    expect(overpass.search).not.toHaveBeenCalled();
+  });
+
+  it("never promotes a provider that declares itself an augment", async () => {
+    const first = poiProvider("acme-pois", [result("osm:node/8", 13.39)], {
+      fusionRole: "augment",
+    });
+    const second = poiProvider("other-pois", [result("osm:node/9", 13.42)], {
+      fusionRole: "augment",
+    });
+    const execute = vi.fn(async (_query: string, _params?: unknown[]) => []);
+    const ctx = hostLike([integration("poi-acme", first), integration("poi-other", second)]);
+    Object.assign(ctx, { db: { execute } });
+    const response = await createPoiSearchOrchestrator(ctx).search("cafes", BBOX);
+    expect(response.results.map((entry) => entry.id).sort()).toEqual(["osm:node/8", "osm:node/9"]);
+    expect(execute).not.toHaveBeenCalled();
   });
 
   it("uses the operator's order to pick the text-search provider", async () => {
@@ -145,7 +189,70 @@ describe("served POI order, fingerprint and admin list", () => {
     Object.assign(ctx, { db: { execute } });
     const orchestrator = createPoiSearchOrchestrator(ctx);
     await orchestrator.search("cafes", BBOX);
+    expect(execute).toHaveBeenCalledTimes(1);
     expect(execute.mock.calls[0]?.[1]).toEqual(expect.arrayContaining(["node", 1n]));
     expect((await orchestrator.searchText("q", BBOX)).results[0]?.id).toBe("osm:text");
+
+    // An operator who puts Overture first does not make it the base.
+    execute.mockClear();
+    const reordered = hostLike(
+      [integration("poi-overture", overture), integration("poi-overpass", overpass)],
+      ["poi-overture", "poi-overpass"],
+    );
+    Object.assign(reordered, { db: { execute } });
+    await createPoiSearchOrchestrator(reordered).search("cafes", BBOX);
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute.mock.calls[0]?.[1]).toEqual(expect.arrayContaining(["node", 1n]));
+  });
+});
+
+describe("POI result caches", () => {
+  const reply = { header: () => reply, status: () => reply, send: () => reply, type: () => reply };
+  const empty = { results: [], partial: false, truncated: false, total: 0 };
+  const box = { south: "52.49", west: "13.38", north: "52.53", east: "13.43" };
+  const requests = [
+    ["GET", "/search", { query: { category: "cafes", ...box }, body: null }],
+    ["GET", "/text", { query: { q: "cafe", ...box }, body: null }],
+    ["GET", "/filtered", { query: { category: "cafes", ...box }, body: null }],
+    [
+      "POST",
+      "/filter",
+      {
+        query: {},
+        body: {
+          filter: { selectors: [{ tags: [{ key: "amenity", op: "=", value: "cafe" }] }] },
+          ...Object.fromEntries(Object.entries(box).map(([key, value]) => [key, Number(value)])),
+        },
+      },
+    ],
+  ] as const;
+
+  it("key category, text, filtered and filter results by the provider order", async () => {
+    const ctx = hostLike([
+      integration("poi-overpass", poiProvider("overpass", [], { fusionRole: "base" })),
+      integration("poi-acme", poiProvider("acme-pois", [])),
+    ]);
+    const keys: string[] = [];
+    ctx.cache.withCache = async <T>(key: string) => {
+      keys.push(key);
+      return empty as T;
+    };
+    setup(ctx);
+    const readAll = async () => {
+      for (const [method, path, request] of requests) {
+        const route = ctx.registered.routes.find(
+          (entry) => entry.method === method && entry.path === path,
+        );
+        if (!route) throw new Error(`missing ${method} ${path}`);
+        await route.handler(routeRequest(request), reply);
+      }
+      return keys.splice(0);
+    };
+    const first = await readAll();
+    expect(first).toHaveLength(requests.length);
+    expect(await readAll()).toEqual(first);
+    ctx.getProviderOrder = () => ["poi-acme", "poi-overpass"];
+    const reordered = await readAll();
+    for (const [index, key] of reordered.entries()) expect(key).not.toBe(first[index]);
   });
 });

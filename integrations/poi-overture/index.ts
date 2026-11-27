@@ -416,6 +416,8 @@ function bindDb(db: DatabaseClient): void {
 export const overtureProvider: PoiSearchProvider = {
   id: "overture",
   categories: [...OVERTURE_COMMERCIAL_CATEGORIES],
+  // Overture fills gaps in OSM; it never supplies the authoritative set.
+  fusionRole: "augment",
   async search(
     category: string,
     bbox: BoundingBox,

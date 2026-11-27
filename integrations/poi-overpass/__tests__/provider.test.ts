@@ -9,6 +9,11 @@ vi.mock("@openmapx/core", async (importOriginal) => {
 });
 
 describe("overpassProvider", () => {
+  it("declares itself the fusion base, so OSM stays authoritative in any provider order", async () => {
+    const { overpassProvider } = await import("../index");
+    expect(overpassProvider.fusionRole).toBe("base");
+  });
+
   it("delegates searchByFilter to core searchByFilter", async () => {
     const mockResults = [{ id: "n1", name: "Café Test", coordinates: { lng: 13.4, lat: 52.5 } }];
     const coreMod = await import("@openmapx/core");

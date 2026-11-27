@@ -67,6 +67,10 @@ async function withCurrentHours(result: PoiSearchResponse): Promise<PoiSearchRes
 
 export function setup(ctx: IntegrationContext): void {
   const orchestrator = createPoiSearchOrchestrator(ctx);
+  // Results depend on which providers are loaded and in which order (the
+  // fusion base, the text/filter provider), so a reorder or a provider joining
+  // or leaving must not replay a result computed under the previous set.
+  const providerOrderKey = () => ctx.getProviderOrderFingerprint("poi-search");
   const captureBrand = <T extends BrandSummary>(brand: T): T => ({
     ...brand,
     contributors: snapshotContributors(brand.contributors ?? []),
@@ -111,7 +115,7 @@ export function setup(ctx: IntegrationContext): void {
       }
     }
 
-    const cacheKey = `category:${category}:${lang ?? "en"}:${bboxCacheKey(bbox)}`;
+    const cacheKey = `category:${category}:${lang ?? "en"}:${bboxCacheKey(bbox)}:${providerOrderKey()}`;
 
     try {
       const result = await ctx.cache.withCache(cacheKey, 300, () =>
@@ -151,7 +155,7 @@ export function setup(ctx: IntegrationContext): void {
       }
     }
 
-    const cacheKey = `text:${q.trim().toLowerCase()}:${lang ?? "en"}:${bboxCacheKey(bbox)}`;
+    const cacheKey = `text:${q.trim().toLowerCase()}:${lang ?? "en"}:${bboxCacheKey(bbox)}:${providerOrderKey()}`;
 
     try {
       const result = await ctx.cache.withCache(cacheKey, 300, () =>
@@ -225,7 +229,7 @@ export function setup(ctx: IntegrationContext): void {
       .sort()
       .map((k) => `${k}=${attributes[k]}`)
       .join(",");
-    const cacheKey = `filtered:${category}:${sortedTagKey}:${lang ?? "en"}:${bboxCacheKey(bbox)}`;
+    const cacheKey = `filtered:${category}:${sortedTagKey}:${lang ?? "en"}:${bboxCacheKey(bbox)}:${providerOrderKey()}`;
 
     try {
       const result = await ctx.cache.withCache(cacheKey, 300, () =>
@@ -418,7 +422,7 @@ export function setup(ctx: IntegrationContext): void {
       .update(JSON.stringify(normalizeFilter(v.filter)))
       .digest("hex")
       .slice(0, 16);
-    const cacheKey = `filter:${filterHash}:${lang ?? "en"}:${bboxCacheKey(bbox)}`;
+    const cacheKey = `filter:${filterHash}:${lang ?? "en"}:${bboxCacheKey(bbox)}:${providerOrderKey()}`;
 
     try {
       const result = await ctx.cache.withCache(cacheKey, 300, () =>
