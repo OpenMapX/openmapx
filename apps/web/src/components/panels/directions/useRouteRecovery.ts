@@ -1,7 +1,13 @@
 import type { TravelMode } from "@openmapx/core";
 import { useDirectionsStore, useSettingsStore } from "@openmapx/core";
+import { useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { type RoutingEngine, useRoutingEngines } from "@/lib/useRoutingEngines";
+import {
+  type RoutingEngine,
+  useRoutingEngineCatalog,
+  useRoutingEngines,
+} from "@/lib/useRoutingEngines";
 import {
   GROUND_FALLBACK_MODES,
   type GroundFallbackMode,
@@ -74,6 +80,34 @@ export function routeRecoveryOptions(request: RouteRecoveryRequest): {
               name: engine.name,
             })),
   };
+}
+
+/**
+ * Releases a pinned engine whose request failed once the capabilities show it
+ * is no longer loaded and available, so the trip goes back to the operator's
+ * order instead of repeating a request that cannot succeed; `onReleased` tells
+ * the user. A failure refreshes the capabilities first, so a cached answer
+ * from before the engine left cannot keep the pin. A loaded engine that failed
+ * keeps its pin: the other engines are offered beside Retry.
+ */
+export function useReleaseUnavailablePin(failedPin: string | undefined, onReleased: () => void) {
+  const { engines, state } = useRoutingEngineCatalog();
+  const setRoutingProvider = useDirectionsStore((s) => s.setRoutingProvider);
+  const queryClient = useQueryClient();
+  const released = useRef(onReleased);
+  released.current = onReleased;
+  const unavailable =
+    failedPin !== undefined &&
+    state === "ready" &&
+    !engines.some((engine) => engine.id === failedPin && engine.available);
+  useEffect(() => {
+    if (failedPin !== undefined) void queryClient.invalidateQueries({ queryKey: ["capabilities"] });
+  }, [failedPin, queryClient]);
+  useEffect(() => {
+    if (!unavailable) return;
+    setRoutingProvider(null);
+    released.current();
+  }, [unavailable, setRoutingProvider]);
 }
 
 /**

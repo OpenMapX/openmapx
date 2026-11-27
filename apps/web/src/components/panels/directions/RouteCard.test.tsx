@@ -23,7 +23,10 @@ vi.mock("@openmapx/core", async (importOriginal) => {
 });
 
 // The traffic note names engines from the capabilities query, which these cards do not mount.
-vi.mock("@/lib/useRoutingEngines", () => ({ useRoutingEngines: () => [] }));
+vi.mock("@/lib/useRoutingEngines", () => ({
+  useRoutingEngines: () => [],
+  useRoutingEngineCatalog: () => ({ engines: [], state: "ready" }),
+}));
 
 // This project does not enable Testing Library's automatic cleanup, so without
 // this every render in the file stays in the document and role queries find

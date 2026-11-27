@@ -28,7 +28,7 @@ import { TripTimeChip } from "./TripTimeChip";
 import { useDirectionsDetailsNavigation } from "./useDirectionsDetailsNavigation";
 import { useGroundDirectionsPlan } from "./useGroundDirectionsPlan";
 import { useOptimizeStops } from "./useOptimizeStops";
-import { useRouteRecovery } from "./useRouteRecovery";
+import { useReleaseUnavailablePin, useRouteRecovery } from "./useRouteRecovery";
 import { useTransitDirectionsPlan } from "./useTransitDirectionsPlan";
 import { useTripTimeControl } from "./useTripTimeControl";
 import { useWaypointFields } from "./useWaypointFields";
@@ -88,6 +88,10 @@ export function DirectionsPanelContent() {
     useDirectionsStore.getState().setMode(nextMode);
     details.leave();
   };
+  useReleaseUnavailablePin(
+    ground.directionsQuery.isError ? ground.groundRequest.provider : undefined,
+    () => setSnackbar(t("engineUnavailable")),
+  );
   const recovery = useRouteRecovery({
     focusWaypoint: fields.focusWaypoint,
     switchMode,

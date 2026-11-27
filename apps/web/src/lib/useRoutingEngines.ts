@@ -21,7 +21,27 @@ export interface RoutingEngine {
  * an installed engine is treated like a built-in one.
  */
 export function useRoutingEngines(): RoutingEngine[] {
-  const { services } = useCapabilities();
+  return useRoutingEngineCatalog().engines;
+}
+
+/**
+ * The routing engines and whether they are known yet. Until the capabilities
+ * answer, or after they fail, the list is empty without meaning that no
+ * engine exists, so nothing may be concluded from a missing entry.
+ */
+export function useRoutingEngineCatalog(): {
+  engines: RoutingEngine[];
+  state: "loading" | "failed" | "ready";
+} {
+  const capabilities = useCapabilities();
+  const engines = useRoutingEngineList(capabilities.services);
+  const state = capabilities.data ? "ready" : capabilities.isError ? "failed" : "loading";
+  return { engines, state };
+}
+
+function useRoutingEngineList(
+  services: ReturnType<typeof useCapabilities>["services"],
+): RoutingEngine[] {
   const registry = useIntegrationRegistry();
   return useMemo(
     () =>

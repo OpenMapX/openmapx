@@ -1113,6 +1113,7 @@
     "changeDestination": "Change destination",
     "tryMode": "Try {mode}",
     "tryEngine": "Try with {name}",
+    "engineUnavailable": "The chosen routing engine is no longer available. Routes use the usual order again.",
     "transitNotAvailable": "Transit directions are not available for these locations.",
     "departAt": "Depart at",
     "arriveBy": "Arrive by",
@@ -4760,7 +4761,8 @@
       "expired": "Road updates need to be checked again. Refresh the route.",
       "limited": "Some reported road changes may be missing.",
       "unavailable": "Road updates couldn’t be checked.",
-      "unverified": "We couldn’t confirm which road updates were used."
+      "unverified": "We couldn’t confirm which road updates were used.",
+      "checking": "Checking which road updates were used…"
     },
     "congestionUnverified": "This travel time may not include current traffic delays.",
     "overlay": {

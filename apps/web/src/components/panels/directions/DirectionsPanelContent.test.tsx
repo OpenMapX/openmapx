@@ -108,7 +108,11 @@ vi.mock("@openmapx/core", async (importOriginal) => {
     useRideQuotes: () => ({ results: [], expiresAt: null, refetch: vi.fn() }),
     useVehicleJourney: () => ({ data: transitCollection.journey }),
     useRouteAlerts: () => ({ data: transitCollection.alerts }),
-    useCapabilities: () => ({ services: capabilityServices }),
+    useCapabilities: () => ({
+      services: capabilityServices,
+      data: { services: capabilityServices, features: { osmContributions: false } },
+      isError: false,
+    }),
     useOptimizeRoute: () => ({
       mutate: (...a: unknown[]) => optimizeMutate(...a),
       isPending: false,
@@ -815,6 +819,58 @@ describe("DirectionsPanelContent", () => {
     expect(useDirectionsMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ provider: "routing-second" }),
     );
+  });
+
+  it("releases a pinned engine that is no longer loaded and says so", () => {
+    seedOriginDestination();
+    capabilityServices = {
+      "routing-first": { available: true, modes: ["driving"], exclusions: true },
+      "routing-second": { available: true, modes: ["driving"], exclusions: true },
+    };
+    act(() => useDirectionsStore.getState().setRoutingProvider("routing-gone"));
+    // The host answers a pin on an unloaded engine with 503; the usual order answers.
+    useDirectionsMock.mockImplementation((arg: unknown) =>
+      (arg as { provider?: string }).provider === "routing-gone"
+        ? { data: undefined, isLoading: false, isError: true, refetch: vi.fn() }
+        : {
+            data: {
+              waypoints: [
+                [13.3, 52.5],
+                [11.5, 48.1],
+              ],
+              routes: [],
+              activeRouteIndex: 0,
+              provider: "routing-first",
+            },
+            isLoading: false,
+            isError: false,
+          },
+    );
+
+    renderPanel();
+    expect(useDirectionsStore.getState().routingProvider).toBeNull();
+    expect(useDirectionsMock).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ provider: "routing-gone" }),
+    );
+    expect(screen.getByText("directions.engineUnavailable")).toBeInTheDocument();
+  });
+
+  it("keeps a pin on a loaded engine that failed, so another can be tried", () => {
+    seedOriginDestination();
+    capabilityServices = {
+      "routing-first": { available: true, modes: ["driving"], exclusions: true },
+      "routing-second": { available: true, modes: ["driving"], exclusions: true },
+    };
+    act(() => useDirectionsStore.getState().setRoutingProvider("routing-second"));
+    useDirectionsMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch: vi.fn(),
+    });
+    renderPanel();
+    expect(useDirectionsStore.getState().routingProvider).toBe("routing-second");
+    expect(screen.queryByText("directions.engineUnavailable")).toBeNull();
   });
 
   it("clearing a waypoint suppresses an old request failure", () => {

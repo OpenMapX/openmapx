@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { TrafficInfo } from "@/integration-api/components/TrafficInfo";
 import { type RoutingEngineLabels, routeTrafficStatus } from "@/lib/route-traffic-status";
 import { useRouteTrafficPresentation } from "@/lib/useRouteTrafficPresentation";
-import { useRoutingEngines } from "@/lib/useRoutingEngines";
+import { useRoutingEngineCatalog } from "@/lib/useRoutingEngines";
 
 export function RouteTrafficStatus({
   route,
@@ -21,13 +21,17 @@ export function RouteTrafficStatus({
   const t = useTranslations("trafficStatus");
   const [revision, setRevision] = useState(0);
   void revision;
-  const engines = useRoutingEngines();
+  const { engines, state: catalog } = useRoutingEngineCatalog();
   const labels = useMemo<RoutingEngineLabels>(
     () =>
       Object.fromEntries(engines.map(({ id, name, trafficProof }) => [id, { name, trafficProof }])),
     [engines],
   );
   const status = routeTrafficStatus(route, impact, provider, labels, Date.now());
+  // Without the capabilities the engine is unknown: name it by its raw id, or
+  // call a provable route unverified, and the note would be wrong. The
+  // server's own assessment (expired, limited, unavailable) still holds.
+  const enginesKnown = catalog === "ready";
   const deadline = status?.deadline;
   useEffect(() => {
     if (deadline == null) return;
@@ -59,18 +63,26 @@ export function RouteTrafficStatus({
               : "congestionUnverified",
         )}
       </Typography>
-      <Typography variant="body2" sx={{ mb: 1 }}>
-        {t(`application.${status.application}`)}
-      </Typography>
-      <Typography variant="caption" sx={{ color: "text.secondary" }}>
-        {t("provider", {
-          source: !status.source
-            ? t("sourceUnknown")
-            : status.source.hosted
-              ? t("sourceHosted", { name: status.source.name })
-              : status.source.name,
-        })}
-      </Typography>
+      {enginesKnown || status.application !== "unverified" ? (
+        <Typography variant="body2" sx={{ mb: 1 }}>
+          {t(`application.${status.application}`)}
+        </Typography>
+      ) : catalog === "loading" ? (
+        <Typography variant="body2" sx={{ mb: 1, color: "text.secondary" }}>
+          {t("application.checking")}
+        </Typography>
+      ) : null}
+      {enginesKnown && (
+        <Typography variant="caption" sx={{ color: "text.secondary" }}>
+          {t("provider", {
+            source: !status.source
+              ? t("sourceUnknown")
+              : status.source.hosted
+                ? t("sourceHosted", { name: status.source.name })
+                : status.source.name,
+          })}
+        </Typography>
+      )}
     </TrafficInfo>
   );
 }

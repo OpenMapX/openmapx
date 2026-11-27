@@ -5,13 +5,19 @@ import { NextIntlClientProvider } from "next-intl";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { RouteTrafficStatus } from "./RouteTrafficStatus";
 
+const catalog = vi.hoisted(() => ({ state: "ready" as "loading" | "failed" | "ready" }));
 vi.mock("@/lib/useRoutingEngines", () => {
   const engine = { available: true, modes: ["driving"], timeAware: true, exclusions: true };
   const engines = [
     { ...engine, id: "routing-valhalla", name: "Valhalla", trafficProof: true },
     { ...engine, id: "routing-osrm", name: "OSRM", trafficProof: false },
   ];
-  return { useRoutingEngines: () => engines };
+  // Before the capabilities answer, or after they fail, no engine is known.
+  const current = () => (catalog.state === "ready" ? engines : []);
+  return {
+    useRoutingEngines: current,
+    useRoutingEngineCatalog: () => ({ engines: current(), state: catalog.state }),
+  };
 });
 
 const now = Date.parse("2026-10-07T02:00:00Z");
@@ -56,6 +62,28 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  catalog.state = "ready";
+});
+it.each([
+  ["loading", "Checking which road updates were used…"],
+  ["failed", undefined],
+] as const)("stays neutral while the routing capabilities are %s", (state, line) => {
+  catalog.state = state;
+  render(view());
+  fireEvent.click(screen.getByRole("button", { name: "About traffic" }));
+  const dialog = screen.getByRole("dialog", { name: "About traffic" });
+  expect(dialog).not.toHaveTextContent("routing-valhalla");
+  expect(dialog).not.toHaveTextContent("Route provider");
+  expect(dialog).not.toHaveTextContent("We couldn’t confirm which road updates were used.");
+  if (line) expect(dialog).toHaveTextContent(line);
+});
+it("keeps the server's own assessment while the capabilities are loading", () => {
+  catalog.state = "loading";
+  render(view(route, "routing-valhalla", { ...impact, availability: "unavailable" }));
+  fireEvent.click(screen.getByRole("button", { name: "About traffic" }));
+  expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
+    "Road updates couldn’t be checked.",
+  );
 });
 it("expires held verification at the lease and never claims congestion causality", () => {
   render(view());

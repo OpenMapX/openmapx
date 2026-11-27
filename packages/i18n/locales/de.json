@@ -1113,6 +1113,7 @@
     "changeDestination": "Ziel ändern",
     "tryMode": "{mode} versuchen",
     "tryEngine": "Mit {name} versuchen",
+    "engineUnavailable": "Der gewählte Routenplaner ist nicht mehr verfügbar. Routen werden wieder in der üblichen Reihenfolge berechnet.",
     "transitNotAvailable": "Nahverkehrsverbindungen sind für diese Orte nicht verfügbar.",
     "departAt": "Abfahrt um",
     "arriveBy": "Ankunft bis",
@@ -4760,7 +4761,8 @@
       "expired": "Straßenmeldungen müssen erneut geprüft werden. Berechne die Route erneut.",
       "limited": "Einige gemeldete Straßenänderungen fehlen möglicherweise.",
       "unavailable": "Straßenmeldungen konnten nicht geprüft werden.",
-      "unverified": "Es ist unklar, welche Straßenmeldungen berücksichtigt wurden."
+      "unverified": "Es ist unklar, welche Straßenmeldungen berücksichtigt wurden.",
+      "checking": "Es wird geprüft, welche Straßenmeldungen berücksichtigt wurden …"
     },
     "congestionUnverified": "Die Fahrzeit berücksichtigt möglicherweise keine aktuellen Verzögerungen durch Stau.",
     "overlay": {
