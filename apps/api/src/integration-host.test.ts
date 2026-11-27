@@ -58,6 +58,7 @@ import { registerIntegrationRoute, setIntegrationRouteRateLimits } from "./integ
 import { currentIntegrationScope } from "./integration-scope.js";
 import { processLogger } from "./process-logger";
 import { makeRateLimitTierHook, type RateLimitTiers } from "./server-wiring.js";
+import { getAttributionIndex } from "./services/attribution/index.js";
 import { secretsKeyProblem } from "./services/secrets.js";
 import { resolveRequiresForIntegration } from "./services/service-registry.js";
 import { RateLimiter } from "./utils/rate-limit.js";
@@ -1215,14 +1216,23 @@ describe("initIntegrations — loader", () => {
       });
 
       it("revokes a retired installed generation before the reload awaits anything", async () => {
+        // The first generation keeps work bound to its own scope. The attribution
+        // refresh, the first thing the reload awaits after its commit, runs it,
+        // so it lands in the gap between the commit and that await.
         writeInstalled(
           "retired",
           [
             "// revokes a retired installed generation before the reload awaits anything",
+            'import { AsyncResource } from "node:async_hooks";',
             'import { registerPlaceResolver } from "@openmapx/integration-sdk/places";',
             "export function setup(ctx) {",
             "  const generation = (globalThis.__omxInstalledGenerations ?? 0) + 1;",
             "  globalThis.__omxInstalledGenerations = generation;",
+            "  if (generation !== 1) return;",
+            "  globalThis.__omxInstalledLateWork = AsyncResource.bind(() => {",
+            "    globalThis.__omxInstalledLateRan = true;",
+            '    registerPlaceResolver("retired", async () => ({ generation }));',
+            "  });",
             '  ctx.on("integration.unloaded", () => {',
             '    registerPlaceResolver("retired", async () => ({ generation }));',
             "  });",
@@ -1230,10 +1240,25 @@ describe("initIntegrations — loader", () => {
           ].join("\n"),
         );
         await initIntegrations(makeApp(), [installed()]);
+        let resolverAfterLateWork: unknown = "not run";
+        vi.mocked(getAttributionIndex).mockReturnValue({
+          setIntegrationManifests: () => undefined,
+          reload: async () => {
+            (g.__omxInstalledLateWork as (() => void) | undefined)?.();
+            resolverAfterLateWork = getPlaceResolver("retired");
+          },
+          close: () => undefined,
+        } as unknown as ReturnType<typeof getAttributionIndex>);
 
-        await reloadIntegrations();
+        try {
+          await reloadIntegrations();
+        } finally {
+          vi.mocked(getAttributionIndex).mockReturnValue(null);
+        }
 
         expect(g.__omxInstalledGenerations).toBe(2);
+        expect(g.__omxInstalledLateRan).toBe(true);
+        expect(resolverAfterLateWork).toBeUndefined();
         expect(getPlaceResolver("retired")).toBeUndefined();
       });
 
