@@ -13,6 +13,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     let raw: Sql;
     let pools: typeof import("../db/index");
     let db: DatabaseClient;
+    /** A second integration sharing the pools. */
+    let other: DatabaseClient;
 
     beforeAll(async () => {
       fixture = await createMigratedPostgresFixture();
@@ -21,9 +23,14 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       vi.stubEnv("DATABASE_URL", fixture.connectionUri);
       pools = await import("../db/index");
       const { createIntegrationDb, integrationDbAccess } = await import("../integration-db");
+      const shared = { requests: pools.integrationSql, transactions: pools.extensionSql };
       db = createIntegrationDb(
-        { requests: pools.integrationSql, transactions: pools.extensionSql },
+        shared,
         integrationDbAccess({ id: "demo", database: { migrations: true } }),
+      );
+      other = createIntegrationDb(
+        shared,
+        integrationDbAccess({ id: "other", requires: [{ service: "postgis" }] }),
       );
     }, 180_000);
 
@@ -127,5 +134,95 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       );
       expect(await transaction).toBe("openmapx-api-extensions");
     }, 10_000);
+
+    it("commits nothing of a callback that goes on issuing statements past its deadline", async () => {
+      await db.transaction((tx) => tx.execute("create table busy (id int)"));
+      let callbackDone!: () => void;
+      const callbackSettled = new Promise<void>((resolve) => {
+        callbackDone = resolve;
+      });
+
+      await expect(
+        db.transaction(
+          async (tx) => {
+            try {
+              for (let id = 0; id < 25; id += 1) {
+                await tx.execute("insert into busy values ($1)", [id]);
+                await sleep(100);
+              }
+            } finally {
+              callbackDone();
+            }
+          },
+          { timeoutMs: 1_000 },
+        ),
+      ).rejects.toBeInstanceOf(ProviderTimeoutError);
+      await callbackSettled;
+      // Queued behind the transaction above, so it starts once that one has
+      // committed or rolled back.
+      await db.transaction(noop);
+
+      expect(await raw`select count(*)::int as n from ext_demo.busy`).toEqual([{ n: 0 }]);
+      await Promise.all([
+        db.transaction(noop, { timeoutMs: 1_000 }),
+        other.transaction(noop, { timeoutMs: 1_000 }),
+      ]);
+    }, 15_000);
+
+    it("reports the outcome of a COMMIT that outlasts the deadline", async () => {
+      // A deferred constraint trigger runs inside the COMMIT, which then lasts
+      // past the client-side deadline but within the statement timeout.
+      await raw.unsafe(`
+        create table ext_demo.slow_commit (id int);
+        create function ext_demo.slow_commit_check() returns trigger language plpgsql as
+          $$ begin perform pg_sleep(1.2); return null; end $$;
+        create constraint trigger slow_commit_check after insert on ext_demo.slow_commit
+          deferrable initially deferred for each row execute function ext_demo.slow_commit_check();
+      `);
+      const started = Date.now();
+
+      await expect(
+        db.transaction(
+          async (tx) => {
+            await tx.execute("insert into slow_commit values (1)");
+            await sleep(1_200);
+            return "committed";
+          },
+          { timeoutMs: 2_000 },
+        ),
+      ).resolves.toBe("committed");
+
+      expect(Date.now() - started).toBeGreaterThan(2_000);
+      expect(await raw`select count(*)::int as n from ext_demo.slow_commit`).toEqual([{ n: 1 }]);
+    }, 15_000);
+
+    it("keeps a connection free for other integrations while one holds a long transaction", async () => {
+      const entered: string[] = [];
+      const holding = db.transaction(
+        async (tx) => {
+          entered.push("first");
+          await tx.execute("select pg_sleep(3)");
+        },
+        { timeoutMs: 10_000 },
+      );
+      const queued = db.transaction(
+        async (tx) => {
+          entered.push("second");
+          await tx.execute("select pg_sleep(1)");
+        },
+        { timeoutMs: 10_000 },
+      );
+      await vi.waitFor(() => expect(entered).toEqual(["first"]));
+
+      const started = Date.now();
+      await expect(
+        other.transaction((tx) => tx.execute("select 1 as ok"), { timeoutMs: 2_000 }),
+      ).resolves.toEqual([{ ok: 1 }]);
+      expect(Date.now() - started).toBeLessThan(1_500);
+      expect(entered).toEqual(["first"]);
+
+      await Promise.all([holding, queued]);
+      expect(entered).toEqual(["first", "second"]);
+    }, 20_000);
   },
 );

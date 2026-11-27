@@ -29,7 +29,19 @@ export function currentIntegrationScope(): IntegrationScope | undefined {
   return storage.getStore();
 }
 
-const ignoredMethods = new WeakMap<IntegrationScope, Set<string>>();
+const lateMethods = new WeakMap<IntegrationScope, Set<string>>();
+
+/** Whether this is the first call of `method` in `scope` since it was revoked. */
+function firstLateCall(scope: IntegrationScope, method: string): boolean {
+  let called = lateMethods.get(scope);
+  if (!called) {
+    called = new Set();
+    lateMethods.set(scope, called);
+  }
+  if (called.has(method)) return false;
+  called.add(method);
+  return true;
+}
 
 /**
  * Whether a context method called in `scope` is to be ignored because the
@@ -40,13 +52,7 @@ const ignoredMethods = new WeakMap<IntegrationScope, Set<string>>();
  */
 export function ignoredAfterUnload(scope: IntegrationScope, method: string, log: Logger): boolean {
   if (!scope.revoked) return false;
-  let ignored = ignoredMethods.get(scope);
-  if (!ignored) {
-    ignored = new Set();
-    ignoredMethods.set(scope, ignored);
-  }
-  if (!ignored.has(method)) {
-    ignored.add(method);
+  if (firstLateCall(scope, method)) {
     log.warn(`Integration ${scope.integrationId} was unloaded; ignoring ${method}`, {
       integrationId: scope.integrationId,
       method,
@@ -54,6 +60,28 @@ export function ignoredAfterUnload(scope: IntegrationScope, method: string, log:
   }
   return true;
 }
+
+/**
+ * Logs the first call per scope of a method that still runs once `scope` was
+ * revoked. For a method whose caller awaits a result, such as a shutdown
+ * handler awaiting a database statement, doing nothing would leave the caller
+ * waiting forever, and a rejection would stop the API when nobody awaits it.
+ */
+export function warnAfterUnload(scope: IntegrationScope, method: string, log: Logger): void {
+  if (scope.revoked && firstLateCall(scope, method)) {
+    log.warn(`Integration ${scope.integrationId} was unloaded; still running ${method}`, {
+      integrationId: scope.integrationId,
+      method,
+    });
+  }
+}
+
+/**
+ * The longest the host waits for one shutdown handler of an installed
+ * integration, so that none can hold up start-up, a reload or the process's
+ * shutdown.
+ */
+export const SHUTDOWN_HANDLER_DEADLINE_MS = 10_000;
 
 /** A `setup` still running after this long is named in a warning. */
 export const SETUP_WARNING_MS = 10_000;

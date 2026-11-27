@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -363,6 +364,34 @@ function unstubbedDatabase(
   };
 }
 
+/**
+ * `db` with the host's transaction rule: a `transaction` started inside the
+ * callback of another one is refused, as the host refuses it, so a test
+ * catches a nested call that would wait forever in the host.
+ */
+function withHostTransactionRules(db: DatabaseClient): DatabaseClient {
+  const insideTransaction = new AsyncLocalStorage<{ open: boolean }>();
+  return {
+    execute: (...args) => db.execute(...args),
+    transaction: (fn, options) => {
+      if (insideTransaction.getStore()?.open) {
+        return Promise.reject(
+          new Error(
+            "Nested transactions are not supported; use the transaction passed to the callback",
+          ),
+        );
+      }
+      const inside = { open: true };
+      return Promise.resolve(
+        db.transaction((tx) => insideTransaction.run(inside, () => fn(tx)), options),
+      ).finally(() => {
+        inside.open = false;
+      });
+    },
+    ...(db.schema === undefined ? {} : { schema: db.schema }),
+  };
+}
+
 /** A `Logger` that swallows everything. Override per-call to assert. */
 export function createNoopLogger(): Logger {
   return { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
@@ -549,6 +578,7 @@ export function createMockIntegrationContext(
   const noop = () => undefined;
   const id = overrides.id ?? "test-integration";
   const manifest = overrides.manifest ?? ({} as IntegrationContext["manifest"]);
+  const db = overrides.db ?? unstubbedDatabase(id, manifest);
   const ctx: MockIntegrationContext = {
     id,
     manifest,
@@ -561,7 +591,7 @@ export function createMockIntegrationContext(
         );
       }),
     cache: overrides.cache ?? createPassthroughCache(),
-    db: overrides.db ?? unstubbedDatabase(id, manifest),
+    db: db && withHostTransactionRules(db),
     log: overrides.log ?? createNoopLogger(),
     secrets: overrides.secrets ?? { get: async () => null },
     registered,

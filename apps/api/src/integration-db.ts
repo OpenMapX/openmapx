@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { extensionSchemaName } from "@openmapx/core/component-id";
 import {
   type DatabaseClient,
@@ -7,7 +8,7 @@ import {
   ProviderTimeoutError,
 } from "@openmapx/integration-framework";
 import type { Sql } from "postgres";
-import { type IntegrationScope, ignoredAfterUnload } from "./integration-scope";
+import { type IntegrationScope, warnAfterUnload } from "./integration-scope";
 
 /** PostgreSQL's `query_canceled`: the statement timeout ended it, or the caller cancelled it. */
 const QUERY_CANCELED = "57014";
@@ -36,7 +37,7 @@ export interface IntegrationDbPools {
 export interface IntegrationDbOptions {
   /** The schema the integration owns; derived with `extensionSchemaName` only. */
   readonly schema?: string;
-  /** Calls made once `scope` is revoked do nothing, as other context methods do. */
+  /** Calls made once `scope` is revoked are logged once per method and still run. */
   readonly revocation?: { readonly scope: IntegrationScope; readonly log: Logger };
 }
 
@@ -67,7 +68,10 @@ function transactionTimeoutMs(requested: number | undefined): number {
   );
 }
 
-type Statement = Promise<unknown> & { cancel(): unknown };
+const NESTED_TRANSACTION =
+  "Nested transactions are not supported; use the transaction passed to the callback";
+
+type Statement = Promise<unknown> & { cancel(): Promise<unknown> };
 
 function send(client: Pick<Sql, "unsafe">, query: string, params?: unknown[]): Statement {
   return (params
@@ -75,17 +79,32 @@ function send(client: Pick<Sql, "unsafe">, query: string, params?: unknown[]): S
     : client.unsafe(query)) as unknown as Statement;
 }
 
+/**
+ * Asks the server to cancel `statement`. postgres.js rejects the request when
+ * its cancel socket fails, for example while the database is unreachable;
+ * the statement's own outcome reports what matters, and an unhandled
+ * rejection would stop the API.
+ */
+function cancelQuietly(statement: Statement | undefined): void {
+  if (!statement) return;
+  try {
+    Promise.resolve(statement.cancel()).catch(() => {});
+  } catch {
+    // A cancel that throws at once changes nothing either.
+  }
+}
+
 function hasCode(error: unknown, ...codes: string[]): boolean {
   const code = (error as { code?: unknown } | null)?.code;
   return typeof code === "string" && codes.includes(code);
 }
 
-/**
- * Nobody awaits work an unloaded integration left behind, so a rejection
- * would stop the API; a call it makes gets a promise that never settles.
- */
-function never<T>(): Promise<T> {
-  return new Promise<T>(() => {});
+/** The transaction's deadline passed before it had a connection. */
+class ConnectionWaitTimeoutError extends ProviderTimeoutError {
+  constructor() {
+    super();
+    this.message = "provider deadline exceeded while waiting for a database connection";
+  }
 }
 
 /**
@@ -94,6 +113,10 @@ function never<T>(): Promise<T> {
  * timeout rejects as a provider timeout, so the provider degrades like any
  * slow upstream instead of failing the request. `transaction` runs on its own
  * pool. With `schema`, both methods first point `search_path` at it.
+ *
+ * Calls made once the integration's scope is revoked are logged once per
+ * method and still run: a shutdown handler that awaits one must finish, and
+ * the statement and transaction timeouts bound the work.
  */
 export function createIntegrationDb(
   pools: IntegrationDbPools,
@@ -101,8 +124,13 @@ export function createIntegrationDb(
 ): DatabaseClient {
   const { schema, revocation } = options;
   const searchPath = schema === undefined ? undefined : `"${schema}", public`;
-  const ignored = (method: string) =>
-    revocation !== undefined && ignoredAfterUnload(revocation.scope, method, revocation.log);
+  const warnLate = (method: string) => {
+    if (revocation) warnAfterUnload(revocation.scope, method, revocation.log);
+  };
+  // Set inside a transaction's callback while the transaction is open.
+  const insideTransaction = new AsyncLocalStorage<{ open: boolean }>();
+  // Settles once the integration's last transaction has released its connection.
+  let queue: Promise<void> = Promise.resolve();
 
   async function execute<T = unknown>(
     query: string,
@@ -112,7 +140,7 @@ export function createIntegrationDb(
     const signal = options?.signal;
     signal?.throwIfAborted();
     let current: Statement | undefined;
-    const onAbort = () => current?.cancel();
+    const onAbort = () => cancelQuietly(current);
     signal?.addEventListener("abort", onAbort, { once: true });
     try {
       if (searchPath === undefined) {
@@ -137,18 +165,33 @@ export function createIntegrationDb(
   }
 
   /**
-   * The client-side deadline ends the transaction itself: it cancels the
-   * running statement and makes the callback's promise reject, so postgres.js
-   * rolls back and frees the connection at once, even while the callback still
-   * awaits something else. The server's statement and idle-in-transaction
-   * timeouts end it as well should this process stall.
+   * The integration's transactions run one at a time, in the order they were
+   * called, so one integration never holds both connections of the pool all
+   * extensions share; the deadline bounds the wait for its turn and for a
+   * connection as well. Until the callback has resolved, the client-side
+   * deadline ends the transaction itself: it cancels the running statement
+   * and makes the callback's promise reject, so postgres.js rolls back and
+   * frees the connection at once, even while the callback still awaits
+   * something else. Once the callback has resolved, the COMMIT postgres.js
+   * sends decides the outcome, bounded by the transaction's statement
+   * timeout. The server's statement and idle-in-transaction timeouts end the
+   * transaction as well should this process stall.
    */
   function transaction<T>(
     fn: (tx: DatabaseTransaction) => Promise<T>,
     options?: { timeoutMs?: number },
   ): Promise<T> {
-    if (ignored("db.transaction")) return never();
+    // The call would wait for the very transaction it was made in.
+    if (insideTransaction.getStore()?.open) return Promise.reject(new Error(NESTED_TRANSACTION));
+    warnLate("db.transaction");
     const timeoutMs = transactionTimeoutMs(options?.timeoutMs);
+    const previous = queue;
+    let leaveQueue!: () => void;
+    queue = new Promise<void>((resolve) => {
+      leaveQueue = resolve;
+    });
+    const inside = { open: true };
+    let phase: "waiting" | "running" | "committing" = "waiting";
     const running = new Set<Statement>();
     let ending: { reason: unknown } | undefined;
     let endCallback!: (reason: unknown) => void;
@@ -156,15 +199,11 @@ export function createIntegrationDb(
       endCallback = reject;
     });
     ended.catch(() => {});
-    // Set when the callback went on after its integration was unloaded: the
-    // transaction rolls back and the call, like the callback's statement,
-    // never settles.
-    let abandoned = false;
     const end = (reason: unknown) => {
       if (ending) return;
       ending = { reason };
       endCallback(reason);
-      for (const statement of running) statement.cancel();
+      for (const statement of running) cancelQuietly(statement);
     };
     const track = (statement: Statement) => {
       running.add(statement);
@@ -173,48 +212,57 @@ export function createIntegrationDb(
       return statement;
     };
 
-    const work = pools.transactions.begin((sql) => {
-      if (ending) return Promise.reject(ending.reason);
-      const tx: DatabaseTransaction = {
-        async execute<R = unknown>(query: string, params?: unknown[]): Promise<R> {
-          if (ignored("db.transaction.execute")) {
-            abandoned = true;
-            end(new Error("The integration was unloaded"));
-            return never();
-          }
-          if (ending) throw ending.reason;
-          try {
-            return (await track(send(sql, query, params))) as R;
-          } catch (error) {
-            throw hasCode(error, QUERY_CANCELED)
-              ? new ProviderTimeoutError({ cause: error })
-              : error;
-          }
-        },
-      };
-      const body = async () => {
-        await track(send(sql, SET_TRANSACTION_TIMEOUTS, [String(timeoutMs)]));
-        if (searchPath !== undefined) await track(send(sql, SET_SEARCH_PATH, [searchPath]));
-        return fn(tx);
-      };
-      return Promise.race([body(), ended]);
+    const work = previous.then(() => {
+      // Ended while waiting for its turn: it never asks for a connection.
+      if (ending) return undefined;
+      return pools.transactions.begin((sql) => {
+        if (ending) return Promise.reject(ending.reason);
+        phase = "running";
+        const tx: DatabaseTransaction = {
+          async execute<R = unknown>(query: string, params?: unknown[]): Promise<R> {
+            warnLate("db.transaction.execute");
+            if (ending) throw ending.reason;
+            try {
+              return (await track(send(sql, query, params))) as R;
+            } catch (error) {
+              throw hasCode(error, QUERY_CANCELED)
+                ? new ProviderTimeoutError({ cause: error })
+                : error;
+            }
+          },
+        };
+        const body = async () => {
+          await track(send(sql, SET_TRANSACTION_TIMEOUTS, [String(timeoutMs)]));
+          if (searchPath !== undefined) await track(send(sql, SET_SEARCH_PATH, [searchPath]));
+          const result = await insideTransaction.run(inside, () => fn(tx));
+          phase = "committing";
+          return result;
+        };
+        return Promise.race([body(), ended]);
+      });
     });
+    const leave = () => {
+      inside.open = false;
+      leaveQueue();
+    };
+    work.then(leave, leave);
 
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
-        const timeout = new ProviderTimeoutError();
+        if (phase === "committing") return;
+        const timeout =
+          phase === "waiting" ? new ConnectionWaitTimeoutError() : new ProviderTimeoutError();
         end(timeout);
-        if (!abandoned) reject(timeout);
+        reject(timeout);
       }, timeoutMs);
       (timer as { unref?: () => void }).unref?.();
       work.then(
         (value) => {
           clearTimeout(timer);
-          if (!abandoned) resolve(value as T);
+          resolve(value as T);
         },
         (error: unknown) => {
           clearTimeout(timer);
-          if (abandoned) return;
           reject(
             hasCode(error, QUERY_CANCELED, IDLE_IN_TRANSACTION_TIMEOUT)
               ? new ProviderTimeoutError({ cause: error })
@@ -231,7 +279,8 @@ export function createIntegrationDb(
       params?: unknown[],
       options?: { signal?: AbortSignal },
     ): Promise<T> {
-      return ignored("db.execute") ? never() : execute<T>(query, params, options);
+      warnLate("db.execute");
+      return execute<T>(query, params, options);
     },
     transaction,
     ...(schema === undefined ? {} : { schema }),

@@ -15,6 +15,14 @@ vi.mock("../../db/index.js", () => ({
     }),
   },
   sql: { unsafe: vi.fn().mockResolvedValue([]) },
+  // The pools behind ctx.db: every statement returns no rows, every transaction commits.
+  integrationSql: {
+    unsafe: vi.fn(async () => []),
+    begin: vi.fn(async (fn: (sql: unknown) => unknown) => fn({ unsafe: vi.fn(async () => []) })),
+  },
+  extensionSql: {
+    begin: vi.fn(async (fn: (sql: unknown) => unknown) => fn({ unsafe: vi.fn(async () => []) })),
+  },
 }));
 
 vi.mock("../../db/schema.js", () => ({

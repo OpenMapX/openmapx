@@ -154,8 +154,16 @@ export interface DatabaseClient {
   /**
    * Runs `fn` in one transaction that commits when `fn` resolves and rolls
    * back when it rejects. `timeoutMs` (default 30 000, at least 1 000, at most
-   * 900 000) bounds the whole call, each statement and each pause between
-   * statements; past it the call rejects with `ProviderTimeoutError`.
+   * 900 000) bounds the wait for a connection, `fn`, each statement and each
+   * pause between statements; when one of them outlasts it, the transaction
+   * is rolled back and the call rejects with `ProviderTimeoutError`. Once `fn`
+   * has resolved, the COMMIT decides: the call settles with its outcome, even
+   * past `timeoutMs`, and the COMMIT itself may last up to `timeoutMs` again.
+   * So a `ProviderTimeoutError` always means nothing was committed.
+   *
+   * An integration's transactions run one at a time, in the order they were
+   * called; `execute` calls are not queued behind them. A `transaction` called
+   * inside `fn` is refused at once; use the `tx` passed to `fn`.
    */
   transaction<T>(
     fn: (tx: DatabaseTransaction) => Promise<T>,

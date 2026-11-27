@@ -38,10 +38,14 @@ at once; its code stays loaded in the API process until the next restart.
 An integration that requires PostGIS or declares `database.migrations: true` gets
 `ctx.db` with `transaction(fn, { timeoutMs })` besides `execute`. Transactions run
 on a new API pool, `openmapx-api-extensions`, of at most 2 connections; each ends
-with `ProviderTimeoutError` and rolls back when it, one of its statements or a
-pause between them outlasts its timeout (default 30 seconds, at most 15 minutes).
-For an integration that ships migrations, unqualified names resolve in its schema
-`ext_<id>` (hyphens as underscores) first.
+with `ProviderTimeoutError` and rolls back when the wait for a connection, the
+transaction, one of its statements or a pause between them outlasts its timeout
+(default 30 seconds, at most 15 minutes), unless its callback has finished and the
+COMMIT is already running. An integration runs one transaction at a time and
+cannot nest them. For an integration that ships migrations, unqualified names
+resolve in its schema `ext_<id>` (hyphens as underscores) first. Database calls an
+unloaded integration still makes run with one warning per method. The API waits
+at most 10 seconds for each shutdown handler of an installed integration.
 
 The admin integration API drops `blockedCode` and gains `loadState`, `loadError`,
 `loadErrorPhase` and a required `status` (`healthy`, `unhealthy`, `unconfigured`,

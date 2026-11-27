@@ -72,6 +72,7 @@ import {
   runInIntegrationScope,
   SETUP_DEADLINE_MS,
   SETUP_WARNING_MS,
+  SHUTDOWN_HANDLER_DEADLINE_MS,
 } from "./integration-scope";
 import { processLogger } from "./process-logger";
 import { redis } from "./redis";
@@ -978,6 +979,51 @@ const hostLog: Logger = (() => {
   return { info: write("info"), warn: write("warn"), error: write("error"), debug: write("debug") };
 })();
 
+/**
+ * Runs an integration's shutdown handlers one after another and passes each
+ * failure to `onError`. A handler of an installed integration is awaited for
+ * at most `SHUTDOWN_HANDLER_DEADLINE_MS` and then left running, so none can
+ * hold up start-up, the reload queue or the process's shutdown. A built-in's
+ * handlers are awaited to their end.
+ */
+async function runShutdownHandlers(
+  integration: Pick<LoadedIntegration, "id" | "isBuiltIn">,
+  handlers: ReadonlyArray<() => Promise<void>>,
+  onError: (error: unknown) => void,
+): Promise<void> {
+  for (const handler of handlers) {
+    try {
+      await (integration.isBuiltIn ? handler() : withinShutdownDeadline(integration.id, handler));
+    } catch (error) {
+      onError(error);
+    }
+  }
+}
+
+function withinShutdownDeadline(id: string, handler: () => Promise<void>): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      hostLog.warn(
+        `A shutdown handler of integration ${id} did not finish within ${SHUTDOWN_HANDLER_DEADLINE_MS / 1000} seconds; going on without it`,
+        { integrationId: id },
+      );
+      resolve();
+    }, SHUTDOWN_HANDLER_DEADLINE_MS);
+    timer.unref?.();
+    // A handler that throws at once rejects like one whose promise rejects.
+    new Promise<void>((run) => run(handler())).then(
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 class LoadDeadlineError extends Error {
   constructor() {
     super(`Import and setup did not finish within ${SETUP_DEADLINE_MS / 1000} seconds`);
@@ -1134,17 +1180,12 @@ async function loadIntegrationBackend(args: {
       { err: error, integrationId: integration.id, phase },
       `Leaving out installed integration ${integration.id}: its backend failed to ${phase === "import" ? "import" : phase === "deadline" ? "import and set up in time" : "set up"}`,
     );
-    const handlers = shutdownHandlers.splice(0);
-    for (const handler of handlers) {
-      try {
-        await handler();
-      } catch (shutdownError) {
-        _fastify?.log.warn(
-          { err: shutdownError, integrationId: integration.id },
-          `A shutdown handler of the left-out integration ${integration.id} failed`,
-        );
-      }
-    }
+    await runShutdownHandlers(integration, shutdownHandlers.splice(0), (shutdownError) => {
+      _fastify?.log.warn(
+        { err: shutdownError, integrationId: integration.id },
+        `A shutdown handler of the left-out integration ${integration.id} failed`,
+      );
+    });
     return "left-out";
   }
 }
@@ -1802,13 +1843,8 @@ async function doReloadIntegrations(
       } catch (err) {
         _fastify.log.error(err, `Failed to stage integration ${id}; keeping current generation`);
         next.delete(id);
-        for (const handler of shutdownHandlers) {
-          try {
-            await handler();
-          } catch {
-            // best effort cleanup for the partially staged integration
-          }
-        }
+        // Best effort cleanup for the partially staged integration.
+        await runShutdownHandlers(integration, shutdownHandlers, () => {});
         throw err;
       }
     }
@@ -1835,13 +1871,8 @@ async function doReloadIntegrations(
     stagedEventBus.removeAll();
     for (const integration of next.values()) {
       revokeInstalledScope(integration);
-      for (const handler of integration.shutdownHandlers) {
-        try {
-          await handler();
-        } catch {
-          // best effort cleanup for resources created by the failed generation
-        }
-      }
+      // Best effort cleanup for resources created by the failed generation.
+      await runShutdownHandlers(integration, integration.shutdownHandlers, () => {});
     }
     throw err;
   }
@@ -1863,13 +1894,8 @@ async function doReloadIntegrations(
 
   for (const integration of previousIntegrations) {
     previousEventBus.emit({ type: "integration.unloaded", integrationId: integration.id });
-    for (const handler of integration.shutdownHandlers) {
-      try {
-        await handler();
-      } catch {
-        // best effort retirement of the previous generation
-      }
-    }
+    // Best effort retirement of the previous generation.
+    await runShutdownHandlers(integration, integration.shutdownHandlers, () => {});
   }
   previousEventBus.removeAll();
 
@@ -1884,14 +1910,7 @@ export async function shutdownIntegrations(): Promise<void> {
   for (const integration of integrations.values()) {
     eventBus.emit({ type: "integration.unloaded", integrationId: integration.id });
     revokeInstalledScope(integration);
-
-    for (const handler of integration.shutdownHandlers) {
-      try {
-        await handler();
-      } catch {
-        // best effort
-      }
-    }
+    await runShutdownHandlers(integration, integration.shutdownHandlers, () => {});
   }
   integrations.clear();
   providerOrders = new Map();

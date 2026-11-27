@@ -750,13 +750,22 @@ interface IntegrationContext {
   declares `database.migrations: true`; otherwise it is `undefined`.
   `execute` runs one statement on the request-path pool, which ends it after
   five seconds. `transaction(fn, { timeoutMs })` runs `fn` in one transaction
-  on a separate pool of two connections: it commits when `fn` resolves, rolls
-  back when it rejects, and rejects with `ProviderTimeoutError` once the call,
-  a statement or a pause between statements outlasts `timeoutMs` (default
-  30 seconds, from 1 second to 15 minutes). An integration that ships
-  migrations owns the schema in `db.schema` (`ext_` and its id with `-` as
-  `_`), and unqualified names in both methods resolve there first. Calls made
-  after the integration was unloaded do nothing and never settle.
+  on a separate pool of two connections that all extensions share: it commits
+  when `fn` resolves and rolls back when it rejects. When the wait for a
+  connection, `fn`, a statement or a pause between statements outlasts
+  `timeoutMs` (default 30 seconds, from 1 second to 15 minutes), the
+  transaction rolls back and the call rejects with `ProviderTimeoutError`;
+  after a wait for a connection, its message says so. Once `fn` has resolved,
+  the COMMIT decides the outcome, even past `timeoutMs`, so a
+  `ProviderTimeoutError` always means nothing was committed. An integration's
+  transactions run one at a time, in the order it called them, so one
+  integration cannot hold both connections; `execute` calls do not wait for
+  them. A `transaction` called inside another one's `fn` is refused at once:
+  use the `tx` passed to `fn`. An integration that ships migrations owns the
+  schema in `db.schema` (`ext_` and its id with `-` as `_`), and unqualified
+  names in both methods resolve there first. Calls made after the integration
+  was unloaded, for example from a shutdown handler, still run, with one
+  warning per method.
 - **`log`** is a structured logger tagged with the integration id.
 - **`secrets`** retrieves a decrypted credential from the vault.
 
@@ -1164,7 +1173,8 @@ local to `setup` where possible.
 `onShutdown` registers cleanup run when a generation retires or is discarded.
 Register cleanup as resources are created. Abort pending requests, cancel timers
 and unsubscribe listeners; prevent retired requests from publishing into new
-state.
+state. The host waits at most 10 seconds for each handler of an installed
+integration, logs a warning naming the integration, and goes on without it.
 `getIntegrationsByDomain` lets an orchestrator enumerate its peers.
 `getProviderOrder(domain)` returns the operator's order for a domain: the
 integration ids in the `providerOrder` setting of the domain's orchestrator

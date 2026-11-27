@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createMockIntegrationContext } from "./index";
 
 describe("createMockIntegrationContext", () => {
@@ -37,12 +37,43 @@ describe("createMockIntegrationContext", () => {
       }).db?.schema,
     ).toBe("ext_demo_data");
 
+    const execute = vi.fn(async () => [{ id: 1 }]);
     const db = {
-      execute: async <T>() => [] as T,
+      execute: execute as <T>() => Promise<T>,
       transaction: <T>(fn: (tx: { execute: <R>() => Promise<R> }) => Promise<T>) =>
         fn({ execute: async <R>() => [] as R }),
+      schema: "ext_demo",
     };
-    expect(createMockIntegrationContext({ db }).db).toBe(db);
+    const stubbed = createMockIntegrationContext({ db }).db;
+    expect(await stubbed?.execute("select 1", [2])).toEqual([{ id: 1 }]);
+    expect(execute).toHaveBeenCalledWith("select 1", [2]);
+    expect(await stubbed?.transaction(async () => "done")).toBe("done");
+    expect(stubbed?.schema).toBe("ext_demo");
+  });
+
+  it("refuses a transaction started inside another, as the host does", async () => {
+    const db = createMockIntegrationContext({
+      db: {
+        execute: async <T>() => [] as T,
+        transaction: <T>(fn: (tx: { execute: <R>() => Promise<R> }) => Promise<T>) =>
+          fn({ execute: async <R>() => [] as R }),
+      },
+    }).db;
+    let openLater!: () => void;
+    const laterGate = new Promise<void>((resolve) => {
+      openLater = resolve;
+    });
+    let later: Promise<string> | undefined;
+
+    await db?.transaction(async () => {
+      await expect(db.transaction(async () => "inner")).rejects.toThrow(
+        "Nested transactions are not supported; use the transaction passed to the callback",
+      );
+      later = laterGate.then(() => db.transaction(async () => "later"));
+    });
+    openLater();
+
+    await expect(later).resolves.toBe("later");
   });
 
   it("refuses at registration the providers the host refuses", () => {

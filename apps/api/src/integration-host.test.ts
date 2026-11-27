@@ -778,7 +778,7 @@ describe("initIntegrations — loader", () => {
     function writeInstalled(
       id: string,
       bundle: string,
-      options: { declared?: boolean; domains?: string[] } = {},
+      options: { declared?: boolean; domains?: string[]; manifest?: Record<string, unknown> } = {},
     ) {
       const directory = join(installedRoot, id);
       mkdirSync(join(directory, "dist", "backend"), { recursive: true });
@@ -792,6 +792,7 @@ describe("initIntegrations — loader", () => {
           domains: options.domains ?? ["knowledge"],
           quality: "community",
           ...(options.declared === false ? {} : { backend: { entry: "dist/backend/index.mjs" } }),
+          ...options.manifest,
         }),
       );
       writeFileSync(join(directory, "dist", "backend", "index.mjs"), bundle);
@@ -1484,6 +1485,133 @@ describe("initIntegrations — loader", () => {
         await vi.advanceTimersByTimeAsync(1);
         expect(settled).toBe(true);
         await outcome;
+      });
+
+      it("lets a reload and shutdown finish while an unloaded integration's shutdown handler queries ctx.db", async () => {
+        writeInstalled(
+          "ledger",
+          [
+            "// lets a reload and shutdown finish while an unloaded integration's shutdown handler queries ctx.db",
+            "export function setup(ctx) {",
+            "  ctx.onShutdown(async () => {",
+            '    const rows = await ctx.db.execute("delete from pending returning id");',
+            "    globalThis.__omxInstalledFlushes = [...(globalThis.__omxInstalledFlushes ?? []), rows];",
+            "  });",
+            "}",
+          ].join("\n"),
+          { manifest: { database: { migrations: true } } },
+        );
+        const warn = vi.fn();
+        const app = makeApp();
+        // biome-ignore lint/suspicious/noExplicitAny: test-only log patch
+        (app as any).log = { info: vi.fn(), warn, error: vi.fn(), debug: vi.fn() };
+        await initIntegrations(app, [installed()]);
+
+        await reloadIntegrations();
+        await shutdownIntegrations();
+
+        expect(g.__omxInstalledFlushes).toEqual([[], []]);
+        expect(
+          warn.mock.calls
+            .map(([, message]) => String(message))
+            .filter((message) => message.includes("was unloaded")),
+        ).toEqual([
+          "Integration ledger was unloaded; still running db.execute",
+          "Integration ledger was unloaded; still running db.execute",
+        ]);
+      });
+
+      /**
+       * Runs `work` until a shutdown handler that never settles has been
+       * entered `hangs` times in all, moves the fake clock past the shutdown
+       * handler deadline, and expects `work` to settle.
+       */
+      async function settlesPastHungShutdownHandler(work: Promise<unknown>, hangs: number) {
+        let settled = false;
+        void work.then(
+          () => {
+            settled = true;
+          },
+          () => {
+            settled = true;
+          },
+        );
+        await vi.waitFor(() => expect(g.__omxInstalledHangs).toBe(hangs), { timeout: 5_000 });
+        await vi.advanceTimersByTimeAsync(10_000);
+        await vi.waitFor(() => expect(settled).toBe(true), { timeout: 5_000 });
+        await work;
+      }
+
+      it("does not let a shutdown handler that never settles hold up a reload or shutdown", async () => {
+        writeInstalled(
+          "stuck-shutdown",
+          [
+            "// does not let a shutdown handler that never settles hold up a reload or shutdown",
+            "export function setup(ctx) {",
+            "  globalThis.__omxInstalledSetups = (globalThis.__omxInstalledSetups ?? 0) + 1;",
+            "  ctx.onShutdown(() => {",
+            "    globalThis.__omxInstalledHangs = (globalThis.__omxInstalledHangs ?? 0) + 1;",
+            "    return new Promise(() => {});",
+            "  });",
+            "  ctx.onShutdown(async () => {",
+            "    globalThis.__omxInstalledLaterHandlers = (globalThis.__omxInstalledLaterHandlers ?? 0) + 1;",
+            "  });",
+            "}",
+          ].join("\n"),
+        );
+        const warn = vi.fn();
+        const app = makeApp();
+        // biome-ignore lint/suspicious/noExplicitAny: test-only log patch
+        (app as any).log = { info: vi.fn(), warn, error: vi.fn(), debug: vi.fn() };
+        await initIntegrations(app, [installed()]);
+        // Each generation's setup deadline is cleared before the previous
+        // generation's handlers run, so moving the clock reaches only the
+        // deadlines of handlers that have not finished.
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+        await settlesPastHungShutdownHandler(reloadIntegrations(), 1);
+        await settlesPastHungShutdownHandler(reloadIntegrations(), 2);
+        await settlesPastHungShutdownHandler(shutdownIntegrations(), 3);
+
+        expect(g.__omxInstalledSetups).toBe(3);
+        expect(g.__omxInstalledLaterHandlers).toBe(3);
+        expect(
+          warn.mock.calls
+            .map(([, message]) => String(message))
+            .filter((message) => message.includes("did not finish")),
+        ).toEqual(
+          Array.from(
+            { length: 3 },
+            () =>
+              "A shutdown handler of integration stuck-shutdown did not finish within 10 seconds; going on without it",
+          ),
+        );
+      });
+
+      it("does not let a shutdown handler that never settles hold up start-up when its integration is left out", async () => {
+        writeInstalled(
+          "stuck-left-out",
+          [
+            "// does not let a shutdown handler that never settles hold up start-up when its integration is left out",
+            "export function setup(ctx) {",
+            "  ctx.onShutdown(() => {",
+            "    globalThis.__omxInstalledHangs = (globalThis.__omxInstalledHangs ?? 0) + 1;",
+            "    return new Promise(() => {});",
+            "  });",
+            '  throw new Error("setup failed");',
+            "}",
+          ].join("\n"),
+        );
+        // The setup deadline is cleared before the handlers of the left-out
+        // integration run, so moving the clock reaches only theirs.
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+        await settlesPastHungShutdownHandler(initIntegrations(makeApp(), [installed()]), 1);
+
+        expect(getIntegration("stuck-left-out")).toMatchObject({
+          loadState: "failed",
+          loadError: { phase: "setup", message: "setup failed" },
+        });
       });
     });
 
