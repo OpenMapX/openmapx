@@ -48,8 +48,8 @@ than the map center.
 
 ## How it works
 
-OpenMapX tries eligible weather providers in priority order and returns the
-first answer. A provider error can advance to the next source. Current weather
+OpenMapX tries eligible weather providers in the operator's order and returns
+the first answer. A provider error can advance to the next source. Current weather
 and forecasts are cached briefly, so a new view need not trigger a new upstream
 observation. Source policy can exclude a provider.
 
@@ -65,7 +65,7 @@ evidence platform and provider domain.
 | **MET Norway**  | `weather-met-norway`     | MET Norway Locationforecast | Global   | No      |    8     |
 | **Open-Meteo**  | `weather-open-meteo`     | Open-Meteo                  | Global   | No      |    10    |
 
-Lower priority numbers are tried first. With the defaults, Bright Sky is tried first and can answer around Germany.
+The default order follows these priorities, lowest first. With the defaults, Bright Sky is tried first and can answer around Germany.
 MET Norway and Open-Meteo provide broader fallback coverage. OpenWeather slots in between when you've
 configured a key. Without one, that provider is not registered.
 
@@ -105,9 +105,12 @@ Both are keyless and, like the rest of weather, are fetched through your server.
 Each provider is an [integration](../overview/how-it-works.md), so it's enabled,
 disabled, and configured the same way as any other. Three providers work out of
 the box with no setup: MET Norway, Open-Meteo, and Bright Sky (the latter only
-matters if you serve users in Germany). The orchestrator tries the enabled providers in their adapter priority order.
-Enable or disable providers to change the eligible set; numeric priority is not
-an exposed per-provider admin setting.
+matters if you serve users in Germany). The orchestrator tries the enabled
+providers in the order of the `weather` integration's `providerOrder` setting
+(integration ids; the environment override is `INTEGRATION_WEATHER_PROVIDER_ORDER`,
+comma-separated). Providers it does not list, an installed one included, follow
+in adapter priority order. Enable or disable providers to change the eligible
+set.
 
 The only provider that needs a credential is **OpenWeather**, which requires a
 OpenWeatherMap API key. Set it in either place:

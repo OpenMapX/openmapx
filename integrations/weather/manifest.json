@@ -5,5 +5,23 @@
   "license": "MIT",
   "domains": ["weather"],
   "backend": { "routes": true },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "providerOrder": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 64,
+        "default": [
+          "weather-bright-sky",
+          "weather-openweathermap",
+          "weather-met-norway",
+          "weather-open-meteo"
+        ]
+      }
+    }
+  },
   "quality": "built-in"
 }

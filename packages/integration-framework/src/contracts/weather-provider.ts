@@ -25,6 +25,12 @@ export interface WeatherProvider {
    * the data was modified, as a licence asking to keep such a notice requires.
    */
   readonly changesSourceData?: boolean;
+  /**
+   * The `dataSources` sourceIds this provider can answer from, when its `id`
+   * is not one of them. The orchestrator skips the provider only when the
+   * data-use policy disallows every one; without this, `id` is the source.
+   */
+  readonly sourceIds?: readonly string[];
 
   getCurrentWeather(coords: LngLat, options?: WeatherOptions): Promise<WeatherResponse>;
 

@@ -11,7 +11,7 @@ import {
   type ContributingRecord,
   captureIntegrationContributorCatalogue,
   captureResultContributors,
-  compareByPriority,
+  collectOrderedProviders,
   contributorsForRecords,
   type IntegrationContext,
   resolveCapturedContributors,
@@ -20,30 +20,26 @@ import {
 import type { WeatherProvider } from "@openmapx/provider-kit/weather";
 
 export function createWeatherOrchestrator(ctx: IntegrationContext) {
-  function getProviders(): Array<{ provider: WeatherProvider; integrationId: string }> {
-    const integrations = ctx.getIntegrationsByDomain("weather");
-    const result: Array<{ provider: WeatherProvider; integrationId: string }> = [];
-
-    for (const integration of integrations) {
-      const ps = (integration.providers.get("weather") ?? []) as WeatherProvider[];
-      for (const provider of ps) {
-        result.push({ provider, integrationId: integration.id });
-      }
-    }
-
-    result.sort((a, b) => compareByPriority(a.provider, b.provider));
-    return result;
-  }
-
   /**
-   * Providers in priority order, minus any whose source the operator's data-use
-   * policy currently disallows (a provider's `id` is its `dataSources` sourceId).
-   * The fallback loops walk this list, so a gated provider is skipped and the
-   * next eligible one is tried — exactly like an erroring provider.
+   * Providers in the operator's order, minus those the data-use policy
+   * disallows: every provider of a disallowed integration, and a provider all
+   * of whose sources (`sourceIds`, or its `id`) are disallowed. The fallback
+   * loops walk this list, so a gated provider is skipped and the next eligible
+   * one is tried, exactly like an erroring provider.
    */
   async function eligibleProviders() {
-    const disallowed = (await ctx.getDisallowedSourceIds?.()) ?? new Set<string>();
-    return getProviders().filter(({ provider }) => !disallowed.has(provider.id));
+    const [disallowedSources, disallowedIntegrations] = await Promise.all([
+      ctx.getDisallowedSourceIds?.() ?? new Set<string>(),
+      ctx.getDisallowedIntegrationIds?.() ?? new Set<string>(),
+    ]);
+    // An empty `sourceIds` would make every source disallowed vacuously.
+    const sourcesOf = (provider: WeatherProvider) =>
+      provider.sourceIds?.length ? provider.sourceIds : [provider.id];
+    return collectOrderedProviders<WeatherProvider>(ctx, "weather").filter(
+      ({ provider, integrationId }) =>
+        !disallowedIntegrations.has(integrationId) &&
+        !sourcesOf(provider).every((id) => disallowedSources.has(id)),
+    );
   }
 
   async function getCurrentWeather(
