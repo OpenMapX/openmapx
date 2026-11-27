@@ -59,7 +59,7 @@ import { CredentialSetupGuide } from "./CredentialSetupGuide";
 import { DomainChip } from "./DomainChip";
 import { HealthHistoryChart } from "./HealthHistoryChart";
 import { IntegrationStatusDot } from "./IntegrationStatusDot";
-import { ProviderOrderEditor } from "./ProviderOrderEditor";
+import { declaresProviderOrder, ProviderOrderEditor } from "./ProviderOrderEditor";
 import { RequiredServicesPanel } from "./RequiredServicesPanel";
 import { SetCredentialDialog } from "./SetCredentialDialog";
 import { StatusBadge } from "./StatusBadge";
@@ -334,9 +334,13 @@ function ConfigTab({
   const sourceLabel = useConfigSourceLabel();
   const entries = Object.entries(data.resolvedConfig);
   const { paged: pagedEntries, paginationProps: entriesPagination } = useClientPagination(entries);
-  const orderedDomains = Object.entries(ORCHESTRATOR_BY_DOMAIN).flatMap(([domain, owner]) =>
-    owner === integrationId ? [domain] : [],
-  );
+  // Only an orchestrator that stores an order can take one; for the others a
+  // saved order would be refused as an unknown setting.
+  const orderedDomains = declaresProviderOrder(data.manifest.configSchema)
+    ? Object.entries(ORCHESTRATOR_BY_DOMAIN).flatMap(([domain, owner]) =>
+        owner === integrationId ? [domain] : [],
+      )
+    : [];
   // The editor owns the setting; the generic form must not offer it a second time.
   const editorKeys = orderedDomains.length > 0 ? PROVIDER_ORDER_KEYS : undefined;
 

@@ -74,16 +74,41 @@ interface Server {
   domains: Domain[];
   details: Record<string, AdminIntegrationDetail>;
   orderStatus?: number;
+  detailStatus?: number;
+  /** Holds each save open until it resolves. */
+  patchGate?: Promise<void>;
 }
+
+/** The order a saved list is served in: listed entries first, then the rest. */
+function stored(domain: Domain, providerOrder: string[]): Domain {
+  const byId = new Map(domain.effective.map((item) => [item.integrationId, item]));
+  const listed = providerOrder.flatMap((id) => {
+    const item = byId.get(id);
+    return item ? [{ ...item, listed: true }] : [];
+  });
+  const rest = domain.effective
+    .filter((item) => !providerOrder.includes(item.integrationId))
+    .map((item) => ({ ...item, listed: false }));
+  return { ...domain, stored: providerOrder, effective: [...listed, ...rest] };
+}
+
 function serve(server: Server) {
   const patches: { path: string; body: unknown }[] = [];
   vi.stubGlobal("fetch", async (input: string, init: RequestInit) => {
     const url = new URL(input);
     if (url.origin !== apiUrl) throw new Error(`Unexpected network origin: ${url.origin}`);
     if (init.method === "PATCH") {
-      patches.push({ path: url.pathname, body: JSON.parse(String(init.body)) });
+      const body = JSON.parse(String(init.body)) as { providerOrder: string[] };
+      patches.push({ path: url.pathname, body });
+      await server.patchGate;
+      const id = url.pathname.split("/").at(-2);
+      server.domains = server.domains.map((domain) =>
+        domain.orchestratorId === id ? stored(domain, body.providerOrder) : domain,
+      );
       return Response.json({ ok: true, message: "ok", reloaded: 1, enabled: 1, updated: [] });
     }
+    if (server.detailStatus && url.pathname.startsWith("/api/admin/integrations/"))
+      return Response.json({ error: "Unavailable" }, { status: server.detailStatus });
     if (url.pathname === "/api/admin/provider-order")
       return server.orderStatus
         ? Response.json({ error: "Unavailable" }, { status: server.orderStatus })
@@ -129,8 +154,111 @@ describe("provider order editor", () => {
         },
       ]),
     );
-    expect(screen.getByRole("button", { name: "Move Alpha up" })).toBeDisabled();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Move Beta up" })).toBeDisabled(),
+    );
     expect(screen.getByRole("button", { name: "Move Gamma down" })).toBeDisabled();
+  });
+
+  it("keeps keyboard focus on the moved row and announces where it went", async () => {
+    let release = () => {};
+    const server: Server = {
+      domains: [weather],
+      details: { weather: orchestrator("weather", []) },
+      patchGate: new Promise((resolve) => {
+        release = resolve;
+      }),
+    };
+    const patches = serve(server);
+    mount("weather", "weather");
+    const gammaUp = await screen.findByRole("button", { name: "Move Gamma up" });
+    await waitFor(() => expect(gammaUp).not.toBeDisabled());
+    gammaUp.focus();
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(patches).toHaveLength(1));
+    // While the save is open, the control in use stays focusable: a browser
+    // moves focus off a control that becomes disabled.
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Move Gamma up" }));
+    expect(document.activeElement).not.toBeDisabled();
+    expect(document.activeElement).toHaveAttribute("aria-disabled", "true");
+    release();
+    server.patchGate = undefined;
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Move Gamma up" })).not.toHaveAttribute(
+        "aria-disabled",
+        "true",
+      ),
+    );
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Move Gamma up" }));
+    expect(await screen.findByText("Gamma moved to position 2")).toBeInTheDocument();
+
+    // At the top the same control no longer applies; focus takes the other direction.
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(patches).toHaveLength(2));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "Move Gamma down" })),
+    );
+    expect(screen.getByRole("button", { name: "Move Gamma up" })).toBeDisabled();
+    expect(await screen.findByText("Gamma moved to position 1")).toBeInTheDocument();
+  });
+
+  it("keeps keyboard focus in the list after adding and removing", async () => {
+    const patches = serve({
+      domains: [geocoding],
+      details: { geocoding: orchestrator("geocoding", ["geocoding-maptiler"], "database") },
+    });
+    mount("geocoding", "geocoding");
+    const add = await screen.findByRole("button", { name: "Add Acme" });
+    await waitFor(() => expect(add).not.toBeDisabled());
+    add.focus();
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(patches).toHaveLength(1));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "Remove Acme" })),
+    );
+    expect(await screen.findByText("Acme added at position 2")).toBeInTheDocument();
+
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(patches).toHaveLength(2));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(screen.getByRole("button", { name: "Remove MapTiler" })),
+    );
+    expect(await screen.findByText("Acme removed")).toBeInTheDocument();
+  });
+
+  it("saves at most the schema's maximum, dropping trailing unlisted providers", async () => {
+    const many: Domain = {
+      ...weather,
+      effective: Array.from({ length: 65 }, (_, i) => entry(`p${i}`, `Provider ${i}`, false)),
+    };
+    const patches = serve({
+      domains: [many],
+      details: {
+        weather: orchestrator("weather", [], "default", undefined, {
+          type: "object",
+          properties: { providerOrder: { type: "array", maxItems: 64 } },
+        }),
+      },
+    });
+    mount("weather", "weather");
+    const up = await screen.findByRole("button", { name: "Move Provider 1 up" });
+    await waitFor(() => expect(up).not.toBeDisabled());
+    await userEvent.click(up);
+    await waitFor(() => expect(patches).toHaveLength(1));
+    const saved = (patches[0]?.body as { providerOrder: string[] }).providerOrder;
+    expect(saved).toHaveLength(64);
+    expect(saved.slice(0, 3)).toEqual(["p1", "p0", "p2"]);
+    expect(saved).not.toContain("p64");
+  });
+
+  it("explains why the order cannot be edited when the orchestrator could not be read", async () => {
+    serve({ domains: [weather], details: {}, detailStatus: 500 });
+    mount("weather", "weather");
+    expect(
+      await screen.findByText(
+        "Couldn’t load this integration’s settings, so the order can’t be changed.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("offers an unlisted geocoder instead of saving it", async () => {
@@ -181,7 +309,7 @@ describe("provider order editor", () => {
     );
     await userEvent.click(screen.getByRole("button", { name: "Remove routing-gone" }));
     await waitFor(() =>
-      expect(patches.at(-1)?.body).toEqual({ providerOrder: ["routing-a", "routing-b"] }),
+      expect(patches.at(-1)?.body).toEqual({ providerOrder: ["routing-b", "routing-a"] }),
     );
     expect(screen.queryByRole("button", { name: "Remove Router A" })).not.toBeInTheDocument();
   });
@@ -238,6 +366,55 @@ describe("provider order editor", () => {
     expect(await screen.findByRole("heading", { name: "Provider order" })).toBeInTheDocument();
     expect(await screen.findByText("Timeout field")).toBeInTheDocument();
     expect(screen.queryByText("Order field")).not.toBeInTheDocument();
+  });
+
+  it("shows no order control for an orchestrator whose configuration has no provider order", async () => {
+    const rideHailing: Domain = {
+      domain: "ride-hailing",
+      orchestratorId: "ride-hailing",
+      unlisted: "append",
+      stored: [],
+      effective: [entry("ride-a", "Ride A", false), entry("ride-b", "Ride B", false)],
+    };
+    const patches = serve({
+      domains: [rideHailing],
+      details: {
+        "ride-hailing": {
+          ...orchestrator("ride-hailing", [], "default", undefined, {
+            type: "object",
+            properties: { defaultProvider: { type: "string", title: "Default provider field" } },
+          }),
+          resolvedConfig: { defaultProvider: { value: "", source: "default" } },
+        },
+      },
+    });
+    const client = createTestQueryClient();
+    client.setDefaultOptions({ queries: { retry: false } });
+    render(
+      <QueryClientProvider client={client}>
+        <AdminToastProvider>
+          <IntegrationDetail id="ride-hailing" />
+        </AdminToastProvider>
+      </QueryClientProvider>,
+    );
+    await userEvent.click(await screen.findByRole("tab", { name: /Configuration/ }));
+    expect(await screen.findByText("Default provider field")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Provider order" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Move / })).not.toBeInTheDocument();
+    expect(patches).toEqual([]);
+  });
+
+  it.each([
+    ["weather", "Weather"],
+    ["fuel-stations", "Fuel stations"],
+    ["live-transit", "Live transit"],
+  ])("names the %s domain it orders", async (domain, label) => {
+    serve({
+      domains: [{ ...weather, domain }],
+      details: { weather: orchestrator("weather", []) },
+    });
+    mount("weather", domain);
+    expect(await screen.findByText(label)).toBeInTheDocument();
   });
 
   it("reports a provider order that could not be read", async () => {
