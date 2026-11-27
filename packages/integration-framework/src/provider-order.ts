@@ -266,7 +266,7 @@ function servedProviders<T>(
  * members live on their prototype.
  */
 export function collectOrderedProviders<T>(
-  ctx: IntegrationContext,
+  ctx: Pick<IntegrationContext, "getProviderOrder" | "getIntegrationsByDomain">,
   domain: ProviderDomain,
   options: { unlisted?: "append" | "exclude" } = {},
 ): OrderedProvider<T>[] {

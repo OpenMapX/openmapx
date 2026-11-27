@@ -13,7 +13,11 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import {
+  collectOrderedProviders,
+  effectiveProviderOrder,
+  type IntegrationContext,
+} from "@openmapx/integration-framework";
 import { getPlaceResolver, registerPlaceResolver } from "@openmapx/place-ids";
 import type { FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -1678,7 +1682,11 @@ describe("operator-set provider order", () => {
   function integration(
     id: string,
     domains: string[],
-    options: { config?: Record<string, unknown>; setup?: string } = {},
+    options: {
+      config?: Record<string, unknown>;
+      setup?: string;
+      configSchema?: Record<string, unknown>;
+    } = {},
   ): void {
     const directory = writeTestIntegration(root, id, {
       id,
@@ -1687,7 +1695,7 @@ describe("operator-set provider order", () => {
       platform: "1.0",
       domains,
       quality: "built-in",
-      configSchema: {
+      configSchema: options.configSchema ?? {
         properties: {
           providerOrder: { type: "array", items: { type: "string" }, maxItems: 64, default: [] },
         },
@@ -1797,6 +1805,54 @@ describe("operator-set provider order", () => {
       }
     },
   );
+
+  it("serves routing in the routing manifest's default order, as fingerprinted and listed", async () => {
+    const routingManifest = JSON.parse(
+      readFileSync(
+        join(fileURLToPath(import.meta.url), "../../../../integrations/routing/manifest.json"),
+        "utf8",
+      ),
+    ) as { configSchema: { properties: { providerOrder: { default: string[] } } } };
+    const defaultOrder = routingManifest.configSchema.properties.providerOrder.default;
+    integration("routing", ["routing"], {
+      configSchema: {
+        properties: { providerOrder: routingManifest.configSchema.properties.providerOrder },
+      },
+    });
+    for (const [id, priority] of [
+      ["routing-acme", 1],
+      ["routing-osrm", 20],
+      ["routing-valhalla", 10],
+      ["routing-brouter", 5],
+    ] as const) {
+      integration(id, ["routing"], {
+        setup: [
+          "  ctx.registerRoutingProvider({",
+          `    id: ${JSON.stringify(id)}, priority: ${priority}, supportedModes: ["driving"],`,
+          "    getRoute: async () => ({ waypoints: [], routes: [], activeRouteIndex: 0 }),",
+          "  });",
+        ].join("\n"),
+      });
+    }
+    await initIntegrations(makeApp(), [{ directory: root, isBuiltIn: true }]);
+
+    const ctx = ctxOf("routing");
+    expect(getProviderOrder("routing")).toEqual(defaultOrder);
+    expect(ctx.getProviderOrder("routing")).toEqual(defaultOrder);
+    const served = collectOrderedProviders(ctx, "routing").map((entry) => entry.integrationId);
+    expect(served).toEqual(["routing-brouter", "routing-valhalla", "routing-osrm", "routing-acme"]);
+    expect(
+      effectiveProviderOrder(defaultOrder, getIntegrationsByDomain("routing"), "routing").map(
+        (entry) => entry.integrationId,
+      ),
+    ).toEqual(served);
+    expect(ctx.getProviderOrderFingerprint("routing")).toBe(
+      createHash("sha256")
+        .update(JSON.stringify(served.map((id) => [id, id])))
+        .digest("hex")
+        .slice(0, 16),
+    );
+  });
 
   it("fingerprints the integrations that serve a domain", async () => {
     integration("transit", ["transit"]);

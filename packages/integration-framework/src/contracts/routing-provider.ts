@@ -1,5 +1,7 @@
 import type {
   DirectionsResult,
+  IsochroneResult,
+  IsochroneTravelMode,
   LngLat,
   MatchOptions,
   MatchResult,
@@ -47,9 +49,8 @@ export interface RoutingProvider {
   readonly id: string;
   readonly supportedModes: TravelMode[];
   /**
-   * Lower values are preferred when several providers support a request.
-   * Each engine integration declares its own preference; the orchestrator
-   * does not need to know engine IDs.
+   * Orders this engine among those the operator's `providerOrder` does not
+   * list, which follow the listed ones; lower values come first.
    */
   readonly priority?: number;
   /**
@@ -76,6 +77,13 @@ export interface RoutingProvider {
    * `resolveTemporalCapabilities`, so an existing provider keeps working.
    */
   readonly temporal?: TemporalCapabilities;
+  /**
+   * Whether driving routes can carry a `trafficProof` that the live-traffic
+   * writer's snapshot confirms. Only such an engine is reported as offering
+   * traffic-aware routing, and only routes it served are reconciled against
+   * a snapshot that names its integration.
+   */
+  readonly supportsTrafficProof?: boolean;
   /**
    * The most engine calls the provider's current upstream permits, when that
    * is stricter than the deployment's routing budget (a public demo server
@@ -113,6 +121,16 @@ export interface RoutingProvider {
     targets: LngLat[],
     opts?: { mode?: TravelMode },
   ): Promise<(({ seconds: number; km: number } & ContributingRecord) | null)[][]>;
+  /**
+   * Areas reachable from `origin` within each of `contourMinutes`, one contour
+   * per value in ascending time. The first engine in the operator's order
+   * that implements it serves `/isochrone`.
+   */
+  getIsochrone?(
+    origin: [number, number],
+    mode: IsochroneTravelMode,
+    contourMinutes: number[],
+  ): Promise<IsochroneResult>;
 }
 
 export type RoutingProviderErrorCode = "unsupported-exclusions";

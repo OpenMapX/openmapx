@@ -1,6 +1,6 @@
+import type { IsochroneTravelMode } from "@openmapx/integration-framework";
 import type { FastifyPluginAsync } from "fastify";
 import { getIsochroneProvider } from "../services/isochrone/factory.js";
-import type { IsochroneTravelMode } from "../services/isochrone/provider.js";
 import { hashKey, round, TTL, withCache } from "../utils/cache.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
 
@@ -57,7 +57,15 @@ export const isochroneRoute: FastifyPluginAsync = async (fastify) => {
 
       const sorted = [...contourMinutes].sort((a, b) => a - b);
 
-      const key = hashKey("cache:isochrone:contributors-v2", {
+      const engine = getIsochroneProvider();
+      if (!engine) {
+        reply.header("Cache-Control", "no-cache");
+        return reply.status(503).send({ error: "Isochrone service unavailable" });
+      }
+
+      // Keyed by engine, so a changed provider order never serves another engine's areas.
+      const key = hashKey("cache:isochrone:contributors-v3", {
+        engine: engine.integrationId,
         lat: round(lat, 3),
         lng: round(lng, 3),
         mode,
@@ -66,7 +74,7 @@ export const isochroneRoute: FastifyPluginAsync = async (fastify) => {
 
       try {
         const result = await withCache(key, TTL.isochrone, () =>
-          getIsochroneProvider().isochrone([lng, lat], mode, sorted),
+          engine.isochrone([lng, lat], mode, sorted),
         );
         reply.header("Cache-Control", "public, max-age=3600");
         return result;

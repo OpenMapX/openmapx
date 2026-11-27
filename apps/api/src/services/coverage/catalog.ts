@@ -346,7 +346,7 @@ function makeProviders(integration: LoadedIntegration): CoverageProviderDescript
         routingIds,
         (operationId) =>
           operationId === "traffic.traffic-aware-routing"
-            ? integration.id === "routing-valhalla" && id === "valhalla"
+            ? provider.supportsTrafficProof === true
             : (provider.supportedModes ?? []).includes("driving"),
         provider,
         "routing",

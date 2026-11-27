@@ -1,4 +1,8 @@
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import {
+  effectiveProviderOrder,
+  type IntegrationContext,
+  providerOrderFingerprintInput,
+} from "@openmapx/integration-framework";
 import { nth } from "@openmapx/integration-framework/testing";
 import type {
   DirectionsResult,
@@ -7,7 +11,15 @@ import type {
   TravelMode,
 } from "@openmapx/provider-kit/routing";
 import { describe, expect, it, vi } from "vitest";
+import manifest from "../manifest.json";
 import { captureRoutingResult, createRoutingOrchestrator } from "../orchestrator";
+
+const ROUTING_DEFAULT_ORDER: readonly string[] =
+  manifest.configSchema.properties.providerOrder.default;
+
+it("orders the built-in engines BRouter, Valhalla, OSRM by default", () => {
+  expect(ROUTING_DEFAULT_ORDER).toEqual(["routing-brouter", "routing-valhalla", "routing-osrm"]);
+});
 
 function makeProvider(
   modes: TravelMode[],
@@ -60,8 +72,12 @@ function makeProvider(
   return provider;
 }
 
-function makeCtx(integrations: { id: string; provider: RoutingProvider }[]): IntegrationContext {
+function makeCtx(
+  integrations: { id: string; provider: RoutingProvider }[],
+  order: readonly string[] = [],
+): IntegrationContext {
   return {
+    getProviderOrder: (domain: string) => (domain === "routing" ? order : []),
     getIntegrationsByDomain: (_domain: string) =>
       integrations.map((i) => ({
         id: i.id,
@@ -102,6 +118,52 @@ describe("routing orchestrator getRoutingProviders", () => {
     expect(orch.getRoutingProvider("driving")?.integrationId).toBe("routing-valhalla");
   });
 
+  it("tries engines in the operator's order, not by their own priority", () => {
+    const acme = makeProvider(["driving"], { id: "acme", priority: 1 });
+    const valhalla = makeProvider(["driving"], { id: "valhalla", priority: 10 });
+    const ctx = makeCtx(
+      [
+        { id: "routing-acme", provider: acme },
+        { id: "routing-valhalla", provider: valhalla },
+      ],
+      ["routing-valhalla"],
+    );
+    const chain = createRoutingOrchestrator(ctx).getRoutingProviders("driving");
+    expect(chain.map((e) => e.integrationId)).toEqual(["routing-valhalla", "routing-acme"]);
+  });
+
+  it("serves the order the fingerprint and the admin list describe", () => {
+    const providers = [
+      { id: "routing-acme", provider: makeProvider(["driving"], { id: "acme", priority: 1 }) },
+      { id: "routing-osrm", provider: makeProvider(["driving"], { id: "osrm", priority: 20 }) },
+      {
+        id: "routing-valhalla",
+        provider: makeProvider(["driving"], { id: "valhalla", priority: 10 }),
+      },
+      {
+        id: "routing-brouter",
+        provider: makeProvider(["driving"], { id: "brouter", priority: 5 }),
+      },
+    ];
+    const ctx = makeCtx(providers, ROUTING_DEFAULT_ORDER);
+    const served = createRoutingOrchestrator(ctx)
+      .getRoutingProviders("driving")
+      .map((e) => e.integrationId);
+    expect(served).toEqual(["routing-brouter", "routing-valhalla", "routing-osrm", "routing-acme"]);
+    expect(
+      effectiveProviderOrder(
+        ROUTING_DEFAULT_ORDER,
+        ctx.getIntegrationsByDomain("routing"),
+        "routing",
+      ).map((e) => e.integrationId),
+    ).toEqual(served);
+    expect(
+      (JSON.parse(providerOrderFingerprintInput(ctx, "routing")) as [string, string][]).map(
+        ([integrationId]) => integrationId,
+      ),
+    ).toEqual(served);
+  });
+
   it("returns only providers that support the requested mode", () => {
     const osrm = makeProvider(["driving"]);
     const val = makeProvider(["walking", "cycling", "driving"]);
@@ -131,6 +193,21 @@ describe("routing orchestrator getMatchProvider", () => {
     ]);
     const orch = createRoutingOrchestrator(ctx);
     expect(orch.getMatchProvider("driving")?.integrationId).toBe("routing-valhalla");
+  });
+
+  it("uses the first engine in order that can map-match", () => {
+    const first = makeProvider(["driving"], { id: "first", supportsMatch: true });
+    const second = makeProvider(["driving"], { id: "second", supportsMatch: true });
+    const ctx = makeCtx(
+      [
+        { id: "routing-first", provider: first },
+        { id: "routing-second", provider: second },
+      ],
+      ["routing-second"],
+    );
+    expect(createRoutingOrchestrator(ctx).getMatchProvider("driving")?.integrationId).toBe(
+      "routing-second",
+    );
   });
 
   it("returns null when no provider implements getMatch for the mode", () => {

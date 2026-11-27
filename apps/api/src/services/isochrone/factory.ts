@@ -1,32 +1,26 @@
-import type { IsochroneProvider } from "./provider.js";
-import { valhallaIsochroneProvider } from "./valhalla.js";
+import { collectOrderedProviders, type RoutingProvider } from "@openmapx/integration-framework";
+import { getIntegrationsByDomain, getProviderOrder } from "../../integration-host.js";
 
-type ProviderName = "valhalla";
-
-const providers: Record<ProviderName, IsochroneProvider> = {
-  valhalla: valhallaIsochroneProvider,
-};
-
-function isProviderName(value: string): value is ProviderName {
-  return value in providers;
-}
-
-let cached: IsochroneProvider | null = null;
-
-export function getIsochroneProvider(): IsochroneProvider {
-  if (cached) return cached;
-
-  // `|| "valhalla"` (not `??`) so an empty or whitespace-only env var — e.g. a
-  // compose `ISOCHRONE_PROVIDER:` with no value — falls back rather than
-  // throwing "Unknown ISOCHRONE_PROVIDER".
-  const name = (process.env.ISOCHRONE_PROVIDER?.trim() || "valhalla").toLowerCase();
-
-  if (!isProviderName(name)) {
-    throw new Error(
-      `Unknown ISOCHRONE_PROVIDER: "${name}". Valid options: ${Object.keys(providers).join(", ")}`,
-    );
+/**
+ * The first routing engine in the operator's order that offers isochrones,
+ * or null when none does. The method is called on the registered provider
+ * itself, so the engine's scope and call deadline apply.
+ */
+export function getIsochroneProvider(): {
+  integrationId: string;
+  isochrone: NonNullable<RoutingProvider["getIsochrone"]>;
+} | null {
+  for (const { integrationId, provider } of collectOrderedProviders<RoutingProvider>(
+    { getProviderOrder, getIntegrationsByDomain },
+    "routing",
+  )) {
+    const getIsochrone = provider.getIsochrone;
+    if (typeof getIsochrone !== "function") continue;
+    return {
+      integrationId,
+      isochrone: (origin, mode, contourMinutes) =>
+        getIsochrone.call(provider, origin, mode, contourMinutes),
+    };
   }
-
-  cached = providers[name];
-  return cached;
+  return null;
 }

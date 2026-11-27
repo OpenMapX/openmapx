@@ -1199,7 +1199,7 @@ attribution and freshness flow through every call unmodified.
 | `air-quality`          | `AirQualityProvider`         | Current, forecast, station and raster evidence; see [Air-quality integrations](./air-quality-integrations.md).                                      |
 | `search-suggestions`   | `SearchSuggestionProvider`   | Unified autocomplete contributions.                                                                                                                 |
 | `street-level-imagery` | `StreetLevelProvider`        | Image search, links, coverage and nearby street-level imagery.                                                                                      |
-| `routing`              | `RoutingProvider`            | Turn-by-turn directions, plus optional isochrones and map-matching.                                                                                 |
+| `routing`              | `RoutingProvider`            | Turn-by-turn directions, plus optional isochrones (`getIsochrone`), map-matching and traffic proofs (`supportsTrafficProof`).                       |
 | `transit`              | `TransitProvider`            | Stops, departures/arrivals, routes, trip planning, vehicle positions, alerts.                                                                       |
 | `live-transit`         | `RealtimeProvider`           | Realtime overlays: vehicle positions, service alerts, trip-update deltas.                                                                           |
 | `data-source`          | `MobilityDataSourceProvider` | Map data sources: bike/car/scooter sharing, and the user-facing merger over the charging-sites, parking-sites, fuel-stations and cameras providers. |

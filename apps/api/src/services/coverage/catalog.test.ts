@@ -81,3 +81,25 @@ it("counts a journey-platform-only live provider without claiming unsupported me
   ]);
   expect(buildCoverageCatalog([fixture]).providers[0]?.supports["transit.realtime"]).toBe(true);
 });
+
+it("reports traffic-aware routing for any engine that declares proofs", () => {
+  const engine = (id: string, provider: Record<string, unknown>) => {
+    const fixture = integration([]);
+    fixture.id = id;
+    fixture.manifest = { ...fixture.manifest, id, domains: ["routing"] };
+    fixture.providers.set("routing", [
+      { supportedModes: ["driving"], getRoute: async () => null, ...provider },
+    ]);
+    return fixture;
+  };
+  const catalog = buildCoverageCatalog([
+    engine("routing-acme", { id: "acme", supportsTrafficProof: true }),
+    engine("routing-valhalla", { id: "valhalla" }),
+  ]);
+  expect(
+    catalog.providers.map((p) => [p.integrationId, p.supports["traffic.traffic-aware-routing"]]),
+  ).toEqual([
+    ["routing-acme", true],
+    ["routing-valhalla", false],
+  ]);
+});

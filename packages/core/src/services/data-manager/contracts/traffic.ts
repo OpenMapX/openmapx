@@ -28,7 +28,8 @@ export const trafficApplicationSnapshotSchema = z.strictObject({
   schemaVersion: z.literal(1),
   writeId: z.string().nullable(),
   engineBootId: z.string().nullable(),
-  providerId: z.literal("routing-valhalla"),
+  /** The routing integration whose engine the traffic writer wrote to. */
+  providerId: z.string().min(1),
   graphGeneration: z.string().nullable(),
   policyRevision: z.string().nullable(),
   validUntil: timestampSchema.nullable(),

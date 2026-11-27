@@ -14,7 +14,7 @@ export function valhallaBaseUrl(): string {
 }
 
 /**
- * Full Valhalla endpoint URL for a path like "/isochrone". Appends
+ * Full Valhalla endpoint URL for a path like "/height". Appends
  * `api_key` when VALHALLA_API_KEY is set (required by Stadia; ignored by
  * key-less self-hosted instances).
  */

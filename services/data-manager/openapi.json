@@ -49288,9 +49288,7 @@
                     },
                     "providerId": {
                       "type": "string",
-                      "enum": [
-                        "routing-valhalla"
-                      ]
+                      "minLength": 1
                     },
                     "graphGeneration": {
                       "type": [

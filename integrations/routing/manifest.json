@@ -21,6 +21,12 @@
   "configSchema": {
     "type": "object",
     "properties": {
+      "providerOrder": {
+        "type": "array",
+        "items": { "type": "string" },
+        "maxItems": 64,
+        "default": ["routing-brouter", "routing-valhalla", "routing-osrm"]
+      },
       "providerRequestsPerMinute": {
         "type": "integer",
         "default": 3000,

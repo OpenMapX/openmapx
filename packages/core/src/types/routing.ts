@@ -723,7 +723,8 @@ export interface TrafficApplicationSnapshot {
   schemaVersion: 1;
   writeId: string | null;
   engineBootId: string | null;
-  providerId: "routing-valhalla";
+  /** The routing integration whose engine the traffic writer wrote to. */
+  providerId: string;
   graphGeneration: string | null;
   policyRevision: string | null;
   validUntil: string | null;

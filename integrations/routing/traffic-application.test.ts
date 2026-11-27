@@ -93,6 +93,36 @@ const fallback = {
   validUntil: null,
   reasons: ["unverified_engine_application"],
 };
+/** A context whose data manager answers `applied` and whose one road-conditions provider is complete. */
+function trafficContext(applied: TrafficApplicationSnapshot): IntegrationContext {
+  return {
+    http: { get: vi.fn().mockResolvedValue(applied) },
+    getRequiredService: () => ({ url: "http://localhost:4000" }),
+    getIntegrationsByDomain: () => [
+      {
+        providers: new Map([
+          [
+            "road-conditions",
+            [
+              {
+                getEvents: async () => [event()],
+                getRoutingEvents: async () => ({ complete: true, events: [event()] }),
+              },
+            ],
+          ],
+        ]),
+      },
+    ],
+    getDisallowedSourceIds: async () => new Set(),
+    getRoadConditionsPolicySnapshot: async () => ({
+      authoritative: true,
+      revision: "policy",
+      validUntil: proof.validUntil,
+      disallowedSourceIds: [],
+    }),
+  } as unknown as IntegrationContext;
+}
+const routes = () => [{ trafficProof: proof, geometry: [[7, 50]], mode: "driving" }] as Route[];
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllEnvs();
@@ -108,6 +138,44 @@ describe("engine application reconciliation", () => {
       { validUntil: proof.evaluatedAt },
     ])
       expect(snapshotMatchesProof({ ...snapshot(), ...patch }, proof, NOW)).toBe(false);
+  });
+  it("accepts a traffic proof from the engine named in the snapshot", () => {
+    expect(snapshotMatchesProof({ ...snapshot(), providerId: "routing-acme" }, proof, NOW)).toBe(
+      true,
+    );
+  });
+  it("ignores a traffic snapshot written for another engine", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile("test-secret"));
+    const reconcile = (served: string) =>
+      verifyRouteTraffic(trafficContext(snapshot()), routes(), fallback, served);
+    expect((await reconcile("routing-valhalla"))?.availability).toBe("current");
+    expect(await reconcile("routing-osrm")).toBe(fallback);
+  });
+  it("reconciles routes of any engine its snapshot names", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile("test-secret"));
+    const ctx = trafficContext({ ...snapshot(), providerId: "routing-acme" });
+    expect((await verifyRouteTraffic(ctx, routes(), fallback, "routing-acme"))?.availability).toBe(
+      "current",
+    );
+    expect(await verifyRouteTraffic(ctx, routes(), fallback, "routing-valhalla")).toBe(fallback);
+  });
+  it("treats a snapshot that names no engine as not matching", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    vi.stubEnv("DATA_MANAGER_TOKEN_FILE", dataManagerTokenFile("test-secret"));
+    const { providerId: _providerId, ...unnamed } = snapshot();
+    expect(
+      await verifyRouteTraffic(
+        trafficContext(unnamed as TrafficApplicationSnapshot),
+        routes(),
+        fallback,
+        "routing-valhalla",
+      ),
+    ).toBe(fallback);
   });
   it("requires exact revision, effect, source graph, policy, spans and current rights", () => {
     const e = event();
