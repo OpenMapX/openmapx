@@ -22,7 +22,10 @@ host; published engine ports bind to loopback.
 Valhalla can serve all supported ground modes. OSRM adds a driving provider;
 BRouter adds cycling preferences. Request features and provider availability
 affect selection, so verify the modes you use after setup. A selected provider
-that cannot answer may fall back to another configured provider.
+that cannot answer may fall back to another configured provider. The routing
+integration's provider order decides which compatible engine is asked first
+(default BRouter, Valhalla, OSRM); change it under **Admin → Integrations →
+Routing**.
 
 :::tip[Planet deployments use Valhalla alone]
 For worldwide general ground routing, use Valhalla rather than an OSRM graph.

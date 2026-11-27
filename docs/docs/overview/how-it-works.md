@@ -35,10 +35,11 @@ overlays, external data sources, photos, reviews, and place enrichment. A
 manifest declares the integration's domain, runtime entry points, typed
 configuration schema, attribution, and required services.
 
-Installed community extensions use a declarative contract. Features that need
-executable backend code run in a separate service container. Installing an
-extension does not load its arbitrary JavaScript into the trusted API or web
-process. See [Community extensions](../administration/community-extensions.md)
+An installed community integration can carry backend code. The API loads it
+into its own process, where it has the same access as a built-in integration to
+the instance and its users' data, so install only extensions you trust.
+Container services run in their own sandboxed containers, and community frontend
+code is not executed. See [Community extensions](../administration/community-extensions.md)
 before adding a third-party source.
 
 ## Capabilities tie the two together

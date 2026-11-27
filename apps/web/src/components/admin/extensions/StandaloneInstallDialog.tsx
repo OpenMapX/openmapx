@@ -262,7 +262,7 @@ function StandaloneInstallDialogContent() {
         <DialogTitle>{t("installStandaloneIntegration")}</DialogTitle>
         <DialogContent>
           <Stack sx={{ gap: 2, pt: 1 }}>
-            <Alert severity="info">{t("communityIntegrationsAreDeclarativeExecutable")}</Alert>
+            <Alert severity="warning">{t("communityIntegrationCodeRunsInApi")}</Alert>
             <TextField
               select
               label={t("installSource")}

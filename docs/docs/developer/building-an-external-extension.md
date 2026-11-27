@@ -6,11 +6,11 @@ sidebar_position: 6
 
 # Building an external extension
 
-Use this guide to publish a declarative integration artifact, a containerized
-service, or an extension bundle containing both from your own repository.
-Installed artifacts cannot execute backend or presentation JavaScript in
-OpenMapX. A new provider or UI requires an existing host protocol or a reviewed
-built-in adapter.
+Use this guide to publish an integration artifact, a containerized service, or
+an extension bundle containing both from your own repository. An installed
+integration can ship a bundled backend that runs in the API process with the
+same access as a built-in integration; presentation JavaScript is rejected. A
+new UI requires an existing host protocol or a reviewed built-in adapter.
 
 The examples use a hypothetical `conditions` integration and `conditions-ingest`
 service. OpenConditions illustrates the service/adapter boundary: its service
@@ -32,9 +32,9 @@ Before starting, prepare:
 
 An **external extension** is one or both of:
 
-- An **integration**: a manifest plus optional presentation assets. Community
-  artifacts contain declarative metadata, localized strings and safe static
-  assets. Both backend entry points and presentation scripts are rejected.
+- An **integration**: a manifest plus optional assets. Community artifacts
+  contain metadata, localized strings, assets and optionally a backend bundle;
+  presentation scripts are rejected.
 - A **companion service**: a separately containerized daemon described by a
   `service.json`, managed by the OpenMapX compose renderer, and registered in the
   host's service registry. Services do their own Postgres schema migrations and
@@ -42,8 +42,8 @@ An **external extension** is one or both of:
 
 The two dependency directions to keep in mind:
 
-1. **OpenMapX → your integration**: the API discovers its manifest and serves its
-   approved presentation assets; it does not execute community server code.
+1. **OpenMapX → your integration**: the API discovers its manifest, serves its
+   approved assets and imports its declared backend bundle into its own process.
 2. **You → OpenMapX tooling**: use `@openmapx/extension-cli` to scaffold,
    validate, package, and assemble the component manifest. Runtime code
    stays in the service container.
@@ -59,9 +59,8 @@ not establish publication or compatibility with a deployed host.
 
 An installable integration artifact needs no runtime SDK. It contains a
 manifest, localized strings, and optional safe static assets such as an SVG
-preview. The API does not import community server modules, and the web app does
-not execute community scripts. Put all executable behavior in the companion
-service described below.
+preview. The web app does not execute community scripts. Put all executable
+behavior in the companion service described below.
 
 ### Scaffold an integration
 
@@ -373,10 +372,8 @@ snapshot changes, request limits and queued-job handling.
 
 ### Reload the API
 
-Community artifacts are declarative-only. Backend
-JavaScript is rejected because the API is a privileged control plane process,
-not a sandbox; backend behavior must live in the companion
-service described below. After a manual CLI install, restart the API so the new
+Backend JavaScript runs in the API process, which is a privileged control plane,
+not a sandbox. After a manual CLI install, restart the API so the new
 manifest is discovered (the Extensions store performs a transactional reload):
 
 ```sh
@@ -671,11 +668,13 @@ those commands obtain another fresh preview and exit on 429 without retrying.
 
 ## Caveats
 
-**Runtime isolation.** Integration artifacts are declarative-only and require a
-SHA-256 pin. Executable behavior runs in a separate service container subject to
-the [community service restrictions](./service-manifest.md#quality-tiers).
-The API, data-manager and the same-origin web page do not execute community
-integration modules. Network isolation still permits outbound internet traffic
+**Runtime isolation.** Integration artifacts require a SHA-256 pin. The API
+imports an integration's declared backend bundle into its own process with full
+access; its check of the bundle's imports before loading catches packaging
+mistakes and is not a sandbox. Service containers run subject to the
+[community service restrictions](./service-manifest.md#quality-tiers). The
+data-manager and the same-origin web page do not execute community integration
+modules. Network isolation still permits outbound internet traffic
 and any explicitly reviewed built-in bridge connections.
 
 **Platform-version compatibility.** The host rejects an integration whose

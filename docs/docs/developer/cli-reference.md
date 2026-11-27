@@ -187,7 +187,7 @@ database, and temporary-disk cost.
 
 ## `ext`
 
-Browse and manage bundles of declarative integrations and isolated services.
+Browse and manage bundles of integrations and isolated services.
 These commands use the admin API as the administrator session in
 `--session-file`, with `--api-origin` and `--allow-loopback-http` as described
 above. See [Community extensions](../administration/community-extensions.md)
@@ -217,9 +217,11 @@ silently approve ports. A returned job ID means the operation was queued. Check
 times out, the server job may still be running: inspect Activity before retrying.
 Do not assume that every failed operation has fully rolled back.
 
-Service components execute container code. Integration artifacts are declarative
-and cannot install executable API, web, or data-manager entry points. Review the
-source and requested access before installing either component type.
+Service components execute container code. Integration artifacts can carry a
+backend bundle that runs in the API process with the same access as a built-in
+integration; frontend entry points are rejected. Review the source and requested
+access before installing either component type, and install only extensions you
+trust.
 
 ## `integrations`
 
@@ -228,14 +230,14 @@ The developer-side build/package tooling for integrations (distinct from the
 packaged; the API container never builds at runtime. The integration model is
 documented in [Integration system](./integration-system.md).
 
-| Command                         | Description                                                                                                                                                                                                                                                                                                                                                                      |
-| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `integrations scaffold <id>`    | Scaffold a new first-party integration under `integrations/<id>` from `integrations/_template/`, substituting the `__ID__`/`__DOMAIN__` tokens. Flag: `--domain <domain>`. Run `pnpm install` afterwards so pnpm picks up the new workspace package. See [Writing an integration](./writing-an-integration.md#quick-start-scaffold).                                             |
-| `integrations list`             | List installed community integrations. Flag: `--include-built-in` also lists the first-party integrations under `integrations/`.                                                                                                                                                                                                                                                 |
-| `integrations install <source>` | Install a declarative integration from a Git URL, local path, or artifact through the operations agent, which records it. Local and Git sources are packaged on the host first. Flags: `--ref <ref>`, `--artifact`, `--sha256 <hash>`. Executable runtime entry points are rejected. Without a running agent (development) it installs directly, and the agent will not load it. |
-| `integrations remove <id>`      | Remove a community integration through the operations agent. Only an integration installed with this command, not one an extension installed, can be removed this way. That ownership keeps manual and extension installs from replacing each other; it is not a security boundary.                                                                                              |
-| `integrations validate [id]`    | Validate one integration's manifest, or all if `id` is omitted.                                                                                                                                                                                                                                                                                                                  |
-| `integrations package <source>` | Create a declarative `.tar.gz` artifact for admin/production installs. Requires `--out <file>`; all executable runtime entry points are rejected. Only the declared artifact contract is packaged — source, dotfiles, `.env*`, VCS data, lockfiles, `node_modules/`, and unreferenced assets are never collected.                                                                |
+| Command                         | Description                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `integrations scaffold <id>`    | Scaffold a new first-party integration under `integrations/<id>` from `integrations/_template/`, substituting the `__ID__`/`__DOMAIN__` tokens. Flag: `--domain <domain>`. Run `pnpm install` afterwards so pnpm picks up the new workspace package. See [Writing an integration](./writing-an-integration.md#quick-start-scaffold).                                                                                            |
+| `integrations list`             | List installed community integrations. Flag: `--include-built-in` also lists the first-party integrations under `integrations/`.                                                                                                                                                                                                                                                                                                |
+| `integrations install <source>` | Install an integration from a Git URL, local path, or artifact through the operations agent, which records it. Local and Git sources are packaged on the host first. Flags: `--ref <ref>`, `--artifact`, `--sha256 <hash>`. Frontend entry points are rejected; a declared backend bundle is installed and runs in the API process. Without a running agent (development) it installs directly, and the agent will not load it. |
+| `integrations remove <id>`      | Remove a community integration through the operations agent. Only an integration installed with this command, not one an extension installed, can be removed this way. That ownership keeps manual and extension installs from replacing each other; it is not a security boundary.                                                                                                                                             |
+| `integrations validate [id]`    | Validate one integration's manifest, or all if `id` is omitted.                                                                                                                                                                                                                                                                                                                                                                 |
+| `integrations package <source>` | Create a `.tar.gz` artifact for admin/production installs. Requires `--out <file>`. Frontend entry points are rejected; a declared backend bundle is packaged and runs in the API process once installed. Only the declared artifact contract is packaged — source, dotfiles, `.env*`, VCS data, lockfiles, `node_modules/`, and unreferenced assets are never collected.                                                       |
 
 After installing or removing an integration, restart `api` so the
 integration host picks up the change:

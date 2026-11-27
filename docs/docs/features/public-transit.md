@@ -208,8 +208,10 @@ for the shared engine and native authority boundaries.
 
 The transit integration selects providers by declared coverage, role,
 capabilities, health, and source policy. Baseline planning is tried before
-regional and fallback providers. Within a role, lower numeric priority is tried
-first. A successful baseline response with no itinerary is authoritative and
+regional and fallback providers. Within a role, the transit integration's
+provider order is followed (empty by default), then lower numeric priority, then
+provider id. Stop lookups by prefix and stop search without a map area use the
+same order. A successful baseline response with no itinerary is authoritative and
 can stop the chain; it does not automatically trigger a hosted search.
 
 The built-in `transit-motis` integration registers local MOTIS when configured.

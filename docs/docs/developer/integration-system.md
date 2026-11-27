@@ -35,15 +35,15 @@ The main implementation boundaries are:
 An integration is a directory. Built-in integrations live under `integrations/`
 and run directly from workspace TypeScript source; community integrations live
 in the operations agent's integration store, which the API mounts at
-`custom_integrations/`, and contain declarative metadata and
-safe static assets (see
+`custom_integrations/`, and contain metadata, assets and optionally a bundled
+backend (`dist/backend/index.mjs`) (see
 [Built-in versus community](#built-in-versus-community)). The directory can contain these entry files:
 
 - **`manifest.json`**: declarative metadata. Required. This is what the host
   discovers and validates; an integration with only a manifest and no code is a
   valid (if inert) integration.
-- **`index.ts`**: the trusted built-in runtime entry point. Optional and not
-  permitted in an installable community artifact.
+- **`index.ts`**: the built-in runtime entry point; an installed integration
+  ships the bundled `dist/backend/index.mjs` instead. Optional.
   It exports a `setup(ctx)` function that the host invokes once at load time,
   passing the [`IntegrationContext`](#the-integration-context). This is where an
   integration registers providers, routes, and lifecycle hooks.
@@ -1753,12 +1753,18 @@ The host treats the two install locations differently, and the
   integration store, `infra/docker/state/ops-agent/custom-integrations/`, which
   records the SHA-256 of every file it installs; the API mounts the store
   read-only at `custom_integrations/` and serves only files that match. Their
-  manifests and safe static assets are discovered, but backend and frontend
-  JavaScript is never imported by the API: that process holds
-  database credentials and application secrets and is not a sandbox. Host and
-  Docker operations are separately owned by the operations agent. The installer rejects such entry points.
-  Backend behavior belongs in a separately containerized service component;
-  executable presentation remains disabled until a cross-origin sandbox exists. A community
+  manifests and assets are discovered, and a backend bundle the manifest
+  declares at `dist/backend/index.mjs` is verified against the recorded digest,
+  copied into the API's code cache and imported into the API process. Installed
+  backend code is trusted like a built-in: it runs with the process's database
+  credentials, application secrets and network access, so operators install only
+  integrations they trust. Before the import, the API refuses a bundle that
+  imports anything but the SDK, `zod` and Node built-ins; that check gives an
+  honest packaging mistake a clear error and is not a sandbox. A failing
+  installed integration is left out while the rest load; a failing built-in
+  aborts a reload. Host and Docker operations are separately owned by the
+  operations agent. Frontend code is still rejected; executable presentation
+  remains disabled until a cross-origin sandbox exists. A community
   integration must declare a minimum `platform` version in its manifest; if the
   running platform's major version differs, or its minor is lower, the host skips
   the integration with a warning. The platform version uses simple

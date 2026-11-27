@@ -50,8 +50,8 @@ those services and external APIs through the integration host. The admin panel
 manages configuration, service operations, capability bindings, accounts, jobs,
 and installed community extensions.
 
-Community extensions can contain declarative integrations, isolated service
-containers, or both. See [How it works](https://docs.openmapx.org/overview/how-it-works/),
+Community extensions can contain integrations, which may carry backend code that
+runs in the API process with full access, isolated service containers, or both. See [How it works](https://docs.openmapx.org/overview/how-it-works/),
 [the integration system](https://docs.openmapx.org/developer/integration-system/),
 and [the external extension guide](https://docs.openmapx.org/developer/building-an-external-extension/)
 for the contracts and trust boundaries.

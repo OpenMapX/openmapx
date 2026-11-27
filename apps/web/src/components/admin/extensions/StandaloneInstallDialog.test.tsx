@@ -85,6 +85,16 @@ function mount() {
     </QueryClientProvider>,
   );
 }
+it("warns before installation that an integration's backend code runs in the API", () => {
+  mount();
+  fireEvent.click(screen.getByRole("button", { name: "Install standalone integration" }));
+  const warning = screen.getByRole("alert");
+  expect(warning).toHaveTextContent(
+    "An integration can include backend code. The OpenMapX API loads it into its own process",
+  );
+  expect(warning).toHaveTextContent("Install only integrations you trust.");
+  expect(warning.className).toMatch(/Warning/);
+});
 it("reviews a fixed source commit before sending the retained inspection to install", async () => {
   mount();
   fireEvent.click(screen.getByRole("button", { name: "Install standalone integration" }));

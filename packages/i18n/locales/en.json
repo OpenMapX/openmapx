@@ -5184,7 +5184,7 @@
     "selectANonemptyIntegrationArchive": "Select a nonempty integration archive of at most 200 MiB.",
     "uploadedArchiveDigestIsUnavailable": "Uploaded archive digest is unavailable.",
     "installStandaloneIntegration": "Install standalone integration",
-    "communityIntegrationsAreDeclarativeExecutable": "Community integrations are declarative. Executable code and package scripts are rejected.",
+    "communityIntegrationCodeRunsInApi": "An integration can include backend code. The OpenMapX API loads it into its own process, with the same access as a built-in integration: to this instance, its credentials and its users' data. Install only integrations you trust. Frontend code is still rejected.",
     "installSource": "Install source",
     "sourceRepository": "Source repository",
     "artifactUrl": "Artifact URL",
