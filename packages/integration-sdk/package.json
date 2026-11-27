@@ -256,7 +256,7 @@
     "escape-html": "1.0.3",
     "parse5": "8.1.1",
     "spdx-expression-parse": "5.0.0",
-    "undici": "8.12.4",
+    "undici": "8.13.0",
     "zod": "^4.6.7"
   },
   "peerDependencies": {
@@ -264,7 +264,7 @@
   },
   "devDependencies": {
     "@types/node": "^26.6.6",
-    "rollup": "4.66.0",
+    "rollup": "4.68.7",
     "rollup-plugin-dts": "6.5.1",
     "tsup": "9.0.0",
     "typescript": "^6.0.3",

@@ -74,7 +74,7 @@
     "next": "^16.4.3",
     "next-intl": "^4.14.9",
     "p-map": "7.1.1",
-    "papaparse": "5.7.0",
+    "papaparse": "5.7.1",
     "pure-web-bottom-sheet": "1.1.1",
     "qrcode": "^1.5.4",
     "react": "19.3.1",
