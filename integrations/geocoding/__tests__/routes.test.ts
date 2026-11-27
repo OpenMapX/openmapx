@@ -28,7 +28,7 @@ function harness() {
   };
   const cacheKeys: string[] = [];
   const ctx = createMockIntegrationContext({
-    config: { provider: "maptiler" },
+    providerOrder: { geocoding: ["geocoding-maptiler"] },
     cache: {
       get: async () => null,
       set: async () => undefined,

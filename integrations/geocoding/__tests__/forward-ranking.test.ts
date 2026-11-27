@@ -38,6 +38,7 @@ const maptilerGeocodingService = createMaptilerGeocodingService({
 function harness(cache = new Map<string, unknown>()) {
   const loads: string[] = [];
   const ctx = createMockIntegrationContext({
+    providerOrder: { geocoding: ["geocoding-maptiler"] },
     cache: {
       ...createPassthroughCache(),
       withCache: async <T>(

@@ -1,65 +1,47 @@
 import {
   type CapturedContributorCatalogue,
   captureIntegrationContributorCatalogue,
+  collectOrderedProviders,
   type IntegrationContext,
+  type OrderedProvider,
   resolveCapturedContributors,
+  UNLISTED_BY_DOMAIN,
 } from "@openmapx/integration-framework";
 import { type ContributingRecord, withContributors } from "@openmapx/mobility-core/contributors";
 import type { GeocodingProvider } from "@openmapx/provider-kit/geocoding";
 
-type ProviderName = "entur" | "maptiler" | "nominatim" | "pelias" | "photon" | "motis" | "db-ris";
+/**
+ * Selected entries already warned about, per context. A reload builds new
+ * contexts, so each reload warns once about each entry it cannot serve.
+ */
+const warnedEntries = new WeakMap<IntegrationContext, Set<string>>();
 
 /**
- * Map provider names (as used in GEOCODING_PROVIDER env var) to integration IDs,
- * each following the "geocoding-<name>" convention.
+ * The operator's selection of geocoders, in order: only listed integrations
+ * are asked. The registered providers are used as they are, never copied.
  */
-const NAME_TO_INTEGRATION: Record<ProviderName, string> = {
-  entur: "geocoding-entur",
-  maptiler: "geocoding-maptiler",
-  nominatim: "geocoding-nominatim",
-  pelias: "geocoding-pelias",
-  photon: "geocoding-photon",
-  motis: "geocoding-motis",
-  "db-ris": "geocoding-db-ris",
-};
-
-function collectProviders(ctx: IntegrationContext): Map<string, GeocodingProvider> {
-  const map = new Map<string, GeocodingProvider>();
-  const geocodingIntegrations = ctx.getIntegrationsByDomain("geocoding");
-
-  for (const integration of geocodingIntegrations) {
-    const providers = (integration.providers.get("geocoding") ?? []) as GeocodingProvider[];
-    for (const provider of providers) {
-      map.set(integration.id, provider);
+function selectedChain(ctx: IntegrationContext): OrderedProvider<GeocodingProvider>[] {
+  const chain = collectOrderedProviders<GeocodingProvider>(ctx, "geocoding", {
+    unlisted: UNLISTED_BY_DOMAIN.geocoding,
+  });
+  const served = new Set(chain.map((entry) => entry.integrationId));
+  const missing = ctx.getProviderOrder("geocoding").filter((id) => !served.has(id));
+  if (missing.length > 0) {
+    let warned = warnedEntries.get(ctx);
+    if (!warned) {
+      warned = new Set();
+      warnedEntries.set(ctx, warned);
     }
-  }
-
-  return map;
-}
-
-function isProviderName(value: string): value is ProviderName {
-  return value in NAME_TO_INTEGRATION;
-}
-
-function parseProviderList(configured: unknown): ProviderName[] {
-  const raw = typeof configured === "string" && configured.trim() ? configured : "maptiler";
-  const names = raw
-    .split(",")
-    .map((s) => s.trim().toLowerCase())
-    .filter(Boolean);
-  const valid: ProviderName[] = [];
-  for (const name of names) {
-    if (!isProviderName(name)) {
-      throw new Error(
-        `Unknown GEOCODING_PROVIDER: "${name}". Valid options: ${Object.keys(NAME_TO_INTEGRATION).join(", ")}`,
+    for (const id of missing) {
+      if (warned.has(id)) continue;
+      warned.add(id);
+      ctx.log.warn(
+        `geocoding provider order names "${id}", which is not a loaded geocoder; skipping it`,
       );
     }
-    valid.push(name);
   }
-  if (valid.length === 0) {
-    throw new Error("GEOCODING_PROVIDER must contain at least one provider");
-  }
-  return valid;
+  if (chain.length === 0) throw new Error("No geocoding provider is selected and loaded");
+  return chain;
 }
 
 /**
@@ -93,60 +75,19 @@ function tagRecord<T extends ContributingRecord & { provider?: string; sourceIds
 }
 
 /**
- * Returns a GeocodingProvider that tries each configured provider in order.
+ * Returns a GeocodingProvider that tries the operator's selected geocoders in
+ * order (the geocoding integration's `providerOrder`, by integration id). The
+ * first one with results answers; an error moves on to the next, and the last
+ * one's error is thrown.
  *
- * GEOCODING_PROVIDER accepts a comma-separated list, e.g. "photon,maptiler".
- * The first provider is tried; on failure the next one is used, and so on.
- * A single value (e.g. "maptiler") works as before.
- *
- * Providers are resolved from the integration framework at call time. Each
- * result carries a `provider` tag (the serving integration ID) via tagProvider.
+ * The selection is resolved at call time, so a call fails with "No geocoding
+ * provider is selected and loaded" when none of it is loaded. Each result
+ * carries a `provider` tag (the serving integration ID) via tagProvider.
  */
 export function getGeocodingProvider(ctx: IntegrationContext): GeocodingProvider {
-  const names = parseProviderList(ctx.config.provider);
-  const providersByIntegration = collectProviders(ctx);
-
-  const chain: { integrationId: string; provider: GeocodingProvider }[] = [];
-  for (const name of names) {
-    const integrationId = NAME_TO_INTEGRATION[name];
-    const provider = providersByIntegration.get(integrationId);
-    if (!provider) {
-      throw new Error(
-        `Geocoding provider "${name}" (integration "${integrationId}") is not loaded. ` +
-          `Check that the integration is enabled and its manifest is valid.`,
-      );
-    }
-    chain.push({ integrationId, provider });
-  }
-
-  const [single] = chain;
-  if (chain.length === 1 && single) {
-    return {
-      ...single.provider,
-      async geocode(query, lang, proximity) {
-        return tagProvider(
-          captureIntegrationContributorCatalogue(ctx, "geocoding"),
-          await single.provider.geocode(query, lang, proximity),
-          single.integrationId,
-        );
-      },
-      async autocomplete(query, lang, bias) {
-        return tagProvider(
-          captureIntegrationContributorCatalogue(ctx, "geocoding"),
-          await single.provider.autocomplete(query, lang, bias),
-          single.integrationId,
-        );
-      },
-      async reverseGeocode(lat, lng, lang) {
-        const catalogue = captureIntegrationContributorCatalogue(ctx, "geocoding");
-        const result = await single.provider.reverseGeocode(lat, lng, lang);
-        return result ? tagRecord(catalogue, result, single.integrationId) : null;
-      },
-    };
-  }
-
   return {
     async geocode(query, lang, proximity) {
+      const chain = selectedChain(ctx);
       for (const [i, { provider, integrationId }] of chain.entries()) {
         try {
           const catalogue = captureIntegrationContributorCatalogue(ctx, "geocoding");
@@ -159,6 +100,7 @@ export function getGeocodingProvider(ctx: IntegrationContext): GeocodingProvider
       return [];
     },
     async autocomplete(query, lang, bias) {
+      const chain = selectedChain(ctx);
       for (const [i, { provider, integrationId }] of chain.entries()) {
         try {
           const catalogue = captureIntegrationContributorCatalogue(ctx, "geocoding");
@@ -171,6 +113,7 @@ export function getGeocodingProvider(ctx: IntegrationContext): GeocodingProvider
       return [];
     },
     async reverseGeocode(lat, lng, lang) {
+      const chain = selectedChain(ctx);
       for (const [i, { provider, integrationId }] of chain.entries()) {
         try {
           const catalogue = captureIntegrationContributorCatalogue(ctx, "geocoding");

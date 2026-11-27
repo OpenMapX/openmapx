@@ -29,7 +29,7 @@ function harness(label: string, shared = new Map<string, unknown>()) {
   };
   const keys: string[] = [];
   const ctx = createMockIntegrationContext({
-    config: { provider: "maptiler" },
+    providerOrder: { geocoding: ["geocoding-maptiler"] },
     cache: {
       get: async <T>(key: string) => (shared.get(key) as T | undefined) ?? null,
       set: async (key, value) => {
@@ -340,7 +340,7 @@ describe("country cache lifecycle", () => {
       reverseGeocode: async () => null,
     };
     const ctx = createMockIntegrationContext({
-      config: { provider: "maptiler" },
+      providerOrder: { geocoding: ["geocoding-maptiler"] },
       cache: {
         get: async () => null,
         set: async () => undefined,
