@@ -210,6 +210,24 @@ describe("integration scheduler", () => {
     await vi.advanceTimersByTimeAsync(60_000);
     expect(handler).not.toHaveBeenCalled();
     expect(runs.rows("t")).toHaveLength(1);
+    expect(log.warn).toHaveBeenCalledWith(
+      "Scheduled task demo:t skipped this run: a run this process did not start is recorded as running",
+      { integrationId: "demo", task: "t" },
+    );
+    expect(log.debug).not.toHaveBeenCalled();
+  });
+
+  it("logs a value that cannot be read as an error by its description, not as itself", async () => {
+    vi.useFakeTimers();
+    stage("rejects", { everyMs: 60_000, deadlineMs: 5_000 }, () =>
+      Promise.reject(Object.create(null)),
+    );
+    scheduler.activate(["demo"]);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(log.warn).toHaveBeenCalledWith(
+      "Scheduled task demo:rejects failed",
+      expect.objectContaining({ err: "a value that cannot be shown" }),
+    );
   });
 
   it("aborts the run's signal when the integration is retired", async () => {

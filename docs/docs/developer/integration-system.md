@@ -810,23 +810,29 @@ database role:
   `pg_dump` data files use, is not available either; load data with `INSERT`.
   A file may not change the role, create extensions or create schemas other
   than its own, and it must not change `lock_timeout` or
-  `transaction_timeout`.
-- After each file, the foreign keys of the whole schema are checked, so that
-  deleting a row outside the schema, such as an account, cannot fail because
-  of them:
+  `transaction_timeout`. Create objects only in the integration's schema:
+  a table, function or other object a file creates in another schema, such
+  as `public`, escapes the foreign-key check below and is not removed with
+  the integration's data.
+- Deferred constraints are checked at the end of each file, so each file must
+  leave its rows consistent; a file that relies on deferring a check within
+  itself sets `SET CONSTRAINTS ... DEFERRED` at its start.
+- After each file, the foreign keys of the whole schema are checked:
   - A key to a table outside the schema, such as `public."user"(id)`, must be
-    `ON DELETE CASCADE`, or `ON DELETE SET NULL` where every column it sets to
-    null is nullable (with a column list, `SET NULL (col)`, only the listed
-    columns count). `NO ACTION`, `RESTRICT` and `SET DEFAULT` are refused.
+    `ON DELETE CASCADE`.
   - A table of the schema that such a cascade deletes rows from, directly or
     through further cascades, may only be referenced by keys that are
-    `ON DELETE CASCADE` or `SET NULL` on nullable columns. A child table of a
-    cascading table therefore needs `ON DELETE CASCADE` as well.
+    `ON DELETE CASCADE` as well.
 
-  A refused key fails the run, with a message that names the file, the key,
-  its table and what to change. The check covers foreign keys only: a trigger
-  or check constraint of the integration that fails on such a deletion still
-  makes it fail.
+  `SET NULL`, `SET DEFAULT`, `NO ACTION` and `RESTRICT` are refused for these
+  keys, with a message that names the file, the key, its table and the
+  cascade that reaches it. Use `ON DELETE CASCADE`, or store the id without a
+  foreign key and erase the rows through the subject-data handler. Keys
+  between tables no such cascade reaches are not restricted. This guarantees
+  that no foreign key of the schema makes deleting a row outside it, such as
+  an account, fail. It judges foreign keys only: a trigger, rule or check
+  constraint of the integration that fails on such a deletion still makes it
+  fail, and objects a file creates outside its schema are not judged at all.
 
 - A migration waits at most 120 seconds for each lock, including the lock
   that keeps two runs of the same integration apart, and all files of a start
@@ -836,7 +842,8 @@ database role:
   that turns `transaction_timeout` off is, if the API dies, no longer
   bounded by the server, and its statement runs on until it ends. A stop
   request, during start-up or while a reload is migrating, cancels running
-  migrations.
+  migrations, and the migrations of the integrations that would follow do not
+  start.
 - When a file fails or a limit is reached, everything is rolled back. An
   installed integration is then left out with phase `migrate`, and a built-in
   fails as well; fix the file and install the integration again.

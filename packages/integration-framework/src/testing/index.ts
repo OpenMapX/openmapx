@@ -406,6 +406,11 @@ function withHostTransactionRules(db: DatabaseClient): DatabaseClient {
  * callback with a transaction whose statements go to the same `execute`, so
  * a test that stubs statements needs no separate transaction stub. Pass it
  * as `db` to `createMockIntegrationContext`.
+ *
+ * On its own it does not apply the host's transaction rules: its
+ * `transaction` neither queues concurrent calls nor refuses a nested one.
+ * The mock context wraps it in those rules; a test that uses the client
+ * directly gets neither.
  */
 export function fakeDatabaseClient(
   execute: (...args: Parameters<DatabaseClient["execute"]>) => Promise<unknown>,

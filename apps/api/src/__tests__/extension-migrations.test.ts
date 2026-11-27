@@ -87,6 +87,19 @@ describe("applyExtensionMigrations", () => {
     expect(database.openMigrationSession).not.toHaveBeenCalled();
   });
 
+  it("starts no migration once the API is stopping, so a reload cannot go on to the next integration", async () => {
+    // A fresh module, so the stop does not reach the other tests.
+    vi.resetModules();
+    const fresh = await import("../extension-migrations");
+
+    await fresh.cancelRunningExtensionMigrations();
+
+    await expect(
+      fresh.applyExtensionMigrations({ integrationId: "demo", directory: dir }),
+    ).rejects.toThrow("Migrations of demo were cancelled because the API is stopping");
+    expect(database.openMigrationSession).not.toHaveBeenCalled();
+  });
+
   it("refuses an id no schema can be derived from before opening a session", async () => {
     await expect(
       applyExtensionMigrations({ integrationId: "Not An Id", directory: dir }),

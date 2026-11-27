@@ -1201,6 +1201,53 @@ describe("initIntegrations — loader", () => {
       expect((await app.inject("/api/integrations/demo/owned")).statusCode).toBe(200);
     });
 
+    const HOSTILE_PROXY =
+      "new Proxy(Object.freeze({}), { get() { throw new Error('trap'); }, has() { throw new Error('trap'); }, getPrototypeOf() { throw new Error('trap'); }, getOwnPropertyDescriptor() { throw new Error('trap'); }, ownKeys() { throw new Error('trap'); } })";
+
+    it("reports a built-in whose setup throws a proxy with an error that describes it", async () => {
+      writeBuiltIn(
+        "listener",
+        [
+          "// reports a built-in whose setup throws a proxy with an error that describes it",
+          "export function setup(ctx) {",
+          '  ctx.on("integration.error", (event) => {',
+          "    globalThis.__omxInstalledErrors = [...(globalThis.__omxInstalledErrors ?? []),",
+          "      [event.integrationId, event.error instanceof Error, event.error.message]];",
+          "  });",
+          "}",
+        ].join("\n"),
+      );
+      writeBuiltIn("thrower", `export function setup() { throw ${HOSTILE_PROXY}; }\n`, {
+        dependencies: ["listener"],
+      });
+
+      await initIntegrations(makeApp(), [builtIn()]);
+
+      expect(getIntegration("thrower")).toMatchObject({
+        loadState: "failed",
+        loadError: { phase: "setup", message: "a value that cannot be shown" },
+      });
+      expect(g.__omxInstalledErrors).toEqual([["thrower", true, "a value that cannot be shown"]]);
+    });
+
+    it("answers the reload endpoint with a description when a reload throws a proxy", async () => {
+      writeBuiltIn(
+        "fragile",
+        `export function setup() { if (globalThis.__omxInstalledFragile) throw ${HOSTILE_PROXY}; }\n`,
+      );
+      const app = makeApp();
+      await initIntegrations(app, [builtIn()]);
+      g.__omxInstalledFragile = true;
+
+      const response = await app.inject({ method: "POST", url: "/api/integrations/reload" });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toEqual({
+        error: "Reload failed",
+        message: "a value that cannot be shown",
+      });
+    });
+
     it("ignores late context calls of a retired generation with one warning per method", async () => {
       writeInstalled(
         "late",

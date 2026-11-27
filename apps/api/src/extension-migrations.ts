@@ -51,6 +51,11 @@ const ACTIVE_SQL_TRANSACTION = "25001";
  * statement in it that would end or start one, so a file can neither commit
  * part of the run nor carry on outside it.
  *
+ * `set constraints all immediate` fires the checks of deferred constraints
+ * the file left pending inside the same statement, so a violation is
+ * reported with the file's name rather than at the run's `COMMIT`. The mode
+ * stays immediate for the rest of the run.
+ *
  * `reset all` in the same statement returns every setting the file changed
  * to the session's own (its search path and limits are startup parameters)
  * before the runner's next statement starts, so a file's statement timeout
@@ -59,7 +64,7 @@ const ACTIVE_SQL_TRANSACTION = "25001";
  * that statement itself.
  */
 const CREATE_RUN_MIGRATION =
-  "create function pg_temp.openmapx_run_migration(migration text) returns void language plpgsql as $run$ begin execute migration; reset all; end $run$";
+  "create function pg_temp.openmapx_run_migration(migration text) returns void language plpgsql as $run$ begin execute migration; set constraints all immediate; reset all; end $run$";
 const RUN_MIGRATION = "select pg_temp.openmapx_run_migration($1)";
 
 /**
@@ -69,27 +74,25 @@ const RUN_MIGRATION = "select pg_temp.openmapx_run_migration($1)";
  * tables, and the set grows with the platform, so every table outside the
  * schema counts. The effect is judged over the whole schema:
  *
- * - a key to a table outside the schema must delete (`CASCADE`) or clear
- *   (`SET NULL`, only on nullable columns) the referencing rows;
+ * - a key to a table outside the schema must be `ON DELETE CASCADE`;
  * - the tables such a cascade deletes rows from, directly or through
  *   further cascades in the schema, are `reachable`, and every key to one of
- *   them must delete or clear its rows in the same way.
+ *   them must be `ON DELETE CASCADE` as well.
  *
- * `SET NULL` with a column list clears only the listed columns. `NO ACTION`
- * is refused as well, although it lets a cascade through that deletes the
- * referencing rows in the same statement: whether it does depends on data.
- * Keys of a partition copy their parent's key and are judged with it.
+ * Every other action is refused. `SET NULL` and `SET DEFAULT` write into the
+ * referencing row, and whether that write succeeds depends on what else
+ * constrains the column: a key that references it, a `MATCH FULL` key, a
+ * domain, a generated column, a check. `NO ACTION` lets a cascade through
+ * only when the same statement deletes the referencing rows, which depends
+ * on data. Keys of a partition copy their parent's key and are judged with
+ * it. Triggers and rules are not judged.
  */
 const BLOCKING_FOREIGN_KEY = `with recursive fk as (
     select c.oid, c.conname::text as name, c.conrelid, c.confrelid, c.conparentid,
       c.confdeltype::text as action,
       target.relnamespace <> c.connamespace as leaves,
       format('%I.%I', source_ns.nspname, source.relname) as source,
-      format('%I.%I', target_ns.nspname, target.relname) as target,
-      (select string_agg(quote_ident(a.attname), ', ' order by a.attnum)
-         from pg_catalog.pg_attribute a
-        where a.attrelid = c.conrelid and a.attnotnull
-          and a.attnum = any(coalesce(nullif(c.confdelsetcols, '{}'), c.conkey))) as not_null_columns
+      format('%I.%I', target_ns.nspname, target.relname) as target
     from pg_catalog.pg_constraint c
     join pg_catalog.pg_class source on source.oid = c.conrelid
     join pg_catalog.pg_namespace source_ns on source_ns.oid = source.relnamespace
@@ -106,15 +109,14 @@ const BLOCKING_FOREIGN_KEY = `with recursive fk as (
       where not fk.leaves and fk.action = 'c' and fk.conrelid <> all(r.visited)
   ),
   refused as (
-    select distinct on (fk.oid) fk.name, fk.source, fk.target, fk.action, fk.not_null_columns,
-        r.origin, r.path
+    select distinct on (fk.oid) fk.name, fk.source, fk.target, fk.action, r.origin, r.path
       from fk left join reachable r on not fk.leaves and r.relid = fk.confrelid
       where (fk.leaves or r.relid is not null)
         and fk.conparentid = 0
-        and (fk.action not in ('c', 'n') or (fk.action = 'n' and fk.not_null_columns is not null))
+        and fk.action <> 'c'
       order by fk.oid, cardinality(r.path)
   )
-  select name, source, target, action, not_null_columns, origin, path
+  select name, source, target, action, origin, path
     from refused order by name limit 1`;
 
 interface BlockingForeignKey {
@@ -123,8 +125,6 @@ interface BlockingForeignKey {
   readonly target: string;
   /** `confdeltype`: `a` NO ACTION, `r` RESTRICT, `d` SET DEFAULT, `n` SET NULL. */
   readonly action: string;
-  /** The NOT NULL columns a `SET NULL` key would clear, comma-separated. */
-  readonly not_null_columns: string | null;
   /** For a key inside the schema: the outside table the cascade starts from. */
   readonly origin: string | null;
   /** For a key inside the schema: the keys the cascade follows, in order. */
@@ -135,22 +135,15 @@ const DELETE_ACTIONS: Record<string, string> = {
   a: "NO ACTION",
   r: "RESTRICT",
   d: "SET DEFAULT",
+  n: "SET NULL",
 };
 
 function foreignKeyRefusal(prefix: string, key: BlockingForeignKey): string {
-  const columns = key.not_null_columns;
-  const clearsNotNull = key.action === "n" && columns !== null;
-  const problem = clearsNotNull
-    ? `that sets the NOT NULL column${columns.includes(",") ? "s" : ""} ${columns} to null on delete`
-    : `with ON DELETE ${DELETE_ACTIONS[key.action] ?? key.action}`;
   const cascade =
     key.origin === null || key.path === null
       ? ""
       : `; rows of ${key.target} are deleted by a cascade from ${key.origin} through ${key.path.join(", ")}`;
-  const change = clearsNotNull
-    ? `make ${columns} nullable or declare ON DELETE CASCADE`
-    : "declare ON DELETE CASCADE, or ON DELETE SET NULL on nullable columns";
-  return `${prefix} adds foreign key ${key.name} on ${key.source} to ${key.target} ${problem}${cascade}; ${change} so the platform can still delete the rows it references, for example an account`;
+  return `${prefix} adds foreign key ${key.name} on ${key.source} to ${key.target} with ON DELETE ${DELETE_ACTIONS[key.action] ?? key.action}${cascade}; declare ON DELETE CASCADE, or store the id without a foreign key and erase the rows through the subject-data handler, so the platform can still delete the rows it references, for example an account`;
 }
 
 /** The tables that hold an integration's rows outside its own schema. */
@@ -163,6 +156,14 @@ const INTEGRATION_BOOKKEEPING_TABLES = [
 
 /** Cancels each migration run in progress and resolves once its session is ended. */
 const runningMigrations = new Set<() => Promise<void>>();
+
+/**
+ * Set once the process is stopping. Start-up and a reload migrate one
+ * integration after another, so cancelling only the run in progress would
+ * let the next integration's run open a session the process then leaves
+ * behind.
+ */
+let stopRequested = false;
 
 function migrationLockName(integrationId: string): string {
   return `openmapx-ext-migrations:${integrationId}`;
@@ -216,9 +217,11 @@ type Run = <T>(client: Pick<Sql, "unsafe">, query: string, params?: unknown[]) =
  * Cancels the extension migrations in progress: each running statement is
  * cancelled, the transaction rolls back and the session ends, which releases
  * the migration lock. Resolves once every session is ended. For a process
- * that stops before start-up has finished.
+ * that is stopping: from now on every new run is refused before it opens a
+ * session, so start-up or a reload cannot go on to the next integration.
  */
 export async function cancelRunningExtensionMigrations(): Promise<void> {
+  stopRequested = true;
   await Promise.all([...runningMigrations].map((cancel) => cancel()));
 }
 
@@ -241,6 +244,8 @@ export async function applyExtensionMigrations(args: {
 }): Promise<{ applied: string[]; schemaAhead: boolean }> {
   const { integrationId, directory } = args;
   const schema = extensionSchemaName(integrationId);
+  if (stopRequested)
+    throw new Error(`Migrations of ${integrationId} were cancelled because the API is stopping`);
   const lockTimeoutMs = args.limits?.lockTimeoutMs ?? MIGRATION_LOCK_TIMEOUT_MS;
   const deadlineMs = args.limits?.deadlineMs ?? MIGRATION_DEADLINE_MS;
   const files: ShippedMigration[] = listMigrationFiles(

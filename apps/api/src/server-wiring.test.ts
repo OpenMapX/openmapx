@@ -133,6 +133,25 @@ describe("uniformErrorHandler", () => {
     await app.close();
   });
 
+  it("answers a 4xx whose message cannot be read with a fixed text", async () => {
+    const app = Fastify({ logger: false });
+    app.setErrorHandler(uniformErrorHandler);
+    app.get("/boom", async () => {
+      throw Object.defineProperty({ statusCode: 400 }, "message", {
+        get() {
+          throw new Error("getter");
+        },
+      });
+    });
+    await app.ready();
+
+    const res = await app.inject({ method: "GET", url: "/boom" });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.json()).toEqual({ error: "Request failed" });
+    await app.close();
+  });
+
   it("masks 5xx internals and does not leak the message", async () => {
     const app = await appThatThrows(new Error("db password xyz leaked"));
     const res = await app.inject({ method: "GET", url: "/boom" });

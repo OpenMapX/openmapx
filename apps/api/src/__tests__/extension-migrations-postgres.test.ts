@@ -389,7 +389,8 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       ]);
     });
 
-    const DECLARE = "declare ON DELETE CASCADE, or ON DELETE SET NULL on nullable columns";
+    const DECLARE =
+      "declare ON DELETE CASCADE, or store the id without a foreign key and erase the rows through the subject-data handler,";
     const SO_DELETION_WORKS =
       "so the platform can still delete the rows it references, for example an account";
 
@@ -445,18 +446,87 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
 
     it.each([
       [
-        "on the whole key",
+        "on a NOT NULL column",
         'create table notes (user_id text not null references public."user"(id) on delete set null);',
       ],
       [
-        "with a column list",
+        "with a column list on a NOT NULL column",
         'create table notes (user_id text not null, foreign key (user_id) references public."user"(id) on delete set null (user_id));',
       ],
-    ])("refuses ON DELETE SET NULL %s on a NOT NULL column", async (_label, table) => {
+      [
+        "on a nullable column",
+        'create table notes (user_id text references public."user"(id) on delete set null);',
+      ],
+      [
+        "with a column list whose other columns are NOT NULL",
+        'create table notes (user_id text, org text not null, foreign key (user_id) references public."user"(id) on delete set null (user_id));',
+      ],
+    ])("refuses ON DELETE SET NULL %s out of the schema", async (_label, table) => {
       await expect(
         migrations.applyExtensionMigrations(shipping({ "0001_init.sql": table })),
       ).rejects.toThrow(
-        `Migration 0001_init.sql of demo adds foreign key notes_user_id_fkey on ext_demo.notes to public."user" that sets the NOT NULL column user_id to null on delete; make user_id nullable or declare ON DELETE CASCADE ${SO_DELETION_WORKS}`,
+        `Migration 0001_init.sql of demo adds foreign key notes_user_id_fkey on ext_demo.notes to public."user" with ON DELETE SET NULL; ${DECLARE} ${SO_DELETION_WORKS}`,
+      );
+      expect(await leftBehind()).toEqual({ schema: false, rows: 0, stray: null });
+    });
+
+    it.each([
+      [
+        "a unique column another key references",
+        [
+          'create table profiles (user_id text unique references public."user"(id) on delete set null);',
+          "create table posts (author text references profiles(user_id));",
+        ],
+        "profiles_user_id_fkey on ext_demo.profiles",
+      ],
+      [
+        "a column of a MATCH FULL key",
+        [
+          "create table memberships (user_id text, org int, primary key (user_id, org));",
+          'create table t (user_id text references public."user"(id) on delete set null, org int, foreign key (user_id, org) references memberships (user_id, org) match full);',
+        ],
+        "t_user_id_fkey on ext_demo.t",
+      ],
+      [
+        "a column whose domain forbids null",
+        [
+          "create domain uid as text not null;",
+          'create table t (user_id uid references public."user"(id) on delete set null);',
+        ],
+        "t_user_id_fkey on ext_demo.t",
+      ],
+      [
+        "a column a NOT NULL generated column is computed from",
+        [
+          'create table t (user_id text references public."user"(id) on delete set null, k text not null generated always as (user_id) stored);',
+        ],
+        "t_user_id_fkey on ext_demo.t",
+      ],
+    ])(
+      "refuses ON DELETE SET NULL on %s, which would make deleting the account fail",
+      async (_label, statements, key) => {
+        await expect(
+          migrations.applyExtensionMigrations(shipping({ "0001_init.sql": statements.join("\n") })),
+        ).rejects.toThrow(
+          `Migration 0001_init.sql of demo adds foreign key ${key} to public."user" with ON DELETE SET NULL; ${DECLARE}`,
+        );
+        expect(await leftBehind()).toEqual({ schema: false, rows: 0, stray: null });
+      },
+    );
+
+    it("names the file whose deferred key a row of it violates", async () => {
+      await expect(
+        migrations.applyExtensionMigrations(
+          shipping({
+            "0001_init.sql": INIT,
+            "0002_deferred.sql": [
+              "create table b (item_id int references items(id) on delete cascade deferrable initially deferred);",
+              "insert into b values (5);",
+            ].join("\n"),
+          }),
+        ),
+      ).rejects.toThrow(
+        'Migration 0002_deferred.sql of demo failed: insert or update on table "b" violates foreign key constraint "b_item_id_fkey"',
       );
       expect(await leftBehind()).toEqual({ schema: false, rows: 0, stray: null });
     });
@@ -484,12 +554,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
             "0001_init.sql": [
               'create table notes (id int primary key, user_id text not null references public."user"(id) on delete cascade);',
               "create table tags (id int primary key, note_id int not null references notes(id) on delete cascade);",
-              "create table votes (tag_id int not null references tags(id) on delete set null);",
+              "create table votes (tag_id int references tags(id) on delete set null);",
             ].join("\n"),
           }),
         ),
       ).rejects.toThrow(
-        'Migration 0001_init.sql of demo adds foreign key votes_tag_id_fkey on ext_demo.votes to ext_demo.tags that sets the NOT NULL column tag_id to null on delete; rows of ext_demo.tags are deleted by a cascade from public."user" through notes_user_id_fkey, tags_note_id_fkey; make tag_id nullable or declare ON DELETE CASCADE',
+        `Migration 0001_init.sql of demo adds foreign key votes_tag_id_fkey on ext_demo.votes to ext_demo.tags with ON DELETE SET NULL; rows of ext_demo.tags are deleted by a cascade from public."user" through notes_user_id_fkey, tags_note_id_fkey; ${DECLARE}`,
       );
       expect(await leftBehind()).toEqual({ schema: false, rows: 0, stray: null });
     });
@@ -526,15 +596,18 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           shipping({
             "0001_init.sql": [
               'create table notes (id int primary key, parent_id int references notes(id) on delete cascade, user_id text not null references public."user"(id) on delete cascade);',
-              "create table tags (id int primary key, note_id int not null references notes(id) on delete cascade);",
-              "create table votes (tag_id int references tags(id) on delete set null, label text not null);",
-              'create table edits (id int primary key, editor text references public."user"(id) on delete set null);',
-              "create table edit_notes (edit_id int not null references edits(id), body text);",
+              "create table tags (id int primary key, note_id int not null references notes(id) on delete cascade deferrable initially deferred);",
+              "create table votes (tag_id int not null references tags(id) on delete cascade, label text not null);",
+              "create table labels (id int primary key, name text not null);",
+              "create table label_uses (label_id int not null references labels(id), note_id int references notes(id) on delete cascade);",
+              "create table label_aliases (label_id int references labels(id) on delete set null, alias text not null);",
             ].join("\n"),
             "0002_more.sql": [
               'create table pins (owner text not null, note_id int, foreign key (owner) references public."user"(id) on delete cascade);',
-              "alter table pins add constraint pins_note_fkey foreign key (note_id) references notes(id) on delete set null (note_id);",
-              'create table reviews (reviewer text, label text not null, foreign key (reviewer) references public."user"(id) on delete set null (reviewer));',
+              "alter table pins add constraint pins_note_fkey foreign key (note_id) references notes(id) on delete cascade;",
+              "create table visits (session_id text not null references public.session(id) on delete cascade, at timestamptz);",
+              'create table authors (user_id text unique not null references public."user"(id) on delete cascade, bio text);',
+              "create table posts (author text not null references authors(user_id) on delete cascade, body text);",
             ].join("\n"),
           }),
         ),
@@ -545,33 +618,39 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         insert into ext_demo.notes (id, parent_id, user_id) values (1, null, 'note-owner'), (2, 1, 'note-owner');
         insert into ext_demo.tags (id, note_id) values (10, 2);
         insert into ext_demo.votes (tag_id, label) values (10, 'up');
-        insert into ext_demo.edits (id, editor) values (1, 'note-owner');
-        insert into ext_demo.edit_notes (edit_id, body) values (1, 'kept');
-        insert into ext_demo.reviews (reviewer, label) values ('note-owner', 'fine');`);
+        insert into ext_demo.labels (id, name) values (1, 'kept');
+        insert into ext_demo.label_uses (label_id, note_id) values (1, 1);
+        insert into ext_demo.label_aliases (label_id, alias) values (1, 'alias');
+        insert into ext_demo.authors (user_id, bio) values ('note-owner', 'bio');
+        insert into ext_demo.posts (author, body) values ('note-owner', 'post');`);
       await api`insert into "user" (id, name, email, role, created_at, updated_at)
         values ('pin-owner', 'Pins', 'pin-owner@example.test', 'user', now(), now())`;
-      await raw`insert into ext_demo.pins (owner, note_id) values ('pin-owner', 1)`;
+      await raw`insert into ext_demo.pins (owner, note_id) values ('pin-owner', null)`;
 
       await deleteAccount("note-owner");
 
       expect(
         await raw`select (select count(*)::int from ext_demo.notes) as notes,
           (select count(*)::int from ext_demo.tags) as tags,
-          (select json_agg(json_build_object('tag', tag_id, 'label', label)) from ext_demo.votes) as votes,
-          (select editor from ext_demo.edits where id = 1) as editor,
-          (select count(*)::int from ext_demo.edit_notes) as edit_notes,
-          (select json_agg(json_build_object('owner', owner, 'note', note_id)) from ext_demo.pins) as pins,
-          (select json_agg(json_build_object('reviewer', reviewer, 'label', label)) from ext_demo.reviews) as reviews,
+          (select count(*)::int from ext_demo.votes) as votes,
+          (select count(*)::int from ext_demo.labels) as labels,
+          (select count(*)::int from ext_demo.label_uses) as label_uses,
+          (select count(*)::int from ext_demo.label_aliases) as label_aliases,
+          (select count(*)::int from ext_demo.authors) as authors,
+          (select count(*)::int from ext_demo.posts) as posts,
+          (select json_agg(owner) from ext_demo.pins) as pins,
           (select count(*)::int from "user" where id = 'note-owner') as users`,
       ).toEqual([
         {
           notes: 0,
           tags: 0,
-          votes: [{ tag: null, label: "up" }],
-          editor: null,
-          edit_notes: 1,
-          pins: [{ owner: "pin-owner", note: null }],
-          reviews: [{ reviewer: null, label: "fine" }],
+          votes: 0,
+          labels: 1,
+          label_uses: 0,
+          label_aliases: 1,
+          authors: 0,
+          posts: 0,
+          pins: ["pin-owner"],
           users: 0,
         },
       ]);
@@ -665,7 +744,11 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     }, 30_000);
 
     it("cancels running migrations on request, rolls them back and releases their lock", async () => {
-      const running = migrations.applyExtensionMigrations(
+      // The cancel also refuses every later run, so it gets a module of its
+      // own; the other tests keep theirs.
+      vi.resetModules();
+      const stopping = await import("../extension-migrations");
+      const running = stopping.applyExtensionMigrations(
         shipping({ "0001_init.sql": `${INIT} select pg_sleep(60);` }),
       );
       running.catch(() => {});
@@ -679,9 +762,12 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       );
       const started = Date.now();
 
-      await migrations.cancelRunningExtensionMigrations();
+      await stopping.cancelRunningExtensionMigrations();
 
       await expect(running).rejects.toThrow("Migrations of demo were cancelled");
+      await expect(stopping.applyExtensionMigrations(args())).rejects.toThrow(
+        "Migrations of demo were cancelled because the API is stopping",
+      );
       expect(Date.now() - started).toBeLessThan(10_000);
       expect(await leftBehind()).toEqual({ schema: false, rows: 0, stray: null });
       expect(

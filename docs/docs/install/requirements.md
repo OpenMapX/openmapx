@@ -17,7 +17,7 @@ scaled to several replicas. Parts of the API rely on this. The administrative
 job runner and the scheduled tasks of integrations each start a task at most
 once at a time, and at start-up they mark the runs the previous process left
 unfinished as failed. A second API process on the same database would break
-both. To serve more traffic, put a CDN in front of the API.
+both. A CDN in front of the API can serve cacheable responses such as tiles.
 
 ## Software prerequisites
 
