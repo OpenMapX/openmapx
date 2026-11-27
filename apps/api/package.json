@@ -32,6 +32,7 @@
     "@motis-project/motis-client": "^2.11.4",
     "@openmapx/core": "workspace:^",
     "@openmapx/db-schema": "workspace:^",
+    "@openmapx/extension-contracts": "workspace:^",
     "@openmapx/i18n": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/integration-sdk": "workspace:^",

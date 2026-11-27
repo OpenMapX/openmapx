@@ -305,6 +305,9 @@ importers:
       '@openmapx/db-schema':
         specifier: workspace:^
         version: link:../../packages/db-schema
+      '@openmapx/extension-contracts':
+        specifier: workspace:^
+        version: link:../../packages/extension-contracts
       '@openmapx/i18n':
         specifier: workspace:^
         version: link:../../packages/i18n

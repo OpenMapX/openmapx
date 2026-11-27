@@ -22,6 +22,8 @@ import { getPlaceResolver, registerPlaceResolver } from "@openmapx/place-ids";
 import type { FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  getAttentionMocks,
+  getExtensionMigrationMocks,
   getIntegrationHealthMocks,
   createIntegrationHostTestApp as makeApp,
 } from "./__tests__/support/integration-host-environment.js";
@@ -969,6 +971,110 @@ describe("initIntegrations — loader", () => {
 
       await reloadIntegrations();
       await expectLeftOut(2);
+    });
+
+    it("leaves out an installed integration whose migration fails, before importing it", async () => {
+      const { applyExtensionMigrations } = getExtensionMigrationMocks();
+      applyExtensionMigrations.mockImplementationOnce(async () => {
+        throw new Error("Migration 0001_init.sql of demo changed after it was applied");
+      });
+      writeInstalled(
+        "demo",
+        [
+          "// leaves out an installed integration whose migration fails, before importing it",
+          "globalThis.__omxInstalledEvaluated = true;",
+          "export function setup() { globalThis.__omxInstalledSetup = true; }",
+        ].join("\n"),
+        { manifest: { database: { migrations: true } } },
+      );
+
+      await initIntegrations(makeApp(), [installed()]);
+
+      expect(applyExtensionMigrations).toHaveBeenCalledWith({
+        integrationId: "demo",
+        directory: join(installedRoot, "demo"),
+      });
+      expect(getIntegration("demo")).toMatchObject({
+        enabled: false,
+        loadState: "failed",
+        loadError: {
+          phase: "migrate",
+          message: "Migration 0001_init.sql of demo changed after it was applied",
+        },
+      });
+      expect(g.__omxInstalledEvaluated).toBeUndefined();
+      expect(g.__omxInstalledSetup).toBeUndefined();
+      expect(failedIntegrationLoads(["demo"])).toEqual([
+        {
+          id: "demo",
+          phase: "migrate",
+          message: "Migration 0001_init.sql of demo changed after it was applied",
+        },
+      ]);
+    });
+
+    it("migrates only integrations that declare migrations", async () => {
+      const { applyExtensionMigrations } = getExtensionMigrationMocks();
+      writeInstalled("plain", "// migrates only integrations that declare migrations\n");
+
+      await initIntegrations(makeApp(), [installed()]);
+
+      expect(getIntegration("plain")?.loadState).toBe("loaded");
+      expect(applyExtensionMigrations).not.toHaveBeenCalled();
+    });
+
+    it("loads an integration whose schema is ahead and raises an attention item", async () => {
+      const { applyExtensionMigrations } = getExtensionMigrationMocks();
+      const { raiseAttention, resolveAttention } = getAttentionMocks();
+      applyExtensionMigrations.mockImplementationOnce(async () => ({
+        applied: [],
+        schemaAhead: true,
+      }));
+      writeInstalled(
+        "demo",
+        [
+          "// loads an integration whose schema is ahead and raises an attention item",
+          "export function setup() { globalThis.__omxInstalledSetup = true; }",
+        ].join("\n"),
+        { manifest: { name: "Demo Ledger", database: { migrations: true } } },
+      );
+      const app = makeApp();
+
+      await initIntegrations(app, [installed()]);
+
+      expect(getIntegration("demo")?.loadState).toBe("loaded");
+      expect(g.__omxInstalledSetup).toBe(true);
+      expect(raiseAttention).toHaveBeenCalledWith({
+        key: "integration-schema-ahead:demo",
+        severity: "warning",
+        source: "extensions",
+        title: "Demo Ledger runs against a newer database schema",
+        detail:
+          "A later version of this extension migrated its tables, and the files were rolled back. Install a fixed version.",
+      });
+      expect(resolveAttention).not.toHaveBeenCalled();
+
+      await reloadIntegrations();
+
+      expect(resolveAttention).toHaveBeenCalledWith("integration-schema-ahead:demo");
+    });
+
+    it("loads an integration when the attention list cannot be written", async () => {
+      const { applyExtensionMigrations } = getExtensionMigrationMocks();
+      const { resolveAttention } = getAttentionMocks();
+      resolveAttention.mockImplementationOnce(async () => {
+        throw new Error("database unavailable");
+      });
+      writeInstalled(
+        "demo",
+        "// loads an integration when the attention list cannot be written\n",
+        { manifest: { database: { migrations: true } } },
+      );
+
+      await initIntegrations(makeApp(), [installed()]);
+
+      expect(applyExtensionMigrations).toHaveBeenCalledOnce();
+      expect(getIntegration("demo")?.loadState).toBe("loaded");
     });
 
     const lineSeparator = String.fromCodePoint(0x2028);

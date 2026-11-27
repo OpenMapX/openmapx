@@ -63,6 +63,8 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
        AND child_column.attnum = fk.conkey[1]
       WHERE fk.contype = 'f'
         AND parent.relname = 'user'
+        -- An integration's ext_ schema is its own; its migrations choose its keys.
+        AND child_ns.nspname IN ('public', 'data_manager')
       ORDER BY child.relname, child_column.attname
     `);
 

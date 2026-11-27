@@ -4,6 +4,11 @@ import { integrationsRoute } from "../../routes/integrations";
 
 vi.mock("../../redis.js", () => ({ redis: null }));
 
+const schemaPresentUnsafe = vi.hoisted(
+  () => () =>
+    vi.fn(async (query: string) => (query.includes("to_regnamespace") ? [{ present: true }] : [])),
+);
+
 vi.mock("../../db/index.js", () => ({
   db: {
     select: vi.fn().mockReturnValue({
@@ -15,15 +20,29 @@ vi.mock("../../db/index.js", () => ({
     }),
   },
   sql: { unsafe: vi.fn().mockResolvedValue([]) },
-  // The pools behind ctx.db: every statement returns no rows, every transaction commits.
+  // The pools behind ctx.db: an integration's schema exists, every other
+  // statement returns no rows, every transaction commits.
   integrationSql: {
     unsafe: vi.fn(async () => []),
-    begin: vi.fn(async (fn: (sql: unknown) => unknown) => fn({ unsafe: vi.fn(async () => []) })),
+    begin: vi.fn(async (fn: (sql: unknown) => unknown) => fn({ unsafe: schemaPresentUnsafe() })),
   },
   extensionSql: {
-    begin: vi.fn(async (fn: (sql: unknown) => unknown) => fn({ unsafe: vi.fn(async () => []) })),
+    begin: vi.fn(async (fn: (sql: unknown) => unknown) => fn({ unsafe: schemaPresentUnsafe() })),
   },
 }));
+
+const extensionMigrationMocks = vi.hoisted(() => ({
+  applyExtensionMigrations: vi.fn(async () => ({ applied: [] as string[], schemaAhead: false })),
+}));
+
+vi.mock("../../extension-migrations.js", () => extensionMigrationMocks);
+
+const attentionMocks = vi.hoisted(() => ({
+  raiseAttention: vi.fn(async () => "inserted"),
+  resolveAttention: vi.fn(async () => {}),
+}));
+
+vi.mock("../../services/attention.js", () => attentionMocks);
 
 vi.mock("../../db/schema.js", () => ({
   integrationConfig: { integrationId: "integrationId", config: "config" },
@@ -89,6 +108,16 @@ vi.mock("../../utils/require-auth.js", () => ({
 
 export function getIntegrationHealthMocks() {
   return integrationHealthMocks;
+}
+
+/** The migration runner the host calls before importing an integration that owns tables. */
+export function getExtensionMigrationMocks() {
+  return extensionMigrationMocks;
+}
+
+/** The attention list the host raises the schema-ahead item on. */
+export function getAttentionMocks() {
+  return attentionMocks;
 }
 
 export function createIntegrationHostTestApp(): FastifyInstance {

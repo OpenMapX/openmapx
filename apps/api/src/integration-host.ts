@@ -41,6 +41,7 @@ import {
 } from "@openmapx/place-ids";
 import type { FastifyInstance } from "fastify";
 import { extensionSql, integrationSql } from "./db";
+import { applyExtensionMigrations } from "./extension-migrations";
 import { assertBundleImports } from "./integration-bundle-imports";
 import { createCacheClient, createHttpClient, createLogger } from "./integration-clients";
 import { type IntegrationCodeCache, prepareIntegrationCodeCache } from "./integration-code-cache";
@@ -80,6 +81,7 @@ import {
   type AdministrativeConfigurationReadContext,
   assertAdministrativeConfigurationRead,
 } from "./services/administrative-configuration-context";
+import { raiseAttention, resolveAttention } from "./services/attention";
 import {
   AttributionIndex,
   defaultMotisLicenseFile,
@@ -504,7 +506,7 @@ function buildIntegrationDb(
   return access
     ? createIntegrationDb(
         { requests: integrationSql, transactions: extensionSql },
-        { ...access, revocation: { scope, log: hostLog } },
+        { ...access, integrationId: manifest.id, revocation: { scope, log: hostLog } },
       )
     : undefined;
 }
@@ -1105,6 +1107,49 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+const LOAD_FAILURE_STEP: Record<IntegrationLoadError["phase"], string> = {
+  import: "import",
+  migrate: "migrate its database schema",
+  setup: "set up",
+  deadline: "import and set up in time",
+};
+
+/**
+ * Applies the migrations of an integration whose manifest declares them,
+ * before its code is imported. Their time does not count against the load
+ * deadline, which a legitimate migration may outlast; the migration runner
+ * bounds itself. The schema-ahead attention item is raised or resolved after
+ * the migration transaction has committed, and a failure to do so does not
+ * fail the load.
+ */
+async function migrateIntegration(integration: LoadedIntegration): Promise<void> {
+  if (integration.manifest.database?.migrations !== true) return;
+  const { schemaAhead } = await applyExtensionMigrations({
+    integrationId: integration.id,
+    directory: integration.directory,
+  });
+  const key = `integration-schema-ahead:${integration.id}`;
+  try {
+    if (schemaAhead) {
+      await raiseAttention({
+        key,
+        severity: "warning",
+        source: "extensions",
+        title: `${integration.manifest.name || integration.id} runs against a newer database schema`,
+        detail:
+          "A later version of this extension migrated its tables, and the files were rolled back. Install a fixed version.",
+      });
+    } else {
+      await resolveAttention(key);
+    }
+  } catch (error) {
+    hostLog.warn(`Could not update the attention item ${key}`, {
+      err: error,
+      integrationId: integration.id,
+    });
+  }
+}
+
 /**
  * Imports an integration's backend and runs its `setup`. A built-in's failure
  * is rethrown for the caller to handle. An installed integration that fails is
@@ -1123,6 +1168,9 @@ async function loadIntegrationBackend(args: {
   if (integration.isBuiltIn) {
     try {
       const entryPoint = resolveBuiltInBackendEntryPoint(integration.directory);
+      phase = "migrate";
+      await migrateIntegration(integration);
+      phase = "import";
       if (entryPoint) {
         const specifier = backendEntryImportSpecifier(entryPoint);
         const mod = (await runInIntegrationScope(scope, () => import(specifier))) as {
@@ -1145,6 +1193,9 @@ async function loadIntegrationBackend(args: {
   const declaredDataSources = integration.manifest.dataSources;
   try {
     const specifier = await installedBackendImportSpecifier(integration);
+    phase = "migrate";
+    await migrateIntegration(integration);
+    phase = "import";
     if (specifier) {
       const deadline = startLoadDeadline(scope);
       try {
@@ -1178,7 +1229,7 @@ async function loadIntegrationBackend(args: {
     integration.loadError = { phase, message: errorMessage(error) };
     _fastify?.log.error(
       { err: error, integrationId: integration.id, phase },
-      `Leaving out installed integration ${integration.id}: its backend failed to ${phase === "import" ? "import" : phase === "deadline" ? "import and set up in time" : "set up"}`,
+      `Leaving out installed integration ${integration.id}: its backend failed to ${LOAD_FAILURE_STEP[phase]}`,
     );
     await runShutdownHandlers(integration, shutdownHandlers.splice(0), (shutdownError) => {
       _fastify?.log.warn(

@@ -1,11 +1,21 @@
 import { classifyProviderFailure, ProviderTimeoutError } from "@openmapx/integration-framework";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createIntegrationDb, integrationDbAccess } from "../integration-db";
+import {
+  createIntegrationDb,
+  integrationDbAccess,
+  stopIntegrationDatabase,
+} from "../integration-db";
 import type { IntegrationScope } from "../integration-scope";
 
 const SET_TIMEOUTS =
   "select set_config('statement_timeout', $1, true), set_config('idle_in_transaction_session_timeout', $1, true)";
-const SET_SEARCH_PATH = "select set_config('search_path', $1, true)";
+const SET_SEARCH_PATH =
+  "select set_config('search_path', $1, true), to_regnamespace($2) is not null as present";
+
+/** What the search path statement returns while the integration's schema exists. */
+async function schemaPresent(query: string): Promise<unknown> {
+  return query === SET_SEARCH_PATH ? [{ present: true }] : [];
+}
 
 /** A postgres.js-shaped client whose statement settles as `settle` decides. */
 function client(settle: () => Promise<unknown>) {
@@ -22,7 +32,7 @@ function client(settle: () => Promise<unknown>) {
  * for a statement's cancel request.
  */
 function fakePools(
-  settle: (query: string) => Promise<unknown> = async () => [],
+  settle: (query: string) => Promise<unknown> = schemaPresent,
   options: { commit?: () => Promise<void>; cancel?: () => Promise<unknown> } = {},
 ) {
   const statements: Array<{ pool: string; query: string; params?: unknown[] }> = [];
@@ -176,12 +186,62 @@ describe("integration ctx.db", () => {
 
     expect(statements).toEqual([
       { pool: "transactions", query: SET_TIMEOUTS, params: ["30000"] },
-      { pool: "transactions", query: SET_SEARCH_PATH, params: ['"ext_demo", public'] },
+      {
+        pool: "transactions",
+        query: SET_SEARCH_PATH,
+        params: ['"ext_demo", public', "ext_demo"],
+      },
       { pool: "transactions", query: "insert into t values ($1)", params: [1] },
-      { pool: "requests", query: SET_SEARCH_PATH, params: ['"ext_demo", public'] },
+      { pool: "requests", query: SET_SEARCH_PATH, params: ['"ext_demo", public', "ext_demo"] },
       { pool: "requests", query: "select count(*) from t" },
     ]);
     expect(outcomes).toEqual(["commit", "commit"]);
+  });
+
+  it("runs nothing when the integration's schema is missing", async () => {
+    const { pools, statements, outcomes } = fakePools(async () => [{ present: false }]);
+    const db = createIntegrationDb(pools, { schema: "ext_demo" });
+    const callback = vi.fn(async () => "ran");
+
+    await expect(db.execute("create table t (id int)")).rejects.toThrow(
+      "Schema ext_demo does not exist",
+    );
+    await expect(db.transaction(callback)).rejects.toThrow("Schema ext_demo does not exist");
+
+    expect(callback).not.toHaveBeenCalled();
+    expect(statements.map(({ query }) => query)).not.toContain("create table t (id int)");
+    expect(outcomes).toEqual(["rollback", "rollback"]);
+  });
+
+  it("refuses every call of an integration whose data was removed, and a new client works", async () => {
+    const { pools, statements } = fakePools();
+    const db = createIntegrationDb(pools, { schema: "ext_gone", integrationId: "gone" });
+    const neighbour = createIntegrationDb(pools, { schema: "ext_kept", integrationId: "kept" });
+    let inside!: (query: string) => Promise<unknown>;
+    let release!: () => void;
+    const running = db.transaction(async (tx) => {
+      inside = (query) => tx.execute(query);
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return tx.execute("insert into t values (1)");
+    });
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+
+    stopIntegrationDatabase("gone");
+    const before = statements.length;
+    const refused = "The data of integration gone was removed";
+    await expect(db.execute("select 1")).rejects.toThrow(refused);
+    await expect(db.transaction(async () => "ran")).rejects.toThrow(refused);
+    await expect(inside("select 2")).rejects.toThrow(refused);
+    release();
+    await expect(running).rejects.toThrow(refused);
+    expect(statements.length).toBe(before);
+
+    await expect(neighbour.execute("select 3")).resolves.toEqual([]);
+    const reinstalled = createIntegrationDb(pools, { schema: "ext_gone", integrationId: "gone" });
+    await expect(reinstalled.execute("select 4")).resolves.toEqual([]);
+    await expect(db.execute("select 5")).rejects.toThrow(refused);
   });
 
   it("rolls back when the callback rejects", async () => {
