@@ -608,8 +608,8 @@ without exposing connection URLs. Integration queries on the public request path
 timeout. Transactions of integrations that own data use a third pool,
 `openmapx-api-extensions`, with at most 2 connections; each transaction sets
 its own statement and idle-in-transaction timeouts. The main API pool keeps at
-most 10 connections and no statement timeout. Each API replica therefore opens
-up to 16 connections. Application names label clients;
+most 10 connections and no statement timeout. The API, which runs as one process
+per instance, therefore opens up to 16 connections. Application names label clients;
 `pg_stat_statements` aggregates statements by database, user and query identity,
 not by application name. Attribute jobs with isolated replay windows or spans.
 

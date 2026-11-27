@@ -105896,7 +105896,7 @@
                                 "type": "string",
                                 "enum": [
                                   "running",
-                                  "completed",
+                                  "succeeded",
                                   "failed"
                                 ]
                               },
@@ -108009,7 +108009,7 @@
                           "type": "string",
                           "enum": [
                             "running",
-                            "completed",
+                            "succeeded",
                             "failed"
                           ]
                         },
@@ -114581,7 +114581,7 @@
                                 "type": "string",
                                 "enum": [
                                   "running",
-                                  "completed",
+                                  "succeeded",
                                   "failed"
                                 ]
                               },

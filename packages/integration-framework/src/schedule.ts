@@ -35,12 +35,19 @@ export function cronShapeProblem(name: string, cron: string): string | null {
 
 /**
  * What is wrong with a `ctx.schedule` registration, other than a cron
- * expression that does not parse, which only the host can tell; `null` when
- * nothing is.
+ * expression that does not parse or never matches, which only the host can
+ * tell; `null` when nothing is.
  */
-export function scheduleRegistrationProblem(name: unknown, options: unknown): string | null {
+export function scheduleRegistrationProblem(
+  name: unknown,
+  options: unknown,
+  handler: unknown,
+): string | null {
   if (typeof name !== "string" || !SCHEDULED_TASK_NAME_PATTERN.test(name)) {
     return `The scheduled task name ${JSON.stringify(name)} does not match ${SCHEDULED_TASK_NAME_PATTERN.source}`;
+  }
+  if (typeof handler !== "function") {
+    return `Scheduled task ${name}: the handler must be a function`;
   }
   if (typeof options !== "object" || options === null) {
     return `Scheduled task ${name} needs options with exactly one of cron or everyMs`;

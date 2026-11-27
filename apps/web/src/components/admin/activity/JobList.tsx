@@ -30,11 +30,8 @@ import { AdminTableSurface } from "../shared/AdminTableSurface";
 import { JobStatusChip } from "../shared/JobStatusChip";
 import { TableSkeleton } from "../shared/TableSkeleton";
 import { ActorCell } from "./ActorCell";
-import {
-  ACTIVITY_READ_TIMEOUT_MS,
-  useActivityClient,
-  useActivityJobLabel,
-} from "./activityQueries";
+import { useActivityJobLabel } from "./activityJobLabel";
+import { ACTIVITY_READ_TIMEOUT_MS, useActivityClient } from "./activityQueries";
 import { JobDetail } from "./JobDetail";
 
 type StatusFilter = "all" | "active" | "completed" | "failed";

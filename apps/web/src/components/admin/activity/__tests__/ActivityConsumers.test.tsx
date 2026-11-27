@@ -539,10 +539,10 @@ describe("integration task runs", () => {
 
   it("shows a run's outcome without cancellation or a log pane", async () => {
     vi.stubGlobal("fetch", async () =>
-      Response.json(taskRun({ status: "completed", error: null })),
+      Response.json(taskRun({ status: "succeeded", error: null })),
     );
     mount(<JobDetail jobId="0193e4a0-0000-7000-8001-000000000002" source="integration-task" />);
-    expect(await screen.findByText("completed")).toBeInTheDocument();
+    expect(await screen.findByText("succeeded")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
     expect(screen.queryByText("No log output")).not.toBeInTheDocument();
   });

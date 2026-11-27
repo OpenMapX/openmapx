@@ -459,6 +459,7 @@ export {
   type ParsedStreetLevelSearch,
   parseStreetLevelSearchQuery,
 } from "./street-level-search";
+export { describeThrown, loggableThrown, UNPRINTABLE_THROWN_VALUE } from "./thrown";
 export {
   createTidesIntegration,
   type MetObservation,

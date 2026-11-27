@@ -139,7 +139,7 @@ export type GetAdminActivityJob200 =
       finishedAt: string | null;
       cancelable: false;
       source: "integration-task";
-      status: "running" | "completed" | "failed";
+      status: "running" | "succeeded" | "failed";
       /** Recursive JSON. Objects with an own __proto__ key are rejected at every depth. */
       result: AdminGetAdminActivityJob200Schema0 | null;
       /** @maxItems 0 */

@@ -11,6 +11,25 @@ const describeDatabase = process.env.OPENMAPX_RUN_DATABASE_TESTS === "1" ? descr
 /** The lifecycle calls of createApp() and stop(), in the order they happened. */
 const lifecycle = vi.hoisted(() => [] as string[]);
 
+vi.mock("./integration-host", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./integration-host")>();
+  return {
+    ...actual,
+    recoverInterruptedIntegrationTasks: () => {
+      lifecycle.push("recover task runs");
+      return actual.recoverInterruptedIntegrationTasks();
+    },
+    initIntegrations: (...args: Parameters<typeof actual.initIntegrations>) => {
+      lifecycle.push("load integrations");
+      return actual.initIntegrations(...args);
+    },
+    stopIntegrationTasks: () => {
+      lifecycle.push("stop tasks");
+      actual.stopIntegrationTasks();
+    },
+  };
+});
+
 vi.mock("./extension-migrations", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./extension-migrations")>();
   return {
@@ -99,6 +118,9 @@ describeDatabase("the real application from createApp()", () => {
     Error.stackTraceLimit = 40;
     // The fixture is built before the spies so its own client is not counted.
     fixture = await createMigratedPostgresFixture();
+    // A run a previous API process left behind.
+    await fixture.sql`insert into integration_task_run (integration_id, task_name, status)
+      values ('left-behind', 'nightly', 'running')`;
     customIntegrations = await mkdtemp(join(tmpdir(), "openmapx-app-integrations-"));
     vi.stubEnv("NODE_ENV", "test");
     vi.stubEnv("LOG_LEVEL", "silent");
@@ -216,6 +238,17 @@ describeDatabase("the real application from createApp()", () => {
     expect(app.server.server.listening).toBe(false);
   });
 
+  it("closes the task runs a previous process left running before any integration loads", async () => {
+    expect(lifecycle.indexOf("recover task runs")).toBeGreaterThanOrEqual(0);
+    expect(lifecycle.indexOf("recover task runs")).toBeLessThan(
+      lifecycle.indexOf("load integrations"),
+    );
+    expect(
+      await fixture.sql`select status, error from integration_task_run
+        where integration_id = 'left-behind'`,
+    ).toEqual([{ status: "failed", error: "interrupted by restart" }]);
+  });
+
   it("ends a slow integration statement at the integration pool's timeout", async () => {
     const { ProviderTimeoutError } = await import("@openmapx/integration-framework");
     const { extensionSql, integrationSql } = await import("./db/index");
@@ -305,16 +338,32 @@ describeDatabase("the real application from createApp()", () => {
     if (!address || typeof address === "string") throw new Error("Blocker has no port");
     vi.stubEnv("HOST", "127.0.0.1");
     vi.stubEnv("PORT", String(address.port));
+    // Start-up runs the retention jobs, which delete task runs finished more
+    // than 30 days after they started.
+    await fixture.sql`insert into integration_task_run
+        (integration_id, task_name, status, started_at, finished_at)
+      values ('pruned', 'old', 'succeeded', now() - interval '31 days', now() - interval '31 days'),
+             ('pruned', 'recent', 'succeeded', now() - interval '29 days', now() - interval '29 days')`;
 
     try {
       await expect(app.start()).rejects.toThrow(/EADDRINUSE/);
     } finally {
       await new Promise<void>((resolve) => blocker.close(() => resolve()));
     }
+    await vi.waitFor(
+      async () =>
+        expect(
+          await fixture.sql`select task_name from integration_task_run
+            where integration_id = 'pruned'`,
+        ).toEqual([{ task_name: "recent" }]),
+      { timeout: 10_000, interval: 100 },
+    );
     expect(lifecycle).not.toContain("cancel extension migrations");
+    expect(lifecycle).not.toContain("stop tasks");
     await app.stop();
     // A reload may be migrating an integration while the API serves.
     expect(lifecycle).toContain("cancel extension migrations");
+    expect(lifecycle).toContain("stop tasks");
     await expect(app.stop()).resolves.toBeUndefined();
 
     const healthRefreshes = [...timers.values()].filter(

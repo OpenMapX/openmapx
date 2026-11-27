@@ -83,13 +83,6 @@ const INTEGRATION_TASK_STATUSES: Record<ActivityJobFilter, IntegrationTaskRunSta
   failed: ["failed"],
 };
 
-/** The status Activity lists a scheduled task's run with: a succeeded run is `completed`. */
-export function integrationTaskActivityStatus(
-  status: IntegrationTaskRunStatus,
-): "running" | "completed" | "failed" {
-  return status === "succeeded" ? "completed" : status;
-}
-
 /** Who started a scheduled task's run, as the Activity list names it. */
 const INTEGRATION_TASK_ACTOR = { userId: null, label: "Scheduled" } as const;
 
@@ -203,10 +196,7 @@ function integrationTaskSelect(filter?: ActivityJobFilter) {
       type: sql<string>`${integrationTaskRun.integrationId} || ':' || ${integrationTaskRun.taskName}`.as(
         "type",
       ),
-      status:
-        sql<string>`CASE WHEN ${integrationTaskRun.status} = 'succeeded' THEN 'completed' ELSE ${integrationTaskRun.status} END`.as(
-          "status",
-        ),
+      status: sql<string>`${integrationTaskRun.status}::text`.as("status"),
       payload: sql<unknown>`null::jsonb`.as("payload"),
       error: integrationTaskRun.error,
       progress: sql<number | null>`null::integer`.as("progress"),
@@ -296,7 +286,7 @@ async function getIntegrationTaskActivityJob(id: string) {
     source: "integration-task" as const,
     id: run.id,
     type: `${run.integrationId}:${run.taskName}`,
-    status: integrationTaskActivityStatus(run.status),
+    status: run.status,
     payload: null,
     result: null,
     error: run.error,

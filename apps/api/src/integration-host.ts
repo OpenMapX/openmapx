@@ -7,6 +7,7 @@ import {
   type CacheClient,
   type CustomHealthCheckFn,
   createActivationTransactionScope,
+  describeThrown,
   type HttpClient,
   type IntegrationContext,
   type IntegrationDataSource,
@@ -1153,8 +1154,28 @@ function runSetup(
   }).finally(() => clearTimeout(warning));
 }
 
+/** The text of a value an integration threw; describing it cannot throw. */
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return describeThrown(error);
+}
+
+/** Whether the load deadline ended the load; `instanceof` throws on some proxies. */
+function isLoadDeadline(error: unknown): boolean {
+  try {
+    return error instanceof LoadDeadlineError;
+  } catch {
+    return false;
+  }
+}
+
+/** `error` itself when it is an `Error`, else an `Error` describing it. */
+function asError(error: unknown): Error {
+  try {
+    if (error instanceof Error) return error;
+  } catch {
+    // A proxy whose prototype cannot be read.
+  }
+  return new Error(describeThrown(error));
 }
 
 const LOAD_FAILURE_STEP: Record<IntegrationLoadError["phase"], string> = {
@@ -1269,7 +1290,7 @@ async function loadIntegrationBackend(args: {
     return "loaded";
   } catch (error) {
     scope.revoked = true;
-    if (error instanceof LoadDeadlineError) phase = "deadline";
+    if (isLoadDeadline(error)) phase = "deadline";
     control?.closeTasks();
     control?.discardActivations();
     control?.unsubscribeAll();
@@ -1543,7 +1564,7 @@ export async function initIntegrations(
       eventBus.emit({
         type: "integration.error",
         integrationId: id,
-        error: err instanceof Error ? err : new Error(String(err)),
+        error: asError(err),
       });
     }
   }
@@ -1627,7 +1648,7 @@ export async function initIntegrations(
       } catch (err) {
         return reply.status(500).send({
           error: "Reload failed",
-          message: err instanceof Error ? err.message : String(err),
+          message: describeThrown(err),
         });
       }
     });

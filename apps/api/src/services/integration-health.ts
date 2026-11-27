@@ -8,6 +8,7 @@ import {
 } from "@openmapx/core";
 import { resolvePublicConnectionAddresses, safeFetchStatus } from "@openmapx/core/server";
 import {
+  describeThrown,
   type LoadedIntegration,
   resolveIntegrationPlatformEndpoint,
   toIntegrationMeta,
@@ -96,16 +97,21 @@ export interface ServiceStatus {
 }
 
 function errMsg(err: unknown, redact?: (text: string) => string): string {
-  if (err instanceof Error) {
-    if (err.name === "TimeoutError" || err.message.includes("timed out")) return "Timeout";
-    const cause = err.cause as Record<string, string> | undefined;
-    if (cause?.code === "ECONNREFUSED") return "Connection refused";
-    if (cause?.code === "ENOTFOUND") return "DNS lookup failed";
-    if (cause?.code === "ECONNRESET") return "Connection reset";
-    const msg = redact ? redact(err.message) : err.message;
-    return msg.length > 120 ? `${msg.slice(0, 120)}…` : msg;
+  // A custom health check is integration code and may throw any value.
+  try {
+    if (err instanceof Error) {
+      if (err.name === "TimeoutError" || err.message.includes("timed out")) return "Timeout";
+      const cause = err.cause as Record<string, string> | undefined;
+      if (cause?.code === "ECONNREFUSED") return "Connection refused";
+      if (cause?.code === "ENOTFOUND") return "DNS lookup failed";
+      if (cause?.code === "ECONNRESET") return "Connection reset";
+      const msg = redact ? redact(err.message) : err.message;
+      return msg.length > 120 ? `${msg.slice(0, 120)}…` : msg;
+    }
+  } catch {
+    // Described below.
   }
-  const msg = String(err);
+  const msg = describeThrown(err);
   return (redact ? redact(msg) : msg).slice(0, 120);
 }
 

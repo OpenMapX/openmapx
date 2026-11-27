@@ -210,6 +210,19 @@ export function classifyProviderFailure(
   error: unknown,
   signal?: AbortSignal,
 ): ProviderHealthFailureOutcome {
+  // A provider is integration code and may fail with a value that throws
+  // when it is read, such as a proxy; that is the provider's failure too.
+  try {
+    return classifyReadableFailure(error, signal);
+  } catch {
+    return "connection";
+  }
+}
+
+function classifyReadableFailure(
+  error: unknown,
+  signal?: AbortSignal,
+): ProviderHealthFailureOutcome {
   const chain = causeChain(error);
   if (chain.some(isDeadline)) return "timeout";
   if (

@@ -1,6 +1,6 @@
 import type { BBox } from "@openmapx/core";
 import { describe, expect, test, vi } from "vitest";
-import { createCollectionOrchestrator } from "../collection-orchestrator";
+import { createCollectionOrchestrator, createProviderOutages } from "../collection-orchestrator";
 import type { IntegrationContext } from "../context";
 
 interface Item {
@@ -56,6 +56,22 @@ function collection(ctx: IntegrationContext) {
     sourcesOf: (item) => item.sources,
   });
 }
+
+describe("provider outages", () => {
+  test("logs a provider failure with any thrown value without throwing", () => {
+    const warn = vi.fn();
+    const outages = createProviderOutages(
+      { info: vi.fn(), warn, error: vi.fn(), debug: vi.fn() },
+      "demo",
+    );
+    outages.failed("a", "read", Object.create(null));
+    outages.failed("b", "read", Symbol("odd"));
+    expect(warn.mock.calls).toEqual([
+      ["[demo] provider a failed read: a value that cannot be shown"],
+      ["[demo] provider b failed read: Symbol(odd)"],
+    ]);
+  });
+});
 
 describe("collection orchestrator", () => {
   test("pushes the disallowed sources into the query and drops an item naming one", async () => {

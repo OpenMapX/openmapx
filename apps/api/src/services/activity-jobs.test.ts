@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dataManagerActor, integrationTaskActivityStatus } from "./activity-jobs.js";
+import { dataManagerActor } from "./activity-jobs.js";
 
 describe("data-manager job actor", () => {
   it.each([
@@ -11,15 +11,5 @@ describe("data-manager job actor", () => {
     ["bootstrap", null, null, "Bootstrap"],
   ] as const)("names a %s job started for %s", (trigger, triggeredByUserId, userId, label) => {
     expect(dataManagerActor(trigger, triggeredByUserId)).toEqual({ userId, label });
-  });
-});
-
-describe("integration task run status", () => {
-  it.each([
-    ["running", "running"],
-    ["succeeded", "completed"],
-    ["failed", "failed"],
-  ] as const)("lists a %s run as %s", (status, listed) => {
-    expect(integrationTaskActivityStatus(status)).toBe(listed);
   });
 });

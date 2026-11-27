@@ -219,11 +219,21 @@ describe("Activity canonical producer", () => {
       finishedAt: date,
       cancelable: false,
     };
+    const succeeded = { ...run, id: "0193e4a0-0000-7000-8001-000000000003", status: "succeeded" };
     try {
-      list.mockResolvedValue({ jobs: [{ ...run, actor: null }], total: 1 });
+      list.mockResolvedValue({
+        jobs: [
+          { ...run, actor: null },
+          { ...succeeded, actor: null, error: null },
+        ],
+        total: 2,
+      });
       const listed = await app.inject("/admin/jobs");
       expect(listed.statusCode).toBe(200);
-      expect(listed.json().jobs).toEqual([JSON.parse(JSON.stringify({ ...run, actor: null }))]);
+      expect(listed.json().jobs).toEqual([
+        JSON.parse(JSON.stringify({ ...run, actor: null })),
+        JSON.parse(JSON.stringify({ ...succeeded, actor: null, error: null })),
+      ]);
       detail.mockResolvedValue({ ...run, result: null, logs: [], stages: [] });
       const opened = await app.inject(
         "/admin/jobs/0193e4a0-0000-7000-8001-000000000002?source=integration-task",

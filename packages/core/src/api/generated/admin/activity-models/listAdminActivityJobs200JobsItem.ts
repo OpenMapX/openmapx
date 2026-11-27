@@ -79,7 +79,7 @@ export type ListAdminActivityJobs200JobsItem =
       finishedAt: string | null;
       cancelable: false;
       source: "integration-task";
-      status: "running" | "completed" | "failed";
+      status: "running" | "succeeded" | "failed";
       /** @nullable */
       actor: null;
     };

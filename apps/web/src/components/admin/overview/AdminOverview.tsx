@@ -30,7 +30,7 @@ import { useAdminFormat } from "@/lib/admin/adminFormat";
 import { adminJobHref } from "@/lib/admin/adminJobNavigation";
 import { useIntegrationAdmin, useIntegrationReload } from "@/lib/admin/integrationAdmin";
 import { useAdminMutationOwner } from "@/lib/admin/useAdminMutationOwner";
-import { useActivityJobLabel } from "../activity/activityQueries";
+import { useActivityJobLabel } from "../activity/activityJobLabel";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";
 import { useAuditActionLabel } from "../shared/auditActionLabel";

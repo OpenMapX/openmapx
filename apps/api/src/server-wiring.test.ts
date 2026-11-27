@@ -95,6 +95,44 @@ describe("uniformErrorHandler", () => {
     await app.close();
   });
 
+  it.each([
+    ["an object without a prototype", () => Object.create(null)],
+    [
+      "a proxy that throws on every access",
+      () =>
+        new Proxy(Object.freeze({}), {
+          get() {
+            throw new Error("trap");
+          },
+          getPrototypeOf() {
+            throw new Error("trap");
+          },
+        }),
+    ],
+    [
+      "an Error whose message getter throws",
+      () =>
+        Object.defineProperty(new Error(), "message", {
+          get() {
+            throw new Error("getter");
+          },
+        }),
+    ],
+  ])("answers 500 when a route throws %s", async (_label, value) => {
+    const app = Fastify({ logger: false });
+    app.setErrorHandler(uniformErrorHandler);
+    app.get("/boom", async () => {
+      throw value();
+    });
+    await app.ready();
+
+    const res = await app.inject({ method: "GET", url: "/boom" });
+
+    expect(res.statusCode).toBe(500);
+    expect(res.json()).toEqual({ error: "Internal Server Error" });
+    await app.close();
+  });
+
   it("masks 5xx internals and does not leak the message", async () => {
     const app = await appThatThrows(new Error("db password xyz leaked"));
     const res = await app.inject({ method: "GET", url: "/boom" });

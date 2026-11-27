@@ -110,13 +110,29 @@ describe("integration scheduler", () => {
     [{ deadlineMs: 5_000 }, /cron or everyMs/],
     [{ cron: "* * * * *", everyMs: 60_000, deadlineMs: 5_000 }, /cron or everyMs/],
     [{ everyMs: 1_000, deadlineMs: 5_000 }, /everyMs/],
+    [{ everyMs: 59_999, deadlineMs: 5_000 }, /everyMs/],
     [{ everyMs: 2 ** 31, deadlineMs: 5_000 }, /everyMs/],
     [{ cron: "not cron", deadlineMs: 5_000 }, /cron/],
     [{ cron: "* * * * * *", deadlineMs: 5_000 }, /cron/],
+    [{ cron: "0 0 31 2 *", deadlineMs: 5_000 }, /never matches/],
     [{ everyMs: 60_000, deadlineMs: 10 }, /deadlineMs/],
+    [{ everyMs: 60_000, deadlineMs: 999 }, /deadlineMs/],
     [{ everyMs: 60_000, deadlineMs: 21_600_001 }, /deadlineMs/],
   ] as Array<[ScheduleOptions, RegExp]>)("refuses %j", (options, message) => {
     expect(() => stage("t", options)).toThrow(message);
+  });
+
+  it.each([
+    { everyMs: 60_000, deadlineMs: 1_000 },
+    { everyMs: 2_147_483_647, deadlineMs: 21_600_000 },
+  ] as ScheduleOptions[])("accepts the boundary values %j", (options) => {
+    expect(() => stage("t", options)).not.toThrow();
+  });
+
+  it.each([undefined, "handler", { run: () => {} }])("refuses the handler %j", (handler) => {
+    expect(() =>
+      scheduler.stage("demo", scope, "t", { everyMs: 60_000, deadlineMs: 5_000 }, handler as never),
+    ).toThrow("Scheduled task t: the handler must be a function");
   });
 
   it.each(["", "Upper", "-leading", "a_b", "x".repeat(65)])("refuses the name %j", (name) => {
@@ -160,15 +176,29 @@ describe("integration scheduler", () => {
     ]);
   });
 
-  it("runs a cron task at its next match in UTC", async () => {
-    vi.useFakeTimers({ now: new Date("2026-01-01T00:00:30.000Z") });
-    const handler = vi.fn(async () => {});
-    stage("nightly", { cron: "5 0 * * *", deadlineMs: 5_000 }, handler);
-    scheduler.activate(["demo"]);
-    await vi.advanceTimersByTimeAsync(4 * 60_000);
-    expect(handler).not.toHaveBeenCalled();
-    await vi.advanceTimersByTimeAsync(60_000);
-    expect(handler).toHaveBeenCalledTimes(1);
+  it("runs a cron task at its matches in UTC, whatever the process's time zone", async () => {
+    // New York, where 01:30 local is 06:30Z before and 05:30Z after the
+    // change to daylight saving time at 02:00 local on 2026-03-08.
+    const timeZone = process.env.TZ;
+    process.env.TZ = "America/New_York";
+    try {
+      vi.useFakeTimers({ now: new Date("2026-03-08T00:00:00.000Z") });
+      const handler = vi.fn(async () => {});
+      stage("nightly", { cron: "30 1 * * *", deadlineMs: 5_000 }, handler);
+      scheduler.activate(["demo"]);
+      await vi.advanceTimersByTimeAsync(90 * 60_000 - 1);
+      expect(handler).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(handler).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(24 * 60 * 60_000 - 1);
+      expect(handler).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(handler).toHaveBeenCalledTimes(2);
+      expect(new Date().toISOString()).toBe("2026-03-09T01:30:00.000Z");
+    } finally {
+      if (timeZone === undefined) delete process.env.TZ;
+      else process.env.TZ = timeZone;
+    }
   });
 
   it("skips a tick while another process holds the task's running row", async () => {
@@ -295,6 +325,177 @@ describe("integration scheduler", () => {
     }
   });
 
+  class ThrowingMessage extends Error {
+    override get message(): string {
+      throw new Error("getter");
+    }
+  }
+
+  /** A proxy over a frozen object whose every trap throws. */
+  function hostileProxy(): unknown {
+    const fail = () => {
+      throw new Error("trap");
+    };
+    return new Proxy(Object.freeze({}), {
+      get: fail,
+      has: fail,
+      ownKeys: fail,
+      getPrototypeOf: fail,
+      getOwnPropertyDescriptor: fail,
+    });
+  }
+
+  it.each([
+    ["an object without a prototype", () => Object.create(null), "a value that cannot be shown"],
+    [
+      "an Error whose message getter throws",
+      () => new ThrowingMessage(),
+      "a value that cannot be shown",
+    ],
+    ["a symbol", () => Symbol("odd"), "Symbol(odd)"],
+    ["undefined", () => undefined, "undefined"],
+    ["a proxy that throws on every access", hostileProxy, "a value that cannot be shown"],
+  ])(
+    "records a rejection or throw with %s as failed, and nothing reaches the process",
+    async (_label, value, error) => {
+      vi.useFakeTimers();
+      const unhandled = vi.fn();
+      process.on("unhandledRejection", unhandled);
+      // Reads the logged error as a structured logger's serializer would.
+      const read = (_message: string, fields?: Record<string, unknown>) => {
+        const err = fields?.err;
+        if (err instanceof Error) void err.message;
+        else void `${err}`;
+      };
+      log.warn.mockImplementation(read);
+      log.error.mockImplementation(read);
+      try {
+        stage("rejects", { everyMs: 60_000, deadlineMs: 5_000 }, () => Promise.reject(value()));
+        stage("throws", { everyMs: 60_000, deadlineMs: 5_000 }, () => {
+          throw value();
+        });
+        scheduler.activate(["demo"]);
+        await vi.advanceTimersByTimeAsync(60_000);
+
+        expect(runs.rows("rejects")).toEqual([
+          expect.objectContaining({ status: "failed", error }),
+        ]);
+        expect(runs.rows("throws")).toEqual([expect.objectContaining({ status: "failed", error })]);
+        vi.useRealTimers();
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(unhandled).not.toHaveBeenCalled();
+      } finally {
+        process.off("unhandledRejection", unhandled);
+      }
+    },
+  );
+
+  describe("when the outcome of a run cannot be written", () => {
+    /** Lets `finish` fail while `failing()` says so. */
+    function failFinish(failing: () => boolean) {
+      const finish = runs.finish.bind(runs);
+      const attempts = vi.fn(async (...args: Parameters<TaskRunStore["finish"]>) => {
+        if (failing()) throw new Error("database unavailable");
+        return finish(...args);
+      });
+      runs.finish = attempts;
+      return attempts;
+    }
+
+    it("retries a write that failed once", async () => {
+      vi.useFakeTimers();
+      let failures = 1;
+      failFinish(() => failures-- > 0);
+      const handler = vi.fn(async () => {});
+      stage("t", { everyMs: 60_000, deadlineMs: 5_000 }, handler);
+      scheduler.activate(["demo"]);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(runs.rows("t")).toEqual([expect.objectContaining({ status: "running" })]);
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(runs.rows("t")).toEqual([expect.objectContaining({ status: "succeeded" })]);
+      await vi.advanceTimersByTimeAsync(59_000);
+      expect(handler).toHaveBeenCalledTimes(2);
+      expect(runs.rows("t").map((row) => row.status)).toEqual(["succeeded", "succeeded"]);
+    });
+
+    it("keeps an outcome it could not write and writes it before the task's next run", async () => {
+      vi.useFakeTimers();
+      let down = true;
+      const attempts = failFinish(() => down);
+      const handler = vi.fn(async () => {});
+      stage("t", { everyMs: 60_000, deadlineMs: 5_000 }, handler);
+      scheduler.activate(["demo"]);
+      await vi.advanceTimersByTimeAsync(60_000 + 30_000);
+      expect(attempts).toHaveBeenCalledTimes(4);
+      expect(runs.rows("t")).toEqual([expect.objectContaining({ status: "running" })]);
+      expect(log.warn).toHaveBeenCalledWith(
+        "Could not record the run of scheduled task demo:t; trying again before its next run",
+        expect.objectContaining({ integrationId: "demo", task: "t" }),
+      );
+
+      down = false;
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(handler).toHaveBeenCalledTimes(2);
+      expect(runs.rows("t").map((row) => row.status)).toEqual(["succeeded", "succeeded"]);
+    });
+
+    it("skips ticks with a warning until the outcome is written, then runs again", async () => {
+      vi.useFakeTimers();
+      let down = true;
+      failFinish(() => down);
+      const handler = vi.fn(async () => {});
+      stage("t", { everyMs: 60_000, deadlineMs: 5_000 }, handler);
+      scheduler.activate(["demo"]);
+      await vi.advanceTimersByTimeAsync(3 * 60_000);
+
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(runs.rows("t")).toHaveLength(1);
+      expect(log.warn).toHaveBeenCalledWith(
+        "Scheduled task demo:t skipped this run: the outcome of its previous run could not be recorded",
+        expect.objectContaining({ integrationId: "demo", task: "t" }),
+      );
+
+      down = false;
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(handler).toHaveBeenCalledTimes(2);
+      expect(runs.rows("t").map((row) => row.status)).toEqual(["succeeded", "succeeded"]);
+    });
+
+    it("writes a deadline it could not record before the next generation's run", async () => {
+      vi.useFakeTimers();
+      let down = true;
+      failFinish(() => down);
+      const newHandler = vi.fn(async () => {});
+      stage("t", { everyMs: 60_000, deadlineMs: 5_000 }, () => new Promise(() => {}));
+      scheduler.activate(["demo"]);
+      await vi.advanceTimersByTimeAsync(60_000 + 5_000 + 30_000);
+      expect(runs.rows("t")).toEqual([expect.objectContaining({ status: "running" })]);
+
+      stage("t", { everyMs: 60_000, deadlineMs: 5_000 }, newHandler, newScope());
+      scheduler.retire("demo");
+      scheduler.activate(["demo"]);
+      down = false;
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(newHandler).toHaveBeenCalledTimes(1);
+      expect(runs.rows("t")).toEqual([
+        expect.objectContaining({ status: "failed", error: "deadline exceeded" }),
+        expect.objectContaining({ status: "succeeded" }),
+      ]);
+    });
+
+    it("clears its retry timers at stop", async () => {
+      vi.useFakeTimers();
+      failFinish(() => true);
+      stage("t", { everyMs: 60_000, deadlineMs: 5_000 });
+      scheduler.activate(["demo"]);
+      await vi.advanceTimersByTimeAsync(60_000);
+      scheduler.stop();
+      expect(vi.getTimerCount()).toBe(0);
+    });
+  });
+
   it("logs and skips a tick whose run cannot be recorded", async () => {
     vi.useFakeTimers();
     const handler = vi.fn(async () => {});
@@ -333,6 +534,128 @@ describe("integration scheduler", () => {
     expect(signal?.aborted).toBe(true);
     expect(vi.getTimerCount()).toBe(0);
     expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets the new generation's task run once a retired run reaches its deadline", async () => {
+    vi.useFakeTimers();
+    const newHandler = vi.fn(async () => {});
+    stage("t", { everyMs: 60_000, deadlineMs: 10_000 }, () => new Promise(() => {}));
+    scheduler.activate(["demo"]);
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    stage("t", { everyMs: 60_000, deadlineMs: 10_000 }, newHandler, newScope());
+    scheduler.retire("demo");
+    scheduler.activate(["demo"]);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(runs.rows("t")).toEqual([
+      expect.objectContaining({ status: "failed", error: "deadline exceeded" }),
+    ]);
+    await vi.advanceTimersByTimeAsync(50_000);
+
+    expect(newHandler).toHaveBeenCalledTimes(1);
+    expect(runs.rows("t").map((row) => row.status)).toEqual(["failed", "succeeded"]);
+  });
+
+  it("aborts a retired run at stop and clears its deadline", async () => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    stage("t", { everyMs: 60_000, deadlineMs: 30_000 }, ({ signal: runSignal }) => {
+      signal = runSignal;
+      return new Promise(() => {});
+    });
+    scheduler.activate(["demo"]);
+    await vi.advanceTimersByTimeAsync(60_000);
+    scheduler.retire("demo");
+
+    scheduler.stop();
+
+    expect(signal?.aborted).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(60_000);
+    // Left to the next start's recovery.
+    expect(runs.rows("t")).toEqual([expect.objectContaining({ status: "running" })]);
+  });
+
+  /** Holds `runs.start` until the returned function is called. */
+  function holdStart() {
+    const start = runs.start.bind(runs);
+    const gate = deferred();
+    const held = vi.fn(async (integrationId: string, taskName: string) => {
+      await gate.promise;
+      return start(integrationId, taskName);
+    });
+    runs.start = held;
+    return { held, release: gate.resolve };
+  }
+
+  it("does not let ticks pile up behind a slow start of a run", async () => {
+    vi.useFakeTimers();
+    const { held } = holdStart();
+    stage("t", { everyMs: 60_000, deadlineMs: 5_000 });
+    scheduler.activate(["demo"]);
+    await vi.advanceTimersByTimeAsync(180_000);
+    expect(held).toHaveBeenCalledTimes(1);
+  });
+
+  it("records a run whose start a reload overtook as replaced, without running it", async () => {
+    vi.useFakeTimers();
+    const { release } = holdStart();
+    const handler = vi.fn(async () => {});
+    stage("t", { everyMs: 60_000, deadlineMs: 5_000 }, handler);
+    scheduler.activate(["demo"]);
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    scheduler.retire("demo");
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(handler).not.toHaveBeenCalled();
+    expect(runs.rows("t")).toEqual([
+      expect.objectContaining({
+        status: "failed",
+        error: "replaced by a reload before it started",
+      }),
+    ]);
+  });
+
+  it("starts no run whose start finishes after stop", async () => {
+    vi.useFakeTimers();
+    const { release } = holdStart();
+    const handler = vi.fn(async () => {});
+    stage("t", { everyMs: 60_000, deadlineMs: 5_000 }, handler);
+    scheduler.activate(["demo"]);
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    scheduler.stop();
+    release();
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(handler).not.toHaveBeenCalled();
+    expect(runs.rows("t")).toEqual([expect.objectContaining({ status: "running" })]);
+  });
+
+  it("records a rejection that comes after the integration was retired", async () => {
+    vi.useFakeTimers();
+    const unhandled = vi.fn();
+    process.on("unhandledRejection", unhandled);
+    try {
+      const run = deferred();
+      stage("t", { everyMs: 60_000, deadlineMs: 30_000 }, () => run.promise);
+      scheduler.activate(["demo"]);
+      await vi.advanceTimersByTimeAsync(60_000);
+      scheduler.retire("demo");
+      run.reject(new Error("failed while stopping"));
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(runs.rows("t")).toEqual([
+        expect.objectContaining({ status: "failed", error: "failed while stopping" }),
+      ]);
+      vi.useRealTimers();
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off("unhandledRejection", unhandled);
+    }
   });
 
   it("marks the runs a previous process left running as failed", async () => {

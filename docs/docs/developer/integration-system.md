@@ -959,14 +959,14 @@ Do not replace it with process-local maps or counters in production. Redis
 failure must never become unmetered upstream use: deny a new quota-consuming
 refresh, or, where a refusal would take a core feature down, count the same
 windows in process with `createLocalQuotaMeter` until the store returns
-(each replica then admits up to the full limit). Eligible stale data may still
+(that count starts over when the API restarts). Eligible stale data may still
 be returned with its original evidence time.
 
 #### Shared request admission
 
 `upstreamRuntime.admitSharedRequest?({ scope, key, policy?, signal? })` is a
-separate opt-in capability for upstream identities shared across integrations and
-replicas. `scope` and `key` are nonempty strings supplied by the consumer; the
+separate opt-in capability for upstream identities shared across integrations.
+`scope` and `key` are nonempty strings supplied by the consumer; the
 host hashes them into `upstream-shared:` keys outside integration cache scopes.
 Choose the identity from the upstream's actual quota boundary. Do not include
 integration IDs, result receipts, bounding boxes or reload generations when
@@ -1089,6 +1089,73 @@ one value silently.
 Opaque cursors are HMAC-signed and purpose-scoped. Bind their encoded value to
 the normalized query/provider context and give it a finite expiry; decoding a
 cursor under another route purpose must fail.
+
+#### Scheduled tasks
+
+`ctx.schedule(name, options, handler)` registers work the host runs on a
+schedule, for example a nightly import into the integration's schema:
+
+```ts
+ctx.schedule("refresh", { cron: "30 2 * * *", deadlineMs: 15 * 60_000 }, async ({ signal }) => {
+  const rows = await ctx.http.get<Row[]>(FEED_URL, { signal, timeoutMs: 60_000 });
+  signal.throwIfAborted();
+  await ctx.db?.transaction(async (tx) => {
+    for (const row of rows) await tx.execute("insert into items (id) values ($1)", [row.id]);
+  });
+});
+```
+
+- Call it from `setup()`. A call after `setup()` has returned is ignored with
+  one warning; the task would otherwise attach to the next generation.
+- `name` matches `^[a-z0-9][a-z0-9-]{0,63}$` and is unique within the
+  integration. The handler must be a function.
+- `options` holds exactly one of `cron` and `everyMs`, and `deadlineMs`:
+  - `cron` has five fields (minute, hour, day of month, month, day of week) or
+    is a nickname such as `@daily` or `@hourly`. It is evaluated in UTC,
+    whatever the server's time zone, and must match at least once: an
+    expression that never matches, such as `0 0 31 2 *`, is refused.
+  - `everyMs` is between 60 000 and 2 147 483 647 milliseconds. The first run
+    comes one interval after the generation goes live.
+  - `deadlineMs` is between 1 000 and 21 600 000 milliseconds (six hours).
+- An invalid registration throws in `setup()` and fails the load, as any
+  other error there does.
+- A task runs at most once at a time. A tick is skipped while the task's
+  previous run has not settled, and missed ticks are not made up: a run that
+  was due while the previous one was still going, while the API was down or
+  while the integration was not loaded does not happen later.
+- At `deadlineMs`, the run's `signal` aborts and the run is recorded as failed
+  with `deadline exceeded`. The host cannot stop JavaScript that ignores the
+  signal; such a handler keeps its task from running again until it settles.
+  Pass `signal` to `ctx.http` calls and check it between steps.
+- A handler that resolves is recorded as succeeded. One that rejects or throws,
+  with any value, is recorded as failed with a description of that value (at
+  most 2 000 characters); nothing reaches the process.
+- A reload, of this integration or any other, aborts the `signal` of every run
+  in progress. The new generation's task does not start while the old run is
+  still going, until that run settles or reaches its deadline. Removing or
+  disabling the integration stops its ticks.
+- When the API stops, every run's `signal` aborts and the API exits without
+  waiting for the handlers. At the next start, runs still recorded as running
+  are recorded as failed with `interrupted by restart`.
+- When the outcome of a run cannot be written to the database, the host retries
+  the write three times over about 20 seconds and then keeps it in memory. The
+  task's next tick writes it first, and runs only once that has worked; until
+  then each tick is skipped with a warning.
+
+Every run is listed in the administration's Activity, as a job named
+`<integration>: <task>` with the caption "Scheduled task"; see
+[Monitoring](../administration/monitoring.md). In tests,
+`createMockIntegrationContext().runScheduledTask(name)` runs a task's handler
+once. The mock checks a registration as the host does, except that it checks
+only the shape of a cron expression: one with a value out of range, or one that
+never matches, passes the mock and fails the load in the host.
+
+Scheduled tasks rely on there being one API process per instance, which is the
+only supported deployment (see [Requirements](../install/requirements.md)). Each
+task's running run is one row in `integration_task_run`, and the restart
+recovery fails every row left running; a second API process on the same
+database would start runs beside the first one's and fail them at its own
+start.
 
 ### Registering capabilities
 

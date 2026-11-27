@@ -564,12 +564,20 @@ export interface MockContextOverrides {
   providerOrder?: Record<string, readonly string[]>;
 }
 
+/**
+ * The context `createMockIntegrationContext` returns. Its `schedule` checks a
+ * registration as the host does, except the cron expression: it checks only
+ * that it is a nickname such as `@daily` or has five fields. An expression
+ * with a value out of range, such as `0 25 * * *`, or one that never matches,
+ * such as `0 0 31 2 *`, passes here and fails the load in the host.
+ */
 export interface MockIntegrationContext extends IntegrationContext {
   /** Captured registrations from `setup()` — drives contract conformance. */
   readonly registered: CapturedRegistrations;
   /**
    * Runs the handler of the task `setup()` scheduled under `name` once, as a
-   * tick of its schedule would, with `signal` or one that never aborts.
+   * tick of its schedule would, with `signal` or one that never aborts. The
+   * mock does not parse cron fields; see `MockIntegrationContext`.
    */
   runScheduledTask(name: string, options?: { signal?: AbortSignal }): Promise<void>;
 }
@@ -742,7 +750,7 @@ export function createMockIntegrationContext(
     // The host's checks, except that only the host parses a cron expression's fields.
     schedule: (name, options, handler) => {
       const problem =
-        scheduleRegistrationProblem(name, options) ??
+        scheduleRegistrationProblem(name, options, handler) ??
         (options.cron === undefined ? null : cronShapeProblem(name, options.cron));
       if (problem) throw new Error(problem);
       if (registered.tasks.some((task) => task.name === name)) {

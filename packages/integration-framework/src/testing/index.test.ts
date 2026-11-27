@@ -147,12 +147,31 @@ describe("createMockIntegrationContext", () => {
     [{ deadlineMs: 5_000 }, /cron or everyMs/],
     [{ cron: "0 * * * *", everyMs: 60_000, deadlineMs: 5_000 }, /cron or everyMs/],
     [{ everyMs: 1_000, deadlineMs: 5_000 }, /everyMs/],
+    [{ everyMs: 59_999, deadlineMs: 5_000 }, /everyMs/],
+    [{ everyMs: 2_147_483_648, deadlineMs: 5_000 }, /everyMs/],
     [{ cron: "not cron", deadlineMs: 5_000 }, /cron/],
     [{ cron: "* * * * * *", deadlineMs: 5_000 }, /cron/],
     [{ everyMs: 60_000, deadlineMs: 10 }, /deadlineMs/],
+    [{ everyMs: 60_000, deadlineMs: 999 }, /deadlineMs/],
+    [{ everyMs: 60_000, deadlineMs: 21_600_001 }, /deadlineMs/],
   ])("refuses the scheduled task options the host refuses: %j", (options, message) => {
     const ctx = createMockIntegrationContext();
     expect(() => ctx.schedule("t", options as never, async () => {})).toThrow(message);
+  });
+
+  it.each([
+    { everyMs: 60_000, deadlineMs: 1_000 },
+    { everyMs: 2_147_483_647, deadlineMs: 21_600_000 },
+  ])("accepts the boundary values %j", (options) => {
+    const ctx = createMockIntegrationContext();
+    expect(() => ctx.schedule("t", options, async () => {})).not.toThrow();
+  });
+
+  it("refuses a scheduled task whose handler is not a function, as the host does", () => {
+    const ctx = createMockIntegrationContext();
+    expect(() =>
+      ctx.schedule("t", { everyMs: 60_000, deadlineMs: 5_000 }, "handler" as never),
+    ).toThrow("Scheduled task t: the handler must be a function");
   });
 
   it("records scheduled tasks and lets a test run one", async () => {

@@ -70,12 +70,13 @@ const dataManager = z.strictObject({
 });
 /**
  * One run of a task an integration scheduled: `type` is
- * `<integrationId>:<taskName>`, and a run that succeeded is `completed`.
+ * `<integrationId>:<taskName>`, and a run that succeeded is `succeeded`, as
+ * a job of the other sources is.
  */
 const integrationTask = z.strictObject({
   ...fields,
   source: z.literal("integration-task"),
-  status: z.enum(["running", "completed", "failed"]),
+  status: z.enum(["running", "succeeded", "failed"]),
   cancelable: z.literal(false),
 });
 export const adminActivityJobSchema = z.discriminatedUnion("source", [

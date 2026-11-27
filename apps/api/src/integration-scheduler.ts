@@ -1,5 +1,7 @@
 import {
+  describeThrown,
   type Logger,
+  loggableThrown,
   type ScheduleOptions,
   scheduleRegistrationProblem,
 } from "@openmapx/integration-framework";
@@ -41,6 +43,19 @@ export interface IntegrationScheduler {
 /** The longest error message recorded for a failed run. */
 const MAX_ERROR_LENGTH = 2_000;
 const DEADLINE_EXCEEDED = "deadline exceeded";
+/**
+ * The pauses before each retry of a failed write of a run's outcome. They add
+ * up to less than the shortest interval, so the retries end before the next
+ * tick, which tries once more.
+ */
+const OUTCOME_RETRY_DELAYS_MS = [1_000, 5_000, 15_000] as const;
+
+/** A run's outcome that still has to be written. */
+interface Outcome {
+  readonly runId: string;
+  readonly status: "succeeded" | "failed";
+  readonly error?: string;
+}
 
 interface Run {
   readonly controller: AbortController;
@@ -74,16 +89,17 @@ function cronOptions() {
 }
 
 function cronProblem(name: string, cron: string): string | null {
+  let job: Cron;
   try {
-    new Cron(cron, { ...cronOptions(), paused: true }).stop();
-    return null;
+    job = new Cron(cron, { ...cronOptions(), paused: true });
   } catch (error) {
-    return `Scheduled task ${name}: the cron expression ${JSON.stringify(cron)} does not parse: ${errorMessage(error)}`;
+    return `Scheduled task ${name}: the cron expression ${JSON.stringify(cron)} does not parse: ${describeThrown(error)}`;
   }
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  const next = job.nextRun();
+  job.stop();
+  return next === null
+    ? `Scheduled task ${name}: the cron expression ${JSON.stringify(cron)} never matches`
+    : null;
 }
 
 /**
@@ -93,7 +109,9 @@ function errorMessage(error: unknown): string {
  * the task, which its unique index allows once per task. Nothing here awaits
  * a handler: a run is bounded by its deadline, at which its signal aborts and
  * its row is failed, while a handler that ignores the signal keeps its task
- * from running again until it settles. Every timer is unreferenced.
+ * from running again until it settles. A run's outcome whose write fails is
+ * retried, then kept in memory and written before the task's next tick, which
+ * runs only once that has worked. Every timer is unreferenced.
  */
 export function createIntegrationScheduler(deps: {
   runs: TaskRunStore;
@@ -107,7 +125,58 @@ export function createIntegrationScheduler(deps: {
   /** Retired tasks whose run has not settled, so `stop` can still abort it. */
   const lingering = new Set<Task>();
 
+  /**
+   * Outcomes not yet written, by task label, whichever generation ran them.
+   * The run's row stays `running` until its outcome is written, so a task
+   * with an entry here does not start another run.
+   */
+  const unwritten = new Map<string, Outcome>();
+  /** The labels of the tasks whose outcome is being written right now. */
+  const writing = new Set<string>();
+  const retryTimers = new Set<ReturnType<typeof setTimeout>>();
+  let stopping = false;
+
   const label = (task: Task) => `${task.integrationId}:${task.name}`;
+  const taskFields = (task: Task) => ({ integrationId: task.integrationId, task: task.name });
+
+  function pause(ms: number): Promise<void> {
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        retryTimers.delete(timer);
+        resolve();
+      }, ms);
+      timer.unref?.();
+      retryTimers.add(timer);
+    });
+  }
+
+  /**
+   * Writes the task's unwritten outcome, pausing `delays` between attempts;
+   * resolves with `null` once none is left, or with the last write's error.
+   * At most one write per task runs at a time.
+   */
+  async function writeOutcome(task: Task, delays: readonly number[]): Promise<unknown> {
+    const key = label(task);
+    if (writing.has(key)) return new Error("Another write of the outcome is in progress");
+    writing.add(key);
+    try {
+      for (let attempt = 0; ; attempt += 1) {
+        const outcome = unwritten.get(key);
+        if (!outcome) return null;
+        try {
+          await runs.finish(outcome.runId, outcome.status, outcome.error);
+          unwritten.delete(key);
+          return null;
+        } catch (error) {
+          const delay = delays[attempt];
+          if (delay === undefined || stopping) return error ?? new Error(String(error));
+          await pause(delay);
+        }
+      }
+    } finally {
+      writing.delete(key);
+    }
+  }
 
   function record(
     task: Task,
@@ -118,12 +187,18 @@ export function createIntegrationScheduler(deps: {
   ) {
     if (run.recorded || run.stopped) return;
     run.recorded = true;
-    runs.finish(runId, status, error).catch((finishError: unknown) => {
-      log.warn(`Could not record the run of scheduled task ${label(task)}`, {
-        err: finishError,
-        integrationId: task.integrationId,
-        task: task.name,
-      });
+    keep(task, { runId, status, ...(error === undefined ? {} : { error }) });
+  }
+
+  /** Writes the outcome, with retries; one that still fails waits for the task's next tick. */
+  function keep(task: Task, outcome: Outcome) {
+    unwritten.set(label(task), outcome);
+    void writeOutcome(task, OUTCOME_RETRY_DELAYS_MS).then((failure) => {
+      if (failure === null || stopping) return;
+      log.warn(
+        `Could not record the run of scheduled task ${label(task)}; trying again before its next run`,
+        { err: loggableThrown(failure), ...taskFields(task) },
+      );
     });
   }
 
@@ -155,6 +230,8 @@ export function createIntegrationScheduler(deps: {
     }, task.options.deadlineMs);
     run.deadline.unref?.();
 
+    // The handler may reject with any value at all; its description cannot
+    // throw, and the outcome is kept before anything is logged.
     const settle = (failed: boolean, error?: unknown) => {
       clearTimeout(run.deadline);
       run.deadline = undefined;
@@ -162,23 +239,18 @@ export function createIntegrationScheduler(deps: {
       lingering.delete(task);
       const durationMs = now() - run.startedAt;
       if (!failed) {
-        log.debug(`Scheduled task ${label(task)} finished`, {
-          integrationId: task.integrationId,
-          task: task.name,
-          durationMs,
-        });
         record(task, run, runId, "succeeded");
+        log.debug(`Scheduled task ${label(task)} finished`, { ...taskFields(task), durationMs });
         return;
       }
-      if (!run.recorded && !run.stopped) {
+      const unreported = !run.recorded && !run.stopped;
+      record(task, run, runId, "failed", describeThrown(error).slice(0, MAX_ERROR_LENGTH));
+      if (unreported)
         log.warn(`Scheduled task ${label(task)} failed`, {
-          err: error,
-          integrationId: task.integrationId,
-          task: task.name,
+          err: loggableThrown(error),
+          ...taskFields(task),
           durationMs,
         });
-      }
-      record(task, run, runId, "failed", errorMessage(error).slice(0, MAX_ERROR_LENGTH));
     };
 
     let pending: Promise<void>;
@@ -189,10 +261,28 @@ export function createIntegrationScheduler(deps: {
     } catch (error) {
       pending = Promise.reject(error);
     }
-    pending.then(
-      () => settle(false),
-      (error: unknown) => settle(true, error),
-    );
+    pending
+      .then(
+        () => settle(false),
+        (error: unknown) => settle(true, error),
+      )
+      .catch((settleError: unknown) => {
+        try {
+          log.error(`Scheduled task ${label(task)} could not be settled`, {
+            err: loggableThrown(settleError),
+            ...taskFields(task),
+          });
+        } catch {
+          // Nothing is left to tell.
+        }
+      });
+  }
+
+  /** Whether the task has no outcome left to write, after one more attempt. */
+  async function outcomeWritten(task: Task): Promise<{ written: boolean; error?: unknown }> {
+    if (!unwritten.has(label(task))) return { written: true };
+    const failure = await writeOutcome(task, []);
+    return failure === null ? { written: true } : { written: false, error: failure };
   }
 
   async function tick(task: Task) {
@@ -200,36 +290,39 @@ export function createIntegrationScheduler(deps: {
     task.starting = true;
     let runId: string | null;
     try {
+      const outcome = await outcomeWritten(task);
+      if (!outcome.written) {
+        log.warn(
+          `Scheduled task ${label(task)} skipped this run: the outcome of its previous run could not be recorded`,
+          { err: loggableThrown(outcome.error), ...taskFields(task) },
+        );
+        return;
+      }
       runId = await runs.start(task.integrationId, task.name);
     } catch (error) {
       log.warn(`Could not start scheduled task ${label(task)}; skipping this run`, {
-        err: error,
-        integrationId: task.integrationId,
-        task: task.name,
+        err: loggableThrown(error),
+        ...taskFields(task),
       });
       return;
     } finally {
       task.starting = false;
     }
     if (runId === null) {
-      log.debug(`Scheduled task ${label(task)} is still running; skipping this run`, {
-        integrationId: task.integrationId,
-        task: task.name,
-      });
+      // A retired run of this process that is still going holds the row;
+      // anything else is a row this process cannot account for.
+      const own = [...lingering].some((other) => label(other) === label(task));
+      const message = own
+        ? `Scheduled task ${label(task)} is still running; skipping this run`
+        : `Scheduled task ${label(task)} skipped this run: a run this process did not start is recorded as running`;
+      if (own) log.debug(message, taskFields(task));
+      else log.warn(message, taskFields(task));
       return;
     }
     // A stopping process leaves the row to the next start's recovery.
     if (task.stopped) return;
     if (task.retired) {
-      runs
-        .finish(runId, "failed", "replaced by a reload before it started")
-        .catch((error: unknown) => {
-          log.warn(`Could not record the run of scheduled task ${label(task)}`, {
-            err: error,
-            integrationId: task.integrationId,
-            task: task.name,
-          });
-        });
+      keep(task, { runId, status: "failed", error: "replaced by a reload before it started" });
       return;
     }
     execute(task, runId);
@@ -239,9 +332,8 @@ export function createIntegrationScheduler(deps: {
     const onTick = () => {
       tick(task).catch((error: unknown) => {
         log.error(`Scheduled task ${label(task)} could not run`, {
-          err: error,
-          integrationId: task.integrationId,
-          task: task.name,
+          err: loggableThrown(error),
+          ...taskFields(task),
         });
       });
     };
@@ -270,7 +362,7 @@ export function createIntegrationScheduler(deps: {
   return {
     stage(integrationId, scope, name, options, handler) {
       const problem =
-        scheduleRegistrationProblem(name, options) ??
+        scheduleRegistrationProblem(name, options, handler) ??
         (options.cron !== undefined ? cronProblem(name, options.cron) : null);
       if (problem) throw new Error(problem);
       let tasks = staged.get(integrationId);
@@ -312,6 +404,11 @@ export function createIntegrationScheduler(deps: {
       return runs.failInterrupted();
     },
     stop() {
+      // Outcomes not yet written stay `running`; the next start's recovery
+      // closes them.
+      stopping = true;
+      for (const timer of retryTimers) clearTimeout(timer);
+      retryTimers.clear();
       staged.clear();
       const tasks = [...[...active.values()].flat(), ...lingering];
       active.clear();

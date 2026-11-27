@@ -1413,6 +1413,45 @@ describe("scheduled integration health checks", () => {
     });
   });
 
+  it.each([
+    ["an object without a prototype", () => Object.create(null), "a value that cannot be shown"],
+    [
+      "a proxy that throws on every access",
+      () =>
+        new Proxy(Object.freeze({}), {
+          get() {
+            throw new Error("trap");
+          },
+          getPrototypeOf() {
+            throw new Error("trap");
+          },
+        }),
+      "a value that cannot be shown",
+    ],
+    [
+      "an Error whose message getter throws",
+      () =>
+        Object.defineProperty(new Error(), "message", {
+          get() {
+            throw new Error("getter");
+          },
+        }),
+      "a value that cannot be shown",
+    ],
+  ])("reports a custom health check that throws %s as down", async (_label, value, error) => {
+    const odd = makeIntegration({ type: "custom" });
+    odd.id = "custom-odd-throw";
+    odd.customHealthCheck = vi.fn(async () => {
+      throw value();
+    });
+
+    await executeAllIntegrationHealthChecks([odd], { scheduled: true });
+
+    expect(getCachedIntegrationHealthSnapshot([odd]).results).toEqual([
+      expect.objectContaining({ id: "custom-odd-throw", status: "down", error }),
+    ]);
+  });
+
   it("coalesces identical HTTP probes within a sweep but never across distinct headers or SSRF contexts", async () => {
     const a = makeIntegration({ type: "http", url: "https://shared.example.org/health" });
     a.id = "dedup-a";

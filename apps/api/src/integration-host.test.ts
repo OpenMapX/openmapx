@@ -1422,6 +1422,55 @@ describe("initIntegrations — loader", () => {
           timeout: 10_000,
         });
       });
+
+      const countingTicker = (comment: string) =>
+        ticker(comment, [
+          '  ctx.schedule("refresh", { everyMs: 60000, deadlineMs: 5000 }, async () => {',
+          "    globalThis.__omxInstalledRuns = (globalThis.__omxInstalledRuns ?? 0) + 1;",
+          "  });",
+        ]);
+
+      it("stops the ticks of an integration that a reload no longer loads", async () => {
+        writeInstalled(
+          "ticker",
+          countingTicker("stops the ticks of an integration that a reload no longer loads"),
+        );
+        await initIntegrations(makeApp(), [installed()]);
+        vi.advanceTimersByTime(60_000);
+        await vi.waitFor(() => expect(taskRuns.rows[0]?.status).toBe("succeeded"), {
+          timeout: 10_000,
+        });
+
+        rmSync(join(installedRoot, "ticker"), { recursive: true, force: true });
+        await reloadIntegrations();
+        vi.advanceTimersByTime(180_000);
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(getIntegration("ticker")).toBeUndefined();
+        expect(g.__omxInstalledRuns).toBe(1);
+        expect(taskRuns.rows).toHaveLength(1);
+      });
+
+      it("loads an integration and its task again after a reload that failed", async () => {
+        writeInstalled(
+          "ticker",
+          countingTicker("loads an integration and its task again after a reload that failed"),
+        );
+        writeBuiltIn(
+          "fragile",
+          'export function setup() { if (globalThis.__omxInstalledFragile) throw new Error("fragile setup"); }\n',
+        );
+        await initIntegrations(makeApp(), [installed(), builtIn()]);
+        g.__omxInstalledFragile = true;
+        await expect(reloadIntegrations()).rejects.toThrow("fragile setup");
+        g.__omxInstalledFragile = false;
+
+        await reloadIntegrations();
+        vi.advanceTimersByTime(60_000);
+
+        expect(getIntegration("ticker")).toMatchObject({ loadState: "loaded" });
+        await vi.waitFor(() => expect(g.__omxInstalledRuns).toBe(1), { timeout: 10_000 });
+      });
     });
 
     describe("integration scope and setup deadline", () => {
@@ -1975,6 +2024,34 @@ describe("initIntegrations — loader", () => {
         });
       });
     });
+
+    it.each([
+      ["an object without a prototype", "Object.create(null)", "a value that cannot be shown"],
+      [
+        "a proxy that throws on every access",
+        "new Proxy({}, { get() { throw new Error('trap'); }, getPrototypeOf() { throw new Error('trap'); } })",
+        "a value that cannot be shown",
+      ],
+      ["a symbol", "Symbol('odd')", "Symbol(odd)"],
+    ])(
+      "leaves out an integration whose setup throws %s, with a description of it",
+      async (label, value, message) => {
+        writeInstalled(
+          "odd-throw",
+          [
+            `// leaves out an integration whose setup throws ${label}`,
+            `export function setup() { throw ${value}; }`,
+          ].join("\n"),
+        );
+
+        await initIntegrations(makeApp(), [installed()]);
+
+        expect(getIntegration("odd-throw")).toMatchObject({
+          loadState: "failed",
+          loadError: { phase: "setup", message },
+        });
+      },
+    );
 
     it("ignores a bundle the manifest does not declare", async () => {
       writeInstalled(

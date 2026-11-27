@@ -325,8 +325,8 @@ current policy and needs consent, the available cloud provider labels, and
 whether the intent came from cache. A request rejected by the hourly limit returns `429` with
 `Retry-After: 3600`. The limit is counted per client network (an IPv4 address or
 an IPv6 /64), using the key the host derives from the trusted peer address;
-nothing in the request can choose or change it. With Valkey the count is atomic
-across replicas. If Valkey is configured but unreachable, the request is served
+nothing in the request can choose or change it. With Valkey the count is atomic.
+If Valkey is configured but unreachable, the request is served
 by the keyword parser alone, since neither cloud spend nor local model time can
 be metered. The host dispatcher separately applies its own per-client limit.
 Parsing or spatial-resolution failure can return `502`. The browser falls back

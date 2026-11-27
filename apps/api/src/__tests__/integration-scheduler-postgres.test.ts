@@ -123,8 +123,9 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         error: null,
         finishedAt: null,
       });
+      // Activity's own word for a successful job, as the other sources use it.
       expect(listed.jobs.find((job) => job.id === succeeded)).toMatchObject({
-        status: "completed",
+        status: "succeeded",
         finishedAt: expect.any(Date),
       });
       expect(listed.jobs.find((job) => job.id === failed)).toMatchObject({

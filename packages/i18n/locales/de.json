@@ -6650,7 +6650,7 @@
     "servicePaused": "Pausiert",
     "serviceUnknown": "Unbekannt",
     "jobQueued": "Wartet auf den Start.",
-    "jobStatusLabel": "{status, select, queued {eingereiht} running {läuft} cancel_pending {Abbruch angefordert} succeeded {erfolgreich} completed {abgeschlossen} partially_succeeded {teilweise erfolgreich} failed {fehlgeschlagen} cancelled {abgebrochen} stale {veraltet} interrupted {unterbrochen} skipped {übersprungen} never {nie} other {{status}}}",
+    "jobStatusLabel": "{status, select, queued {eingereiht} running {läuft} cancel_pending {Abbruch angefordert} succeeded {erfolgreich} partially_succeeded {teilweise erfolgreich} failed {fehlgeschlagen} cancelled {abgebrochen} stale {veraltet} interrupted {unterbrochen} skipped {übersprungen} never {nie} other {{status}}}",
     "jobRunning": "Läuft gerade.",
     "jobSucceeded": "Erfolgreich abgeschlossen.",
     "jobFailed": "Angehalten, weil der Auftrag fehlgeschlagen ist.",

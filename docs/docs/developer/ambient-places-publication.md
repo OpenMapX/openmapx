@@ -270,13 +270,14 @@ reconciliation and selection; this does not relax source coordinate validation.
 
 ### Deployment scenarios
 
-| Scenario                                      | Supported setup                                                                                                                                                                      | Operational tradeoff                                                                                                                                                                                                                                     |
-| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| One appropriately sized host                  | Existing data-manager, ops-agent, authoritative PostGIS and API; separate source/publication schedules                                                                               | Simplest operations. Preparation competes with origin reads for RAM, disk I/O and WAL; container defaults are not a planet capacity profile.                                                                                                             |
-| Dedicated preparation host and scaled origins | One data-manager with persistent `/data`, private access to the same authoritative PostGIS, and authenticated ops-agent access to that database host; multiple API origins and a CDN | Separates source-tool CPU/RAM from serving. Capacity inspection must report the actual database volume; a builder-local empty disk is not a substitute. Do not run competing builders. Source/feature SQL and WAL still consume database-host resources. |
-| Immutable object storage / PMTiles            | A possible later distribution path, not an implemented exporter here                                                                                                                 | Removes most origin SQL after export, but needs generation-aware conflated tile enumeration, archive verification, object lifecycle and range/cache configuration. Raw Overture tiles cannot replace the canonical OSM/Overture policy output.           |
+| Scenario                             | Supported setup                                                                                                                                                                                    | Operational tradeoff                                                                                                                                                                                                                                     |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| One appropriately sized host         | Existing data-manager, ops-agent, authoritative PostGIS and API; separate source/publication schedules                                                                                             | Simplest operations. Preparation competes with origin reads for RAM, disk I/O and WAL; container defaults are not a planet capacity profile.                                                                                                             |
+| Dedicated preparation host and a CDN | One data-manager with persistent `/data`, private access to the same authoritative PostGIS, and authenticated ops-agent access to that database host; the one API process and a CDN in front of it | Separates source-tool CPU/RAM from serving. Capacity inspection must report the actual database volume; a builder-local empty disk is not a substitute. Do not run competing builders. Source/feature SQL and WAL still consume database-host resources. |
+| Immutable object storage / PMTiles   | A possible later distribution path, not an implemented exporter here                                                                                                                               | Removes most origin SQL after export, but needs generation-aware conflated tile enumeration, archive verification, object lifecycle and range/cache configuration. Raw Overture tiles cannot replace the canonical OSM/Overture policy output.           |
 
-All implemented API origins must use the same authoritative generation database.
+OpenMapX runs one API process per instance, and it must use the authoritative
+generation database.
 This change does not route individual requests to replicas or synchronize separate
 publication databases. A deployment using physical database replication must
 route discovery and feature reads consistently to a fully replayed instance;
@@ -291,9 +292,9 @@ in the cache key and preserve binary content type. Changing sources creates new
 URLs. Disable changes discovery within one minute; rollback restores a retained
 URL. Neither action can revoke a tile already held by a client/CDN. Preserve the
 API's per-origin eight pending reads, two-second SQL timeout, zooms 13 to 18,
-256-feature and 128-KiB budgets. Origin scaling increases aggregate database work,
-so size connection limits and monitor cache misses, timeout/429 rate and query
-latency instead of multiplying API processes without a database budget.
+256-feature and 128-KiB budgets. The CDN, not more API processes, is how tile
+serving scales; size connection limits and monitor cache misses, timeout/429 rate
+and query latency.
 
 ### Resource sizing and configuration
 
