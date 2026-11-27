@@ -163,12 +163,12 @@ it("rearms expiry when a clock correction makes the first callback early", () =>
 
 it("keeps provider and application details out of the default summary", () => {
   render(view());
-  expect(screen.queryByText("Current traffic speeds unavailable")).toBeNull();
+  expect(screen.queryByText("Current traffic speeds not confirmed")).toBeNull();
   expect(screen.queryByText(/Route provider: Valhalla/)).toBeNull();
   expect(screen.queryByText("Available road updates were used for this route.")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "About traffic" }));
   expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
-    "Current traffic speeds unavailable",
+    "Current traffic speeds not confirmed",
   );
   expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
     "Available road updates were used for this route.",

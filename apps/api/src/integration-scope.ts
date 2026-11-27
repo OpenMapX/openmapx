@@ -125,13 +125,13 @@ export const PROVIDER_CALL_DEADLINE_MS: Readonly<Record<ProviderDomain, number>>
 
 /**
  * The longest the host waits for a place resolver of an installed
- * integration, by the rule above. The longest built-in resolver is a data
- * source's: it opens the site (the chain behind `data-source`, 210 s), looks
- * for the OSM feature on the Overpass primary and the public mirror (35 s
- * each), then reverse-geocodes (10 s): 290 s, times one and a half.
- * Built-in resolvers are not bound.
+ * integration. Place details are the only route that calls resolvers, and it
+ * answers the client after 20 seconds whether or not the resolver has
+ * finished. Waiting longer reaches no one and only keeps one of the few
+ * place-enrichment slots busy, so the resolver is cut off soon after the
+ * route has given up. Built-in resolvers are not bound.
  */
-export const PLACE_RESOLVER_DEADLINE_MS = 435_000;
+export const PLACE_RESOLVER_DEADLINE_MS = 30_000;
 
 /**
  * Returns a resolver that runs `resolver` inside `scope`, cut off with

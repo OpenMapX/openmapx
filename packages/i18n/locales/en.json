@@ -4778,7 +4778,7 @@
       "slow": "Slow"
     },
     "about": "About traffic",
-    "summary": "Current traffic speeds unavailable",
+    "summary": "Current traffic speeds not confirmed",
     "provider": "Route provider: {source}",
     "delay": "+{delay}",
     "coverageExplanation": "Current traffic is included in this travel time.",

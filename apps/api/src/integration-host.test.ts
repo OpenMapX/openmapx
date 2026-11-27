@@ -1465,8 +1465,20 @@ describe("initIntegrations — loader", () => {
         expect(await resolver?.("1", {})).toEqual({ scope: "demo" });
         vi.useFakeTimers({ toFake: ["setTimeout"] });
         const hung = resolver?.("hang", {});
+        let settled = false;
+        hung?.then(
+          () => {
+            settled = true;
+          },
+          () => {
+            settled = true;
+          },
+        );
         const outcome = expect(hung).rejects.toThrow("provider deadline exceeded");
-        await vi.advanceTimersByTimeAsync(435_000);
+        await vi.advanceTimersByTimeAsync(29_999);
+        expect(settled).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(settled).toBe(true);
         await outcome;
       });
     });

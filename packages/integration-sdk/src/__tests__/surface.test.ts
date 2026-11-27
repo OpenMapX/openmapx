@@ -85,6 +85,22 @@ describe("integration SDK surface", () => {
       expect(name in root).toBe(false);
   });
 
+  it("keeps the host's place-resolver controls out of the places entry", async () => {
+    const places = await import("@openmapx/integration-sdk/places");
+    const placeIds = await import("@openmapx/place-ids");
+    for (const name of [
+      "setPlaceResolverRegistrationHook",
+      "snapshotPlaceResolvers",
+      "restorePlaceResolvers",
+      "beginPlaceResolverStaging",
+      "commitPlaceResolverStaging",
+      "rollbackPlaceResolverStaging",
+    ]) {
+      expect(name in placeIds, name).toBe(true);
+      expect(name in places, name).toBe(false);
+    }
+  });
+
   it("uses named re-exports only", () => {
     const starred = entryFiles
       .filter(({ file, text }) => file !== "testing.ts" && /^export \* from/m.test(text))
