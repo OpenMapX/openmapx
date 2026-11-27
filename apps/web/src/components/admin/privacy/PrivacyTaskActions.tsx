@@ -28,6 +28,20 @@ export function PrivacyTaskActions({
   );
 }
 
+/** The reasons an export leaves an extension out, as the API codes them. */
+const EXTENSION_TASK_REASONS = new Set([
+  "extension-not-loaded",
+  "extension-not-installed",
+  "extension-no-export-handler",
+  "extension-handler-failed",
+  "extension-export-too-large",
+]);
+
+/** Why an export left an extension out, in words; an unknown code is shown as it is. */
+function extensionTaskReason(w: (key: string) => string, code: string): string {
+  return EXTENSION_TASK_REASONS.has(code) ? w(`extensionTaskReasons.${code}`) : code;
+}
+
 function Task({
   task,
   detail,
@@ -43,8 +57,17 @@ function Task({
   return (
     <Stack spacing={1} sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 2 }}>
       <Typography>
-        {task.registrationId}
-        {task.publicCode ? ` · ${task.publicCode}` : ""} · {w(`taskStates.${task.status}`)}
+        {task.source === "extension" ? (
+          <>
+            {task.integrationName ?? task.registrationId}
+            {task.publicCode ? ` · ${extensionTaskReason(w, task.publicCode)}` : ""} ·{" "}
+            {w(`taskStates.${task.status}`)}
+          </>
+        ) : (
+          <>
+            {task.registrationId} · {w(`taskStates.${task.status}`)}
+          </>
+        )}
         {task.resolutionCode ? ` · ${task.resolutionCode}` : ""}
       </Typography>
       {open && (

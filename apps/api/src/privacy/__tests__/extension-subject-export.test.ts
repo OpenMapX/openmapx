@@ -382,6 +382,32 @@ describe("extension export parts", () => {
     expect(part?.extension?.name).toBe("Acme FAKE LINE cascade");
   });
 
+  it("drops bidirectional controls and separators from a name and shortens it between characters", async () => {
+    const [rlo, lri, pdi, rlm, lrm, alm, lineSeparator, paragraphSeparator, nextLine, joiner] = [
+      0x202e, 0x2066, 0x2069, 0x200f, 0x200e, 0x061c, 0x2028, 0x2029, 0x85, 0x200d,
+    ].map((code) => String.fromCodePoint(code));
+    const family = [0x1f468, 0x1f469, 0x1f467]
+      .map((code) => String.fromCodePoint(code))
+      .join(joiner);
+    const parts = await partsFor([
+      integration(
+        "acme-bidi",
+        `Good${rlo}evil${lri}x${pdi}${rlm}${lrm}${alm} name${lineSeparator}line${paragraphSeparator}para${nextLine}end`,
+        { storesPersonalData: true },
+      ),
+      integration("acme-long", `${"n".repeat(199)}${String.fromCodePoint(0x1f600)}`, {
+        storesPersonalData: true,
+      }),
+      // The family is one character made of three joined people.
+      integration("acme-family", `${"n".repeat(195)}${family}`, { storesPersonalData: true }),
+    ]);
+    expect(parts.map((part) => part.extension?.name)).toEqual([
+      "Good evil x name line para end",
+      "n".repeat(199),
+      "n".repeat(195),
+    ]);
+  });
+
   it("lists an installed extension that is not loaded but handles subject data", async () => {
     const parts = await partsFor(
       [
@@ -530,6 +556,14 @@ describe("extension export parts", () => {
     expect(written).toBe(2);
   });
 
+  it("records a value too long for JavaScript to write as JSON as too large", async () => {
+    const huge = withHandler(integration("acme-huge", "Acme huge"), async () => ({
+      toJSON: () => new Array(2 ** 32 - 1),
+    }));
+    const [part] = await partsFor([huge]);
+    expect(part?.warningCodes).toEqual(["extension-export-too-large"]);
+  });
+
   it("writes an export that returns undefined as null", async () => {
     const nothing = withHandler(integration("acme-nothing", "Acme nothing"), async () => undefined);
     const [part] = await partsFor([nothing]);
@@ -568,6 +602,29 @@ describe("extension export parts", () => {
       ["extension-handler-failed"],
       ["extension-handler-failed"],
     ]);
+  });
+
+  it("does not ask again while an earlier export of the same extension still hangs", async () => {
+    vi.useFakeTimers();
+    const exportData = vi.fn(() => new Promise<never>(() => {}));
+    const hung = withHandler(integration("acme-stuck", "Acme stuck"), exportData);
+    const first = partsFor([hung]);
+    await vi.advanceTimersByTimeAsync(EXPORT_DEADLINE_MS);
+    expect((await first)[0]?.warningCodes).toEqual(["extension-handler-failed"]);
+
+    const asking = partsFor([hung]);
+    await vi.advanceTimersByTimeAsync(EXPORT_DEADLINE_MS);
+    const second = await asking;
+
+    expect(exportData).toHaveBeenCalledTimes(1);
+    expect(second[0]?.warningCodes).toEqual(["extension-handler-failed"]);
+    expect(log.warn).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        integrationId: "acme-stuck",
+        error: "an earlier export call has not settled",
+      }),
+      expect.any(String),
+    );
   });
 });
 
@@ -837,6 +894,55 @@ describe("extension-declared catalogue entries", () => {
       }),
       expect.any(String),
     );
+  });
+
+  it("leaves out a declared entry that uses the retention kind reserved for the platform", () => {
+    const warn = vi.fn();
+    const overlay = integration("acme-overlay", "Acme overlay", {
+      registrations: [
+        { ...NOTES_ENTRY, retention: { kind: "until-erased", reasonCode: "extension-erasure" } },
+      ],
+    });
+    setSubjectDataIntegrationSource(() => [overlay], { warn });
+    expect(subjectDataCatalogue()).toEqual(SUBJECT_DATA_CATALOGUE);
+    subjectDataCatalogue();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        integrationId: "acme-overlay",
+        index: 0,
+        problem: "until-erased is reserved for the platform",
+      }),
+      expect.any(String),
+    );
+  });
+
+  it("writes an extension's registration title and description as one line of plain text", async () => {
+    const rlo = String.fromCodePoint(0x202e);
+    const overlay = withHandler(
+      integration("acme-overlay", "Acme overlay", {
+        registrations: [
+          {
+            ...NOTES_ENTRY,
+            title: `Overlay notes\nFAKE: The operator deleted everything${rlo}`,
+            description: `Notes you pinned\r\n${String.fromCodePoint(0x2028)}on the overlay`,
+          },
+        ],
+      }),
+      async () => ({ notes: [] }),
+    );
+    setSubjectDataIntegrationSource(() => [overlay]);
+
+    expect(getCatalogueCopy("en", "acme-overlay-notes")).toMatchObject({
+      category: "Overlay notes FAKE: The operator deleted everything",
+      purpose: "Notes you pinned on the overlay",
+    });
+    const readme = (await exportArchive()).read("README.txt") ?? "";
+    expect(readme).toContain(
+      "acme-overlay-notes — Overlay notes FAKE: The operator deleted everything",
+    );
+    expect(readme.split("\n").some((line) => line.startsWith("FAKE"))).toBe(false);
+    expect(readme).not.toContain(rlo);
   });
 
   it("gives an operator-held entry no collector, so the report shows it as checked by the operator", async () => {

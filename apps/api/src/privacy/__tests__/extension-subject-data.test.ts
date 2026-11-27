@@ -96,6 +96,9 @@ function memoryStore(seed: { handlers?: string[]; pending?: Array<[string, strin
     async count(integrationIds) {
       return pending.filter((row) => integrationIds.includes(row.integration_id)).length;
     },
+    async migrated() {
+      return new Set<string>();
+    },
   };
   return store;
 }
@@ -285,7 +288,7 @@ describe("pending erasures", () => {
       source: "privacy",
       title: "Erasure pending in Demo A",
       detail:
-        "1 deleted account waits for this extension to erase its data; erasing has failed up to 1 time per account. Last error: boom. Repair or update the extension, or remove its data.",
+        "1 deleted account waits for this extension to erase their data; erasing has failed up to 1 time per account. Last error: boom. Repair or update the extension, or remove its data.",
     });
     expect(attention.resolve).not.toHaveBeenCalled();
     expect(store.pendingRows("a")[0]).toMatchObject({
@@ -357,7 +360,7 @@ describe("pending erasures", () => {
       .map(([input]) => input)
       .find((input) => input.key === "subject-erasure-pending:b");
     expect(raisedForB?.detail).toBe(
-      "1 deleted account waits for this extension to erase its data; erasing has failed up to 1 time per account. Repair or update the extension, or remove its data.",
+      "1 deleted account waits for this extension to erase their data; erasing has failed up to 1 time per account. Repair or update the extension, or remove its data.",
     );
   });
 

@@ -592,6 +592,69 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       expect(await leftBehind()).toEqual({ schema: true, rows: 1, stray: null });
     });
 
+    it.each([
+      [
+        "in the same file",
+        {
+          "0001_init.sql": [
+            "create table p (id int primary key, uid text) partition by range (id);",
+            "create table p1 partition of p for values from (0) to (100);",
+            'alter table p1 add constraint p1_uid_fkey foreign key (uid) references public."user"(id) on delete cascade;',
+            "create table x (pid int references p(id));",
+          ].join("\n"),
+        },
+        "0001_init.sql",
+      ],
+      [
+        "when a later file attaches the partition",
+        {
+          "0001_init.sql": [
+            "create table p (id int primary key, uid text) partition by range (id);",
+            "create table x (pid int references p(id));",
+          ].join("\n"),
+          "0002_attach.sql": [
+            'create table p1 (id int not null, uid text constraint p1_uid_fkey references public."user"(id) on delete cascade);',
+            "alter table p attach partition p1 for values from (0) to (100);",
+          ].join("\n"),
+        },
+        "0002_attach.sql",
+      ],
+    ])(
+      "refuses a key to a partitioned table whose partition alone cascades from a platform table, %s",
+      async (_label, files, file) => {
+        await expect(migrations.applyExtensionMigrations(shipping(files))).rejects.toThrow(
+          `Migration ${file} of demo adds foreign key x_pid_fkey on ext_demo.x to ext_demo.p1 with ON DELETE NO ACTION; rows of ext_demo.p1 are deleted by a cascade from public."user" through p1_uid_fkey; ${DECLARE} ${SO_DELETION_WORKS}`,
+        );
+        expect(await leftBehind()).toEqual({ schema: false, rows: 0, stray: null });
+      },
+    );
+
+    it("lets the account be deleted when every key to a cascading partitioned table cascades", async () => {
+      await migrations.applyExtensionMigrations(
+        shipping({
+          "0001_init.sql": [
+            "create table p (id int primary key, uid text) partition by range (id);",
+            "create table p1 partition of p for values from (0) to (100);",
+            'alter table p1 add constraint p1_uid_fkey foreign key (uid) references public."user"(id) on delete cascade;',
+            "create table x (pid int references p(id) on delete cascade) partition by range (pid);",
+            "create table x1 partition of x for values from (0) to (100);",
+          ].join("\n"),
+        }),
+      );
+      await raw`insert into "user" (id, name, email, role, created_at, updated_at)
+        values ('part-owner', 'Owner', 'part-owner@example.test', 'user', now(), now())`;
+      await raw.unsafe(
+        "insert into ext_demo.p values (1, 'part-owner'); insert into ext_demo.x values (1);",
+      );
+
+      await deleteAccount("part-owner");
+
+      expect(
+        await raw`select (select count(*)::int from ext_demo.p) as p,
+          (select count(*)::int from ext_demo.x) as x`,
+      ).toEqual([{ p: 0, x: 0 }]);
+    });
+
     it("lets the account be deleted through the erasure path with every accepted shape", async () => {
       expect(
         await migrations.applyExtensionMigrations(

@@ -8,6 +8,7 @@ import type { LoadedIntegration } from "@openmapx/integration-framework";
 import z from "zod/v4";
 import {
   EXTENSION_LOGICAL_ID_PREFIX,
+  extensionPlainText,
   installedIntegrations,
   subjectDataLog,
 } from "./extension-handlers";
@@ -982,6 +983,17 @@ function declaredBy(integration: LoadedIntegration): {
       refuse(checked.error.issues.map((issue) => issue.path.join(".") || "entry").join(", "));
       continue;
     }
+    // It describes the platform's own record of an erasure still owed, which
+    // exists only after the account is closed; extension data is not that.
+    if (checked.data.retention.kind === "until-erased") {
+      refuse("until-erased is reserved for the platform");
+      continue;
+    }
+    // The extension's own words reach a plain-text README.
+    const plainTitle =
+      text.data.title === undefined ? "" : extensionPlainText(text.data.title, 200);
+    const plainDescription =
+      text.data.description === undefined ? "" : extensionPlainText(text.data.description, 2_000);
     // Only a collector entry is answered by the extension's export part; an
     // operator-held entry stays with the operator and has no collector.
     const { collectorId: _placeholder, ...registration } = checked.data;
@@ -993,8 +1005,8 @@ function declaredBy(integration: LoadedIntegration): {
           fields.strategy === "collector"
             ? { ...registration, collectorId: `${EXTENSION_LOGICAL_ID_PREFIX}${integration.id}` }
             : registration,
-        ...(text.data.title === undefined ? {} : { title: text.data.title }),
-        ...(text.data.description === undefined ? {} : { description: text.data.description }),
+        ...(plainTitle ? { title: plainTitle } : {}),
+        ...(plainDescription ? { description: plainDescription } : {}),
       },
     });
   }

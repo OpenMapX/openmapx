@@ -159,6 +159,24 @@ describe.skipIf(skipDatabase)("extension subject data in PostgreSQL", () => {
     expect(await raw`select key from attention_item`).toEqual([]);
   });
 
+  it("resolves a schema-ahead item whose integration's data was removed", async () => {
+    await raw`delete from extension_migration where integration_id in ('removed', 'kept')`;
+    await raw`insert into extension_migration (integration_id, name, sha256)
+      values ('kept', '0002_newer.sql', ${"a".repeat(64)})`;
+    await raw`insert into attention_item (key, severity, source, title) values
+      ('integration-schema-ahead:removed', 'warning', 'extensions', 'Removed runs against a newer database schema'),
+      ('integration-schema-ahead:kept', 'warning', 'extensions', 'Kept runs against a newer database schema')`;
+    try {
+      await subjectData.syncSubjectHandlerTable();
+
+      expect(await raw`select key from attention_item order by key`).toEqual([
+        { key: "integration-schema-ahead:kept" },
+      ]);
+    } finally {
+      await raw`delete from extension_migration where integration_id = 'kept'`;
+    }
+  });
+
   it("keeps recording deletions for an installed integration the registry no longer holds", async () => {
     const first = await createUser();
     const second = await createUser();
@@ -287,7 +305,7 @@ describe.skipIf(skipDatabase)("extension subject data in PostgreSQL", () => {
         source: "privacy",
         title: "Erasure pending in Notes",
         detail:
-          "1 deleted account waits for this extension to erase its data; erasing has failed up to 1 time per account. Last error: boom. Repair or update the extension, or remove its data.",
+          "1 deleted account waits for this extension to erase their data; erasing has failed up to 1 time per account. Last error: boom. Repair or update the extension, or remove its data.",
       },
     ]);
   });
@@ -397,6 +415,29 @@ describe.skipIf(skipDatabase)("extension subject data in PostgreSQL", () => {
     } finally {
       await raw`drop schema ext_kept_data`;
       await raw`drop schema "ext_not_an_id_"`;
+    }
+  });
+
+  it("does not take an ext_ schema of another owner for an extension's data", async () => {
+    const userId = await createUser();
+    await raw`do $$ begin
+      if not exists (select from pg_roles where rolname = 'omx_foreign_owner') then
+        create role omx_foreign_owner nologin;
+      end if;
+    end $$`;
+    await raw`create schema if not exists ext_foreign_tool authorization omx_foreign_owner`;
+    try {
+      registry = [notes];
+
+      const parts = await subjectData.collectExtensionSubjectData({
+        requestId: "case-3",
+        userId,
+        database: pools.db,
+      });
+
+      expect(parts.map((part) => part.extension?.integrationId)).toEqual(["notes"]);
+    } finally {
+      await raw`drop schema ext_foreign_tool`;
     }
   });
 

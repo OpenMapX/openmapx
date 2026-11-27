@@ -408,7 +408,7 @@ CREATE TABLE "data_subject_request_event" (
 	"idempotency_key" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "data_subject_request_event_payload_version_check" CHECK ("data_subject_request_event"."payload_version" > 0),
-	CONSTRAINT "data_subject_request_event_event_type_check" CHECK ("data_subject_request_event"."event_type" in ('received', 'status_changed', 'identity_verified', 'task_resolved', 'extended', 'export_started', 'export_delivered', 'export_failed')),
+	CONSTRAINT "data_subject_request_event_event_type_check" CHECK ("data_subject_request_event"."event_type" in ('received', 'status_changed', 'identity_verified', 'task_resolved', 'extended', 'export_started', 'export_delivered', 'export_failed', 'export_incomplete')),
 	CONSTRAINT "data_subject_request_event_actor_kind_check" CHECK ("data_subject_request_event"."actor_kind" in ('subject', 'admin', 'system'))
 );
 --> statement-breakpoint

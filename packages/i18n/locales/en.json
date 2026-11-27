@@ -4727,6 +4727,13 @@
         "open": "Open",
         "resolved": "Checked"
       },
+      "extensionTaskReasons": {
+        "extension-not-loaded": "The export left this extension's data out because the extension was not running",
+        "extension-not-installed": "The export left this extension's data out because the extension is no longer installed while its data is still stored",
+        "extension-no-export-handler": "The export left this extension's data out because the extension keeps personal data but offers no way to export it",
+        "extension-handler-failed": "The export left this extension's data out because the extension failed or did not answer within 30 seconds",
+        "extension-export-too-large": "The export left this extension's data out because its answer was larger than 8 MiB"
+      },
       "caseStates": {
         "in_progress": "In progress",
         "waiting_on_requester": "Waiting on requester",

@@ -33,18 +33,32 @@ describe("operator task actions", () => {
     expect(writes[0]?.body).toEqual({ version: 3, reasonCode: "logs-checked" });
   });
 
-  it("shows why an open task was opened, such as the reason an export left an extension out", () => {
+  it("names the extension an export left out and why, in words", () => {
     const detail = privacyDetail();
     const task = nth(detail.tasks, 0);
     task.registrationId = "extension:acme-tracker";
     task.source = "extension";
     task.publicCode = "extension-not-loaded";
+    task.integrationName = "Acme tracker";
     renderPrivacyComponent(detail, (client) => (
       <PrivacyTaskActions detail={detail} client={client} />
     ));
-    expect(screen.getByText(/extension:acme-tracker/)).toHaveTextContent(
-      "extension:acme-tracker · extension-not-loaded · privacyAdmin.workflows.taskStates.open",
+    expect(screen.getByText(/Acme tracker/)).toHaveTextContent(
+      "Acme tracker · privacyAdmin.workflows.extensionTaskReasons.extension-not-loaded · privacyAdmin.workflows.taskStates.open",
     );
+    expect(screen.queryByText(/extension:acme-tracker/)).toBeNull();
+  });
+
+  it("shows an operator-held source as its id and state only", () => {
+    const detail = privacyDetail();
+    const task = nth(detail.tasks, 0);
+    renderPrivacyComponent(detail, (client) => (
+      <PrivacyTaskActions detail={detail} client={client} />
+    ));
+    expect(screen.getByText(new RegExp(task.registrationId))).toHaveTextContent(
+      `${task.registrationId} · privacyAdmin.workflows.taskStates.open`,
+    );
+    expect(screen.queryByText(/operator-preservation-action-required/)).toBeNull();
   });
 
   it("offers no action for a resolved task", () => {

@@ -828,11 +828,17 @@ database role:
   keys, with a message that names the file, the key, its table and the
   cascade that reaches it. Use `ON DELETE CASCADE`, or store the id without a
   foreign key and erase the rows through the subject-data handler. Keys
-  between tables no such cascade reaches are not restricted. This guarantees
-  that no foreign key of the schema makes deleting a row outside it, such as
-  an account, fail. It judges foreign keys only: a trigger, rule or check
+  between tables no such cascade reaches are not restricted. A key on or to a
+  partitioned table is judged for each partition, because a cascade may reach
+  one partition without its parent. While the schema's keys change only
+  through the integration's own migration files, this guarantees that no
+  foreign key of the schema makes deleting a row outside it, such as an
+  account, fail. It judges foreign keys only: a trigger, rule or check
   constraint of the integration that fails on such a deletion still makes it
-  fail, and objects a file creates outside its schema are not judged at all.
+  fail. Objects a file creates outside its schema are not judged at all, and
+  neither are keys that reach the schema another way: a key that another
+  integration's migration adds to this schema's tables
+  (`ALTER TABLE ext_other.…`), or one created through `ctx.db` at run time.
 
 - A migration waits at most 120 seconds for each lock, including the lock
   that keeps two runs of the same integration apart, and all files of a start
@@ -1260,7 +1266,10 @@ ctx.registerSubjectDataHandler({
   operator has been asked to provide the data. Each one left out opens an
   operator task `extension:<id>` on the case, with the code as its public code,
   and is logged with the case id; the case cannot be completed until the
-  administrator resolves it.
+  administrator resolves it. The tasks are opened under the case's lock with
+  a new version and an `export_incomplete` event; a case completed while the
+  export was collecting is reopened, and on a refused case the export is
+  refused.
 - An installed integration may describe its data for the processing
   information in `subjectData.registrations` (at most 64). Each entry is a
   catalogue registration without `source` and `collectorId`; the host sets

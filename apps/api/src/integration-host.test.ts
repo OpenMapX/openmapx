@@ -1371,6 +1371,7 @@ describe("initIntegrations — loader", () => {
               return summary;
             },
             count: async (ids) => rows.filter(([id]) => ids.includes(id)).length,
+            migrated: async () => new Set(),
           },
           integrations: getAllIntegrations,
           attention: {
@@ -2376,6 +2377,7 @@ describe("initIntegrations — loader", () => {
             recordStalled: async () => {},
             pendingSummary: async () => new Map([["installed-demo", { count: 1, attempts: 0 }]]),
             count: async () => 1,
+            migrated: async () => new Set(),
           },
           integrations: getAllIntegrations,
           attention: {

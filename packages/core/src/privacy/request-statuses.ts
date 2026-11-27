@@ -33,7 +33,8 @@ export const TERMINAL_REQUEST_STATUSES = [
 
 /**
  * What a case event records. A status change is one `status_changed` event;
- * its payload names the `from` and `to` statuses.
+ * its payload names the `from` and `to` statuses. `export_incomplete` records
+ * the operator tasks an export opened for the parts it had to leave out.
  */
 export const PRIVACY_EVENT_TYPES = [
   "received",
@@ -44,6 +45,7 @@ export const PRIVACY_EVENT_TYPES = [
   "export_started",
   "export_delivered",
   "export_failed",
+  "export_incomplete",
 ] as const;
 export type PrivacyEventType = (typeof PRIVACY_EVENT_TYPES)[number];
 

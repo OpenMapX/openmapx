@@ -98,7 +98,12 @@ requires another explicit confirmation.
   `extension-export-too-large`); see
   [User erasure operations](./user-erasure.md#access-and-portability-requests)
   for what to do. A later export that leaves the extension out again opens the
-  task again.
+  task again. Opening these tasks is recorded in the case history as
+  `export_incomplete` and raises the case version. If you completed the case
+  while the export was still collecting, the case returns to `in_progress`
+  (a `status_changed` event with the reason `export-incomplete`), so it shows
+  up among the open cases again; on a refused case the export is refused
+  instead.
 - **Deadlines and decisions:** inspect the original deadline and controller
   time zone. Record the actual notification time before extending a deadline;
   extensions cannot exceed two calendar months after the original deadline.

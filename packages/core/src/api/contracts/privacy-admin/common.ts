@@ -39,6 +39,8 @@ export const privacyOperatorTaskSchema = z.strictObject({
   publicCode: z.string().nullable(),
   resolutionCode: z.string().nullable(),
   resolvedAt: date.nullable(),
+  /** For a task an export opened for an extension: the extension's name, or its id when it is not installed. */
+  integrationName: z.string().max(200).optional(),
 });
 export const privacyCaseCapabilitiesSchema = z.strictObject({
   verifyIdentity: z.boolean(),

@@ -18,16 +18,16 @@ import {
   stopIntegrationDatabase,
 } from "./integration-db";
 import { readIntegrationFile, verifiedIntegrationPaths } from "./integration-files";
-import { erasurePendingAttentionKey } from "./privacy/extension-subject-data";
+import {
+  erasurePendingAttentionKey,
+  schemaAheadAttentionKey,
+} from "./privacy/extension-subject-data";
 import { processLogger } from "./process-logger";
 import { resolveAttention } from "./services/attention";
 
-const MIGRATIONS_DIRECTORY = "migrations";
+export { schemaAheadAttentionKey };
 
-/** The attention item that says an integration runs against a newer schema than it ships. */
-export function schemaAheadAttentionKey(integrationId: string): string {
-  return `integration-schema-ahead:${integrationId}`;
-}
+const MIGRATIONS_DIRECTORY = "migrations";
 
 /**
  * How long one statement of the migration session waits for a lock,
@@ -93,8 +93,11 @@ const RUN_MIGRATION = "select pg_temp.openmapx_run_migration($1)";
  * constrains the column: a key that references it, a `MATCH FULL` key, a
  * domain, a generated column, a check. `NO ACTION` lets a cascade through
  * only when the same statement deletes the referencing rows, which depends
- * on data. Keys of a partition copy their parent's key and are judged with
- * it. Triggers and rules are not judged.
+ * on data. A key on or to a partitioned table has a copy for each partition,
+ * and each copy is judged on its own: a cascade may reach one partition but
+ * not its parent, so the copy that references that partition decides. A
+ * refused copy is reported under the name of the key it was copied from.
+ * Triggers and rules are not judged.
  */
 const BLOCKING_FOREIGN_KEY = `with recursive fk as (
     select c.oid, c.conname::text as name, c.conrelid, c.confrelid, c.conparentid,
@@ -117,11 +120,18 @@ const BLOCKING_FOREIGN_KEY = `with recursive fk as (
       from fk join reachable r on fk.confrelid = r.relid
       where not fk.leaves and fk.action = 'c' and fk.conrelid <> all(r.visited)
   ),
+  lineage as (
+    select fk.oid, fk.conparentid as parent, fk.name as root from fk
+    union all
+    select l.oid, c.conparentid, c.conname::text
+      from lineage l join pg_catalog.pg_constraint c on c.oid = l.parent
+  ),
   refused as (
-    select distinct on (fk.oid) fk.name, fk.source, fk.target, fk.action, r.origin, r.path
-      from fk left join reachable r on not fk.leaves and r.relid = fk.confrelid
+    select distinct on (fk.oid) l.root as name, fk.source, fk.target, fk.action, r.origin, r.path
+      from fk
+      join lineage l on l.oid = fk.oid and l.parent = 0
+      left join reachable r on not fk.leaves and r.relid = fk.confrelid
       where (fk.leaves or r.relid is not null)
-        and fk.conparentid = 0
         and fk.action <> 'c'
       order by fk.oid, cardinality(r.path)
   )
@@ -475,9 +485,11 @@ function migrationFailure(integrationId: string, file: ShippedMigration, error: 
  * database. Waits for a migration of the same integration that is in
  * progress.
  *
- * The caller calls `afterCommit` once its transaction has committed: it logs
- * how many owed erasures were dropped and resolves the integration's
- * attention items. It never rejects.
+ * The caller must call `afterCommit` once its transaction has committed: it
+ * logs how many owed erasures were dropped and resolves the integration's
+ * attention items. It never rejects. Without that call the drop is not
+ * logged; the next erasure run and the next sync of the handler table still
+ * resolve the items, but only then.
  */
 export async function removeIntegrationData(
   tx: Pick<Sql, "unsafe">,

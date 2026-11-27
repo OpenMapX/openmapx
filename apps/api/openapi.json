@@ -204727,6 +204727,10 @@
                                 "type": "null"
                               }
                             ]
+                          },
+                          "integrationName": {
+                            "type": "string",
+                            "maxLength": 200
                           }
                         },
                         "required": [
@@ -204756,7 +204760,8 @@
                               "extended",
                               "export_started",
                               "export_delivered",
-                              "export_failed"
+                              "export_failed",
+                              "export_incomplete"
                             ]
                           },
                           "actorKind": {

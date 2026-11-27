@@ -11,6 +11,7 @@ import { listAttentionKeys, raiseAttention, resolveAttention } from "../services
 import type { CollectorSourcePart } from "./collectors";
 import {
   EXTENSION_LOGICAL_ID_PREFIX,
+  extensionPlainText,
   hasSubjectDataHandler,
   installedIntegrations,
   integrationRuns,
@@ -39,6 +40,13 @@ export function erasurePendingAttentionKey(integrationId: string): string {
 }
 
 const ERASURE_ATTENTION_PREFIX = erasurePendingAttentionKey("");
+
+/** The attention item that says an integration runs against a newer schema than it ships. */
+export function schemaAheadAttentionKey(integrationId: string): string {
+  return `integration-schema-ahead:${integrationId}`;
+}
+
+const SCHEMA_AHEAD_ATTENTION_PREFIX = schemaAheadAttentionKey("");
 
 type RegisteredHandler = RegisteredSubjectDataHandler;
 
@@ -121,17 +129,12 @@ function truncate(text: string, max: number): string {
 }
 
 /**
- * A name an extension gave itself as one line of plain text: control
- * characters and line breaks become spaces, so the name cannot add lines to
- * a plain-text document. Falls back to the id.
+ * A name an extension gave itself as one line of plain text of at most 200
+ * characters, so the name cannot add lines to or reorder a plain-text
+ * document. Falls back to the id.
  */
 export function plainExtensionName(integration: LoadedIntegration | undefined, id: string): string {
-  const name = String(integration?.manifest.name ?? "")
-    .replace(/[\p{Cc}\p{Zl}\p{Zp}]+/gu, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 200);
-  return name || id;
+  return extensionPlainText(String(integration?.manifest.name ?? ""), 200) || id;
 }
 
 /** `count` deleted accounts, and the verb that goes with them. */
@@ -199,6 +202,8 @@ export interface SubjectErasureStore {
   recordStalled(integrationId: string, subjectId: string, error: string): Promise<void>;
   pendingSummary(): Promise<PendingErasureSummary>;
   count(integrationIds: readonly string[]): Promise<number>;
+  /** Those of `integrationIds` that have migrations recorded in `extension_migration`. */
+  migrated(integrationIds: readonly string[]): Promise<ReadonlySet<string>>;
 }
 
 /** The store in the platform database, on the platform's own pool. */
@@ -270,6 +275,13 @@ export function createSubjectErasureStore(
         where integration_id = any(${integrationIds as string[]}::text[])`;
       return row?.n ?? 0;
     },
+    async migrated(integrationIds) {
+      if (integrationIds.length === 0) return new Set();
+      const rows = await client<Array<{ integration_id: string }>>`
+        select distinct integration_id from extension_migration
+        where integration_id = any(${integrationIds as string[]}::text[])`;
+      return new Set(rows.map((row) => row.integration_id));
+    },
   };
 }
 
@@ -337,6 +349,33 @@ export function createExtensionSubjectData(dependencies: ExtensionSubjectDataDep
       );
       await updateItem(erasurePendingAttentionKey(integrationId), () =>
         attention.resolve(erasurePendingAttentionKey(integrationId)),
+      );
+    }
+    await resolveStaleSchemaAhead();
+  }
+
+  /**
+   * Resolves the schema-ahead item of every integration that has no
+   * migrations recorded any more. Removing an integration's data resolves
+   * the item after its transaction commits; this catches the removal whose
+   * caller never got that far, for example because the process stopped.
+   * A failure is logged and does not fail the sync.
+   */
+  async function resolveStaleSchemaAhead(): Promise<void> {
+    try {
+      const open = await attention.openKeys(SCHEMA_AHEAD_ATTENTION_PREFIX);
+      if (open.length === 0) return;
+      const ids = open.map((key) => key.slice(SCHEMA_AHEAD_ATTENTION_PREFIX.length));
+      const migrated = await store.migrated(ids);
+      for (const integrationId of ids) {
+        if (migrated.has(integrationId)) continue;
+        const key = schemaAheadAttentionKey(integrationId);
+        await updateItem(key, () => attention.resolve(key));
+      }
+    } catch (error) {
+      log.warn(
+        { err: loggableThrown(error) },
+        "Could not check the schema-ahead attention items against the recorded migrations",
       );
     }
   }
@@ -469,7 +508,7 @@ export function createExtensionSubjectData(dependencies: ExtensionSubjectDataDep
       const canErase = integration !== undefined && runningSubjectDataHandler(integration);
       let detail: string | undefined;
       if (failure !== undefined)
-        detail = `${accountsWaiting(pending.count)} for this extension to erase its data; erasing has failed up to ${pending.attempts} ${pending.attempts === 1 ? "time" : "times"} per account.${failure ? ` Last error: ${failure}.` : ""} Repair or update the extension, or remove its data.`;
+        detail = `${accountsWaiting(pending.count)} for this extension to erase their data; erasing has failed up to ${pending.attempts} ${pending.attempts === 1 ? "time" : "times"} per account.${failure ? ` Last error: ${failure}.` : ""} Repair or update the extension, or remove its data.`;
       else if (!canErase)
         detail = `${name} cannot erase data now: ${whyNotErasing(integration)}. ${accountsWaiting(pending.count)} for it to erase their data. ${erasureNextStep(integration)}`;
       // An integration that can erase and failed nothing this run keeps its item as it is.
@@ -647,6 +686,9 @@ function serialiseExport(value: unknown): string | null {
     );
   } catch (error) {
     if (error === tooLarge) return null;
+    // V8's own limit on a string's length, which a value can reach before
+    // the count above sees it, for example a huge sparse array.
+    if (error instanceof RangeError && error.message === "Invalid string length") return null;
     throw error;
   }
   if (json === undefined) throw new Error("The export is not a JSON value");
@@ -870,10 +912,16 @@ export function collectExtensionSubjectData(args: {
         select integration_id from integration_subject_handler order by integration_id`;
       return rows.map((row) => row.integration_id);
     },
+    // Only schemas of the role that owns the platform's tables: the migration
+    // runner refuses to use an `ext_` schema of another owner, so such a
+    // schema never holds an extension's data.
     schemas: async () => {
       const rows = await client<Array<{ nspname: string }>>`
         select nspname::text from pg_catalog.pg_namespace
-        where starts_with(nspname::text, 'ext_') order by nspname`;
+        where starts_with(nspname::text, 'ext_')
+          and nspowner = (select relowner from pg_catalog.pg_class
+            where oid = 'public.integration_subject_handler'::regclass)
+        order by nspname`;
       return rows.map((row) => row.nspname);
     },
     log: processLogger,

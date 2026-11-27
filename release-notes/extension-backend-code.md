@@ -69,11 +69,15 @@ every key to a table of the schema that such a cascade deletes rows from, is
 `ON DELETE CASCADE`; `SET NULL`, `SET DEFAULT`, `NO ACTION` and `RESTRICT` are
 refused there. An integration that needs another behaviour stores the id
 without a foreign key and erases the rows through its subject-data handler.
-So no foreign key of the schema can make deleting a row outside it, for example
-an account, fail. The check judges foreign keys only: a trigger, rule or check
+Keys on or to a partitioned table are judged for each partition. So, while the
+schema's keys change only through the integration's own migration files, no
+foreign key of the schema can make deleting a row outside it, for example an
+account, fail. The check judges foreign keys only: a trigger, rule or check
 constraint of the integration can still make a deletion fail, and a file must
 not create objects outside its schema, because such objects escape the check
-and are not removed with the integration's data. Migrations wait at most 2
+and are not removed with the integration's data. A key that another
+integration's migration adds to this schema's tables, or one created through
+`ctx.db` at run time, is not judged either. Migrations wait at most 2
 minutes for a lock and run at most 30 minutes in all; both limits are also set
 on the database session, so PostgreSQL ends a migration whose API process went
 away, unless a file turned the session's time limit off itself. A stop request,

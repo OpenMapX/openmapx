@@ -374,6 +374,171 @@ suite("privacy request lifecycle on PostgreSQL", () => {
     ]);
   });
 
+  async function events(requestId: string) {
+    return fixture.db
+      .select({
+        eventType: dataSubjectRequestEvent.eventType,
+        actorKind: dataSubjectRequestEvent.actorKind,
+        payload: dataSubjectRequestEvent.payload,
+      })
+      .from(dataSubjectRequestEvent)
+      .where(eq(dataSubjectRequestEvent.requestId, requestId))
+      .orderBy(dataSubjectRequestEvent.createdAt, dataSubjectRequestEvent.id);
+  }
+
+  it("records each extension task an export opens as a change of the case", async () => {
+    const userId = await subject();
+    const request = await service().create({
+      userId,
+      kind: "portability",
+      channel: "self_service",
+      locale: "en",
+      timeZone: "UTC",
+    });
+    const before = await service().getById(request.id);
+    const eventsBefore = (await events(request.id)).length;
+
+    now = new Date("2026-03-01T12:05:00Z");
+    await service().recordExtensionsLeftOut(request.id, [
+      { integrationId: "acme-tracker", warningCode: "extension-not-loaded" },
+    ]);
+
+    const after = await service().getById(request.id);
+    expect(after).toMatchObject({ status: "in_progress", version: before.version + 1 });
+    expect(after.updatedAt).toEqual(now);
+    const recorded = (await events(request.id)).slice(eventsBefore);
+    expect(recorded).toEqual([
+      {
+        eventType: "export_incomplete",
+        actorKind: "system",
+        payload: { tasks: ["extension:acme-tracker"], codes: ["extension-not-loaded"] },
+      },
+    ]);
+
+    const [task] = (await tasks(request.id)).filter(
+      (row) => row.registrationId === "extension:acme-tracker",
+    );
+    assert(task);
+    await service().resolveTask({
+      requestId: request.id,
+      taskId: task.id,
+      version: after.version,
+      reasonCode: "extension-data-provided",
+      actorId: ADMINS[0],
+      idempotencyKey: `resolve-extension-${task.id}`,
+    });
+    const resolved = await service().getById(request.id);
+    await service().recordExtensionsLeftOut(request.id, [
+      { integrationId: "acme-tracker", warningCode: "extension-handler-failed" },
+      { integrationId: "kept-data", warningCode: "extension-not-installed" },
+    ]);
+    expect((await service().getById(request.id)).version).toBe(resolved.version + 1);
+    expect((await events(request.id)).at(-1)).toEqual({
+      eventType: "export_incomplete",
+      actorKind: "system",
+      payload: {
+        tasks: ["extension:acme-tracker", "extension:kept-data"],
+        codes: ["extension-handler-failed", "extension-not-installed"],
+      },
+    });
+  });
+
+  it("reopens a case an administrator completed while its export was still collecting", async () => {
+    const userId = await subject();
+    const request = await service().create({
+      userId,
+      kind: "portability",
+      channel: "self_service",
+      locale: "en",
+      timeZone: "UTC",
+    });
+    await resolveAll(request.id);
+    const started = await service().beginSelfServiceExport({
+      userId,
+      sessionId: `session-${request.id}`,
+      kind: "portability",
+      locale: "en",
+      timeZone: "UTC",
+    });
+    expect(started.id).toBe(request.id);
+    const completed = await service().recordDecision({
+      requestId: request.id,
+      version: (await service().getById(request.id)).version,
+      decision: "completed",
+      reasonCode: "data-provided",
+      actorId: ADMINS[0],
+      idempotencyKey: `complete-during-export-${request.id}`,
+    });
+    expect(completed.status).toBe("completed");
+    const eventsBefore = (await events(request.id)).length;
+
+    now = new Date("2026-03-01T12:00:30Z");
+    await service().recordExtensionsLeftOut(request.id, [
+      { integrationId: "acme-tracker", warningCode: "extension-handler-failed" },
+    ]);
+
+    const reopened = await service().getById(request.id);
+    expect(reopened).toMatchObject({
+      status: "in_progress",
+      version: completed.version + 1,
+      completedAt: null,
+      closedAt: null,
+    });
+    expect((await events(request.id)).slice(eventsBefore)).toEqual([
+      {
+        eventType: "status_changed",
+        actorKind: "system",
+        payload: { from: "completed", to: "in_progress", reasonCode: "export-incomplete" },
+      },
+      {
+        eventType: "export_incomplete",
+        actorKind: "system",
+        payload: { tasks: ["extension:acme-tracker"], codes: ["extension-handler-failed"] },
+      },
+    ]);
+    expect(
+      (await tasks(request.id))
+        .filter((task) => task.status === "open")
+        .map((task) => task.registrationId),
+    ).toEqual(["extension:acme-tracker"]);
+    // The download that follows leaves the case with the administrator.
+    expect((await service().finishExport(request.id, { kind: "subject", id: userId })).status).toBe(
+      "in_progress",
+    );
+  });
+
+  it("refuses to open extension tasks on a refused case", async () => {
+    const userId = await subject();
+    const request = await service().create({
+      userId,
+      kind: "portability",
+      channel: "self_service",
+      locale: "en",
+      timeZone: "UTC",
+    });
+    const refused = await service().recordDecision({
+      requestId: request.id,
+      version: request.version,
+      decision: "refused",
+      reasonCode: "manifestly-unfounded",
+      actorId: ADMINS[0],
+      idempotencyKey: `refuse-during-export-${request.id}`,
+    });
+
+    await expect(
+      service().recordExtensionsLeftOut(request.id, [
+        { integrationId: "acme-tracker", warningCode: "extension-not-loaded" },
+      ]),
+    ).rejects.toMatchObject({ code: "REQUEST_NOT_ACTIVE", statusCode: 409 });
+    expect(await service().getById(request.id)).toMatchObject({
+      status: "refused",
+      version: refused.version,
+    });
+    expect(
+      (await tasks(request.id)).filter((task) => task.registrationId.startsWith("extension:")),
+    ).toEqual([]);
+  });
+
   it("records a withdrawal as completed with reason withdrawn and sends no completion email", async () => {
     const userId = await subject();
     const request = await service().create({

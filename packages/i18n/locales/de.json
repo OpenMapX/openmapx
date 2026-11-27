@@ -4727,6 +4727,13 @@
         "open": "Offen",
         "resolved": "Geprüft"
       },
+      "extensionTaskReasons": {
+        "extension-not-loaded": "Der Export enthält die Daten dieser Erweiterung nicht, weil die Erweiterung nicht lief",
+        "extension-not-installed": "Der Export enthält die Daten dieser Erweiterung nicht, weil die Erweiterung nicht mehr installiert ist, ihre Daten aber noch gespeichert sind",
+        "extension-no-export-handler": "Der Export enthält die Daten dieser Erweiterung nicht, weil die Erweiterung personenbezogene Daten speichert, aber keinen Export dafür anbietet",
+        "extension-handler-failed": "Der Export enthält die Daten dieser Erweiterung nicht, weil die Erweiterung einen Fehler hatte oder nicht innerhalb von 30 Sekunden antwortete",
+        "extension-export-too-large": "Der Export enthält die Daten dieser Erweiterung nicht, weil ihre Antwort größer als 8 MiB war"
+      },
       "caseStates": {
         "in_progress": "In Bearbeitung",
         "waiting_on_requester": "Wartet auf anfragende Person",

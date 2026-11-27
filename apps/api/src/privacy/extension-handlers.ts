@@ -16,6 +16,33 @@ import type { IntegrationScope } from "../integration-scope";
  */
 export const EXTENSION_LOGICAL_ID_PREFIX = "extension:";
 
+/**
+ * Control characters, line and paragraph separators, and the bidirectional
+ * controls (marks, embeddings, overrides and isolates), which can make text
+ * read in an order other than the one it is stored in.
+ */
+const UNSAFE_IN_PLAIN_TEXT = /[\p{Cc}\p{Zl}\p{Zp}\p{Bidi_Control}]+/gu;
+
+const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+/**
+ * Text an extension supplies, such as its name or a registration's title, as
+ * one line of plain text at most `max` UTF-16 units long: what could add a
+ * line or reorder the text in a plain-text document becomes a space, runs of
+ * white space become one, and a longer text is cut between two characters
+ * as a reader sees them, never inside one.
+ */
+export function extensionPlainText(value: string, max: number): string {
+  const text = value.replace(UNSAFE_IN_PLAIN_TEXT, " ").replace(/\s+/g, " ").trim();
+  if (text.length <= max) return text;
+  let cut = "";
+  for (const { segment } of graphemes.segment(text)) {
+    if (cut.length + segment.length > max) break;
+    cut += segment;
+  }
+  return cut.trimEnd();
+}
+
 export interface RegisteredSubjectDataHandler {
   readonly scope: IntegrationScope;
   readonly erase: (subjectId: string) => unknown;

@@ -969,6 +969,13 @@ export class PrivacyRequestService {
    * an earlier export opened is opened again with the new reason, also when
    * an administrator had resolved it, so every export that leaves an
    * extension out is seen to before the case can be completed.
+   *
+   * Like every other change to a case, it locks the request, raises its
+   * version and records an `export_incomplete` event. An export collects for
+   * up to half a minute, and an administrator may complete the case in that
+   * time; such a case is reopened, because a completed case must not carry
+   * an open task the administrator never sees. A refused case is not
+   * reopened: the export is refused instead.
    */
   async recordExtensionsLeftOut(
     requestId: string,
@@ -976,29 +983,83 @@ export class PrivacyRequestService {
   ): Promise<void> {
     if (leftOut.length === 0) return;
     const now = this.now();
-    await this.database
-      .insert(dataSubjectRequestTask)
-      .values(
-        leftOut.map(({ integrationId, warningCode }) => ({
-          requestId,
-          registrationId: `${EXTENSION_LOGICAL_ID_PREFIX}${integrationId}`,
-          source: "extension" as const,
-          status: "open" as const,
-          publicCode: warningCode,
+    const taskIds = leftOut.map(
+      ({ integrationId }) => `${EXTENSION_LOGICAL_ID_PREFIX}${integrationId}`,
+    );
+    await this.database.transaction(async (tx) => {
+      const [current] = await tx
+        .select()
+        .from(dataSubjectRequest)
+        .where(eq(dataSubjectRequest.id, requestId))
+        .for("update")
+        .limit(1);
+      if (!current) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
+      const reopening = current.status === "completed";
+      if (!reopening && !acceptsTaskResolution(current.status))
+        throw new PrivacyRequestError("REQUEST_NOT_ACTIVE", 409);
+      await tx
+        .insert(dataSubjectRequestTask)
+        .values(
+          leftOut.map(({ warningCode }, index) => ({
+            requestId,
+            registrationId: taskIds[index] as string,
+            source: "extension" as const,
+            status: "open" as const,
+            publicCode: warningCode,
+            createdAt: now,
+            updatedAt: now,
+          })),
+        )
+        .onConflictDoUpdate({
+          target: [dataSubjectRequestTask.requestId, dataSubjectRequestTask.registrationId],
+          set: {
+            status: "open",
+            publicCode: sql`excluded.public_code`,
+            resolutionCode: null,
+            resolvedAt: null,
+            updatedAt: now,
+          },
+        });
+      const [updated] = await tx
+        .update(dataSubjectRequest)
+        .set({
+          version: sql`${dataSubjectRequest.version} + 1`,
+          updatedAt: now,
+          // An open operator task means the case is being worked on.
+          ...(reopening ? { status: "in_progress", completedAt: null, closedAt: null } : {}),
+        })
+        .where(eq(dataSubjectRequest.id, current.id))
+        .returning({ id: dataSubjectRequest.id });
+      if (!updated) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
+      if (reopening)
+        await tx.insert(dataSubjectRequestEvent).values({
+          requestId: current.id,
+          eventType: "status_changed",
+          actorKind: "system",
+          actorUserId: null,
+          payload: boundedEventPayload({
+            from: current.status,
+            to: "in_progress",
+            reasonCode: "export-incomplete",
+          }),
+          payloadVersion: 1,
           createdAt: now,
-          updatedAt: now,
-        })),
-      )
-      .onConflictDoUpdate({
-        target: [dataSubjectRequestTask.requestId, dataSubjectRequestTask.registrationId],
-        set: {
-          status: "open",
-          publicCode: sql`excluded.public_code`,
-          resolutionCode: null,
-          resolvedAt: null,
-          updatedAt: now,
-        },
+        });
+      // The event payload holds at most 32 entries per list; the tasks
+      // themselves are all recorded above.
+      await tx.insert(dataSubjectRequestEvent).values({
+        requestId: current.id,
+        eventType: "export_incomplete",
+        actorKind: "system",
+        actorUserId: null,
+        payload: boundedEventPayload({
+          tasks: taskIds.slice(0, 32),
+          codes: leftOut.slice(0, 32).map(({ warningCode }) => warningCode),
+        }),
+        payloadVersion: 1,
+        createdAt: now,
       });
+    });
   }
 
   /** Record an export failure without identifiers in the payload. */

@@ -1,5 +1,5 @@
 {
-  "id": "69efd0b3-a114-4788-b7f2-25f765a5d80c",
+  "id": "ec38e3a5-ccc2-4f99-95b3-3719d18bbf1b",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -3633,7 +3633,7 @@
         },
         "data_subject_request_event_event_type_check": {
           "name": "data_subject_request_event_event_type_check",
-          "value": "\"data_subject_request_event\".\"event_type\" in ('received', 'status_changed', 'identity_verified', 'task_resolved', 'extended', 'export_started', 'export_delivered', 'export_failed')"
+          "value": "\"data_subject_request_event\".\"event_type\" in ('received', 'status_changed', 'identity_verified', 'task_resolved', 'extended', 'export_started', 'export_delivered', 'export_failed', 'export_incomplete')"
         },
         "data_subject_request_event_actor_kind_check": {
           "name": "data_subject_request_event_actor_kind_check",
