@@ -109,6 +109,37 @@ describe("integration scope", () => {
       expect(PROVIDER_CALL_DEADLINE_MS[domain as ProviderDomain]).toBeGreaterThanOrEqual(15_000);
   });
 
+  it("leaves every built-in's longest chain of awaited requests inside its domain's deadline", () => {
+    expect(PROVIDER_CALL_DEADLINE_MS).toEqual({
+      transit: 450_000,
+      "live-transit": 45_000,
+      "data-source": 315_000,
+      weather: 15_000,
+      "air-quality": 15_000,
+      geocoding: 15_000,
+      routing: 140_000,
+      "ride-hailing": 90_000,
+      "road-conditions": 155_000,
+      "fuel-stations": 315_000,
+      "parking-sites": 315_000,
+      "charging-sites": 1_200_000,
+      cameras: 255_000,
+      "message-signs": 255_000,
+      "landmark-models": 45_000,
+      "road-weather": 255_000,
+      "service-vehicles": 45_000,
+      "border-crossings": 195_000,
+      hazards: 60_000,
+      photos: 15_000,
+      "street-level-imagery": 45_000,
+      reviews: 45_000,
+      "poi-search": 105_000,
+      "search-suggestions": 15_000,
+      knowledge: 30_000,
+      "gtfs-catalog": 2_320_000,
+    });
+  });
+
   it("leaves synchronous members and non-function members alone", () => {
     const provider = {
       id: "sync",
