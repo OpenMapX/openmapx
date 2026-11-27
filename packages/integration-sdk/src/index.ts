@@ -9,6 +9,7 @@ export type {
   AttributionIndexHandle,
   CustomHealthCheckFn,
   DatabaseClient,
+  DatabaseTransaction,
   HealthCheckResult,
   HttpClient,
   HttpClientOptions,

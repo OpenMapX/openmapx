@@ -5,6 +5,7 @@
     "CacheWriter",
     "CustomHealthCheckFn",
     "DatabaseClient",
+    "DatabaseTransaction",
     "Disclosure",
     "HealthCheckResult",
     "HttpClient",

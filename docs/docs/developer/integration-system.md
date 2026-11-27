@@ -727,7 +727,7 @@ where they came from.
 interface IntegrationContext {
   readonly http: HttpClient; // fetch wrapper with optional Redis caching
   readonly cache: CacheClient; // namespaced KV (int:<id>:<key>) with withCache()
-  readonly db?: DatabaseClient; // only when the manifest requires postgis
+  readonly db?: DatabaseClient; // when the manifest requires postgis or ships migrations
   readonly log: Logger; // tagged structured logger
   readonly secrets: SecretsClient; // decrypted vault access
   // …
@@ -746,8 +746,17 @@ interface IntegrationContext {
   An entry that several callers share holds only what the upstream returned;
   add caller-specific values, such as the distance from the caller to a tide
   station, to a copy at the route.
-- **`db`** is present only when the manifest requires the `postgis` service;
-  otherwise it is `undefined`.
+- **`db`** is present when the manifest requires the `postgis` service or
+  declares `database.migrations: true`; otherwise it is `undefined`.
+  `execute` runs one statement on the request-path pool, which ends it after
+  five seconds. `transaction(fn, { timeoutMs })` runs `fn` in one transaction
+  on a separate pool of two connections: it commits when `fn` resolves, rolls
+  back when it rejects, and rejects with `ProviderTimeoutError` once the call,
+  a statement or a pause between statements outlasts `timeoutMs` (default
+  30 seconds, from 1 second to 15 minutes). An integration that ships
+  migrations owns the schema in `db.schema` (`ext_` and its id with `-` as
+  `_`), and unqualified names in both methods resolve there first. Calls made
+  after the integration was unloaded do nothing and never settle.
 - **`log`** is a structured logger tagged with the integration id.
 - **`secrets`** retrieves a decrypted credential from the vault.
 

@@ -25,6 +25,7 @@ export type {
   CacheClient,
   CustomHealthCheckFn,
   DatabaseClient,
+  DatabaseTransaction,
   Disclosure,
   EmailDisclosure,
   EmailProvider,

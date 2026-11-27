@@ -40,7 +40,7 @@ import {
   snapshotPlaceResolvers,
 } from "@openmapx/place-ids";
 import type { FastifyInstance } from "fastify";
-import { integrationSql } from "./db";
+import { extensionSql, integrationSql } from "./db";
 import { assertBundleImports } from "./integration-bundle-imports";
 import { createCacheClient, createHttpClient, createLogger } from "./integration-clients";
 import { type IntegrationCodeCache, prepareIntegrationCodeCache } from "./integration-code-cache";
@@ -51,7 +51,7 @@ import {
   resolveIntegrationConfigWithSourcesStrict,
   warnInvalidConfig,
 } from "./integration-config";
-import { createIntegrationDb } from "./integration-db";
+import { createIntegrationDb, integrationDbAccess } from "./integration-db";
 import { readIntegrationFile, setVerifiedIntegrationFiles } from "./integration-files";
 import { createProviderRegistrars, type ProviderRegistrars } from "./integration-registrars";
 import {
@@ -492,13 +492,20 @@ function manifestDeclaresSecretFields(manifest: IntegrationManifest): boolean {
 }
 
 /**
- * `ctx.db` on the integration pool when the manifest requires PostGIS (via
- * `requires: [{ service: "postgis" }]`); `undefined` otherwise. Shared by cold
- * start and reload.
+ * `ctx.db` when the manifest requires PostGIS or ships migrations;
+ * `undefined` otherwise. Its calls do nothing once `scope` is revoked.
  */
-function buildIntegrationDb(manifest: IntegrationManifest): IntegrationContext["db"] {
-  const needsDb = manifest.requires?.some((r) => r.service === "postgis");
-  return needsDb ? createIntegrationDb(integrationSql) : undefined;
+function buildIntegrationDb(
+  manifest: IntegrationManifest,
+  scope: IntegrationScope,
+): IntegrationContext["db"] {
+  const access = integrationDbAccess(manifest);
+  return access
+    ? createIntegrationDb(
+        { requests: integrationSql, transactions: extensionSql },
+        { ...access, revocation: { scope, log: hostLog } },
+      )
+    : undefined;
 }
 
 /**
@@ -723,7 +730,6 @@ function buildIntegrationContext(args: {
   log: Logger;
   http: HttpClient;
   cache: CacheClient;
-  db: IntegrationContext["db"];
   requiresMap: ReturnType<typeof resolveRequiresForIntegration>;
   providers: Map<string, unknown[]>;
   shutdownHandlers: Array<() => Promise<void>>;
@@ -741,7 +747,6 @@ function buildIntegrationContext(args: {
     log,
     http,
     cache,
-    db,
     requiresMap,
     providers,
     shutdownHandlers,
@@ -790,7 +795,7 @@ function buildIntegrationContext(args: {
     config,
     http,
     cache,
-    db,
+    db: buildIntegrationDb(manifest, scope),
     log,
     secrets: { get: (key: string) => getSecret(id, key) },
     attributionIndex: getAttributionIndex() ?? undefined,
@@ -1326,8 +1331,6 @@ export async function initIntegrations(
       continue;
     }
 
-    const integrationDb = buildIntegrationDb(manifest);
-
     const requiresMap = resolveRequiresForIntegration({
       manifestId: id,
       requires: manifest.requires,
@@ -1348,7 +1351,6 @@ export async function initIntegrations(
       log,
       http,
       cache,
-      db: integrationDb,
       requiresMap,
       providers,
       shutdownHandlers,
@@ -1749,8 +1751,6 @@ async function doReloadIntegrations(
         continue;
       }
 
-      const integrationDb = buildIntegrationDb(manifest);
-
       const fastifyForReload = _fastify;
       const reloadRequiresMap = resolveRequiresForIntegration({
         manifestId: id,
@@ -1771,7 +1771,6 @@ async function doReloadIntegrations(
         log,
         http,
         cache,
-        db: integrationDb,
         requiresMap: reloadRequiresMap,
         providers,
         shutdownHandlers,

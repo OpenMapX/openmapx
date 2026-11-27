@@ -40,6 +40,23 @@ export const integrationSql = postgres(connectionString, {
   },
 });
 
+/**
+ * Transactions integrations run through `ctx.db.transaction`. Each sets its
+ * own statement and idle-in-transaction timeouts; the pool's 30-second
+ * statement timeout only bounds those first statements. Two connections keep
+ * long transactions away from the request-path pool above and the main pool.
+ */
+export const extensionSql = postgres(connectionString, {
+  max: 2,
+  connect_timeout: 10,
+  idle_timeout: 60,
+  connection: {
+    application_name: "openmapx-api-extensions",
+    statement_timeout: 30000,
+    TimeZone: DATABASE_SESSION_TIME_ZONE,
+  },
+});
+
 export const db = drizzle(sql, { schema });
 
 /**

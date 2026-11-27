@@ -18,6 +18,33 @@ describe("createMockIntegrationContext", () => {
     expect(createMockIntegrationContext().getRequiredService("demo-engine")).toBeNull();
   });
 
+  it("offers ctx.db when the host would", async () => {
+    const notStubbed = "createMockIntegrationContext: database not stubbed — pass { db }";
+    expect(createMockIntegrationContext().db).toBeUndefined();
+
+    const postgis = createMockIntegrationContext({
+      manifest: { requires: [{ service: "postgis" }] } as never,
+    }).db;
+    expect(postgis).toBeDefined();
+    expect(postgis?.schema).toBeUndefined();
+    await expect(postgis?.execute("select 1")).rejects.toThrow(notStubbed);
+    await expect(postgis?.transaction(async () => 1)).rejects.toThrow(notStubbed);
+
+    expect(
+      createMockIntegrationContext({
+        id: "demo-data",
+        manifest: { database: { migrations: true } } as never,
+      }).db?.schema,
+    ).toBe("ext_demo_data");
+
+    const db = {
+      execute: async <T>() => [] as T,
+      transaction: <T>(fn: (tx: { execute: <R>() => Promise<R> }) => Promise<T>) =>
+        fn({ execute: async <R>() => [] as R }),
+    };
+    expect(createMockIntegrationContext({ db }).db).toBe(db);
+  });
+
   it("refuses at registration the providers the host refuses", () => {
     const ctx = createMockIntegrationContext({ id: "demo" });
     const weather = {

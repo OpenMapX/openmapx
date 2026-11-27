@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { FetchJsonHttpError } from "@openmapx/core/http/fetch-json-error";
 import { parseRetryAfterMs } from "@openmapx/core/retry-after";
+import { extensionSchemaName } from "@openmapx/extension-contracts/identifiers";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type {
   MobilityHttpRequestOptions,
@@ -339,6 +340,29 @@ export function createRecordingReply(): {
   };
 }
 
+/**
+ * The `ctx.db` the host would give an integration with `manifest`: none when
+ * it neither requires PostGIS nor ships migrations, and the schema it owns
+ * when it ships them. Its methods reject until a test passes its own `db`.
+ */
+function unstubbedDatabase(
+  id: string,
+  manifest: IntegrationContext["manifest"],
+): DatabaseClient | undefined {
+  const ownsSchema = manifest.database?.migrations === true;
+  if (!ownsSchema && !manifest.requires?.some((requirement) => requirement.service === "postgis")) {
+    return undefined;
+  }
+  const notStubbed = async (): Promise<never> => {
+    throw new Error("createMockIntegrationContext: database not stubbed — pass { db }");
+  };
+  return {
+    execute: notStubbed,
+    transaction: notStubbed,
+    ...(ownsSchema ? { schema: extensionSchemaName(id) } : {}),
+  };
+}
+
 /** A `Logger` that swallows everything. Override per-call to assert. */
 export function createNoopLogger(): Logger {
   return { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
@@ -523,9 +547,11 @@ export function createMockIntegrationContext(
     dataSourceLists: [],
   };
   const noop = () => undefined;
+  const id = overrides.id ?? "test-integration";
+  const manifest = overrides.manifest ?? ({} as IntegrationContext["manifest"]);
   const ctx: MockIntegrationContext = {
-    id: overrides.id ?? "test-integration",
-    manifest: overrides.manifest ?? ({} as IntegrationContext["manifest"]),
+    id,
+    manifest,
     config: overrides.config ?? {},
     http:
       overrides.http ??
@@ -535,7 +561,7 @@ export function createMockIntegrationContext(
         );
       }),
     cache: overrides.cache ?? createPassthroughCache(),
-    db: overrides.db,
+    db: overrides.db ?? unstubbedDatabase(id, manifest),
     log: overrides.log ?? createNoopLogger(),
     secrets: overrides.secrets ?? { get: async () => null },
     registered,

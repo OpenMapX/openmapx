@@ -1,6 +1,6 @@
 import { createFatalProcessHandler } from "@openmapx/core/server";
 import { createApp } from "./app";
-import { integrationSql, sql } from "./db/index";
+import { extensionSql, integrationSql, sql } from "./db/index";
 import type { MigrationRun } from "./db/migration-runner";
 import { processLogger } from "./process-logger";
 import { redis } from "./redis";
@@ -52,7 +52,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, async () => {
     await app.stop();
     await redis?.disconnect();
-    await Promise.all([sql.end(), integrationSql.end()]);
+    await Promise.all([sql.end(), integrationSql.end(), extensionSql.end()]);
     process.exit(0);
   });
 }

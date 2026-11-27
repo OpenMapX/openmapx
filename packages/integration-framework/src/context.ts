@@ -133,12 +133,36 @@ export interface Logger {
   debug(message: string, ...args: unknown[]): void;
 }
 
+/** The statements of one `DatabaseClient.transaction` callback. */
+export interface DatabaseTransaction {
+  execute<T = unknown>(query: string, params?: unknown[]): Promise<T>;
+}
+
+/**
+ * `ctx.db`: present when the manifest requires the `postgis` service or
+ * declares `database.migrations: true`. An integration that ships migrations
+ * owns the schema named in `schema`, and unqualified names in both methods
+ * resolve there first.
+ */
 export interface DatabaseClient {
+  /** One statement on the request-path pool, which ends it after five seconds. */
   execute<T = unknown>(
     query: string,
     params?: unknown[],
     options?: { signal?: AbortSignal },
   ): Promise<T>;
+  /**
+   * Runs `fn` in one transaction that commits when `fn` resolves and rolls
+   * back when it rejects. `timeoutMs` (default 30 000, at least 1 000, at most
+   * 900 000) bounds the whole call, each statement and each pause between
+   * statements; past it the call rejects with `ProviderTimeoutError`.
+   */
+  transaction<T>(
+    fn: (tx: DatabaseTransaction) => Promise<T>,
+    options?: { timeoutMs?: number },
+  ): Promise<T>;
+  /** The schema the integration owns; absent when it ships no migrations. */
+  readonly schema?: string;
 }
 
 /** A `:name` segment's param name, without a `.png`-style or `-` suffix after it. */

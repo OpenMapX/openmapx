@@ -35,6 +35,14 @@ out, late calls it makes to its context are ignored with one warning per method.
 Removing, disabling or updating an installed integration stops what it registered
 at once; its code stays loaded in the API process until the next restart.
 
+An integration that requires PostGIS or declares `database.migrations: true` gets
+`ctx.db` with `transaction(fn, { timeoutMs })` besides `execute`. Transactions run
+on a new API pool, `openmapx-api-extensions`, of at most 2 connections; each ends
+with `ProviderTimeoutError` and rolls back when it, one of its statements or a
+pause between them outlasts its timeout (default 30 seconds, at most 15 minutes).
+For an integration that ships migrations, unqualified names resolve in its schema
+`ext_<id>` (hyphens as underscores) first.
+
 The admin integration API drops `blockedCode` and gains `loadState`, `loadError`,
 `loadErrorPhase` and a required `status` (`healthy`, `unhealthy`, `unconfigured`,
 `disabled`, `failed`); `GET /api/admin/provider-order` is new. Older API clients
@@ -117,4 +125,6 @@ the hosted Stadia Valhalla, set `INTEGRATION_ROUTING_VALHALLA_API_KEY` (keep
 geocoding `provider` or overlay `apiKey` keys refuses later configuration changes and
 must be recreated; there is no migration, and no released version precedes this
 change, so new installations need no action. Review the backend code of any
-community integration before installing it.
+community integration before installing it. Each API replica now opens up to 16
+database connections instead of 14; make sure PostgreSQL's `max_connections`
+covers every replica plus the data manager and other clients.

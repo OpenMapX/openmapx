@@ -166,8 +166,12 @@ describeDatabase("the real application from createApp()", () => {
   afterAll(async () => {
     try {
       await app?.stop();
-      const { integrationSql, sql } = await import("./db/index");
-      await Promise.all([sql.end({ timeout: 5 }), integrationSql.end({ timeout: 5 })]);
+      const { extensionSql, integrationSql, sql } = await import("./db/index");
+      await Promise.all([
+        sql.end({ timeout: 5 }),
+        integrationSql.end({ timeout: 5 }),
+        extensionSql.end({ timeout: 5 }),
+      ]);
     } finally {
       Error.stackTraceLimit = originalStackTraceLimit;
       vi.restoreAllMocks();
@@ -200,7 +204,7 @@ describeDatabase("the real application from createApp()", () => {
 
   it("ends a slow integration statement at the integration pool's timeout", async () => {
     const { ProviderTimeoutError } = await import("@openmapx/integration-framework");
-    const { integrationSql } = await import("./db/index");
+    const { extensionSql, integrationSql } = await import("./db/index");
     const { createIntegrationDb } = await import("./integration-db");
     const [settings] = await integrationSql<{ timeout: string; name: string }[]>`
       SELECT current_setting('statement_timeout') AS timeout,
@@ -209,7 +213,9 @@ describeDatabase("the real application from createApp()", () => {
 
     const started = Date.now();
     await expect(
-      createIntegrationDb(integrationSql).execute("SELECT pg_sleep(6)"),
+      createIntegrationDb({ requests: integrationSql, transactions: extensionSql }).execute(
+        "SELECT pg_sleep(6)",
+      ),
     ).rejects.toBeInstanceOf(ProviderTimeoutError);
     expect(Date.now() - started).toBeLessThan(5_900);
   }, 20_000);
