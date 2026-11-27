@@ -23,8 +23,16 @@ FROM nginx:1.31.8-alpine@sha256:785835ea65db4bba6f021acc0f3be91b0fef76a53fe41f85
 # (CVE-2026-88806), Brotli (CVE-2026-111497), curl (CVE-2026-92392,
 # 8.23.0-r0), libxslt (CVE-2026-87636, CVE-2026-9947, 1.1.43-r4) and libxml2
 # (CVE-2026-86144, 2.13.9-r3) fixes. Upgrade only the affected runtime libraries.
+# libxml2 2.13.9-r4 fixes CVE-2026-86138, CVE-2026-86139, CVE-2026-86140,
+# CVE-2026-86142 and CVE-2026-86143; 2.13.9-r5 fixes CVE-2026-11979. A build can
+# restore this layer from the build cache with the packages it held then. The
+# version floor checked after the upgrade changes this instruction, which keeps
+# such a layer from being reused; it also fails the build on a mirror that
+# doesn't have the fix yet.
 RUN apk upgrade --no-cache libcrypto3 libssl3 libexpat libuuid pcre2 tiff libx11 brotli-libs \
-    curl libcurl libxslt libxml2
+    curl libcurl libxslt libxml2 && \
+    libxml2="$(apk query --fields version libxml2)" && libxml2="${libxml2#Version: }" && \
+    test -n "$libxml2" && test "$(apk version -t "$libxml2" 2.13.9-r5)" != "<"
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/build /usr/share/nginx/html
 EXPOSE 80
