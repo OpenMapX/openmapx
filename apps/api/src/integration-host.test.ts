@@ -1069,6 +1069,173 @@ describe("initIntegrations — loader", () => {
         expect(getPlaceResolver("late")).toBeUndefined();
       });
 
+      /**
+       * Advances the fake clock a second at a time, yielding to the real event
+       * loop in between, until `work` settles; the deadline is armed only after
+       * the bundle has been read from disk.
+       */
+      async function advanceUntilSettled(work: Promise<unknown>, limitMs = 180_000) {
+        let settled = false;
+        void work.then(
+          () => {
+            settled = true;
+          },
+          () => {
+            settled = true;
+          },
+        );
+        for (let elapsed = 0; !settled && elapsed < limitMs; elapsed += 1_000) {
+          await new Promise((resolve) => setImmediate(resolve));
+          await vi.advanceTimersByTimeAsync(1_000);
+        }
+        expect(settled).toBe(true);
+        await work;
+      }
+
+      it("leaves out an installed integration whose import never settles and loads the rest", async () => {
+        writeInstalled(
+          "stuck",
+          [
+            "// leaves out an installed integration whose import never settles and loads the rest",
+            "globalThis.__omxInstalledEntered = true;",
+            "await new Promise(() => {});",
+            "export function setup() { globalThis.__omxInstalledSetupRan = true; }",
+          ].join("\n"),
+        );
+        writeBuiltIn(
+          "good",
+          'export function setup(ctx) { ctx.registerRoute("GET", "/ok", (_q, reply) => reply.send({ ok: true })); }\n',
+        );
+        const app = makeApp();
+        vi.useFakeTimers({ toFake: ["setTimeout"] });
+
+        const expectLeftOut = async () => {
+          expect(getIntegration("stuck")).toMatchObject({
+            enabled: false,
+            loadState: "failed",
+            loadError: {
+              phase: "deadline",
+              message: "Import and setup did not finish within 60 seconds",
+            },
+          });
+          expect(failedIntegrationLoads(["stuck", "good"])).toEqual([
+            {
+              id: "stuck",
+              phase: "deadline",
+              message: "Import and setup did not finish within 60 seconds",
+            },
+          ]);
+          expect(getIntegration("good")?.loadState).toBe("loaded");
+          expect((await app.inject("/api/integrations/good/ok")).statusCode).toBe(200);
+          expect(g.__omxInstalledSetupRan).toBeUndefined();
+        };
+
+        const boot = initIntegrations(app, [installed(), builtIn()]);
+        await vi.waitFor(() => expect(g.__omxInstalledEntered).toBe(true), { timeout: 5_000 });
+        await vi.advanceTimersByTimeAsync(60_000);
+        await boot;
+        await expectLeftOut();
+
+        // Node keeps the pending evaluation for the same bytes, so the reload's
+        // import does not settle either.
+        await advanceUntilSettled(reloadIntegrations());
+        await expectLeftOut();
+      });
+
+      it("gives a setup only what is left of the budget after a slow import", async () => {
+        writeInstalled(
+          "slow-import",
+          [
+            "// gives a setup only what is left of the budget after a slow import",
+            "globalThis.__omxInstalledEntered = true;",
+            "await new Promise((resolve) => setTimeout(resolve, 50_000));",
+            "export async function setup(ctx) {",
+            "  globalThis.__omxInstalledSetupStarted = true;",
+            "  await new Promise((resolve) => setTimeout(resolve, 20_000));",
+            '  ctx.registerRoute("GET", "/ok", (_q, reply) => reply.send({ ok: true }));',
+            "}",
+          ].join("\n"),
+        );
+        const app = makeApp();
+        vi.useFakeTimers({ toFake: ["setTimeout"] });
+
+        let settled = false;
+        const boot = initIntegrations(app, [installed()]).finally(() => {
+          settled = true;
+        });
+        await vi.waitFor(() => expect(g.__omxInstalledEntered).toBe(true), { timeout: 5_000 });
+        await vi.advanceTimersByTimeAsync(50_000);
+        await vi.waitFor(() => expect(g.__omxInstalledSetupStarted).toBe(true), {
+          timeout: 5_000,
+        });
+        await vi.advanceTimersByTimeAsync(10_000);
+        await vi.waitFor(() => expect(settled).toBe(true), { timeout: 5_000 });
+        await boot;
+
+        expect(getIntegration("slow-import")).toMatchObject({
+          enabled: false,
+          loadState: "failed",
+          loadError: { phase: "deadline" },
+        });
+        await vi.advanceTimersByTimeAsync(20_000);
+        expect((await app.inject("/api/integrations/slow-import/ok")).statusCode).toBe(404);
+      });
+
+      it("does not run setup when the import settles after the deadline", async () => {
+        writeInstalled(
+          "late-import",
+          [
+            "// does not run setup when the import settles after the deadline",
+            "globalThis.__omxInstalledEntered = true;",
+            "await new Promise((resolve) => setTimeout(resolve, 70_000));",
+            "export function setup(ctx) {",
+            "  globalThis.__omxInstalledSetupRan = true;",
+            '  ctx.registerRoute("GET", "/ok", (_q, reply) => reply.send({ ok: true }));',
+            "}",
+          ].join("\n"),
+        );
+        const app = makeApp();
+        vi.useFakeTimers({ toFake: ["setTimeout"] });
+
+        const boot = initIntegrations(app, [installed()]);
+        await vi.waitFor(() => expect(g.__omxInstalledEntered).toBe(true), { timeout: 5_000 });
+        await vi.advanceTimersByTimeAsync(60_000);
+        await boot;
+        await vi.advanceTimersByTimeAsync(10_000);
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(getIntegration("late-import")).toMatchObject({
+          enabled: false,
+          loadState: "failed",
+          loadError: { phase: "deadline" },
+        });
+        expect(g.__omxInstalledSetupRan).toBeUndefined();
+        expect((await app.inject("/api/integrations/late-import/ok")).statusCode).toBe(404);
+      });
+
+      it("revokes a retired installed generation before the reload awaits anything", async () => {
+        writeInstalled(
+          "retired",
+          [
+            "// revokes a retired installed generation before the reload awaits anything",
+            'import { registerPlaceResolver } from "@openmapx/integration-sdk/places";',
+            "export function setup(ctx) {",
+            "  const generation = (globalThis.__omxInstalledGenerations ?? 0) + 1;",
+            "  globalThis.__omxInstalledGenerations = generation;",
+            '  ctx.on("integration.unloaded", () => {',
+            '    registerPlaceResolver("retired", async () => ({ generation }));',
+            "  });",
+            "}",
+          ].join("\n"),
+        );
+        await initIntegrations(makeApp(), [installed()]);
+
+        await reloadIntegrations();
+
+        expect(g.__omxInstalledGenerations).toBe(2);
+        expect(getPlaceResolver("retired")).toBeUndefined();
+      });
+
       it("only warns for a built-in that is slow to set up", async () => {
         writeBuiltIn(
           "slow",

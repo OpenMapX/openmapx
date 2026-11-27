@@ -855,60 +855,81 @@ const hostLog: Logger = (() => {
   return { info: write("info"), warn: write("warn"), error: write("error"), debug: write("debug") };
 })();
 
-class SetupDeadlineError extends Error {
+class LoadDeadlineError extends Error {
   constructor() {
-    super(`Setup did not finish within ${SETUP_DEADLINE_MS / 1000} seconds`);
-    this.name = "SetupDeadlineError";
+    super(`Import and setup did not finish within ${SETUP_DEADLINE_MS / 1000} seconds`);
+    this.name = "LoadDeadlineError";
   }
+}
+
+interface LoadDeadline {
+  /** Settles as `step` does, unless the deadline passes first. */
+  within<T>(step: () => Promise<T>): Promise<T>;
+  clear(): void;
+}
+
+/**
+ * The one deadline an installed integration's import and `setup` share, so a
+ * bundle whose top-level `await` never settles is left out as a hung setup
+ * is. When it passes, the scope is revoked at once, before anything the
+ * integration scheduled can run, and the step in progress rejects with
+ * `LoadDeadlineError`. A step that settles later is ignored, and no further
+ * step starts.
+ */
+function startLoadDeadline(scope: IntegrationScope): LoadDeadline {
+  let expired = false;
+  let abandon: ((error: Error) => void) | undefined;
+  const timer = setTimeout(() => {
+    expired = true;
+    scope.revoked = true;
+    abandon?.(new LoadDeadlineError());
+  }, SETUP_DEADLINE_MS);
+  timer.unref?.();
+  return {
+    within<T>(step: () => Promise<T>): Promise<T> {
+      if (expired) return Promise.reject(new LoadDeadlineError());
+      return new Promise<T>((resolve, reject) => {
+        abandon = reject;
+        try {
+          step().then(resolve, reject);
+        } catch (error) {
+          reject(error);
+        }
+      }).finally(() => {
+        abandon = undefined;
+      });
+    },
+    clear() {
+      clearTimeout(timer);
+    },
+  };
 }
 
 /**
  * Runs an integration's `setup` in its scope. A setup still running after
- * `SETUP_WARNING_MS` is named in a warning; an installed integration's setup
- * still running after `SETUP_DEADLINE_MS` rejects with `SetupDeadlineError`,
- * and its scope is revoked at that moment, before anything it scheduled can
- * run, whether or not the setup settles later.
+ * `SETUP_WARNING_MS` is named in a warning, unless its integration was left
+ * out by then.
  */
 function runSetup(
   integration: LoadedIntegration,
   scope: IntegrationScope,
   setup: () => void | Promise<void>,
 ): Promise<void> {
+  const warning = setTimeout(() => {
+    if (scope.revoked) return;
+    (_fastify?.log ?? processLogger).warn(
+      { integrationId: integration.id },
+      `Integration ${integration.id} has not finished setting up after ${SETUP_WARNING_MS / 1000} seconds`,
+    );
+  }, SETUP_WARNING_MS);
+  warning.unref?.();
   return new Promise<void>((resolve, reject) => {
-    let settled = false;
-    const warning = setTimeout(() => {
-      if (settled) return;
-      (_fastify?.log ?? processLogger).warn(
-        { integrationId: integration.id },
-        `Integration ${integration.id} has not finished setting up after ${SETUP_WARNING_MS / 1000} seconds`,
-      );
-    }, SETUP_WARNING_MS);
-    warning.unref?.();
-    const deadline = integration.isBuiltIn
-      ? undefined
-      : setTimeout(() => {
-          if (settled) return;
-          settled = true;
-          clearTimeout(warning);
-          scope.revoked = true;
-          reject(new SetupDeadlineError());
-        }, SETUP_DEADLINE_MS);
-    deadline?.unref?.();
-    const finish =
-      <V>(complete: (value: V) => void) =>
-      (value: V) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(warning);
-        clearTimeout(deadline);
-        complete(value);
-      };
     try {
-      Promise.resolve(runInIntegrationScope(scope, setup)).then(finish(resolve), finish(reject));
+      Promise.resolve(runInIntegrationScope(scope, setup)).then(resolve, reject);
     } catch (error) {
-      finish(reject)(error);
+      reject(error);
     }
-  });
+  }).finally(() => clearTimeout(warning));
 }
 
 function errorMessage(error: unknown): string {
@@ -956,19 +977,25 @@ async function loadIntegrationBackend(args: {
   try {
     const specifier = await installedBackendImportSpecifier(integration);
     if (specifier) {
-      const mod = (await runInIntegrationScope(scope, () => import(specifier))) as {
-        setup?: SetupFunction;
-      };
-      phase = "setup";
-      const { setup } = mod;
-      if (typeof setup === "function") await runSetup(integration, scope, () => setup(ctx));
+      const deadline = startLoadDeadline(scope);
+      try {
+        const mod = (await deadline.within(() =>
+          runInIntegrationScope(scope, () => import(specifier)),
+        )) as { setup?: SetupFunction };
+        phase = "setup";
+        const { setup } = mod;
+        if (typeof setup === "function")
+          await deadline.within(() => runSetup(integration, scope, () => setup(ctx)));
+      } finally {
+        deadline.clear();
+      }
     }
     phase = "setup";
     control?.releaseActivations();
     return "loaded";
   } catch (error) {
     scope.revoked = true;
-    if (error instanceof SetupDeadlineError) phase = "deadline";
+    if (error instanceof LoadDeadlineError) phase = "deadline";
     control?.discardActivations();
     control?.unsubscribeAll();
     dropIntegrationRoutes(integration.id);
@@ -981,7 +1008,7 @@ async function loadIntegrationBackend(args: {
     integration.loadError = { phase, message: errorMessage(error) };
     _fastify?.log.error(
       { err: error, integrationId: integration.id, phase },
-      `Leaving out installed integration ${integration.id}: its backend failed to ${phase === "import" ? "import" : "set up"}`,
+      `Leaving out installed integration ${integration.id}: its backend failed to ${phase === "import" ? "import" : phase === "deadline" ? "import and set up in time" : "set up"}`,
     );
     const handlers = shutdownHandlers.splice(0);
     for (const handler of handlers) {
@@ -1665,6 +1692,9 @@ async function doReloadIntegrations(
     commitPlaceResolverStaging();
     eventBus = stagedEventBus;
     activationScope.complete();
+    // The previous generation stops serving here. Revoking it before the next
+    // await keeps its late work out of the registries just committed.
+    for (const integration of previousIntegrations) revokeInstalledScope(integration);
   } catch (err) {
     for (const rollbackError of activationScope.rollback()) {
       _fastify.log.warn(rollbackError, "Failed to roll back staged integration activation");
@@ -1702,7 +1732,6 @@ async function doReloadIntegrations(
 
   for (const integration of previousIntegrations) {
     previousEventBus.emit({ type: "integration.unloaded", integrationId: integration.id });
-    revokeInstalledScope(integration);
     for (const handler of integration.shutdownHandlers) {
       try {
         await handler();
