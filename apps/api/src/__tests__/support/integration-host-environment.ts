@@ -44,6 +44,17 @@ const attentionMocks = vi.hoisted(() => ({
 
 vi.mock("../../services/attention.js", () => attentionMocks);
 
+const subjectDataMocks = vi.hoisted(() => ({
+  syncSubjectHandlerTable: vi.fn(async () => {}),
+  runPendingErasures: vi.fn(async () => ({ erased: 0, failed: 0 })),
+}));
+
+// The handler registry is real; the two calls that reach the database are not.
+vi.mock("../../privacy/extension-subject-data.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../privacy/extension-subject-data")>()),
+  ...subjectDataMocks,
+}));
+
 /** The run history of scheduled tasks, in memory, with one running row per task at most. */
 const taskRunMocks = vi.hoisted(() => {
   const rows: Array<{
@@ -165,6 +176,11 @@ export function getTaskRunMocks() {
 /** The attention list the host raises the schema-ahead item on. */
 export function getAttentionMocks() {
   return attentionMocks;
+}
+
+/** The handler-table sync and the erasure run the host starts after each activation. */
+export function getSubjectDataMocks() {
+  return subjectDataMocks;
 }
 
 export function createIntegrationHostTestApp(): FastifyInstance {

@@ -27,6 +27,7 @@
     "RouteRequest",
     "ScheduleOptions",
     "SecretsClient",
+    "SubjectDataHandler",
     "UpstreamCacheRead",
     "UpstreamCacheTtl",
     "UpstreamRuntime"

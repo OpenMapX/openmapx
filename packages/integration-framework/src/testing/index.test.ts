@@ -197,4 +197,21 @@ describe("createMockIntegrationContext", () => {
     expect(handler).toHaveBeenLastCalledWith({ signal: aborted });
     await expect(ctx.runScheduledTask("missing")).rejects.toThrow(/missing/);
   });
+
+  it("keeps the subject-data handler and calls it as the host would", async () => {
+    const ctx = createMockIntegrationContext({ id: "notes" });
+    await expect(ctx.eraseSubject("u1")).rejects.toThrow(/no subject-data handler/);
+    const erase = vi.fn(async () => {});
+    const handler = { erase, export: async (subjectId: string) => ({ subjectId, notes: [] }) };
+
+    ctx.registerSubjectDataHandler(handler);
+
+    expect(ctx.registered.subjectDataHandler).toBe(handler);
+    await ctx.eraseSubject("u1");
+    expect(erase).toHaveBeenCalledWith("u1");
+    expect(await ctx.exportSubject("u1")).toEqual({ subjectId: "u1", notes: [] });
+    expect(() => ctx.registerSubjectDataHandler(handler)).toThrow(
+      "Integration notes already registered a subject-data handler",
+    );
+  });
 });

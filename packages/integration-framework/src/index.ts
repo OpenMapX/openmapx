@@ -51,6 +51,7 @@ export type {
   ScheduleOptions,
   SecretsClient,
   StreamHttpResponse,
+  SubjectDataHandler,
   TransferSafeguard,
   TransitReachabilityMetrics,
 } from "./context";

@@ -78,6 +78,13 @@ import {
   SETUP_WARNING_MS,
   SHUTDOWN_HANDLER_DEADLINE_MS,
 } from "./integration-scope";
+import {
+  forgetSubjectDataHandler,
+  registerSubjectDataHandlerFor,
+  runPendingErasures,
+  setSubjectDataIntegrationSource,
+  syncSubjectHandlerTable,
+} from "./privacy/extension-subject-data";
 import { processLogger } from "./process-logger";
 import { redis } from "./redis";
 import {
@@ -794,6 +801,7 @@ function buildIntegrationContext(args: {
   // scheduled later would belong to no generation.
   let acceptsTasks = true;
   let warnedLateTask = false;
+  let warnedLateSubjectDataHandler = false;
   const registrars = createProviderRegistrars({
     integrationId: id,
     manifest,
@@ -918,6 +926,25 @@ function buildIntegrationContext(args: {
       },
       nothing,
     ),
+    registerSubjectDataHandler: live(
+      "registerSubjectDataHandler",
+      (handler) => {
+        // The handler table is written as the generation goes live; a later
+        // registration would not be listed, so deletions would go unrecorded.
+        if (!acceptsTasks) {
+          if (!warnedLateSubjectDataHandler) {
+            warnedLateSubjectDataHandler = true;
+            hostLog.warn(
+              `Integration ${id} registered a subject-data handler after setup; ignoring it`,
+              { integrationId: id },
+            );
+          }
+          return;
+        }
+        registerSubjectDataHandlerFor(integration, scope, handler);
+      },
+      nothing,
+    ),
     getIntegrationsByDomain(domain: string) {
       return integrationsByDomain(domain);
     },
@@ -981,7 +1008,10 @@ interface IntegrationContextControl {
   discardActivations(): void;
   /** Removes every `ctx.on` subscription the context made. */
   unsubscribeAll(): void;
-  /** Ends `setup`'s chance to schedule tasks; later calls are ignored. */
+  /**
+   * Ends `setup`'s chance to schedule tasks and register a subject-data
+   * handler; later calls are ignored.
+   */
   closeTasks(): void;
 }
 
@@ -1222,6 +1252,25 @@ async function migrateIntegration(integration: LoadedIntegration): Promise<void>
 }
 
 /**
+ * Brings the subject-data handler table in line with the generation that
+ * just went live, then starts working through the erasures it allows. A
+ * database failure is logged and does not fail the activation; the next
+ * activation and the daily retention run try again.
+ */
+async function refreshSubjectDataHandlers(): Promise<void> {
+  try {
+    await syncSubjectHandlerTable();
+  } catch (error) {
+    hostLog.warn("Could not update the list of integrations with a subject-data handler", {
+      err: error,
+    });
+  }
+  runPendingErasures().catch((error: unknown) => {
+    hostLog.warn("Processing pending erasures failed", { err: error });
+  });
+}
+
+/**
  * Imports an integration's backend and runs its `setup`. A built-in's failure
  * is rethrown for the caller to handle. An installed integration that fails is
  * left out: it is recorded as failed and disabled, everything it registered is
@@ -1257,6 +1306,7 @@ async function loadIntegrationBackend(args: {
     } catch (error) {
       control?.closeTasks();
       integrationScheduler().discard(integration.id);
+      forgetSubjectDataHandler(integration);
       integration.loadState = "failed";
       integration.loadError = { phase, message: errorMessage(error) };
       throw error;
@@ -1295,6 +1345,7 @@ async function loadIntegrationBackend(args: {
     control?.discardActivations();
     control?.unsubscribeAll();
     integrationScheduler().discard(integration.id);
+    forgetSubjectDataHandler(integration);
     dropIntegrationRoutes(integration.id);
     restorePlaceResolvers(resolvers);
     integration.providers.clear();
@@ -1349,6 +1400,7 @@ export async function initIntegrations(
   _integrationDirs = normalizeIntegrationDirs(integrationDirs);
   resetIntegrationRoutes();
   codeCache = null;
+  setSubjectDataIntegrationSource(getAllIntegrations);
   setPlaceResolverRegistrationHook((_scheme, resolver) => {
     const scope = currentIntegrationScope();
     if (!scope) return resolver;
@@ -1555,6 +1607,7 @@ export async function initIntegrations(
       }
       fastify.log.error(err, `Failed to load integration ${id}`);
       integrationScheduler().discard(id);
+      forgetSubjectDataHandler(integration);
       integration.enabled = false;
       if (integration.loadState !== "failed") {
         integration.loadState = "failed";
@@ -1575,6 +1628,7 @@ export async function initIntegrations(
   // The index above was seeded from the manifests on disk; runtime integrations
   // supplied their sources during setup, so re-index from the live registry.
   await refreshAttributionFromRegistry();
+  await refreshSubjectDataHandlers();
 
   const warnedPreviewIds = new Set<string>();
   fastify.get<{ Params: { id: string } }>("/api/integrations/:id/preview", async (req, reply) => {
@@ -2022,6 +2076,7 @@ async function doReloadIntegrations(
   // index reads the live registry, so it carries the lists runtime
   // integrations supplied while staging and nothing of the retired generation.
   await refreshAttributionFromRegistry();
+  await refreshSubjectDataHandlers();
 
   const enabledCount = Array.from(integrations.values()).filter((i) => i.enabled).length;
   _fastify.log.info(

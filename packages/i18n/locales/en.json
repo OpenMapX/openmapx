@@ -3887,6 +3887,7 @@
         "connection-revocation": "revocation of the timeline connection",
         "control-expiry": "creation or refresh of the security control",
         "erasure-replay": "account closure or erasure processing",
+        "extension-erasure": "erasure by the extension that holds the data, or removal of that extension's data",
         "handoff-expiry": "creation of the mobile handoff",
         "job-retention": "completion of the job",
         "key-revocation": "revocation of the publication key",
@@ -4058,6 +4059,15 @@
           "safeRepresentation": "Reviewed case-by-case; no automatic completeness claim",
           "portabilityExclusion": "Backup copies are not a portable source",
           "rightsOfOthers": "Historical records may contain others"
+        },
+        "extension-erasure-pending": {
+          "category": "Pending erasure in an extension",
+          "purpose": "Erase your data in extensions that hold some after your account is deleted",
+          "source": "Recorded by OpenMapX when the account is deleted",
+          "retention": "Until the extension has erased your data, or its data is removed",
+          "safeRepresentation": "Only the deleted account's ID and the extension are recorded",
+          "portabilityExclusion": "Exists only after the account is deleted",
+          "rightsOfOthers": "None"
         }
       },
       "defaults": {

@@ -26,6 +26,19 @@ describe("OpenMapX subject-data catalogue", () => {
     expect(catalogueAvailability(registration("global-public-data"))).toBe("not_applicable");
   });
 
+  it("registers the account id kept until an extension has erased the account's data", () => {
+    expect(registration("extension-erasure-pending")).toMatchObject({
+      source: "openmapx-db",
+      strategy: "operator_task",
+      locators: [{ type: "user_id", field: "subject_erasure_pending.subject_user_id" }],
+      legalBases: ["legal-obligation"],
+      retention: { kind: "legal-hold", reasonCode: "extension-erasure" },
+    });
+    expect(catalogueAvailability(registration("extension-erasure-pending"))).toBe(
+      "operator_review",
+    );
+  });
+
   it("does not invent a deployment country for configurable controller and processor recipients", () => {
     for (const registration of SUBJECT_DATA_CATALOGUE) {
       for (const recipient of registration.recipients) {

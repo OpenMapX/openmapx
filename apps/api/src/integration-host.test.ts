@@ -25,6 +25,7 @@ import {
   getAttentionMocks,
   getExtensionMigrationMocks,
   getIntegrationHealthMocks,
+  getSubjectDataMocks,
   getTaskRunMocks,
   createIntegrationHostTestApp as makeApp,
 } from "./__tests__/support/integration-host-environment.js";
@@ -63,6 +64,7 @@ import {
 } from "./integration-host.js";
 import { registerIntegrationRoute, setIntegrationRouteRateLimits } from "./integration-routes.js";
 import { currentIntegrationScope } from "./integration-scope.js";
+import { createExtensionSubjectData } from "./privacy/extension-subject-data.js";
 import { processLogger } from "./process-logger";
 import { makeRateLimitTierHook, type RateLimitTiers } from "./server-wiring.js";
 import { getAttributionIndex } from "./services/attribution/index.js";
@@ -1227,6 +1229,9 @@ describe("initIntegrations — loader", () => {
           "    ctx.onShutdown(async () => {});",
           '    ctx.schedule("late-task", { everyMs: 60000, deadlineMs: 5000 }, async () => {});',
           '    ctx.schedule("late-task", { everyMs: 60000, deadlineMs: 5000 }, async () => {});',
+          "    const handler = { erase: async () => {}, export: async () => null };",
+          "    ctx.registerSubjectDataHandler(handler);",
+          "    ctx.registerSubjectDataHandler(handler);",
           "    globalThis.__omxInstalledLateDone = { accepted };",
           "  }, 0);",
           "}",
@@ -1273,6 +1278,7 @@ describe("initIntegrations — loader", () => {
             "onShutdown",
             "registerPlaceResolver",
             "registerRoute",
+            "registerSubjectDataHandler",
             "registerWeatherProvider",
             "schedule",
             "setDataSources",
@@ -1281,6 +1287,139 @@ describe("initIntegrations — loader", () => {
       } finally {
         process.off("unhandledRejection", onRejection);
       }
+    });
+
+    describe("subject-data handlers", () => {
+      /** The real handler-table and erasure logic over the live registry, in memory. */
+      function subjectDataOverRegistry(pending: Array<[string, string]> = []) {
+        const synced: Array<{ handling: readonly string[]; stopped: readonly string[] }> = [];
+        const rows = [...pending];
+        const subjectData = createExtensionSubjectData({
+          store: {
+            syncHandlers: async ({ handling, stopped }) => {
+              synced.push({ handling, stopped });
+            },
+            pendingSubjects: async (id) =>
+              rows.filter(([integrationId]) => integrationId === id).map(([, subject]) => subject),
+            eraseLocked: async (id, subject, erase) => {
+              const attempt = await erase();
+              if (attempt.ok)
+                rows.splice(
+                  rows.findIndex(([i, s]) => i === id && s === subject),
+                  1,
+                );
+              return attempt;
+            },
+            count: async (ids) => rows.filter(([id]) => ids.includes(id)).length,
+          },
+          integrations: getAllIntegrations,
+          attention: { raise: vi.fn(async () => {}), resolve: vi.fn(async () => {}) },
+          log: { warn: vi.fn() },
+        });
+        return { ...subjectData, synced, rows };
+      }
+
+      it("lists the handler after activation and erases through it in the integration's scope", async () => {
+        const { syncSubjectHandlerTable, runPendingErasures } = getSubjectDataMocks();
+        writeInstalled(
+          "notes",
+          [
+            "// lists the handler after activation and erases through it in the integration's scope",
+            "export function setup(ctx) {",
+            "  ctx.registerSubjectDataHandler({",
+            "    async erase(subjectId) { (globalThis.__omxInstalledErased ??= []).push(subjectId); },",
+            "    async export() { return null; },",
+            "  });",
+            "}",
+          ].join("\n"),
+        );
+        writeInstalled("plain", "// lists the handler after activation: no handler\n");
+
+        await initIntegrations(makeApp(), [installed()]);
+
+        expect(getIntegration("notes")?.loadState).toBe("loaded");
+        expect(syncSubjectHandlerTable).toHaveBeenCalledOnce();
+        expect(runPendingErasures).toHaveBeenCalledOnce();
+        expect(syncSubjectHandlerTable.mock.invocationCallOrder[0]).toBeLessThan(
+          runPendingErasures.mock.invocationCallOrder[0] ?? 0,
+        );
+        const real = subjectDataOverRegistry([["notes", "u1"]]);
+        await real.syncSubjectHandlerTable();
+        expect(real.synced).toEqual([{ handling: ["notes"], stopped: ["plain"] }]);
+        expect(await real.runPendingErasures()).toEqual({ erased: 1, failed: 0 });
+        expect(g.__omxInstalledErased).toEqual(["u1"]);
+
+        await reloadIntegrations();
+        expect(syncSubjectHandlerTable).toHaveBeenCalledTimes(2);
+        expect(runPendingErasures).toHaveBeenCalledTimes(2);
+      });
+
+      it("fails the load of an integration that registers a second handler", async () => {
+        writeInstalled(
+          "twice",
+          [
+            "// fails the load of an integration that registers a second handler",
+            "export function setup(ctx) {",
+            "  const handler = { erase: async () => {}, export: async () => null };",
+            "  ctx.registerSubjectDataHandler(handler);",
+            "  ctx.registerSubjectDataHandler(handler);",
+            "}",
+          ].join("\n"),
+        );
+
+        await initIntegrations(makeApp(), [installed()]);
+
+        expect(getIntegration("twice")).toMatchObject({
+          loadState: "failed",
+          loadError: {
+            phase: "setup",
+            message: "Integration twice already registered a subject-data handler",
+          },
+        });
+      });
+
+      it("ignores a handler registered after setup with one warning", async () => {
+        writeInstalled(
+          "slow",
+          [
+            "// ignores a handler registered after setup with one warning",
+            "export function setup(ctx) { globalThis.__omxInstalledCtx = ctx; }",
+          ].join("\n"),
+        );
+        const warn = vi.fn();
+        const app = makeApp();
+        // biome-ignore lint/suspicious/noExplicitAny: test-only log patch
+        (app as any).log = { info: vi.fn(), warn, error: vi.fn(), debug: vi.fn() };
+        await initIntegrations(app, [installed()]);
+        const ctx = g.__omxInstalledCtx as IntegrationContext;
+        const handler = { erase: async () => {}, export: async () => null };
+
+        ctx.registerSubjectDataHandler(handler);
+        ctx.registerSubjectDataHandler(handler);
+
+        const real = subjectDataOverRegistry();
+        await real.syncSubjectHandlerTable();
+        expect(real.synced).toEqual([{ handling: [], stopped: ["slow"] }]);
+        expect(
+          warn.mock.calls
+            .map(([, message]) => String(message))
+            .filter((message) => message.includes("subject-data handler")),
+        ).toEqual(["Integration slow registered a subject-data handler after setup; ignoring it"]);
+      });
+
+      it("loads the generation when the handler table cannot be written", async () => {
+        const { syncSubjectHandlerTable, runPendingErasures } = getSubjectDataMocks();
+        syncSubjectHandlerTable.mockRejectedValueOnce(new Error("database unavailable"));
+        writeInstalled(
+          "plain",
+          "// loads the generation when the handler table cannot be written\n",
+        );
+
+        await initIntegrations(makeApp(), [installed()]);
+
+        expect(getIntegration("plain")?.loadState).toBe("loaded");
+        expect(runPendingErasures).toHaveBeenCalledOnce();
+      });
     });
 
     describe("scheduled tasks", () => {

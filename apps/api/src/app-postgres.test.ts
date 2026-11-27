@@ -121,6 +121,11 @@ describeDatabase("the real application from createApp()", () => {
     // A run a previous API process left behind.
     await fixture.sql`insert into integration_task_run (integration_id, task_name, status)
       values ('left-behind', 'nightly', 'running')`;
+    // An integration that registered a subject-data handler and is gone now.
+    await fixture.sql`insert into integration_subject_handler (integration_id)
+      values ('not-installed')`;
+    await fixture.sql`insert into subject_erasure_pending (integration_id, subject_user_id)
+      values ('not-installed', 'deleted-account')`;
     customIntegrations = await mkdtemp(join(tmpdir(), "openmapx-app-integrations-"));
     vi.stubEnv("NODE_ENV", "test");
     vi.stubEnv("LOG_LEVEL", "silent");
@@ -247,6 +252,14 @@ describeDatabase("the real application from createApp()", () => {
       await fixture.sql`select status, error from integration_task_run
         where integration_id = 'left-behind'`,
     ).toEqual([{ status: "failed", error: "interrupted by restart" }]);
+  });
+
+  it("unlists a removed integration's subject-data handler once the integrations are loaded", async () => {
+    expect(await fixture.sql`select integration_id from integration_subject_handler`).toEqual([]);
+    // Owed until the integration's data is removed or it returns.
+    expect(
+      await fixture.sql`select integration_id, subject_user_id from subject_erasure_pending`,
+    ).toEqual([{ integration_id: "not-installed", subject_user_id: "deleted-account" }]);
   });
 
   it("ends a slow integration statement at the integration pool's timeout", async () => {

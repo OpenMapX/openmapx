@@ -3887,6 +3887,7 @@
         "connection-revocation": "Widerruf der Verlaufsverbindung",
         "control-expiry": "Erstellung oder Aktualisierung der Sicherheitskontrolle",
         "erasure-replay": "Kontoschließung oder Löschungsverarbeitung",
+        "extension-erasure": "Löschung durch die Erweiterung, die die Daten hält, oder Entfernen der Daten dieser Erweiterung",
         "handoff-expiry": "Erstellung der mobilen Übergabe",
         "job-retention": "Abschluss des Auftrags",
         "key-revocation": "Widerruf des Veröffentlichungsschlüssels",
@@ -4058,6 +4059,15 @@
           "safeRepresentation": "Einzelfallprüfung; keine automatische Vollständigkeitszusage",
           "portabilityExclusion": "Sicherungen sind keine portable Quelle",
           "rightsOfOthers": "Historische Daten können andere betreffen"
+        },
+        "extension-erasure-pending": {
+          "category": "Ausstehende Löschung in einer Erweiterung",
+          "purpose": "Ihre Daten in Erweiterungen, die welche halten, nach dem Löschen Ihres Kontos löschen",
+          "source": "Von OpenMapX beim Löschen des Kontos erfasst",
+          "retention": "Bis die Erweiterung Ihre Daten gelöscht hat oder ihre Daten entfernt werden",
+          "safeRepresentation": "Erfasst werden nur die ID des gelöschten Kontos und die Erweiterung",
+          "portabilityExclusion": "Besteht erst nach dem Löschen des Kontos",
+          "rightsOfOthers": "Keine"
         }
       },
       "defaults": {

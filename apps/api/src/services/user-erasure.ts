@@ -12,6 +12,8 @@ import {
   dataManagerOfflinePackageArtifactReference,
   dataManagerOfflinePackageJobOwner,
 } from "../db/schema";
+import { runPendingErasures } from "../privacy/extension-subject-data";
+import { processLogger } from "../process-logger";
 import {
   deriveOfflinePackagePrincipal,
   OFFLINE_PACKAGE_PRINCIPAL_KEY_FILE_DEFAULT,
@@ -133,7 +135,26 @@ export const userErasureHooks = createUserErasureHooks({
   complete: async (receiptId) => {
     const complete = () => appendErasureCompleted(journalPath(), readJournalKey(), receiptId);
     const context = currentAccountMutation();
-    if (context) context.afterCommit.push(complete);
-    else await complete();
+    if (context) {
+      context.afterCommit.push(complete, async () => startExtensionErasures());
+      return;
+    }
+    try {
+      await complete();
+    } finally {
+      startExtensionErasures();
+    }
   },
 });
+
+/**
+ * Starts erasing the deleted account's data in the integrations that hold
+ * some, without waiting: an extension's handler never delays or fails the
+ * deletion. The erasure trigger recorded one pending row per integration in
+ * the deleting transaction; what this run leaves is retried later.
+ */
+function startExtensionErasures(): void {
+  runPendingErasures().catch((error: unknown) => {
+    processLogger.warn({ err: error }, "Processing pending erasures failed");
+  });
+}

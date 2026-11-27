@@ -24,6 +24,7 @@ export type {
   RouteRequest,
   ScheduleOptions,
   SecretsClient,
+  SubjectDataHandler,
 } from "@openmapx/integration-framework/context";
 export { httpError } from "@openmapx/integration-framework/http-error";
 export type { ProviderCallContext } from "@openmapx/integration-framework/provider-execution";

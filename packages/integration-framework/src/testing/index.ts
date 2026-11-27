@@ -29,6 +29,7 @@ import type {
   ScheduleOptions,
   SecretsClient,
   StreamHttpResponse,
+  SubjectDataHandler,
 } from "../context.js";
 import type { AirQualityProvider } from "../contracts/air-quality-provider.js";
 import type { BorderCrossingProvider } from "../contracts/border-crossing-provider.js";
@@ -547,6 +548,8 @@ export interface CapturedRegistrations {
     options: ScheduleOptions;
     handler: (run: { signal: AbortSignal }) => Promise<void>;
   }[];
+  /** The handler passed to `registerSubjectDataHandler()`, or `null`. */
+  subjectDataHandler: SubjectDataHandler | null;
 }
 
 export interface MockContextOverrides {
@@ -580,6 +583,10 @@ export interface MockIntegrationContext extends IntegrationContext {
    * mock does not parse cron fields; see `MockIntegrationContext`.
    */
   runScheduledTask(name: string, options?: { signal?: AbortSignal }): Promise<void>;
+  /** Calls `erase` of the registered subject-data handler, as an account deletion does. */
+  eraseSubject(subjectId: string): Promise<void>;
+  /** Calls `export` of the registered subject-data handler, as a data export does. */
+  exportSubject(subjectId: string): Promise<unknown>;
 }
 
 /**
@@ -623,6 +630,12 @@ export function createMockIntegrationContext(
     disclosures: [],
     dataSourceLists: [],
     tasks: [],
+    subjectDataHandler: null,
+  };
+  const subjectDataHandler = (): SubjectDataHandler => {
+    if (!registered.subjectDataHandler)
+      throw new Error("createMockIntegrationContext: no subject-data handler was registered");
+    return registered.subjectDataHandler;
   };
   const noop = () => undefined;
   const id = overrides.id ?? "test-integration";
@@ -763,6 +776,13 @@ export function createMockIntegrationContext(
       if (!task) throw new Error(`createMockIntegrationContext: no task ${name} was scheduled`);
       await task.handler({ signal: options.signal ?? new AbortController().signal });
     },
+    registerSubjectDataHandler: (handler) => {
+      if (registered.subjectDataHandler)
+        throw new Error(`Integration ${ctx.id} already registered a subject-data handler`);
+      registered.subjectDataHandler = handler;
+    },
+    eraseSubject: async (subjectId) => subjectDataHandler().erase(subjectId),
+    exportSubject: async (subjectId) => subjectDataHandler().export(subjectId),
     getIntegrationsByDomain: () => [],
     getProviderOrder: (domain) => {
       const orders = overrides.providerOrder ?? {};

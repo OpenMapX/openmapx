@@ -631,6 +631,28 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     rightsOfOthers: { mode: "operator_review", code: "rights-of-others" },
   },
   {
+    // The erasure trigger records the deleted account's id once for each
+    // integration with a subject-data handler. The row exists only after the
+    // account is gone, so no collector can run for it. It is deleted once the
+    // integration's handler has erased the account's data, or when the
+    // integration stops handling subject data or its data is removed.
+    id: "extension-erasure-pending",
+    version: 1,
+    category: "account",
+    source: "openmapx-db",
+    strategy: "operator_task",
+    locators: [{ type: "user_id", field: "subject_erasure_pending.subject_user_id" }],
+    purposes: ["account-management", "legal-accountability"],
+    legalBases: ["legal-obligation"],
+    origin: { kind: "controller", descriptionCode: "service-generated" },
+    retention: { kind: "legal-hold", daysAfterClosure: 0, reasonCode: "extension-erasure" },
+    recipients: [{ id: "openmapx-controller", roleCode: "controller", country: "DE" }],
+    article15: "include",
+    portability: { decision: "exclude", reasonCode: "erasure-processing" },
+    secretPolicy: { mode: "metadata", code: "account-safe-metadata" },
+    rightsOfOthers: { mode: "none" },
+  },
+  {
     id: "redis-subject-controls",
     version: 1,
     category: "operational-controls",

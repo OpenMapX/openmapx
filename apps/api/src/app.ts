@@ -41,6 +41,7 @@ import { setIntegrationRouteRateLimits } from "./integration-routes";
 import { runPrivacyDatabaseCleanup } from "./privacy/cleanup.js";
 import { schedulePrivacyDeadlineReminders } from "./privacy/deadline-reminders.js";
 import { janitorEncryptedSourceSpools } from "./privacy/encrypted-source-spool.js";
+import { runPendingErasures } from "./privacy/extension-subject-data.js";
 import { createPrivacyNotificationWorker } from "./privacy/notifications.js";
 import { createPrivacyOperationsMonitor } from "./privacy/operations-monitor.js";
 import { processLogger } from "./process-logger";
@@ -456,6 +457,11 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
     );
     void pruneIntegrationTaskRuns().catch((err) =>
       server.log.warn(err, "Scheduled task run prune failed"),
+    );
+    // Picks up deletions whose own run left work behind, and those made
+    // without the API's delete hook.
+    void runPendingErasures().catch((err) =>
+      server.log.warn(err, "Processing pending erasures failed"),
     );
     void retentionDays("serverLog")
       .then(pruneAppLogs)

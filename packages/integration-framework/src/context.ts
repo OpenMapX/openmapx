@@ -185,6 +185,20 @@ export interface ScheduleOptions {
   deadlineMs: number;
 }
 
+/**
+ * What an integration that stores personal data does for one person, named
+ * by `subjectId`, the platform's account id. `erase` removes everything the
+ * integration holds about the person; it runs after the account is deleted,
+ * may run again for the same person and must then succeed without finding
+ * anything. `export` returns what the integration holds about the person as
+ * a JSON-serialisable value for the person's data export. The host gives each
+ * call 30 seconds.
+ */
+export interface SubjectDataHandler {
+  export(subjectId: string): Promise<unknown>;
+  erase(subjectId: string): Promise<void>;
+}
+
 /** A `:name` segment's param name, without a `.png`-style or `-` suffix after it. */
 type RouteParamName<Segment extends string> = Segment extends `${infer Name}.${string}`
   ? RouteParamName<Name>
@@ -773,6 +787,15 @@ export interface IntegrationContext {
     options: ScheduleOptions,
     handler: (run: { signal: AbortSignal }) => Promise<void>,
   ): void;
+
+  /**
+   * Registers how the host erases and exports what this integration holds
+   * about a person. Call it from `setup()`, at most once; a second call
+   * throws. An account deletion is recorded for every integration that
+   * registered a handler, also while the integration cannot run, and `erase`
+   * is called until it succeeds.
+   */
+  registerSubjectDataHandler(handler: SubjectDataHandler): void;
 
   /** Query all enabled integrations registered under a domain. */
   getIntegrationsByDomain(domain: string): LoadedIntegration[];

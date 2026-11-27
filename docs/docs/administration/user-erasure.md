@@ -32,6 +32,20 @@ that transaction starts, the API durably appends an HMAC-pseudonymised request
 to the erasure journal. If the journal is unavailable, deletion fails without
 pretending that it succeeded.
 
+Extensions that keep data about people register a handler that erases it.
+The trigger records the deleted account once for each such extension, also
+while the extension is disabled, failed or otherwise not running. The API
+then asks each running extension to erase the account's data: right after the
+deletion, after every reload of the integrations and once a day. The
+deletion itself never waits for an extension. A record stays until the
+extension reports success, so an extension that is not running, fails or
+does not answer within 30 seconds is asked again later. While an extension
+fails, the administration's attention list shows "Erasure pending in
+_extension_" with its last error; the item disappears once nothing is pending
+for that extension. The record holds only the deleted account's ID and the
+extension. It is also removed when the extension stops handling personal data
+or its data is removed.
+
 Delete accounts in the app. Deleting with plain SQL as `openmapx_api`
 (`DELETE FROM "user" WHERE id = …`) runs the same trigger but not the API's
 journal entry or offline-package cleanup. `TRUNCATE "user"` fires no row
@@ -143,6 +157,8 @@ OpenMapX.
    off-host lifecycle rules.
 5. Complete any Dawarich/processor action and communicate the external Mangrove
    boundary.
+6. Confirm the attention list shows no "Erasure pending in …" item. If one
+   stays, fix or re-enable the extension it names; the API asks it again.
 
 For a recovery drill, restore a retained backup in a disposable deployment and
 verify that replay removes the erased account before the API resumes. This is a
