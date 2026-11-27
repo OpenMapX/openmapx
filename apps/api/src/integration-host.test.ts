@@ -1173,10 +1173,13 @@ describe("initIntegrations — loader", () => {
 
       /**
        * Advances the fake clock a second at a time, yielding to the real event
-       * loop in between, until `work` settles; the deadline is armed only after
-       * the bundle has been read from disk.
+       * loop in between, until `work` settles. The deadline is armed only after
+       * the work's real asynchronous steps before the import, which take an
+       * unknown share of real time on a loaded machine, so the wait is bounded
+       * by real time rather than by fake seconds: a fixed number of fake seconds
+       * passes in a few milliseconds and can run out before the timer exists.
        */
-      async function advanceUntilSettled(work: Promise<unknown>, limitMs = 180_000) {
+      async function advanceUntilSettled(work: Promise<unknown>, realTimeoutMs = 10_000) {
         let settled = false;
         void work.then(
           () => {
@@ -1186,7 +1189,8 @@ describe("initIntegrations — loader", () => {
             settled = true;
           },
         );
-        for (let elapsed = 0; !settled && elapsed < limitMs; elapsed += 1_000) {
+        const startedAt = performance.now();
+        while (!settled && performance.now() - startedAt < realTimeoutMs) {
           await new Promise((resolve) => setImmediate(resolve));
           await vi.advanceTimersByTimeAsync(1_000);
         }
