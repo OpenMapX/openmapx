@@ -10,6 +10,7 @@ import {
   isTerminalRequestStatus,
   type PrivacyActorKind,
   type PrivacyEventType,
+  type SubjectDataRegistration,
 } from "@openmapx/core/privacy";
 import { defaultLocale, resolveLocale } from "@openmapx/i18n";
 import { and, desc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
@@ -31,7 +32,7 @@ import {
 import { isUniqueViolation } from "../db/unique-violation.js";
 import { decrypt, encrypt, type SealedSecret, secretAad } from "../services/secrets.js";
 import { actorUserIdOrNull } from "../utils/actor.js";
-import { SUBJECT_DATA_CATALOGUE } from "./catalogue.js";
+import { subjectDataCatalogue } from "./catalogue.js";
 import { addCalendarMonths, calculateSubjectRequestDueAt } from "./deadline.js";
 import { PrivacyRequestError } from "./errors.js";
 import {
@@ -49,7 +50,8 @@ import {
 
 export interface PrivacyRequestServiceOptions {
   database?: typeof defaultDb;
-  catalogue?: typeof SUBJECT_DATA_CATALOGUE;
+  /** The registrations a new case preserves; the live catalogue when left out. */
+  catalogue?: readonly SubjectDataRegistration[];
   now?: () => Date;
 }
 
@@ -195,12 +197,12 @@ export async function privacyAlertRecipients(
 
 export class PrivacyRequestService {
   private readonly database: typeof defaultDb;
-  private readonly catalogue: typeof SUBJECT_DATA_CATALOGUE;
+  private readonly catalogue: readonly SubjectDataRegistration[] | undefined;
   private readonly now: () => Date;
 
   constructor(options: PrivacyRequestServiceOptions = {}) {
     this.database = options.database ?? defaultDb;
-    this.catalogue = options.catalogue ?? SUBJECT_DATA_CATALOGUE;
+    this.catalogue = options.catalogue;
     this.now = options.now ?? (() => new Date());
   }
 
@@ -247,7 +249,8 @@ export class PrivacyRequestService {
     // request is tied to the signed-in account and needs no locator copy.
     const requestId = uuidv7();
     const storedLocator = selfService ? NO_LOCATOR : encodeLocator(requestId, locatorValue);
-    const applicable = this.catalogue.filter(
+    // Read per case: installed extensions add registrations while the API runs.
+    const applicable = (this.catalogue ?? subjectDataCatalogue()).filter(
       (registration) => registration.strategy !== "not_personal",
     );
     // A replayed create (same key, same administrator, same request) returns

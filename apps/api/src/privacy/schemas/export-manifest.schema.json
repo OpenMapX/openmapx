@@ -14,6 +14,7 @@
     "collectorOutcomes",
     "reviewContact",
     "translationFallbacks",
+    "extensions",
     "members"
   ],
   "properties": {
@@ -42,6 +43,20 @@
     "collectorOutcomes": { "type": "array", "items": { "type": "object" } },
     "reviewContact": { "type": "string" },
     "translationFallbacks": { "type": "array", "items": { "type": "object" } },
+    "extensions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["integrationId", "name", "outcome", "warningCode"],
+        "properties": {
+          "integrationId": { "type": "string" },
+          "name": { "type": "string" },
+          "outcome": { "enum": ["included", "unavailable"] },
+          "warningCode": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      }
+    },
     "members": {
       "type": "array",
       "items": {

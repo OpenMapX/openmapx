@@ -28,6 +28,7 @@ describe.skipIf(skipDatabase)("extension subject data in PostgreSQL", () => {
   let raw: Sql;
   let pools: typeof import("../../db/index");
   let subjectData: typeof import("../extension-subject-data");
+  let handlers: typeof import("../extension-handlers");
   let registry: LoadedIntegration[];
   /** The integration that owns `ext_notes` and erases through its `ctx.db`. */
   let notes: LoadedIntegration;
@@ -39,6 +40,7 @@ describe.skipIf(skipDatabase)("extension subject data in PostgreSQL", () => {
     vi.stubEnv("DATABASE_URL", fixture.connectionUri);
     pools = await import("../../db/index");
     subjectData = await import("../extension-subject-data");
+    handlers = await import("../extension-handlers");
     const { createIntegrationDb, integrationDbAccess } = await import("../../integration-db");
     await raw`create schema ext_notes`;
     await raw`create table ext_notes.note (user_id text not null, body text not null)`;
@@ -52,17 +54,17 @@ describe.skipIf(skipDatabase)("extension subject data in PostgreSQL", () => {
         tx.execute("delete from note where user_id = $1", [subjectId]),
       );
     });
-    subjectData.registerSubjectDataHandlerFor(
+    handlers.registerSubjectDataHandlerFor(
       notes,
       { integrationId: "notes", isBuiltIn: false, revoked: false },
       { erase: (subjectId) => eraseNotes(subjectId), export: async () => null },
     );
     registry = [notes];
-    subjectData.setSubjectDataIntegrationSource(() => registry);
+    handlers.setSubjectDataIntegrationSource(() => registry);
   }, 180_000);
 
   afterAll(async () => {
-    subjectData?.setSubjectDataIntegrationSource(null);
+    handlers?.setSubjectDataIntegrationSource(null);
     vi.unstubAllEnvs();
     try {
       await Promise.all([
@@ -241,11 +243,46 @@ describe.skipIf(skipDatabase)("extension subject data in PostgreSQL", () => {
     expect(await pendingRows("notes")).toHaveLength(1);
   });
 
+  it("asks a loaded extension for the export and lists a listed one that cannot run", async () => {
+    const userId = await createUser();
+    await raw`insert into ext_notes.note (user_id, body) values (${userId}, 'mine')`;
+    await raw`insert into integration_subject_handler (integration_id) values ('notes'), ('tracker')`;
+    const tracker = { ...integration("tracker", "Tracker"), loadState: "failed" as const };
+    const { createIntegrationDb, integrationDbAccess } = await import("../../integration-db");
+    const ctxDb = createIntegrationDb(
+      { requests: pools.integrationSql, transactions: pools.extensionSql },
+      integrationDbAccess({ id: "notes", database: { migrations: true } }),
+    );
+    const exported = integration("notes", "Notes");
+    handlers.registerSubjectDataHandlerFor(
+      exported,
+      { integrationId: "notes", isBuiltIn: false, revoked: false },
+      {
+        erase: async () => {},
+        export: async (subjectId) => ({
+          notes: await ctxDb.execute("select body from note where user_id = $1", [subjectId]),
+        }),
+      },
+    );
+    registry = [exported, tracker];
+
+    const parts = await subjectData.collectExtensionSubjectData({ userId, database: pools.db });
+
+    expect(
+      parts.map((part) => [part.extension?.integrationId, part.outcome, part.warningCodes]),
+    ).toEqual([
+      ["notes", "included", []],
+      ["tracker", "unavailable", ["extension-not-loaded"]],
+    ]);
+    expect(JSON.parse(String(parts[0]?.entries?.[0]?.source))).toEqual({
+      notes: [{ body: "mine" }],
+    });
+  });
+
   it("holds no lock or transaction past the deadline of a handler that never settles", async () => {
     const hung = integration("hung", "Hung");
-    const { createExtensionSubjectData, createSubjectErasureStore, registerSubjectDataHandlerFor } =
-      subjectData;
-    registerSubjectDataHandlerFor(
+    const { createExtensionSubjectData, createSubjectErasureStore } = subjectData;
+    handlers.registerSubjectDataHandlerFor(
       hung,
       { integrationId: "hung", isBuiltIn: false, revoked: false },
       { erase: () => new Promise<void>(() => {}), export: async () => null },

@@ -3921,8 +3921,14 @@
         "operator-review-required": "Diese Quelle erfordert vor der Offenlegung eine berechtigte manuelle Prüfung.",
         "external-source-review-required": "Eine externe oder vom Betreiber gehaltene Quelle erfordert eine Fallprüfung.",
         "schema-missing": "Der aufbewahrten Quelle fehlte das erforderliche geprüfte Schema.",
-        "storage-missing": "Das aufbewahrte Quellmaterial war nicht mehr verfügbar."
+        "storage-missing": "Das aufbewahrte Quellmaterial war nicht mehr verfügbar.",
+        "extension-not-loaded": "Die Erweiterung ist installiert, lief aber nicht, als dieser Export erstellt wurde, und konnte daher nicht nach Ihren Daten gefragt werden.",
+        "extension-handler-failed": "Die Erweiterung hat nicht innerhalb von 30 Sekunden geantwortet, oder ihre Antwort war nicht verwendbar.",
+        "extension-export-too-large": "Die Antwort der Erweiterung war größer als 8 MiB, das Höchstmaß, das ein Export von einer Erweiterung aufnimmt."
       },
+      "extensionsUnavailableHeading": "Erweiterungen, die nicht gefragt werden konnten",
+      "extensionsUnavailableIntro": "Diese Erweiterungen halten möglicherweise Daten über Sie, die dieses Archiv nicht enthält. Sie können später einen neuen Export anfordern oder sich an den unten genannten Kontakt wenden.",
+      "extensionUnavailableRow": "- {name} ({id}): {reason}",
       "deploymentSourcesHeading": "Bereitstellungs- und Betreiberquellen",
       "noDeploymentSources": "Es wurden keine zusätzlichen Bereitstellungsquellen konfiguriert.",
       "deploymentSourceRow": "{id} — {kind}; Beziehung: {relationship}; Ort: {location}; Aufbewahrung: {retention}; Zugriffsweg: {accessStrategy}.",

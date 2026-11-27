@@ -2,12 +2,21 @@ import {
   describeThrown,
   type LoadedIntegration,
   loggableThrown,
-  type SubjectDataHandler,
 } from "@openmapx/integration-framework";
 import { db } from "../db";
-import { type IntegrationScope, runInIntegrationScope } from "../integration-scope";
+import { runInIntegrationScope } from "../integration-scope";
 import { processLogger } from "../process-logger";
 import { raiseAttention, resolveAttention } from "../services/attention";
+import type { CollectorSourcePart } from "./collectors";
+import {
+  EXTENSION_LOGICAL_ID_PREFIX,
+  hasSubjectDataHandler,
+  installedIntegrations,
+  integrationRuns,
+  type RegisteredSubjectDataHandler,
+  runningSubjectDataHandler,
+  type SubjectDataLog,
+} from "./extension-handlers";
 
 /** The longest the host waits for one call of an integration's `erase`. */
 export const ERASE_DEADLINE_MS = 30_000;
@@ -23,57 +32,7 @@ const MAX_ERROR_LENGTH = 2_000;
  */
 const ERASE_TRANSACTION_IDLE_LIMIT_MS = ERASE_DEADLINE_MS + 15_000;
 
-interface RegisteredHandler {
-  readonly scope: IntegrationScope;
-  readonly erase: (subjectId: string) => unknown;
-  readonly export: (subjectId: string) => unknown;
-}
-
-/**
- * The handler each loaded integration registered, keyed by the generation's
- * record of it: a reload builds new records, so a staged generation never
- * replaces the handler of the one that is serving, and a discarded one
- * leaves nothing behind.
- */
-const handlers = new WeakMap<LoadedIntegration, RegisteredHandler>();
-
-/**
- * Records `handler` as `integration`'s subject-data handler, to be called in
- * `scope`. The methods are read once, here, so the handler cannot swap them
- * later. Throws for a second registration and for a handler without both
- * methods.
- */
-export function registerSubjectDataHandlerFor(
-  integration: LoadedIntegration,
-  scope: IntegrationScope,
-  handler: SubjectDataHandler,
-): void {
-  if (handlers.has(integration))
-    throw new Error(`Integration ${integration.id} already registered a subject-data handler`);
-  const erase = handler?.erase;
-  const exportData = handler?.export;
-  if (typeof erase !== "function" || typeof exportData !== "function")
-    throw new Error(
-      `Integration ${integration.id} registered a subject-data handler without export and erase`,
-    );
-  handlers.set(integration, {
-    scope,
-    erase: (subjectId) => Reflect.apply(erase, handler, [subjectId]),
-    export: (subjectId) => Reflect.apply(exportData, handler, [subjectId]),
-  });
-}
-
-/** Forgets the handler of an integration whose load is undone. */
-export function forgetSubjectDataHandler(integration: LoadedIntegration): void {
-  handlers.delete(integration);
-}
-
-/** The handler of an integration that is loaded and running, if it registered one. */
-function runningHandler(integration: LoadedIntegration): RegisteredHandler | undefined {
-  // A disabled integration keeps the load state of its last load but runs no code.
-  if (integration.loadState !== "loaded" || !integration.enabled) return undefined;
-  return handlers.get(integration);
-}
+type RegisteredHandler = RegisteredSubjectDataHandler;
 
 type HandlerCall<T> = { ok: true; value: T } | { ok: false; error: string; timedOut: boolean };
 
@@ -232,7 +191,7 @@ export interface ExtensionSubjectDataDependencies {
     raise: (input: Parameters<typeof raiseAttention>[0]) => Promise<unknown>;
     resolve: (key: string) => Promise<unknown>;
   };
-  log: { warn(fields: Record<string, unknown>, message: string): void };
+  log: SubjectDataLog;
   /** `ERASE_DEADLINE_MS` unless a test shortens it. */
   eraseDeadlineMs?: number;
 }
@@ -250,8 +209,8 @@ export function createExtensionSubjectData(dependencies: ExtensionSubjectDataDep
     for (const integration of registry) {
       known.push(integration.id);
       // One that cannot run keeps its row, so deletions are still recorded for it.
-      if (integration.loadState !== "loaded" || !integration.enabled) continue;
-      (handlers.has(integration) ? handling : stopped).push(integration.id);
+      if (!integrationRuns(integration)) continue;
+      (hasSubjectDataHandler(integration) ? handling : stopped).push(integration.id);
     }
     await store.syncHandlers({ handling, stopped, known });
   }
@@ -343,7 +302,7 @@ export function createExtensionSubjectData(dependencies: ExtensionSubjectDataDep
     }
     for (const integration of registry ?? []) {
       if (ids && !ids.has(integration.id)) continue;
-      const registered = runningHandler(integration);
+      const registered = runningSubjectDataHandler(integration);
       if (!registered || busyIntegrations.has(integration)) continue;
       await eraseFor(integration, registered, counts);
     }
@@ -397,21 +356,12 @@ export function createExtensionSubjectData(dependencies: ExtensionSubjectDataDep
   return { syncSubjectHandlerTable, runPendingErasures, pendingErasureCount };
 }
 
-let integrationSource: (() => readonly LoadedIntegration[]) | null = null;
-
-/** Called by the integration host with its live registry. */
-export function setSubjectDataIntegrationSource(
-  source: (() => readonly LoadedIntegration[]) | null,
-): void {
-  integrationSource = source;
-}
-
 let platformInstance: ReturnType<typeof createExtensionSubjectData> | null = null;
 
 function platform(): ReturnType<typeof createExtensionSubjectData> {
   platformInstance ??= createExtensionSubjectData({
     store: createSubjectErasureStore(),
-    integrations: () => integrationSource?.() ?? null,
+    integrations: installedIntegrations,
     attention: { raise: raiseAttention, resolve: resolveAttention },
     log: processLogger,
   });
@@ -435,6 +385,166 @@ export function syncSubjectHandlerTable(): Promise<void> {
  */
 export function runPendingErasures(integrationId?: string): Promise<ErasureCounts> {
   return platform().runPendingErasures(integrationId);
+}
+
+/** The longest the host waits for one call of an integration's `export`. */
+export const EXPORT_DEADLINE_MS = 30_000;
+
+/** The most an extension's export may take up in the archive, as JSON. */
+export const MAX_EXTENSION_EXPORT_BYTES = 8 * 1024 * 1024;
+
+class ExportTooLarge extends Error {}
+
+/**
+ * The JSON text of what an export returned, or `null` when it is larger than
+ * `MAX_EXTENSION_EXPORT_BYTES`. A large value is abandoned while it is being
+ * written, before all of it is in memory. Throws when the value cannot be
+ * written as JSON: a cycle, a BigInt, a `toJSON` that throws, or a top-level
+ * value JSON has no text for, such as a function. `undefined` is written as
+ * `null`.
+ */
+function serialiseExport(value: unknown): string | null {
+  let remaining = MAX_EXTENSION_EXPORT_BYTES;
+  const tooLarge = new ExportTooLarge();
+  let json: string | undefined;
+  try {
+    // A character takes at least one byte, so counting characters never
+    // stops a value that would fit.
+    json = JSON.stringify(value === undefined ? null : value, (key, item: unknown) => {
+      remaining -= key.length + (typeof item === "string" ? item.length : 1);
+      if (remaining < 0) throw tooLarge;
+      return item;
+    });
+  } catch (error) {
+    if (error === tooLarge) return null;
+    throw error;
+  }
+  if (json === undefined) throw new Error("The export is not a JSON value");
+  return Buffer.byteLength(json, "utf8") > MAX_EXTENSION_EXPORT_BYTES ? null : json;
+}
+
+type ExtensionWarningCode =
+  | "extension-not-loaded"
+  | "extension-handler-failed"
+  | "extension-export-too-large";
+
+/**
+ * One part per integration that registered a handler and per integration
+ * that is listed in `integration_subject_handler` but cannot run. Every
+ * handler is asked at once, each with `exportDeadlineMs`. Nothing an
+ * extension returns or throws fails the collection: what cannot be included
+ * becomes an unavailable part that does not block the export, and the reason
+ * is logged for the administrator. Without a registry (outside the API),
+ * every listed integration is reported as not loaded.
+ */
+export async function collectExtensionParts(input: {
+  userId: string;
+  integrations: readonly LoadedIntegration[] | null;
+  listed: () => Promise<readonly string[]>;
+  log: SubjectDataLog;
+  exportDeadlineMs?: number;
+}): Promise<CollectorSourcePart[]> {
+  const { userId, log } = input;
+  const listed = new Set(await input.listed());
+  const capturedAt = new Date().toISOString();
+  const part = (
+    integrationId: string,
+    name: string,
+    outcome: { code: ExtensionWarningCode } | { source: Buffer },
+  ): CollectorSourcePart => ({
+    registrationId: `${EXTENSION_LOGICAL_ID_PREFIX}${integrationId}`,
+    category: "extension",
+    records: [],
+    recordCount: "source" in outcome ? 1 : 0,
+    outcome: "source" in outcome ? "included" : "unavailable",
+    warningCodes: "code" in outcome ? [outcome.code] : [],
+    capturedAt,
+    blocking: false,
+    extension: { integrationId, name },
+    ...("source" in outcome
+      ? {
+          entries: [
+            {
+              logicalId: `${EXTENSION_LOGICAL_ID_PREFIX}${integrationId}`,
+              source: outcome.source,
+              mediaType: "application/json",
+            },
+          ],
+        }
+      : {}),
+  });
+  if (!input.integrations)
+    return [...listed]
+      .sort()
+      .map((integrationId) => part(integrationId, integrationId, { code: "extension-not-loaded" }));
+
+  const asked = input.integrations.map(async (integration) => {
+    const { id } = integration;
+    const name = integration.manifest.name || id;
+    const registered = runningSubjectDataHandler(integration);
+    if (!registered)
+      return !integrationRuns(integration) && listed.has(id)
+        ? part(id, name, { code: "extension-not-loaded" })
+        : null;
+    const failed = (code: ExtensionWarningCode, error: string, message: string) => {
+      log.warn({ integrationId: id, error }, message);
+      return part(id, name, { code });
+    };
+    const call = await callHandler<unknown>(
+      integration,
+      registered,
+      (handler) => handler.export(userId),
+      input.exportDeadlineMs ?? EXPORT_DEADLINE_MS,
+      "Export",
+    );
+    if (!call.ok)
+      return failed(
+        "extension-handler-failed",
+        call.error,
+        `The subject-data export of integration ${id} failed`,
+      );
+    let json: string | null;
+    try {
+      // `toJSON` and getters are the integration's code too.
+      json = runInIntegrationScope(registered.scope, () => serialiseExport(call.value));
+    } catch (error) {
+      return failed(
+        "extension-handler-failed",
+        describeThrown(error),
+        `The subject-data export of integration ${id} cannot be written as JSON`,
+      );
+    }
+    if (json === null)
+      return failed(
+        "extension-export-too-large",
+        `larger than ${MAX_EXTENSION_EXPORT_BYTES} bytes`,
+        `The subject-data export of integration ${id} is too large to include`,
+      );
+    return part(id, name, { source: Buffer.from(json, "utf8") });
+  });
+  return (await Promise.all(asked)).filter((candidate) => candidate !== null);
+}
+
+/**
+ * The extension parts of a person's export, from the live registry and the
+ * handler table in `database` (the platform's, unless the manual backup
+ * export reads a restored copy).
+ */
+export function collectExtensionSubjectData(args: {
+  userId: string;
+  database?: typeof db;
+}): Promise<CollectorSourcePart[]> {
+  const client = (args.database ?? db).$client;
+  return collectExtensionParts({
+    userId: args.userId,
+    integrations: installedIntegrations(),
+    listed: async () => {
+      const rows = await client<Array<{ integration_id: string }>>`
+        select integration_id from integration_subject_handler order by integration_id`;
+      return rows.map((row) => row.integration_id);
+    },
+    log: processLogger,
+  });
 }
 
 /** How many erasures are pending for the given integrations. */

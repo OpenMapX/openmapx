@@ -12,6 +12,7 @@ import {
   type ManagedDawarichCollectorContext,
 } from "./collectors/dawarich.js";
 import { PrivacyRequestError } from "./errors.js";
+import { collectExtensionSubjectData } from "./extension-subject-data.js";
 import {
   collectOpenMapxDataSnapshot,
   type OpenMapxCollectorContext,
@@ -125,10 +126,16 @@ export async function prepareSubjectExport(
           ...(options.dawarich ?? {}),
         }),
       );
+    // Extensions are asked last; what one cannot give is listed in the
+    // archive instead of refusing the whole export.
+    parts.push(...(await collectExtensionSubjectData({ userId: subjectUserId, database })));
     for (const part of parts) if (part.disposeSources) disposers.add(part.disposeSources);
-    // A source that should have answered but did not makes the export
-    // incomplete; refuse it rather than deliver a silent gap.
-    if (options.requireAllSources !== false && parts.some((part) => part.outcome === "unavailable"))
+    // A platform source that should have answered but did not makes the
+    // export incomplete; refuse it rather than deliver a silent gap.
+    if (
+      options.requireAllSources !== false &&
+      parts.some((part) => part.outcome === "unavailable" && part.blocking !== false)
+    )
       throw new PrivacyRequestError("COLLECTOR_UNAVAILABLE", 503);
     const includesAccess = request.kind === "access" || request.kind === "access_and_portability";
     const disclosurePart = parts.find((part) => part.registrationId === "disclosure-events");

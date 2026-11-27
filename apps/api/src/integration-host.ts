@@ -81,10 +81,9 @@ import {
 import {
   forgetSubjectDataHandler,
   registerSubjectDataHandlerFor,
-  runPendingErasures,
   setSubjectDataIntegrationSource,
-  syncSubjectHandlerTable,
-} from "./privacy/extension-subject-data";
+} from "./privacy/extension-handlers";
+import { runPendingErasures, syncSubjectHandlerTable } from "./privacy/extension-subject-data";
 import { processLogger } from "./process-logger";
 import { redis } from "./redis";
 import {
@@ -1400,7 +1399,7 @@ export async function initIntegrations(
   _integrationDirs = normalizeIntegrationDirs(integrationDirs);
   resetIntegrationRoutes();
   codeCache = null;
-  setSubjectDataIntegrationSource(getAllIntegrations);
+  setSubjectDataIntegrationSource(getAllIntegrations, processLogger);
   setPlaceResolverRegistrationHook((_scheme, resolver) => {
     const scope = currentIntegrationScope();
     if (!scope) return resolver;

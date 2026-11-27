@@ -3921,8 +3921,14 @@
         "operator-review-required": "This source requires an authorized manual review before disclosure.",
         "external-source-review-required": "An external or operator-held source requires caseworker review.",
         "schema-missing": "The retained source lacked the required reviewed schema.",
-        "storage-missing": "The retained source material was no longer available."
+        "storage-missing": "The retained source material was no longer available.",
+        "extension-not-loaded": "The extension is installed but was not running when this export was made, so it could not be asked for your data.",
+        "extension-handler-failed": "The extension did not answer within 30 seconds or its answer could not be used.",
+        "extension-export-too-large": "The extension's answer was larger than 8 MiB, the most an export takes from one extension."
       },
+      "extensionsUnavailableHeading": "Extensions that could not be asked",
+      "extensionsUnavailableIntro": "These extensions may hold data about you that this archive does not contain. You can request a new export later or ask the contact below.",
+      "extensionUnavailableRow": "- {name} ({id}): {reason}",
       "deploymentSourcesHeading": "Deployment and operator sources",
       "noDeploymentSources": "No additional deployment sources were configured.",
       "deploymentSourceRow": "{id} — {kind}; relationship: {relationship}; location: {location}; retention: {retention}; access strategy: {accessStrategy}.",

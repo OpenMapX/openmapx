@@ -3,6 +3,14 @@ import {
   subjectDataRegistrationSchema,
   validateSubjectDataRegistrations,
 } from "@openmapx/core/privacy";
+import { integrationSubjectDataSchema } from "@openmapx/extension-contracts/integration";
+import type { LoadedIntegration } from "@openmapx/integration-framework";
+import z from "zod/v4";
+import {
+  installedIntegrations,
+  runningSubjectDataHandler,
+  subjectDataLog,
+} from "./extension-handlers";
 
 /**
  * The explicit controller catalogue.  Keep this list hand-maintained: a table
@@ -906,9 +914,163 @@ export const AVAILABLE_SUBJECT_COLLECTORS = new Set([
   "managed-dawarich-v1",
 ]);
 
+const EXTENSION_COLLECTOR_PREFIX = "extension:";
+
+/** A registration an installed integration declared in its manifest. */
+interface ExtensionCatalogueEntry {
+  integrationId: string;
+  registration: SubjectDataRegistration;
+  title?: string;
+  description?: string;
+}
+
+const entryTextSchema = z.object({
+  title: z.string().min(1).max(200).optional(),
+  description: z.string().min(1).max(2_000).optional(),
+});
+
+/** Keys an extension's entry may not set: the host sets them. */
+const HOST_SET_KEYS = ["source", "collectorId"] as const;
+
+/** Each integration's valid entries with their index, and the indexes already warned about. */
+const declaredEntries = new WeakMap<
+  LoadedIntegration,
+  { entries: Array<{ index: number; entry: ExtensionCatalogueEntry }>; warned: Set<number> }
+>();
+
+function warnLeftOut(integrationId: string, index: number, problem: string): void {
+  subjectDataLog().warn(
+    { integrationId, index, problem },
+    `Integration ${integrationId}: personal-data registration ${index} is left out of the catalogue`,
+  );
+}
+
+/**
+ * The registrations an installed integration's manifest declares, each
+ * checked with the catalogue's own schema; the host sets `source` and
+ * `collectorId`. They are read from the declaration as its schema parses it,
+ * so a key the schema drops, such as `__proto__`, never reaches the check.
+ * An entry that fails is left out with one warning per integration record.
+ */
+function declaredBy(integration: LoadedIntegration): {
+  entries: Array<{ index: number; entry: ExtensionCatalogueEntry }>;
+  warned: Set<number>;
+} {
+  const cached = declaredEntries.get(integration);
+  if (cached) return cached;
+  const result = {
+    entries: [] as Array<{ index: number; entry: ExtensionCatalogueEntry }>,
+    warned: new Set<number>(),
+  };
+  declaredEntries.set(integration, result);
+  // Built-in integrations register in the static catalogue.
+  if (integration.isBuiltIn) return result;
+  const declaration = (integration.manifest as { subjectData?: unknown }).subjectData;
+  if (declaration === undefined) return result;
+  const parsed = integrationSubjectDataSchema.safeParse(declaration);
+  if (!parsed.success) return result;
+  for (const [index, raw] of (parsed.data.registrations ?? []).entries()) {
+    const refuse = (problem: string) => {
+      result.warned.add(index);
+      warnLeftOut(integration.id, index, problem);
+    };
+    const hostSet = HOST_SET_KEYS.filter((key) => Object.hasOwn(raw, key));
+    if (hostSet.length > 0) {
+      refuse(`sets ${hostSet.join(" and ")}, which the host sets`);
+      continue;
+    }
+    const { title, description, ...fields } = raw;
+    const text = entryTextSchema.safeParse({ title, description });
+    if (!text.success) {
+      refuse("title or description is not a text of the allowed length");
+      continue;
+    }
+    if (fields.strategy === "not_personal") {
+      refuse("an extension declares only personal data");
+      continue;
+    }
+    // A collector needs a collector id to pass the schema; the host's own
+    // id, which the schema's grammar does not admit, replaces it afterwards.
+    const checked = subjectDataRegistrationSchema.safeParse({
+      ...fields,
+      source: "extension",
+      ...(fields.strategy === "collector" ? { collectorId: "extension" } : {}),
+    });
+    if (!checked.success) {
+      refuse(checked.error.issues.map((issue) => issue.path.join(".") || "entry").join(", "));
+      continue;
+    }
+    result.entries.push({
+      index,
+      entry: {
+        integrationId: integration.id,
+        registration: {
+          ...checked.data,
+          collectorId: `${EXTENSION_COLLECTOR_PREFIX}${integration.id}`,
+        },
+        ...(text.data.title === undefined ? {} : { title: text.data.title }),
+        ...(text.data.description === undefined ? {} : { description: text.data.description }),
+      },
+    });
+  }
+  return result;
+}
+
+/**
+ * The entries every installed integration in the registry declares, loaded
+ * or not, after the static catalogue's ids and those of earlier entries: a
+ * duplicate id is left out with a warning.
+ */
+function extensionCatalogueEntries(): ExtensionCatalogueEntry[] {
+  const taken = new Set(SUBJECT_DATA_CATALOGUE_BY_ID.keys());
+  const accepted: ExtensionCatalogueEntry[] = [];
+  for (const integration of installedIntegrations() ?? []) {
+    const declared = declaredBy(integration);
+    for (const { index, entry } of declared.entries) {
+      if (taken.has(entry.registration.id)) {
+        if (!declared.warned.has(index)) {
+          declared.warned.add(index);
+          warnLeftOut(integration.id, index, `the id ${entry.registration.id} is taken`);
+        }
+        continue;
+      }
+      taken.add(entry.registration.id);
+      accepted.push(entry);
+    }
+  }
+  return accepted;
+}
+
+/**
+ * The static catalogue followed by the registrations installed integrations
+ * declare, with `source: "extension"` and `collectorId: "extension:<id>"`.
+ * `SUBJECT_DATA_CATALOGUE` stays the static part, which the repository's
+ * checks validate.
+ */
+export function subjectDataCatalogue(): readonly SubjectDataRegistration[] {
+  return [
+    ...SUBJECT_DATA_CATALOGUE,
+    ...extensionCatalogueEntries().map(({ registration }) => registration),
+  ];
+}
+
+/** Title and description an extension gave its registration `id`, if one declared it. */
+export function extensionRegistrationText(
+  id: string,
+): { title?: string; description?: string } | undefined {
+  const entry = extensionCatalogueEntries().find(({ registration }) => registration.id === id);
+  return entry && { title: entry.title, description: entry.description };
+}
+
 export function catalogueAvailability(
   registration: SubjectDataRegistration,
 ): "available" | "unavailable" | "operator_review" | "not_applicable" {
+  // Only the host sets this prefix; the schema's grammar refuses it elsewhere.
+  if (registration.collectorId?.startsWith(EXTENSION_COLLECTOR_PREFIX)) {
+    const integrationId = registration.collectorId.slice(EXTENSION_COLLECTOR_PREFIX.length);
+    const integration = installedIntegrations()?.find(({ id }) => id === integrationId);
+    return integration && runningSubjectDataHandler(integration) ? "available" : "unavailable";
+  }
   if (registration.strategy === "not_personal") return "not_applicable";
   if (registration.strategy === "operator_task") return "operator_review";
   return registration.collectorId && AVAILABLE_SUBJECT_COLLECTORS.has(registration.collectorId)

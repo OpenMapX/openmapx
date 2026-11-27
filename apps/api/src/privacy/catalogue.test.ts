@@ -1,6 +1,6 @@
 import { locales } from "@openmapx/i18n";
 import { describe, expect, it } from "vitest";
-import { catalogueAvailability, SUBJECT_DATA_CATALOGUE } from "./catalogue";
+import { catalogueAvailability, SUBJECT_DATA_CATALOGUE, subjectDataCatalogue } from "./catalogue";
 import { catalogueCopy } from "./catalogue-copy";
 
 describe("OpenMapX subject-data catalogue", () => {
@@ -37,6 +37,10 @@ describe("OpenMapX subject-data catalogue", () => {
     expect(catalogueAvailability(registration("extension-erasure-pending"))).toBe(
       "operator_review",
     );
+  });
+
+  it("is the static catalogue while no integration declares registrations", () => {
+    expect(subjectDataCatalogue()).toEqual(SUBJECT_DATA_CATALOGUE);
   });
 
   it("does not invent a deployment country for configurable controller and processor recipients", () => {

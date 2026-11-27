@@ -254,4 +254,44 @@ describe("localized privacy response report", () => {
     expect(english).toContain("only to recover from failure");
     expect(english).toContain("erasure journal");
   });
+
+  it("lists every extension that could not be asked, with its reason", () => {
+    const extensions = [
+      {
+        integrationId: "acme-overlay",
+        name: "Acme overlay",
+        outcome: "included" as const,
+        warningCode: null,
+      },
+      {
+        integrationId: "acme-tracker",
+        name: "Acme tracker",
+        outcome: "unavailable" as const,
+        warningCode: "extension-not-loaded",
+      },
+      {
+        integrationId: "acme-broken",
+        name: "Acme broken",
+        outcome: "unavailable" as const,
+        warningCode: "extension-handler-failed",
+      },
+    ];
+    for (const locale of ["en", "de"] as const) {
+      const t = messages[locale].privacyExport.report;
+      const report = buildPrivacyResponseReport({ locale, context, sources: [], extensions });
+      const section = report.text.slice(report.text.indexOf(t.extensionsUnavailableHeading));
+      expect(report.text).toContain(t.extensionsUnavailableHeading);
+      expect(section).toContain(
+        `- Acme tracker (acme-tracker): ${t.warnings["extension-not-loaded"]}`,
+      );
+      expect(section).toContain(
+        `- Acme broken (acme-broken): ${t.warnings["extension-handler-failed"]}`,
+      );
+      expect(section).not.toContain("acme-overlay");
+      expect(report.processingInformation.extensions).toEqual(extensions);
+    }
+    expect(buildPrivacyResponseReport({ locale: "en", context, sources: [] }).text).not.toContain(
+      "Extensions that could not be asked",
+    );
+  });
 });

@@ -2,7 +2,9 @@ import { createHash } from "node:crypto";
 import { Readable, Transform, type Writable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { ZipArchive } from "@archiver/archiver";
+import { isComponentId } from "@openmapx/core/component-id";
 import { type DawarichSourceEntryId, dawarichSourcePathForEntryId } from "@openmapx/core/privacy";
+import { EXTENSION_LOGICAL_ID_PREFIX } from "./extension-handlers.js";
 
 export const ARCHIVE_PATHS = Object.freeze({
   "readme-html": "openmapx-data-export/README.html",
@@ -78,10 +80,17 @@ const DYNAMIC_DAWARICH_PREFIXES = [
 
 /** Return the only archive path permitted for a logical member. Dynamic
  * Dawarich members retain the source contract's reviewed relative path while
- * selecting a fixed Article 15/20 namespace. */
+ * selecting a fixed Article 15/20 namespace. An extension's member is named
+ * by its integration id, which cannot leave the directory. */
 export function archivePathForLogicalId(logicalId: string): string | null {
   const fixed = ARCHIVE_PATHS[logicalId as keyof typeof ARCHIVE_PATHS];
   if (fixed) return fixed;
+  if (logicalId.startsWith(EXTENSION_LOGICAL_ID_PREFIX)) {
+    const integrationId = logicalId.slice(EXTENSION_LOGICAL_ID_PREFIX.length);
+    return isComponentId(integrationId)
+      ? `openmapx-data-export/extensions/${integrationId}.json`
+      : null;
+  }
   for (const { logicalPrefix, archivePrefix } of DYNAMIC_DAWARICH_PREFIXES) {
     if (!logicalId.startsWith(logicalPrefix)) continue;
     const sourceId = logicalId.slice(logicalPrefix.length) as DawarichSourceEntryId;

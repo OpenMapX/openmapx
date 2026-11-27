@@ -1,11 +1,10 @@
 import type { LoadedIntegration, SubjectDataHandler } from "@openmapx/integration-framework";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { currentIntegrationScope, type IntegrationScope } from "../../integration-scope";
+import { forgetSubjectDataHandler, registerSubjectDataHandlerFor } from "../extension-handlers";
 import {
   createExtensionSubjectData,
   ERASE_DEADLINE_MS,
-  forgetSubjectDataHandler,
-  registerSubjectDataHandlerFor,
   type SubjectErasureStore,
 } from "../extension-subject-data";
 

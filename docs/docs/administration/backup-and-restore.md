@@ -346,6 +346,10 @@ macOS or Windows cannot connect through such a socket.
    script stops with `PRIVACY_CONFIGURATION_INCOMPLETE` when a required fact is
    missing from both. The report inside the archive lists sources the scratch
    database could not answer, such as the managed timeline, for you to review.
+   No extension runs against the snapshot: every extension the snapshot
+   records as handling personal data is listed under "Extensions that could
+   not be asked", and its tables are in the restored `ext_<id>` schema for you
+   to review.
 
 6. **Remove the container, its volume and the scratch files** once the
    archive is delivered through the agreed channel:
