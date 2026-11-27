@@ -17,6 +17,7 @@ import {
   RoutingProviderError,
   scalarQueries,
 } from "@openmapx/integration-framework";
+import type { DirectionsResult } from "@openmapx/provider-kit/routing";
 import {
   applyClosureExclusions,
   hashKey,
@@ -66,7 +67,6 @@ import {
   ScheduleRequestValidationError,
 } from "./schedule-request.js";
 import { verifyRouteTraffic } from "./traffic-application.js";
-import type { DirectionsResult } from "./types.js";
 import { parseDateTime, parseTravelMode } from "./validation.js";
 
 export { evidenceBoundCacheTtlSeconds } from "./road-condition-routing.js";
@@ -163,7 +163,11 @@ async function planDirectionsRequest(ctx: IntegrationContext, request: ParsedDir
     hasExclusions,
     roadConditionImpact,
     localAccessLines: localAccess?.lines ?? [],
-    keyParams: createDirectionsCacheIdentity(request, exclusionsHash),
+    keyParams: createDirectionsCacheIdentity(
+      request,
+      exclusionsHash,
+      ctx.getProviderOrderFingerprint("routing"),
+    ),
     routingOptions: {
       ...baseRoutingOptions,
       ...(closureRefTime ? { useLiveTraffic: false } : {}),
@@ -1033,7 +1037,11 @@ export function setup(ctx: IntegrationContext): void {
           ctx,
           hashKey(
             "cache:directions:schedule:contributors-v3",
-            createScheduleCacheIdentity(request, exclusionsHash),
+            createScheduleCacheIdentity(
+              request,
+              exclusionsHash,
+              ctx.getProviderOrderFingerprint("routing"),
+            ),
           ),
           ttl,
           () =>

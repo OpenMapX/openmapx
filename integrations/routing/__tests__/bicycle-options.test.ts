@@ -33,7 +33,7 @@ describe("cycling preference boundaries", () => {
         bikeHillPreference: "avoid",
         bikePreferQuietRoads: true,
       });
-      expect(createDirectionsCacheIdentity(req, null)).toMatchObject({
+      expect(createDirectionsCacheIdentity(req, null, "order")).toMatchObject({
         bikeProfile,
         bikeHillPreference: "avoid",
         bikePreferQuietRoads: true,
@@ -57,7 +57,7 @@ describe("cycling preference boundaries", () => {
       bikeHillPreference: "strongly-avoid",
       bikePreferQuietRoads: true,
     });
-    expect(createScheduleCacheIdentity(req, null)).toMatchObject({
+    expect(createScheduleCacheIdentity(req, null, "order")).toMatchObject({
       bikeProfile: "mountain",
       bikeHillPreference: "strongly-avoid",
       bikePreferQuietRoads: true,
@@ -71,7 +71,7 @@ describe("cycling preference boundaries", () => {
 it("preserves surface and decimal pace through ordinary, optimize and schedule identities", () => {
   const req = parse({ bikeSpeedKmh: "19.5", bikePreferSmoothSurfaces: "true" });
   expect(req.routingOptions).toMatchObject({ bikeSpeedKmh: 19.5, bikePreferSmoothSurfaces: true });
-  expect(createDirectionsCacheIdentity(req, null)).toMatchObject({
+  expect(createDirectionsCacheIdentity(req, null, "order")).toMatchObject({
     bikeSpeedKmh: 19.5,
     bikePreferSmoothSurfaces: true,
   });
@@ -81,7 +81,7 @@ it("preserves surface and decimal pace through ordinary, optimize and schedule i
     bikeSpeedKmh: 19.5,
     bikePreferSmoothSurfaces: true,
   });
-  expect(createScheduleCacheIdentity(scheduled, null)).toMatchObject({
+  expect(createScheduleCacheIdentity(scheduled, null, "order")).toMatchObject({
     bikeSpeedKmh: 19.5,
     bikePreferSmoothSurfaces: true,
   });

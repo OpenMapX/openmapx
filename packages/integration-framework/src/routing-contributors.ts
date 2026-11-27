@@ -3,6 +3,7 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
   type ContributingRecord,
   captureResultContributors,
+  contributorsForRecords,
   type FieldContributors,
   readCapturedFieldContributors,
   snapshotContributors,
@@ -35,7 +36,9 @@ function captureRoute(route: Route, envelope: readonly Attribution[]): Route {
 
 /** Built-in certificate for the exact backend used by this call. Capture the
  * named source metadata before acquisition, rather than consulting a catalogue
- * after the request finishes or a cached route is later displayed.
+ * after the request finishes or a cached route is later displayed. Every
+ * isochrone contour is credited to the whole captured set, since one engine
+ * computed all of them from the same data.
  */
 export function withRoutingContributors(
   provider: RoutingProvider,
@@ -50,6 +53,7 @@ export function withRoutingContributors(
   });
   const optimizeRoute = provider.optimizeRoute;
   const getMatrix = provider.getMatrix;
+  const getIsochrone = provider.getIsochrone;
   return {
     ...provider,
     async getRoute(...args) {
@@ -72,6 +76,25 @@ export function withRoutingContributors(
           async optimizeRoute(...args: Parameters<NonNullable<RoutingProvider["optimizeRoute"]>>) {
             const envelope = snapshotContributors(capture());
             return captureResult(await optimizeRoute.apply(provider, args), envelope);
+          },
+        }
+      : {}),
+    ...(getIsochrone
+      ? {
+          async getIsochrone(...args: Parameters<NonNullable<RoutingProvider["getIsochrone"]>>) {
+            const envelope = snapshotContributors(capture());
+            const result = await getIsochrone.apply(provider, args);
+            const contours = result.contours.map((contour) => ({
+              ...contour,
+              contributors: snapshotContributors(envelope),
+            }));
+            const contributors = contributorsForRecords(contours);
+            return {
+              ...result,
+              contours,
+              contributors,
+              attributions: snapshotContributors(contributors),
+            };
           },
         }
       : {}),

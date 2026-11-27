@@ -1,6 +1,7 @@
 import type { BBox } from "@openmapx/core";
 import {
   captureIntegrationContributorCatalogue,
+  collectOrderedProviders,
   type IntegrationContext,
   parseContributors,
   resolveCapturedContributors,
@@ -28,11 +29,16 @@ type FlowCapableProvider = RoadConditionsProvider & {
   getFlow: NonNullable<RoadConditionsProvider["getFlow"]>;
 };
 
-/** All road-conditions providers registered across enabled integrations. */
+/**
+ * All road-conditions providers registered across enabled integrations, in
+ * the operator's order (unlisted ones in registration order). Merges iterate
+ * in this order, so of two equally fresh copies of a situation the earlier
+ * provider's survives.
+ */
 export function collectProviders(ctx: IntegrationContext): RoadConditionsProvider[] {
-  return ctx
-    .getIntegrationsByDomain("road-conditions")
-    .flatMap((i) => (i.providers.get("road-conditions") ?? []) as RoadConditionsProvider[]);
+  return collectOrderedProviders<RoadConditionsProvider>(ctx, "road-conditions").map(
+    ({ provider }) => provider,
+  );
 }
 
 function coversBbox(coverage: RoadConditionsProvider["coverage"], bbox: BBox): boolean {
@@ -78,13 +84,10 @@ export async function aggregateRoadConditions(
   bbox: BBox,
   opts?: RoadConditionsQuery,
 ): Promise<RoadConditionEvent[]> {
-  const acquisitions = ctx
-    .getIntegrationsByDomain("road-conditions")
-    .flatMap((integration) =>
-      ((integration.providers.get("road-conditions") ?? []) as RoadConditionsProvider[])
-        .filter((provider) => coversBbox(provider.coverage, bbox))
-        .map((provider) => ({ provider, integrationId: integration.id })),
-    );
+  const acquisitions = collectOrderedProviders<RoadConditionsProvider>(
+    ctx,
+    "road-conditions",
+  ).filter(({ provider }) => coversBbox(provider.coverage, bbox));
   const providers = acquisitions.map(({ provider }) => provider);
   const disallowed = new Set([
     ...((await ctx.getDisallowedSourceIds?.()) ?? []),

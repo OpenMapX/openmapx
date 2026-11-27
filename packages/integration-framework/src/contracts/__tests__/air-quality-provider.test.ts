@@ -25,9 +25,15 @@ describe("AirQualityProvider contract", () => {
     expect(() =>
       assertAirQualityProviderContract(value, new Set(["official-source"])),
     ).not.toThrow();
-    const ctx = createMockIntegrationContext();
+    const ctx = createMockIntegrationContext({
+      manifest: { dataSources: [{ sourceId: "official-source" }] } as never,
+    });
     ctx.registerAirQualityProvider(value);
     expect(ctx.registered.airQuality).toEqual([value]);
+    // Registration runs the host's contract check, which reads the manifest.
+    expect(() => createMockIntegrationContext().registerAirQualityProvider(value)).toThrow(
+      /manifest\.dataSources/,
+    );
   });
 
   it.each([249, 4_501, 250.5])(

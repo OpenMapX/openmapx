@@ -1,4 +1,9 @@
-import type { GeocodingProvider, IntegrationContext } from "@openmapx/integration-framework";
+import {
+  collectOrderedProviders,
+  type GeocodingProvider,
+  type IntegrationContext,
+  UNLISTED_BY_DOMAIN,
+} from "@openmapx/integration-framework";
 import type { SpatialConstraint } from "./types";
 
 export interface Bbox {
@@ -14,12 +19,12 @@ function bboxAround(lng: number, lat: number): Bbox {
   return { south: lat - HALF, north: lat + HALF, west: lng - HALF, east: lng + HALF };
 }
 
+/** The first geocoder of the operator's selection, the one geocoding asks first. */
 function firstGeocoder(ctx: IntegrationContext): GeocodingProvider | null {
-  for (const integration of ctx.getIntegrationsByDomain("geocoding")) {
-    const providers = (integration.providers.get("geocoding") ?? []) as GeocodingProvider[];
-    if (providers[0]) return providers[0];
-  }
-  return null;
+  const [first] = collectOrderedProviders<GeocodingProvider>(ctx, "geocoding", {
+    unlisted: UNLISTED_BY_DOMAIN.geocoding,
+  });
+  return first?.provider ?? null;
 }
 
 export async function resolveSpatialConstraint(

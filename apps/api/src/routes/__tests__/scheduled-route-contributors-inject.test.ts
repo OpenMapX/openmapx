@@ -76,6 +76,7 @@ it("preserves composed geometry receipts and native empty spans through schedule
     directory: "integrations/routing-native",
     config: {},
     strings: {},
+    loadState: "loaded",
     shutdownHandlers: [],
     manifest: {
       id: "routing-native",

@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 
-import type { Route } from "@integrations/routing/types";
 import type { LngLat, NavProgress } from "@openmapx/core";
 import {
   approachTargetZoom,
@@ -18,6 +17,7 @@ import {
   useSettingsStore,
 } from "@openmapx/core";
 import { COAST_START_DELAY_MS } from "@openmapx/core/navigation";
+import type { Route } from "@openmapx/provider-kit/routing";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 

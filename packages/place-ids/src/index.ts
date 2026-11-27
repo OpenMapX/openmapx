@@ -19,7 +19,12 @@ export {
   listPlaceResolverSchemes,
   type PlaceResolver,
   type PlaceResolverContext,
+  type PlaceResolverRegistrationHook,
+  type PlaceResolverSnapshot,
   registerPlaceResolver,
+  restorePlaceResolvers,
   rollbackPlaceResolverStaging,
+  setPlaceResolverRegistrationHook,
+  snapshotPlaceResolvers,
 } from "./resolvers";
 export { buildTripadvisorUrl } from "./tripadvisor";

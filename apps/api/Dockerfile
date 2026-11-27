@@ -29,6 +29,7 @@ COPY packages/i18n/package.json packages/i18n/
 COPY packages/transitous-core/package.json packages/transitous-core/
 COPY packages/air-quality/package.json packages/air-quality/
 COPY packages/integration-framework/package.json packages/integration-framework/
+COPY packages/integration-sdk/package.json packages/integration-sdk/
 COPY packages/mangrove-client/package.json packages/mangrove-client/
 COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
 COPY packages/openconditions-contrib-client/package.json packages/openconditions-contrib-client/
@@ -36,6 +37,7 @@ COPY packages/ourairports-data/package.json packages/ourairports-data/
 COPY packages/open-landmarks-client/package.json packages/open-landmarks-client/
 COPY packages/place-ids/package.json packages/place-ids/
 COPY packages/presets/package.json packages/presets/
+COPY packages/provider-kit/package.json packages/provider-kit/
 COPY packages/brands/package.json packages/brands/
 COPY apps/api/package.json apps/api/
 # Keep integration source changes out of the dependency-install cache key.
@@ -62,6 +64,7 @@ COPY packages/i18n/package.json packages/i18n/
 COPY packages/transitous-core/package.json packages/transitous-core/
 COPY packages/air-quality/package.json packages/air-quality/
 COPY packages/integration-framework/package.json packages/integration-framework/
+COPY packages/integration-sdk/package.json packages/integration-sdk/
 COPY packages/mangrove-client/package.json packages/mangrove-client/
 COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
 COPY packages/openconditions-contrib-client/package.json packages/openconditions-contrib-client/
@@ -69,6 +72,7 @@ COPY packages/ourairports-data/package.json packages/ourairports-data/
 COPY packages/open-landmarks-client/package.json packages/open-landmarks-client/
 COPY packages/place-ids/package.json packages/place-ids/
 COPY packages/presets/package.json packages/presets/
+COPY packages/provider-kit/package.json packages/provider-kit/
 COPY packages/brands/package.json packages/brands/
 COPY apps/api/package.json apps/api/
 # Keep integration source changes out of the dependency-install cache key.
@@ -179,6 +183,7 @@ COPY packages/motis-feed-proxy-config/ packages/motis-feed-proxy-config/
 COPY packages/hey-api-client-fetch/ packages/hey-api-client-fetch/
 COPY packages/air-quality/ packages/air-quality/
 COPY packages/integration-framework/ packages/integration-framework/
+COPY packages/integration-sdk/ packages/integration-sdk/
 COPY packages/mangrove-client/ packages/mangrove-client/
 COPY packages/noaa-coops-data/ packages/noaa-coops-data/
 COPY packages/openconditions-contrib-client/ packages/openconditions-contrib-client/
@@ -186,6 +191,7 @@ COPY packages/ourairports-data/ packages/ourairports-data/
 COPY packages/open-landmarks-client/ packages/open-landmarks-client/
 COPY packages/place-ids/ packages/place-ids/
 COPY packages/presets/ packages/presets/
+COPY packages/provider-kit/ packages/provider-kit/
 COPY packages/brands/ packages/brands/
 COPY --from=prod-deps /app/packages/core/node_modules ./packages/core/node_modules
 COPY --from=prod-deps /app/packages/i18n/node_modules ./packages/i18n/node_modules
@@ -197,12 +203,14 @@ COPY --from=prod-deps /app/packages/entur-client/node_modules ./packages/entur-c
 COPY --from=prod-deps /app/packages/otp-client/node_modules ./packages/otp-client/node_modules
 COPY --from=prod-deps /app/packages/air-quality/node_modules ./packages/air-quality/node_modules
 COPY --from=prod-deps /app/packages/integration-framework/node_modules ./packages/integration-framework/node_modules
+COPY --from=prod-deps /app/packages/integration-sdk/node_modules ./packages/integration-sdk/node_modules
 COPY --from=prod-deps /app/packages/mangrove-client/node_modules ./packages/mangrove-client/node_modules
 COPY --from=prod-deps /app/packages/noaa-coops-data/node_modules ./packages/noaa-coops-data/node_modules
 COPY --from=prod-deps /app/packages/openconditions-contrib-client/node_modules ./packages/openconditions-contrib-client/node_modules
 COPY --from=prod-deps /app/packages/ourairports-data/node_modules ./packages/ourairports-data/node_modules
 COPY --from=prod-deps /app/packages/open-landmarks-client/node_modules ./packages/open-landmarks-client/node_modules
 COPY --from=prod-deps /app/packages/presets/node_modules ./packages/presets/node_modules
+COPY --from=prod-deps /app/packages/provider-kit/node_modules ./packages/provider-kit/node_modules
 COPY --from=prod-deps /app/packages/brands/node_modules ./packages/brands/node_modules
 
 # The API and packages/core import @openmapx/transitous-core for transit feed
@@ -231,7 +239,7 @@ COPY apps/api/package.json ./apps/api/
 #   - packages/core/tsconfig.json: extends the base, resolved from packages/core
 # These are needed because dist/server.js (bundled) dynamically loads:
 #   - /app/integrations/<id>/index.ts — .ts, often imports from ./provider.js
-#   - /app/packages/core/src/index.ts — imports `@integrations/poi-search/types`
+#   - /app/packages/core/src/index.ts — .ts, compiled under its own tsconfig
 COPY tsconfig.base.json ./
 COPY apps/api/tsconfig.json ./apps/api/
 COPY packages/core/tsconfig.json ./packages/core/

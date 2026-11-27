@@ -1,7 +1,7 @@
 import { OverpassTimeoutError } from "@openmapx/core";
+import type { PoiSearchProvider, PoiSearchResult } from "@openmapx/provider-kit/poi-search";
 import { describe, expect, it, vi } from "vitest";
 import { createPoiSearchOrchestrator } from "../orchestrator";
-import type { PoiSearchProvider, PoiSearchResult } from "../types";
 
 const BBOX = { south: 52.49, west: 13.38, north: 52.53, east: 13.43 };
 
@@ -11,6 +11,7 @@ function makeCtx(
 ) {
   return {
     getIntegrationsByDomain: () => [{ providers: new Map([["poi-search", providers]]) }],
+    getProviderOrder: () => [],
     db,
   } as unknown as Parameters<typeof createPoiSearchOrchestrator>[0];
 }
@@ -48,6 +49,7 @@ const OVERTURE_EXTRA: PoiSearchResult = {
 
 const overpassProvider: PoiSearchProvider = {
   id: "overpass",
+  fusionRole: "base",
   categories: ["cafes", "restaurants", "bars", "viewpoints", "__preset__"],
   async search(_cat, _bbox) {
     return [OSM_RESULT_1, OSM_RESULT_2];
@@ -129,6 +131,7 @@ describe("(C) Category routing", () => {
     let overtureCallCount = 0;
     const trackingOverpass: PoiSearchProvider = {
       id: "overpass",
+      fusionRole: "base",
       categories: ["viewpoints"],
       async search() {
         overpassCallCount++;
@@ -191,6 +194,7 @@ describe("(C3) Partial provider failures", () => {
   it("marks a fused response partial when the base provider fails", async () => {
     const failingBase: PoiSearchProvider = {
       id: "overpass",
+      fusionRole: "base",
       categories: ["cafes"],
       async search() {
         throw new Error("upstream unavailable");
@@ -210,6 +214,7 @@ describe("(D) Link-table wiring — ctx.db integration", () => {
   // will NOT match. The link table entry forces the fuse.
   const dissimilarOsmProvider: PoiSearchProvider = {
     id: "overpass",
+    fusionRole: "base",
     categories: ["cafes"],
     async search() {
       return [

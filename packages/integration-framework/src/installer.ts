@@ -5,8 +5,9 @@ import { extractIntegrationArtifactStream } from "./artifact-stream";
 // (`apps/ops-agent/src/integration-store.ts`) both call into this module so
 // they share one source of truth.
 //
-// Community install/package entry points enforce declarative-only artifacts;
-// the API never builds or executes community bundles at runtime.
+// Community install/package entry points accept a prebuilt backend bundle,
+// migrations and assets, never unbundled source or native add-ons: the host
+// never compiles installed code.
 
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
@@ -47,12 +48,19 @@ import {
   MAX_INTEGRATION_MANIFEST_BYTES,
 } from "@openmapx/core/services/trusted-integration-schemas";
 import {
+  BACKEND_ENTRY_PATH,
+  INTEGRATION_ARCHIVE_LIMITS,
+  integrationArchiveEntryKind,
+  MIGRATION_FILE_PATTERN,
+  migrationSequenceProblem,
+} from "@openmapx/extension-contracts/archive";
+import {
   type ArtifactMetadata,
   validateArtifactMetadata as validatePortableArtifactMetadata,
 } from "@openmapx/extension-contracts/artifact";
 import { componentIdSchema, isComponentId } from "@openmapx/extension-contracts/identifiers";
 import z from "zod/v4";
-import { createDeterministicTarGz } from "./deterministic-tar";
+import { createDeterministicTarGz, deterministicTarSize } from "./deterministic-tar";
 import { validateManifest } from "./manifest";
 import { PLATFORM_VERSION, satisfiesPlatformVersion } from "./platform";
 
@@ -401,7 +409,8 @@ export interface InstallOptions {
   /**
    * `source` clones/copies a working directory. `artifact` extracts an
    * OpenMapX community-integration release tarball used by the admin Store.
-   * Both paths enforce the declarative-only community code policy.
+   * Both paths publish the tree as it is, so a working directory must hold
+   * the built layout, never unbundled backend source.
    */
   sourceKind?: "source" | "artifact";
   ref?: string;
@@ -511,7 +520,7 @@ export async function installIntegration(opts: InstallOptions): Promise<InstallR
     // (via assertSafeId) gives a single point of defense if the schema ever
     // loosens AND verifies the resolved path stays under custom_integrations/.
     const target = resolveInstallTarget(opts.rootDir, id);
-    validateDeclarativeArtifact(stage);
+    assertNoShippedNodeModules(stage);
     if (sourceKind === "artifact") {
       validateArtifactMetadata(stage, manifest);
     }
@@ -569,8 +578,8 @@ export interface StagedIntegrationOptions {
 
 /**
  * Every check an installed integration must pass, run on a staged tree before
- * it replaces anything: the manifest, its protocol and id, the declarative-only
- * policy, artifact metadata, and what the operations agent's loader requires.
+ * it replaces anything: the manifest, its protocol and id, the code it may
+ * ship, artifact metadata, and what the operations agent's loader requires.
  * Gives the tree the installed modes on the way.
  */
 export function validateStagedIntegration(
@@ -591,8 +600,10 @@ export function validateStagedIntegration(
   assertSafeId(id);
   assertDoesNotShadowBuiltIn(options.builtInIds, id);
   resolveLayerSelectorPreview(stage, manifest);
-  assertNoExecutableCommunityCode(stage, manifest);
-  validateDeclarativeArtifact(stage);
+  assertNoExecutableFrontendCode(stage, manifest);
+  assertNoShippedNodeModules(stage);
+  assertInstallableBackend(stage, manifest);
+  assertInstallableAssets(stage);
   if (options.artifact) validateArtifactMetadata(stage, manifest);
   if (!options.allowLinks) assertOnlyFilesAndDirectories(stage);
   applyInstalledModes(stage);
@@ -819,8 +830,10 @@ function validatePreparedIntegration(directory: string, rootDir: string): Record
   assertSafeId(manifest.id);
   assertDoesNotShadowBuiltIn(rootDir, manifest.id);
   resolveLayerSelectorPreview(directory, manifest);
-  assertNoExecutableCommunityCode(directory, manifest);
-  validateDeclarativeArtifact(directory);
+  assertNoExecutableFrontendCode(directory, manifest);
+  assertNoShippedNodeModules(directory);
+  assertInstallableBackend(directory, manifest);
+  assertInstallableAssets(directory);
   validateArtifactMetadata(directory, manifest);
   assertAgentLoads(directory, manifest.id);
   return manifest;
@@ -2231,8 +2244,9 @@ export interface PackageResult {
 // The artifact contract. Packaging copies exactly these entries into a fresh
 // staging directory; everything else in the source tree — dotfiles, `.env*`,
 // VCS data, sources, tests, source maps, lockfiles, `node_modules`, caches,
-// unreferenced assets — is simply never collected, so it cannot leak into a
-// release even if it sits next to a declared file.
+// files below `assets/` outside the archive layout — is simply never
+// collected, so it cannot leak into a release even if it sits next to a
+// declared file.
 const MAX_LOCALE_FILES = 100;
 const MAX_LOCALE_BYTES = 256 * 1024;
 const MAX_PREVIEW_BYTES = 64 * 1024;
@@ -2275,10 +2289,16 @@ function collectStagedFile(
     }
     return null;
   }
-  if (stats.size > maxBytes) {
-    throw new Error(`Artifact file ${relativePath} exceeds its ${maxBytes}-byte limit`);
-  }
+  if (stats.size > maxBytes) throw oversizedArtifactFile(relativePath, maxBytes);
   return { relativePath, absoluteSource: absolute, sizeBytes: stats.size };
+}
+
+function oversizedArtifactFile(relativePath: string, maxBytes: number): Error {
+  return new Error(`Artifact file ${relativePath} exceeds its ${maxBytes}-byte limit`);
+}
+
+function tooManyAssetFiles(): Error {
+  return new Error(`Artifact holds more than ${INTEGRATION_ARCHIVE_LIMITS.assetFiles} asset files`);
 }
 
 /**
@@ -2349,6 +2369,41 @@ function collectArtifactFiles(
     if (staged) files.push(staged);
   }
 
+  if (manifestDeclaresBackendEntry(manifest)) {
+    const bundle = collectStagedFile(
+      directory,
+      BACKEND_ENTRY_PATH,
+      INTEGRATION_ARCHIVE_LIMITS.backendEntryBytes,
+      true,
+    );
+    if (bundle) files.push(bundle);
+  }
+
+  if (manifestDeclaresMigrations(manifest)) {
+    for (const name of readdirSync(join(directory, "migrations")).sort()) {
+      const path = `migrations/${name}`;
+      if (!MIGRATION_FILE_PATTERN.test(path)) continue;
+      const staged = collectStagedFile(
+        directory,
+        path,
+        INTEGRATION_ARCHIVE_LIMITS.migrationBytes,
+        true,
+      );
+      if (staged) files.push(staged);
+    }
+  }
+
+  // A layer-selector preview stored under `assets/` is already staged above.
+  const staged = new Set(files.map((file) => file.relativePath));
+  const assets = collectAssetFiles(directory).filter((file) => !staged.has(file.relativePath));
+  // An install counts every file below `assets/`, including a preview whose
+  // name the asset pattern would not have collected.
+  const stagedUnderAssets = files.filter((file) => file.relativePath.startsWith("assets/")).length;
+  if (assets.length + stagedUnderAssets > INTEGRATION_ARCHIVE_LIMITS.assetFiles) {
+    throw tooManyAssetFiles();
+  }
+  files.push(...assets);
+
   const seen = new Set<string>();
   for (const file of files) {
     if (seen.has(file.relativePath)) {
@@ -2370,23 +2425,201 @@ function regularDirectory(absolute: string): boolean {
   }
 }
 
-const BACKEND_BUNDLE_PATH = ["dist", "backend", "index.mjs"] as const;
+/**
+ * Every regular, single-link file below `assets/` whose path the archive
+ * layout admits. Anything else there (hidden files, links, names outside the
+ * pattern, deeper trees) is left behind like any other source-tree residue.
+ */
+function collectAssetFiles(directory: string): StagedFile[] {
+  const files: StagedFile[] = [];
+  const walk = (relativeDirectory: string): void => {
+    const absoluteDirectory = join(directory, relativeDirectory);
+    if (!regularDirectory(absoluteDirectory)) return;
+    for (const name of readdirSync(absoluteDirectory).sort()) {
+      const path = `${relativeDirectory}/${name}`;
+      if (integrationArchiveEntryKind(path) !== "asset") continue;
+      if (regularDirectory(join(directory, path))) {
+        walk(path);
+        continue;
+      }
+      if (!regularFile(join(directory, path))) continue;
+      if (files.length === INTEGRATION_ARCHIVE_LIMITS.assetFiles) throw tooManyAssetFiles();
+      const staged = collectStagedFile(
+        directory,
+        path,
+        INTEGRATION_ARCHIVE_LIMITS.assetBytes,
+        true,
+      );
+      if (staged) files.push(staged);
+    }
+  };
+  walk("assets");
+  return files;
+}
+
+/**
+ * The archive layout's asset limits, for a tree published as it is. Every
+ * entry below `assets/` counts, since all of it is published; links are
+ * counted but not followed.
+ */
+function assertInstallableAssets(directory: string): void {
+  let count = 0;
+  const walk = (relativeDirectory: string): void => {
+    const entries = readdirSync(join(directory, relativeDirectory), { withFileTypes: true });
+    for (const entry of entries) {
+      const path = `${relativeDirectory}/${entry.name}`;
+      if (entry.isDirectory()) {
+        walk(path);
+        continue;
+      }
+      if (++count > INTEGRATION_ARCHIVE_LIMITS.assetFiles) throw tooManyAssetFiles();
+      const stats = lstatSync(join(directory, path));
+      if (stats.isFile() && stats.size > INTEGRATION_ARCHIVE_LIMITS.assetBytes)
+        throw oversizedArtifactFile(path, INTEGRATION_ARCHIVE_LIMITS.assetBytes);
+    }
+  };
+  if (regularDirectory(join(directory, "assets"))) walk("assets");
+}
+
 const ARTIFACT_METADATA_FILE = "openmapx-artifact.json";
 // Fixed build stamp so the same source always produces byte-identical output.
 const DETERMINISTIC_TIMESTAMP = "1970-01-01T00:00:00Z";
 
-function manifestDeclaresBackend(manifest: Record<string, unknown>): boolean {
+function manifestDeclaresBackendEntry(manifest: Record<string, unknown>): boolean {
   const backend = manifest.backend;
-  if (!backend || typeof backend !== "object") return false;
-  return Object.values(backend as Record<string, unknown>).some(
-    (value) => value === true || typeof value === "string",
+  return (
+    typeof backend === "object" &&
+    backend !== null &&
+    typeof (backend as Record<string, unknown>).entry === "string"
   );
 }
 
+function manifestDeclaresMigrations(manifest: Record<string, unknown>): boolean {
+  const database = manifest.database;
+  return (
+    typeof database === "object" &&
+    database !== null &&
+    (database as Record<string, unknown>).migrations === true
+  );
+}
+
+function lstatOrNull(path: string): ReturnType<typeof lstatSync> | null {
+  try {
+    return lstatSync(path);
+  } catch {
+    return null;
+  }
+}
+
+/** Root files that mean the tree holds backend source instead of its bundle. */
+const UNBUNDLED_BACKEND_SOURCES = ["index.ts", "index.js"] as const;
+/** Directories of an authoring tree that packaging never collects or inspects. */
+const AUTHORING_ONLY_DIRECTORIES = new Set(["node_modules", ".git"]);
+
+/** The first native add-on below `directory`, without following links. */
+function findNativeAddOn(directory: string, skipAuthoringDirectories: boolean): string | null {
+  const walk = (relativeDirectory: string): string | null => {
+    const entries = readdirSync(join(directory, relativeDirectory), { withFileTypes: true });
+    for (const entry of entries) {
+      const path = relativeDirectory ? `${relativeDirectory}/${entry.name}` : entry.name;
+      // Case-insensitive: a case-insensitive filesystem loads `x.NODE` for `./x.node`.
+      if (/\.node$/i.test(entry.name)) return path;
+      if (!entry.isDirectory()) continue;
+      if (
+        skipAuthoringDirectories &&
+        !relativeDirectory &&
+        AUTHORING_ONLY_DIRECTORIES.has(entry.name)
+      )
+        continue;
+      const found = walk(path);
+      if (found) return found;
+    }
+    return null;
+  };
+  return walk("");
+}
+
+/**
+ * The backend layout rules. An installed tree is published as it is, so it is
+ * also refused when it holds unbundled source at its root; a packaged source
+ * tree is collected from an allowlist, so its sources are simply left behind
+ * and its authoring dependencies are not inspected.
+ */
+function assertBackendLayout(
+  directory: string,
+  manifest: Record<string, unknown>,
+  tree: "installed" | "source",
+): void {
+  const bundle = lstatOrNull(join(directory, BACKEND_ENTRY_PATH));
+  if (manifestDeclaresBackendEntry(manifest)) {
+    if (!bundle?.isFile())
+      throw new Error(`Manifest declares backend.entry but ${BACKEND_ENTRY_PATH} is missing`);
+  } else if (bundle) {
+    throw new Error(
+      `${BACKEND_ENTRY_PATH} is present but the manifest does not declare backend.entry`,
+    );
+  }
+  if (
+    tree === "installed" &&
+    UNBUNDLED_BACKEND_SOURCES.some((name) => lstatOrNull(join(directory, name)) !== null)
+  ) {
+    throw new Error(`Unbundled backend source cannot be installed; build ${BACKEND_ENTRY_PATH}`);
+  }
+  if (bundle && bundle.size > INTEGRATION_ARCHIVE_LIMITS.backendEntryBytes) {
+    throw new Error(
+      `${BACKEND_ENTRY_PATH} exceeds ${INTEGRATION_ARCHIVE_LIMITS.backendEntryBytes} bytes`,
+    );
+  }
+  if (findNativeAddOn(directory, tree === "source") !== null) {
+    throw new Error("Native add-ons cannot be installed");
+  }
+  const migrations = join(directory, "migrations");
+  if (manifestDeclaresMigrations(manifest)) {
+    const isMigration = (name: string) => MIGRATION_FILE_PATTERN.test(`migrations/${name}`);
+    const present = regularDirectory(migrations) ? readdirSync(migrations).sort() : [];
+    // Packaging collects only migration files; an installed tree is published
+    // whole, so anything else there is refused by the sequence check below.
+    const names = tree === "source" ? present.filter(isMigration) : present;
+    if (!names.some(isMigration)) {
+      throw new Error(
+        "Manifest declares database.migrations but migrations/ holds no migration file",
+      );
+    }
+    if (names.length > INTEGRATION_ARCHIVE_LIMITS.migrationFiles) {
+      throw new Error(
+        `migrations/ holds more than ${INTEGRATION_ARCHIVE_LIMITS.migrationFiles} files`,
+      );
+    }
+    for (const name of names) {
+      const stats = lstatOrNull(join(migrations, name));
+      if (!stats?.isFile()) throw new Error(`migrations/${name} is not a regular file`);
+      if (stats.size > INTEGRATION_ARCHIVE_LIMITS.migrationBytes) {
+        throw new Error(
+          `migrations/${name} exceeds ${INTEGRATION_ARCHIVE_LIMITS.migrationBytes} bytes`,
+        );
+      }
+    }
+    const problem = migrationSequenceProblem(names);
+    if (problem !== null) throw new Error(problem);
+  } else if (lstatOrNull(migrations) !== null) {
+    throw new Error("migrations/ is present but the manifest does not declare database.migrations");
+  }
+}
+
+/**
+ * Refuses an installed tree whose backend code the host could not load as
+ * one verified, prebuilt bundle: a bundle the manifest does not declare (or
+ * the reverse), unbundled source, an oversized bundle, native add-ons, and
+ * migrations that are undeclared, oversized or not numbered in sequence.
+ */
+export function assertInstallableBackend(
+  directory: string,
+  manifest: Record<string, unknown>,
+): void {
+  assertBackendLayout(directory, manifest, "installed");
+}
+
 const EXECUTABLE_COMMUNITY_CODE_PATHS = [
-  "index.ts",
-  "index.js",
-  "dist/backend/index.mjs",
   "map-layer.tsx",
   "legend.tsx",
   "panel.tsx",
@@ -2408,28 +2641,22 @@ function manifestDeclaresFrontendCode(manifest: Record<string, unknown>): boolea
   );
 }
 
-function assertNoExecutableCommunityCode(
+function assertNoExecutableFrontendCode(
   directory: string,
   manifest: Record<string, unknown>,
 ): void {
   const found = EXECUTABLE_COMMUNITY_CODE_PATHS.filter((path) => existsSync(join(directory, path)));
-  if (
-    !manifestDeclaresBackend(manifest) &&
-    !manifestDeclaresFrontendCode(manifest) &&
-    found.length === 0
-  ) {
-    return;
-  }
+  if (!manifestDeclaresFrontendCode(manifest) && found.length === 0) return;
   const details = found.length > 0 ? ` Found: ${found.join(", ")}.` : "";
   throw new Error(
     "Executable community integration code cannot be installed without an isolation boundary." +
       details +
-      " Move backend behavior into an isolated service component and keep the integration artifact declarative-only.",
+      " Community integrations cannot ship frontend code yet; keep the artifact free of frontend bundles and declarations.",
   );
 }
 
 export function integrationBackendBundlePath(directory: string): string {
-  return join(directory, ...BACKEND_BUNDLE_PATH);
+  return join(directory, BACKEND_ENTRY_PATH);
 }
 
 function assertCompatibleManifestProtocol(manifest: Record<string, unknown>): void {
@@ -2440,9 +2667,11 @@ function assertCompatibleManifestProtocol(manifest: Record<string, unknown>): vo
   }
 }
 
-function validateDeclarativeArtifact(directory: string): void {
+function assertNoShippedNodeModules(directory: string): void {
   if (existsSync(join(directory, "node_modules"))) {
-    throw new Error("Declarative integration artifacts must not ship a node_modules/ directory.");
+    throw new Error(
+      `Integration artifacts must not ship a node_modules/ directory; bundle dependencies into ${BACKEND_ENTRY_PATH}`,
+    );
   }
 }
 
@@ -2497,11 +2726,13 @@ export async function packageIntegration(opts: PackageOptions): Promise<PackageR
   }
   assertCompatibleManifestProtocol(manifest);
   resolveLayerSelectorPreview(directory, manifest);
-  assertNoExecutableCommunityCode(directory, manifest);
+  assertNoExecutableFrontendCode(directory, manifest);
+  assertBackendLayout(directory, manifest, "source");
 
-  // Authoring dependencies may exist in the source tree. The explicit file
-  // allowlist below never stages node_modules; received artifacts are still
-  // rejected by validateDeclarativeArtifact before installation.
+  // Authoring dependencies and sources may exist in the source tree. The
+  // explicit file allowlist below never stages them; received artifacts are
+  // still rejected by assertNoShippedNodeModules and assertInstallableBackend
+  // before installation.
 
   // Generated in memory, not written into the caller's tree: packaging must
   // leave the source directory byte-for-byte unchanged.
@@ -2519,6 +2750,16 @@ export async function packageIntegration(opts: PackageOptions): Promise<PackageR
   const files = collectArtifactFiles(directory, manifest, { metadata, licenses });
   const totalBytes = files.reduce((sum, file) => sum + file.sizeBytes, 0);
   const relativePaths = files.map((file) => file.relativePath);
+  // Every install bounds the extracted tar by this size; refuse an artifact
+  // that would exceed it before any contents are read into memory.
+  const tarBytes = deterministicTarSize(
+    files.map((file) => ({ path: file.relativePath, sizeBytes: file.sizeBytes })),
+  );
+  if (tarBytes > DEFAULT_MAX_ARTIFACT_BYTES) {
+    throw new Error(
+      `Artifact would expand to ${tarBytes} bytes; an install accepts at most ${DEFAULT_MAX_ARTIFACT_BYTES}`,
+    );
+  }
 
   if (opts.dryRun) {
     // The list and the byte total only — never file contents.
@@ -2536,19 +2777,24 @@ export async function packageIntegration(opts: PackageOptions): Promise<PackageR
   // Built in memory from the exact allowlisted set. Platform `tar` dialects
   // disagree about the flags that make output reproducible, so the archive is
   // written with fixed ustar headers instead of shelling out.
-  mkdirSync(dirname(resolve(opts.outFile)), { recursive: true });
-  writeFileSync(
-    resolve(opts.outFile),
-    createDeterministicTarGz(
-      files.map((file) => ({
-        path: file.relativePath,
-        contents:
-          file.absoluteSource === null
-            ? Buffer.from(file.contents ?? "", "utf-8")
-            : readFileSync(file.absoluteSource),
-      })),
-    ),
+  const artifact = createDeterministicTarGz(
+    files.map((file) => ({
+      path: file.relativePath,
+      contents:
+        file.absoluteSource === null
+          ? Buffer.from(file.contents ?? "", "utf-8")
+          : readFileSync(file.absoluteSource),
+    })),
   );
+  // Every install also bounds the compressed file, and gzip enlarges
+  // incompressible content such as already-compressed images or tiles.
+  if (artifact.length > DEFAULT_MAX_ARTIFACT_BYTES) {
+    throw new Error(
+      `Artifact would be ${artifact.length} bytes; an install accepts at most ${DEFAULT_MAX_ARTIFACT_BYTES}`,
+    );
+  }
+  mkdirSync(dirname(resolve(opts.outFile)), { recursive: true });
+  writeFileSync(resolve(opts.outFile), artifact);
 
   return {
     id: manifest.id,

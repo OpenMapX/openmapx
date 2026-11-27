@@ -53,6 +53,7 @@ describe("GET /api/capabilities", () => {
       config: { apiKey: "private-secret" },
       directory: "private-directory",
       providers: new Map(),
+      loadState: "loaded",
       shutdownHandlers: [],
     };
     runtime.integrations = [row, { ...row, id: "disabled", enabled: false }];
@@ -65,6 +66,74 @@ describe("GET /api/capabilities", () => {
     expect(response.body).not.toContain("private-");
     expect(response.body).not.toContain("configured");
   });
+  it("describes each routing engine by what it can serve, not by its id", async () => {
+    const base: LoadedIntegration = {
+      id: "routing-acme",
+      manifest: { id: "routing-acme", domains: ["routing"] },
+      enabled: true,
+      isBuiltIn: false,
+      strings: {},
+      config: {},
+      directory: "acme",
+      providers: new Map([
+        [
+          "routing",
+          [
+            {
+              id: "acme",
+              supportedModes: ["driving", "walking"],
+              supportsTrafficProof: true,
+              supportsTimeAware: true,
+              getRoute: async () => ({ routes: [] }),
+            },
+          ],
+        ],
+      ]),
+      loadState: "loaded",
+      shutdownHandlers: [],
+    };
+    runtime.integrations = [
+      base,
+      {
+        ...base,
+        id: "routing-plain",
+        providers: new Map([
+          [
+            "routing",
+            [
+              { id: "plain-car", supportedModes: ["driving"], supportsExclusions: true },
+              { id: "plain-bike", supportedModes: ["cycling", "driving"] },
+            ],
+          ],
+        ]),
+      },
+      { ...base, id: "routing", providers: new Map() },
+    ];
+    const services = (await capabilities({})).json().services;
+    expect(services["routing-acme"]).toEqual({
+      enabled: true,
+      healthy: true,
+      available: true,
+      domains: ["routing"],
+      modes: ["driving", "walking"],
+      trafficProof: true,
+      timeAware: true,
+      exclusions: false,
+    });
+    expect(services["routing-plain"]).toMatchObject({
+      modes: ["driving", "cycling"],
+      trafficProof: false,
+      timeAware: false,
+      exclusions: true,
+    });
+    expect(services.routing).toEqual({
+      enabled: true,
+      healthy: true,
+      available: true,
+      domains: ["routing"],
+    });
+  });
+
   it("preserves the services map and its cache header", async () => {
     const response = await capabilities({});
     expect(response.statusCode).toBe(200);

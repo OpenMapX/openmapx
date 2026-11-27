@@ -59,6 +59,14 @@ export function integrationAdminQueries(client: ApiClient, apiUrl: string) {
             await integrationOrThrow(sdk.getAdminIntegration(id, options(signal))),
           ),
       }),
+    providerOrder: () =>
+      queryOptions({
+        queryKey: [...key, "provider-order"],
+        queryFn: async ({ signal }) =>
+          sdk.adminProviderOrderSchema.parse(
+            await integrationOrThrow(sdk.getAdminProviderOrder(options(signal))),
+          ),
+      }),
     envVars: () =>
       queryOptions({
         queryKey: [...key, "env-vars"],

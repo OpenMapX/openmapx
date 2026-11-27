@@ -1,6 +1,5 @@
 "use client";
 
-import type { ReviewAggregate as ReviewAggregateType } from "@integrations/reviews/types";
 import EditIcon from "@mui/icons-material/Edit";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import RateReviewIcon from "@mui/icons-material/RateReview";
@@ -11,6 +10,7 @@ import Typography from "@mui/material/Typography";
 import { type Place, type Review, safeHref, useSession } from "@openmapx/core";
 import { usePlaceReviews, useReviewAggregate, useReviewIdentity } from "@openmapx/mangrove-react";
 import { contributorsForRecords } from "@openmapx/mobility-core/contributors";
+import type { ReviewAggregate as ReviewAggregateType } from "@openmapx/provider-kit/reviews";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { AuthDialog } from "@/components/auth/AuthDialog";

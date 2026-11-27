@@ -205,7 +205,7 @@ it("isolates old weather caches and keeps the acquired receipt on retained respo
   };
   const entries = new Map<string, unknown>([
     [
-      "weather:current:contributors-v1:51.00,6.00:metric",
+      "weather:current:contributors-v2:51.00,6.00:metric",
       { source: "winner", contributors: [{ sourceId: "winner", name: "Incorrect old cache" }] },
     ],
   ]);

@@ -28,7 +28,7 @@ import { TripTimeChip } from "./TripTimeChip";
 import { useDirectionsDetailsNavigation } from "./useDirectionsDetailsNavigation";
 import { useGroundDirectionsPlan } from "./useGroundDirectionsPlan";
 import { useOptimizeStops } from "./useOptimizeStops";
-import { useRouteRecovery } from "./useRouteRecovery";
+import { useReleaseUnavailablePin, useRouteRecovery } from "./useRouteRecovery";
 import { useTransitDirectionsPlan } from "./useTransitDirectionsPlan";
 import { useTripTimeControl } from "./useTripTimeControl";
 import { useWaypointFields } from "./useWaypointFields";
@@ -88,7 +88,18 @@ export function DirectionsPanelContent() {
     useDirectionsStore.getState().setMode(nextMode);
     details.leave();
   };
-  const recovery = useRouteRecovery({ focusWaypoint: fields.focusWaypoint, switchMode });
+  useReleaseUnavailablePin(
+    ground.directionsQuery.isError ? ground.groundRequest.provider : undefined,
+    () => setSnackbar(t("engineUnavailable")),
+  );
+  const recovery = useRouteRecovery({
+    focusWaypoint: fields.focusWaypoint,
+    switchMode,
+    // An empty answer names its engine; a failed one is known only when it was pinned.
+    failedEngine: ground.directionsQuery.isError
+      ? ground.groundRequest.provider
+      : ground.directionsQuery.data?.provider,
+  });
 
   const transitDetails = openTransitItinerary(transit, details);
   if (transitDetails) {

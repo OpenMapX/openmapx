@@ -228,7 +228,7 @@ async function executeSingleHealthCheck(
 
   // Skip the probe when any required config key is unresolved (no value from
   // defaults / DB / vault / env). The cascade is populated at integration
-  // load time via `resolveConfig`.
+  // load time via `resolveConfigWithSources`.
   if (hc.requiredConfigKeys?.some((k: string) => !resolveConfigValue(integration, k))) {
     const missing = hc.requiredConfigKeys?.find((k: string) => !resolveConfigValue(integration, k));
     return {
@@ -378,9 +378,9 @@ async function executeSingleHealthCheck(
   let unsatisfiedService: string | null = null;
   let unsatisfiedEndpoint: string | null = null;
   // `${endpoint:id}` names the deployment's own instance, possibly internal and
-  // with the operator's credentials. A built-in manifest may use it only as the
-  // whole URL prefix; its credentials never enter the template and go only to
-  // that origin, as Basic auth.
+  // with the operator's credentials. A manifest may use it only as the whole
+  // URL prefix; its credentials never enter the template and go only to that
+  // origin, as Basic auth.
   let endpointMisuse: string | null = null;
   let resolvedEndpoint: ProbeEndpoint | null = null;
   let usedCredentialPlaceholder = false;
@@ -391,10 +391,6 @@ async function executeSingleHealthCheck(
   function resolvePlaceholder(key: string, inHeader = false): string {
     if (key.startsWith("endpoint:")) {
       const endpointId = key.slice("endpoint:".length);
-      if (!integration.isBuiltIn) {
-        endpointMisuse = "endpoint placeholders are reserved for built-in integrations";
-        return "";
-      }
       if (inHeader) {
         endpointMisuse = "an endpoint placeholder may not appear in a header";
         return "";

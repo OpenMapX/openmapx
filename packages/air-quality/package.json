@@ -19,6 +19,38 @@
     "./ids": {
       "types": "./src/ids.ts",
       "default": "./src/ids.ts"
+    },
+    "./api": {
+      "types": "./src/api.ts",
+      "default": "./src/api.ts"
+    },
+    "./types": {
+      "types": "./src/types.ts",
+      "default": "./src/types.ts"
+    },
+    "./forecast": {
+      "types": "./src/forecast.ts",
+      "default": "./src/forecast.ts"
+    },
+    "./selection": {
+      "types": "./src/selection.ts",
+      "default": "./src/selection.ts"
+    },
+    "./standards/adapter": {
+      "types": "./src/standards/adapter.ts",
+      "default": "./src/standards/adapter.ts"
+    },
+    "./standards/registry": {
+      "types": "./src/standards/registry.ts",
+      "default": "./src/standards/registry.ts"
+    },
+    "./normalize/coherence": {
+      "types": "./src/normalize/coherence.ts",
+      "default": "./src/normalize/coherence.ts"
+    },
+    "./normalize/units": {
+      "types": "./src/normalize/units.ts",
+      "default": "./src/normalize/units.ts"
     }
   },
   "scripts": {

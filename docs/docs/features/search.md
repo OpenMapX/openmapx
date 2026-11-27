@@ -137,7 +137,7 @@ older results during a temporary source failure.
 
 Operators configure the `geocoding` integration's **Provider order** and each
 provider's endpoint and credentials under **Admin → Integrations**. The shipped
-order is `maptiler`; a working MapTiler credential or another configured chain
+order is `geocoding-maptiler`; a working MapTiler credential or another configured chain
 is needed for general name and address lookup.
 
 For installation, defaults, public endpoint limits, and local services, use the

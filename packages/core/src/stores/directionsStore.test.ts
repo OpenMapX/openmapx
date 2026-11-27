@@ -8,6 +8,29 @@ function reset() {
   useDirectionsStore.getState().close();
 }
 
+describe("directionsStore routing pin", () => {
+  beforeEach(reset);
+
+  it("holds a pinned routing integration until the trip changes", () => {
+    const s = useDirectionsStore.getState();
+    s.setRoutingProvider("routing-acme");
+    expect(useDirectionsStore.getState().routingProvider).toBe("routing-acme");
+    s.setActiveRouteIndex(1);
+    expect(useDirectionsStore.getState().routingProvider).toBe("routing-acme");
+    s.setMode("walking");
+    expect(useDirectionsStore.getState().routingProvider).toBeNull();
+    s.setRoutingProvider("routing-acme");
+    s.setWaypoint(0, [13.4, 52.5], "Start");
+    expect(useDirectionsStore.getState().routingProvider).toBeNull();
+    s.setRoutingProvider("routing-acme");
+    s.setAvoidTolls(true);
+    expect(useDirectionsStore.getState().routingProvider).toBeNull();
+    s.setRoutingProvider("routing-acme");
+    s.close();
+    expect(useDirectionsStore.getState().routingProvider).toBeNull();
+  });
+});
+
 describe("directionsStore transit options", () => {
   beforeEach(reset);
 

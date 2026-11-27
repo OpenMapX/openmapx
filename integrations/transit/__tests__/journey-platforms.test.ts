@@ -77,6 +77,44 @@ describe("journey passenger-platform enrichment", () => {
     });
     expect(await enrichJourneyPlatforms({ ctx: f.ctx, timed }, base)).toBe(base);
   });
+  it("asks live-transit sources in the operator's order before their priority", async () => {
+    const asked: string[] = [];
+    const source = (id: string, priority: number, code: string) => ({
+      id,
+      priority,
+      coverage: { all: true },
+      capabilities: { journeyPlatforms: true },
+      getJourneyPlatforms: vi.fn(async () => {
+        asked.push(id);
+        return {
+          data: [{ stopIndex: 0, departurePlatform: { code, kind: "correction", sourceId: id } }],
+          attributions: [{ sourceId: id, name: id }],
+          freshness: { ...base.freshness, hasRealtimeData: false },
+        };
+      }),
+    });
+    const ctx = createMockIntegrationContext({
+      providerOrder: { "live-transit": ["live-transit-acme"] },
+    });
+    ctx.getIntegrationsByDomain = (domain) =>
+      domain === "live-transit"
+        ? ([
+            {
+              id: "live-transit-siri",
+              manifest: { dataSources: [{ sourceId: "siri" }] },
+              providers: new Map([["live-transit", [source("siri", 1, "3")]]]),
+            },
+            {
+              id: "live-transit-acme",
+              manifest: { dataSources: [{ sourceId: "acme" }] },
+              providers: new Map([["live-transit", [source("acme", 50, "4")]]]),
+            },
+          ] as never)
+        : [];
+    const result = await enrichJourneyPlatforms({ ctx, timed }, base);
+    expect(asked[0]).toBe("acme");
+    expect(result.data?.stops[0]?.platform).toBe("4");
+  });
 });
 
 it("keeps the baseline usable when platform acquisition fails", async () => {

@@ -91,16 +91,10 @@ export function createPlanHandlers(orchestrator: TransitOrchestrator, session: R
       }
       delete plan.previousPageCursor;
       delete plan.nextPageCursor;
-      if (plan.source === "transit-motis-local" && plan.datasetEpoch) {
-        for (const itinerary of plan.itineraries) {
-          itinerary.refreshToken = await session.issueForSearch(itinerary, {
-            providerId: "transit-motis-local",
-            instance: plan.instance ?? "ms",
-            datasetEpoch: plan.datasetEpoch,
-            requestFingerprint: fingerprint,
-            request: planRequest,
-          });
-        }
+      const origin = session.originForPlan(planRes, fingerprint, planRequest);
+      if (origin) {
+        for (const itinerary of plan.itineraries)
+          itinerary.refreshToken = await session.issueForSearch(itinerary, origin);
       }
       reply.send(toEnvelope(planRes));
     },
@@ -115,7 +109,7 @@ export function createPlanHandlers(orchestrator: TransitOrchestrator, session: R
           reply.status(404).send({ error: "The exact provider trip could not be resolved" });
           return;
         }
-        if (result.data.source === "transit-motis-local" && result.data.datasetEpoch) {
+        if (session.canRefresh(result.planner) && result.data.datasetEpoch) {
           for (const itinerary of result.data.itineraries)
             itinerary.refreshToken = await session.issueForReference(itinerary, request);
         }

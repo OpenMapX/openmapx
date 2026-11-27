@@ -311,6 +311,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/integration-sdk':
+        specifier: workspace:^
+        version: link:../../packages/integration-sdk
       '@openmapx/mobility-core':
         specifier: workspace:^
         version: link:../../packages/mobility-core
@@ -335,6 +338,9 @@ importers:
       '@opentelemetry/sdk-metrics':
         specifier: ^3.0.0
         version: 3.1.0(@opentelemetry/api@1.10.0)
+      acorn:
+        specifier: ^8.19.0
+        version: 8.19.0
       better-auth:
         specifier: 1.7.18
         version: 1.7.18(@opentelemetry/api@1.10.0)(drizzle-orm@0.45.4(@opentelemetry/api@1.10.0)(kysely@0.29.7)(postgres@4.1.1))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -666,6 +672,9 @@ importers:
       '@openmapx/place-ids':
         specifier: workspace:^
         version: link:../../packages/place-ids
+      '@openmapx/provider-kit':
+        specifier: workspace:^
+        version: link:../../packages/provider-kit
       '@photo-sphere-viewer/core':
         specifier: ^5.15.1
         version: 5.15.1
@@ -935,9 +944,6 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
-      '@openmapx/integration-geocoding':
-        specifier: workspace:^
-        version: link:../geocoding
       '@openmapx/mobility-core':
         specifier: workspace:^
         version: link:../../packages/mobility-core
@@ -947,6 +953,9 @@ importers:
       '@openmapx/place-ids':
         specifier: workspace:^
         version: link:../../packages/place-ids
+      '@openmapx/provider-kit':
+        specifier: workspace:^
+        version: link:../../packages/provider-kit
 
   integrations/crowd-reports:
     dependencies:
@@ -1059,9 +1068,6 @@ importers:
 
   integrations/geocoding:
     dependencies:
-      '@fragaria/address-formatter':
-        specifier: ^7.1.2
-        version: 7.1.2
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
@@ -1074,6 +1080,9 @@ importers:
       '@openmapx/place-ids':
         specifier: workspace:^
         version: link:../../packages/place-ids
+      '@openmapx/provider-kit':
+        specifier: workspace:^
+        version: link:../../packages/provider-kit
       '@openstreetmap/id-tagging-schema':
         specifier: ^7.3.0
         version: 7.3.0
@@ -1089,15 +1098,15 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
-      '@openmapx/integration-geocoding':
-        specifier: workspace:^
-        version: link:../geocoding
       '@openmapx/mobility-core':
         specifier: workspace:^
         version: link:../../packages/mobility-core
       '@openmapx/place-ids':
         specifier: workspace:^
         version: link:../../packages/place-ids
+      '@openmapx/provider-kit':
+        specifier: workspace:^
+        version: link:../../packages/provider-kit
 
   integrations/geocoding-entur:
     dependencies:
@@ -1125,9 +1134,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
-      '@openmapx/integration-geocoding':
+      '@openmapx/provider-kit':
         specifier: workspace:^
-        version: link:../geocoding
+        version: link:../../packages/provider-kit
 
   integrations/geocoding-motis:
     dependencies:
@@ -1143,12 +1152,12 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
-      '@openmapx/integration-geocoding':
-        specifier: workspace:^
-        version: link:../geocoding
       '@openmapx/mobility-core':
         specifier: workspace:^
         version: link:../../packages/mobility-core
+      '@openmapx/provider-kit':
+        specifier: workspace:^
+        version: link:../../packages/provider-kit
 
   integrations/geocoding-nominatim:
     dependencies:
@@ -1158,9 +1167,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
-      '@openmapx/integration-geocoding':
+      '@openmapx/provider-kit':
         specifier: workspace:^
-        version: link:../geocoding
+        version: link:../../packages/provider-kit
 
   integrations/geocoding-pelias:
     dependencies:
@@ -1170,9 +1179,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
-      '@openmapx/integration-geocoding':
+      '@openmapx/provider-kit':
         specifier: workspace:^
-        version: link:../geocoding
+        version: link:../../packages/provider-kit
 
   integrations/geocoding-photon:
     dependencies:
@@ -1182,9 +1191,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
-      '@openmapx/integration-geocoding':
+      '@openmapx/provider-kit':
         specifier: workspace:^
-        version: link:../geocoding
+        version: link:../../packages/provider-kit
 
   integrations/hotels:
     dependencies:
@@ -1944,6 +1953,9 @@ importers:
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../../packages/integration-framework
       '@openmapx/mobility-core':
         specifier: workspace:^
         version: link:../../packages/mobility-core
@@ -2165,6 +2177,9 @@ importers:
       '@openmapx/integration-geocoding':
         specifier: workspace:^
         version: link:../geocoding
+      '@openmapx/provider-kit':
+        specifier: workspace:^
+        version: link:../../packages/provider-kit
     devDependencies:
       '@openmapx/mobility-core':
         specifier: workspace:^
@@ -2178,12 +2193,12 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
-      '@openmapx/integration-photos':
-        specifier: workspace:^
-        version: link:../photos
       '@openmapx/mobility-core':
         specifier: workspace:^
         version: link:../../packages/mobility-core
+      '@openmapx/provider-kit':
+        specifier: workspace:^
+        version: link:../../packages/provider-kit
 
   integrations/photos-mapillary:
     dependencies:
@@ -2193,12 +2208,12 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
-      '@openmapx/integration-photos':
-        specifier: workspace:^
-        version: link:../photos
       '@openmapx/mobility-core':
         specifier: workspace:^
         version: link:../../packages/mobility-core
+      '@openmapx/provider-kit':
+        specifier: workspace:^
+        version: link:../../packages/provider-kit
 
   integrations/photos-panoramax:
     dependencies:
@@ -2208,12 +2223,12 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
-      '@openmapx/integration-photos':
-        specifier: workspace:^
-        version: link:../photos
       '@openmapx/mobility-core':
         specifier: workspace:^
         version: link:../../packages/mobility-core
+      '@openmapx/provider-kit':
+        specifier: workspace:^
+        version: link:../../packages/provider-kit
 
   integrations/photos-wikimedia:
     dependencies:
@@ -2223,9 +2238,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
-      '@openmapx/integration-photos':
+      '@openmapx/provider-kit':
         specifier: workspace:^
-        version: link:../photos
+        version: link:../../packages/provider-kit
     devDependencies:
       '@openmapx/mobility-core':
         specifier: workspace:^
@@ -2239,12 +2254,12 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
-      '@openmapx/integration-poi-search':
-        specifier: workspace:^
-        version: link:../poi-search
       '@openmapx/mobility-core':
         specifier: workspace:^
         version: link:../../packages/mobility-core
+      '@openmapx/provider-kit':
+        specifier: workspace:^
+        version: link:../../packages/provider-kit
 
   integrations/poi-overture:
     dependencies:
@@ -2254,15 +2269,15 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
-      '@openmapx/integration-poi-search':
-        specifier: workspace:^
-        version: link:../poi-search
       '@openmapx/mobility-core':
         specifier: workspace:^
         version: link:../../packages/mobility-core
       '@openmapx/place-ids':
         specifier: workspace:^
         version: link:../../packages/place-ids
+      '@openmapx/provider-kit':
+        specifier: workspace:^
+        version: link:../../packages/provider-kit
 
   integrations/poi-search:
     dependencies:
@@ -2278,6 +2293,9 @@ importers:
       '@openmapx/presets':
         specifier: workspace:^
         version: link:../../packages/presets
+      '@openmapx/provider-kit':
+        specifier: workspace:^
+        version: link:../../packages/provider-kit
     devDependencies:
       '@openmapx/mobility-core':
         specifier: workspace:^
@@ -2300,6 +2318,9 @@ importers:
       '@openmapx/mangrove-client':
         specifier: workspace:^
         version: link:../../packages/mangrove-client
+      '@openmapx/provider-kit':
+        specifier: workspace:^
+        version: link:../../packages/provider-kit
 
   integrations/reviews-mangrove:
     dependencies:
@@ -2309,15 +2330,15 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
-      '@openmapx/integration-reviews':
-        specifier: workspace:^
-        version: link:../reviews
       '@openmapx/mangrove-client':
         specifier: workspace:^
         version: link:../../packages/mangrove-client
       '@openmapx/mobility-core':
         specifier: workspace:^
         version: link:../../packages/mobility-core
+      '@openmapx/provider-kit':
+        specifier: workspace:^
+        version: link:../../packages/provider-kit
 
   integrations/ride-deeplink:
     dependencies:
@@ -2433,6 +2454,9 @@ importers:
       '@openmapx/mobility-core':
         specifier: workspace:^
         version: link:../../packages/mobility-core
+      '@openmapx/provider-kit':
+        specifier: workspace:^
+        version: link:../../packages/provider-kit
 
   integrations/routing-brouter:
     dependencies:
@@ -2454,9 +2478,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
-      '@openmapx/integration-routing':
+      '@openmapx/provider-kit':
         specifier: workspace:^
-        version: link:../routing
+        version: link:../../packages/provider-kit
 
   integrations/routing-valhalla:
     dependencies:
@@ -2469,9 +2493,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
-      '@openmapx/integration-routing':
+      '@openmapx/provider-kit':
         specifier: workspace:^
-        version: link:../routing
+        version: link:../../packages/provider-kit
 
   integrations/scooter-sharing:
     dependencies:
@@ -2602,15 +2626,15 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
-      '@openmapx/integration-geocoding':
-        specifier: workspace:^
-        version: link:../geocoding
       '@openmapx/mobility-core':
         specifier: workspace:^
         version: link:../../packages/mobility-core
       '@openmapx/place-ids':
         specifier: workspace:^
         version: link:../../packages/place-ids
+      '@openmapx/provider-kit':
+        specifier: workspace:^
+        version: link:../../packages/provider-kit
       p-map:
         specifier: 7.1.1
         version: 7.1.1
@@ -2810,6 +2834,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/provider-kit':
+        specifier: workspace:^
+        version: link:../../packages/provider-kit
     devDependencies:
       '@openmapx/mobility-core':
         specifier: workspace:^
@@ -2823,9 +2850,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
-      '@openmapx/integration-weather':
+      '@openmapx/provider-kit':
         specifier: workspace:^
-        version: link:../weather
+        version: link:../../packages/provider-kit
 
   integrations/weather-met-norway:
     dependencies:
@@ -2835,9 +2862,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
-      '@openmapx/integration-weather':
+      '@openmapx/provider-kit':
         specifier: workspace:^
-        version: link:../weather
+        version: link:../../packages/provider-kit
 
   integrations/weather-open-meteo:
     dependencies:
@@ -2847,9 +2874,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
-      '@openmapx/integration-weather':
+      '@openmapx/provider-kit':
         specifier: workspace:^
-        version: link:../weather
+        version: link:../../packages/provider-kit
 
   integrations/weather-open-meteo-air-quality:
     dependencies:
@@ -2874,9 +2901,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
-      '@openmapx/integration-weather':
+      '@openmapx/provider-kit':
         specifier: workspace:^
-        version: link:../weather
+        version: link:../../packages/provider-kit
 
   integrations/webcam:
     dependencies:
@@ -3321,6 +3348,73 @@ importers:
         specifier: ^5.0.5
         version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@5.1.0)(jsdom@31.0.1(@noble/hashes@2.4.0))(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
+  packages/integration-sdk:
+    dependencies:
+      '@fragaria/address-formatter':
+        specifier: ^7.1.2
+        version: 7.1.2
+      '@openmapx/air-quality':
+        specifier: workspace:^
+        version: link:../air-quality
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../core
+      '@openmapx/extension-contracts':
+        specifier: workspace:^
+        version: link:../extension-contracts
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../mobility-core
+      '@openmapx/place-ids':
+        specifier: workspace:^
+        version: link:../place-ids
+      '@openmapx/provider-kit':
+        specifier: workspace:^
+        version: link:../provider-kit
+      '@photostructure/tz-lookup':
+        specifier: ^11.8.0
+        version: 11.8.0
+      '@types/geojson':
+        specifier: ^7946.0.16
+        version: 7946.0.16
+      escape-html:
+        specifier: 1.0.3
+        version: 1.0.3
+      parse5:
+        specifier: 8.1.1
+        version: 8.1.1
+      spdx-expression-parse:
+        specifier: 5.0.0
+        version: 5.0.0
+      undici:
+        specifier: ^8.12.3
+        version: 8.12.4
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
+    devDependencies:
+      '@types/node':
+        specifier: ^26.6.6
+        version: 26.6.6
+      rollup:
+        specifier: 4.66.0
+        version: 4.66.0
+      rollup-plugin-dts:
+        specifier: 6.5.1
+        version: 6.5.1(rollup@4.66.0)(typescript@6.0.3)
+      tsup:
+        specifier: 9.0.0
+        version: 9.0.0(@swc/core@1.16.20(@swc/helpers@0.5.23))(jiti@2.7.0)(postcss@8.5.32)(tsx@4.23.15)(typescript@6.0.3)(yaml@2.9.1)
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^5.0.5
+        version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@5.1.0)(jsdom@31.0.1(@noble/hashes@2.4.0))(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+
   packages/mangrove-client:
     dependencies:
       age-encryption:
@@ -3635,6 +3729,28 @@ importers:
         specifier: ^5.0.5
         version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@5.1.0)(jsdom@31.0.1(@noble/hashes@2.4.0))(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
+  packages/provider-kit:
+    dependencies:
+      '@fragaria/address-formatter':
+        specifier: ^7.1.2
+        version: 7.1.2
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../core
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../integration-framework
+    devDependencies:
+      '@types/node':
+        specifier: ^26.6.6
+        version: 26.6.6
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+      vitest:
+        specifier: ^5.0.5
+        version: 5.1.0(@opentelemetry/api@1.10.0)(@types/node@26.6.6)(@vitest/coverage-v8@5.1.0)(jsdom@31.0.1(@noble/hashes@2.4.0))(vite@8.3.5(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+
   packages/transitous-core:
     dependencies:
       '@openmapx/mobility-formats':
@@ -3668,6 +3784,9 @@ importers:
       '@openmapx/mobility-core':
         specifier: workspace:^
         version: link:../packages/mobility-core
+      '@openmapx/place-ids':
+        specifier: workspace:^
+        version: link:../packages/place-ids
       '@openmapx/transitous-core':
         specifier: workspace:^
         version: link:../packages/transitous-core
@@ -3692,6 +3811,9 @@ importers:
       yaml:
         specifier: ^2.9.1
         version: 2.9.1
+      zod:
+        specifier: ^4.6.7
+        version: 4.6.7
     devDependencies:
       '@types/node':
         specifier: ^26.6.6
@@ -11938,6 +12060,17 @@ packages:
     resolution: {integrity: sha512-6odND+fel5zVw3I4Yc2e69gvguDnX0CAAGiNDZSq4ik5WUcaLrkD2GLuog0XcODbor31hZ5ayEMgVDno+KPV5g==}
     engines: {node: ^20.19.0 || >=22.12.0}
     hasBin: true
+
+  rollup-plugin-dts@6.5.1:
+    resolution: {integrity: sha512-jODTXp3H7MK/Ur/ErtsrQ0G1GvaCmc3du+y5pNrdBMf6d7HlL2Nd/N6TkEr+f75CkUj01zEoEd7y2elH0eHi1Q==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      '@typescript/typescript6': ^6
+      rollup: ^3 || ^4
+      typescript: ^4.5 || ^5 || ^6 || ^7
+    peerDependenciesMeta:
+      '@typescript/typescript6':
+        optional: true
 
   rollup@4.66.0:
     resolution: {integrity: sha512-Onq6/qO4ARhxIs+jYiHE0pYehadLyMECAiGEqQ+0/aWND3+2PmifJIIqBLYtuBODqHTlOUEQFtIVPyCy0Lck7A==}
@@ -22343,6 +22476,17 @@ snapshots:
       '@rolldown/binding-openharmony-arm64': 1.2.15
       '@rolldown/binding-win32-arm64-msvc': 1.2.15
       '@rolldown/binding-win32-x64-msvc': 1.2.15
+
+  rollup-plugin-dts@6.5.1(rollup@4.66.0)(typescript@6.0.3):
+    dependencies:
+      '@jridgewell/remapping': 2.3.5
+      '@jridgewell/sourcemap-codec': 1.6.0
+      convert-source-map: 2.0.0
+      magic-string: 0.30.21
+      rollup: 4.66.0
+      typescript: 6.0.3
+    optionalDependencies:
+      '@babel/code-frame': 8.0.6
 
   rollup@4.66.0:
     dependencies:

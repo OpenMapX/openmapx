@@ -1,5 +1,5 @@
+import type { DirectionsResult, TravelMode } from "@openmapx/provider-kit/routing";
 import { describe, expect, it, vi } from "vitest";
-import type { DirectionsResult, TravelMode } from "../types.js";
 import {
   createRoutingHandlerEnvironment,
   createRoutingTestReply,

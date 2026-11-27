@@ -1,11 +1,11 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { validateServiceManifest } from "@openmapx/extension-contracts/service";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { scaffoldIntegration, scaffoldService } from "../commands/scaffold.js";
-import { runValidate } from "../commands/validate.js";
+import { runValidate, validateAuthoringInput } from "../commands/validate.js";
 
 const CLI = resolve(__dirname, "../../dist/cli.js");
 
@@ -143,6 +143,24 @@ describe("validate", () => {
     const destDir = join(tmp, "demo-validate");
     await expect(runValidate(destDir)).resolves.toBeUndefined();
   });
+
+  it("passes a layer-selector preview stored under assets/", async () => {
+    scaffoldIntegration({ id: "demo-preview", domain: "knowledge", outDir: tmp });
+    const destDir = join(tmp, "demo-preview");
+    const manifestPath = join(destDir, "manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf-8")) as Record<string, unknown>;
+    manifest.frontend = {
+      layerSelector: {
+        group: "map-details",
+        labelKey: "layer",
+        preview: "assets/layer-preview.svg",
+      },
+    };
+    writeFileSync(manifestPath, JSON.stringify(manifest));
+    mkdirSync(join(destDir, "assets"), { recursive: true });
+    writeFileSync(join(destDir, "assets", "layer-preview.svg"), "<svg/>");
+    await expect(validateAuthoringInput(destDir)).resolves.toEqual({ valid: true, errors: [] });
+  });
 });
 
 describe("CLI binary (integration + validate + package)", () => {
@@ -240,5 +258,30 @@ describe("CLI binary (integration + validate + package)", () => {
     expect(tarContents).not.toContain("dist/backend/index.mjs");
     expect(tarContents).not.toContain("companion-response.example.json");
     expect(tarContents).not.toContain("CONTRIBUTOR-CONTRACT.md");
+  });
+
+  it("package ships the bundle a manifest declares", () => {
+    execFileSync(
+      "node",
+      [CLI, "scaffold", "integration", "bundle-demo", "--domain", "knowledge", "--out", tmp],
+      { encoding: "utf-8" },
+    );
+    const directory = join(tmp, "bundle-demo");
+    const manifestPath = join(directory, "manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
+    writeFileSync(
+      manifestPath,
+      JSON.stringify({ ...manifest, backend: { entry: "dist/backend/index.mjs" } }),
+    );
+    mkdirSync(join(directory, "dist", "backend"), { recursive: true });
+    writeFileSync(join(directory, "dist", "backend", "index.mjs"), "export default {};");
+    const outFile = join(tmp, "bundle-demo.tar.gz");
+    execFileSync("node", [CLI, "package", directory, "--out", outFile], {
+      encoding: "utf-8",
+      cwd: tmp,
+    });
+
+    const tarContents = execFileSync("tar", ["-tzf", outFile], { encoding: "utf-8" });
+    expect(tarContents).toContain("dist/backend/index.mjs");
   });
 });

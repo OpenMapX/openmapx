@@ -1,6 +1,7 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { FetchJsonHttpError } from "@openmapx/core";
+import { FetchJsonHttpError } from "@openmapx/core/http/fetch-json-error";
 import { parseRetryAfterMs } from "@openmapx/core/retry-after";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type {
@@ -41,6 +42,11 @@ import type { MobilityDataSourceProvider } from "../contracts/mobility-data-sour
 import type { ParkingSiteProvider } from "../contracts/parking-site-provider.js";
 import type { PhotoProvider } from "../contracts/photo-provider.js";
 import type { PoiSearchProvider } from "../contracts/poi-search-provider.js";
+import {
+  PROVIDER_SHAPES,
+  type ProviderDomain,
+  type ProviderRegistrar,
+} from "../contracts/provider-shapes";
 import type { RealtimeProvider } from "../contracts/realtime-provider.js";
 import type { ReviewProvider } from "../contracts/review-provider.js";
 import type { RideProvider } from "../contracts/ride-provider.js";
@@ -54,6 +60,8 @@ import type { TransitProvider } from "../contracts/transit-provider.js";
 import type { WeatherProvider } from "../contracts/weather-provider.js";
 import { type IntegrationDataSource, validateDataSource } from "../manifest";
 import { resolveIntegrationPlatformEndpoint } from "../platform-endpoints";
+import { providerOrderFingerprintInput, readProviderOrder } from "../provider-order";
+import { createProviderRegistrationCheck } from "../provider-registration";
 import { storedRouteHandler } from "../route-handler";
 
 export interface FakeMobilityHttpRequest {
@@ -462,6 +470,10 @@ export interface MockContextOverrides {
   db?: DatabaseClient;
   log?: Logger;
   manifest?: IntegrationContext["manifest"];
+  /** Required services the host has running, by service id, each with its URL. */
+  requiredServices?: Record<string, string>;
+  /** The operator's provider order, by domain; empty for a domain not named. */
+  providerOrder?: Record<string, readonly string[]>;
 }
 
 export interface MockIntegrationContext extends IntegrationContext {
@@ -631,7 +643,22 @@ export function createMockIntegrationContext(
     onActivate: runImmediateActivation,
     onShutdown: noop,
     getIntegrationsByDomain: () => [],
-    getRequiredService: () => null,
+    getProviderOrder: (domain) => {
+      const orders = overrides.providerOrder ?? {};
+      return Object.hasOwn(orders, domain) ? readProviderOrder(orders[domain]) : [];
+    },
+    // Reads the context's own members at call time, so a test that replaces
+    // them sees the fingerprint follow.
+    getProviderOrderFingerprint: (domain) =>
+      createHash("sha256")
+        .update(providerOrderFingerprintInput(ctx, domain))
+        .digest("hex")
+        .slice(0, 16),
+    getRequiredService: (serviceId) => {
+      const services = overrides.requiredServices ?? {};
+      const url = Object.hasOwn(services, serviceId) ? services[serviceId] : undefined;
+      return url === undefined ? null : { serviceId, url, enabled: true };
+    },
     resolvePlatformEndpoint: (endpointId) =>
       resolveIntegrationPlatformEndpoint(
         { manifest: ctx.manifest, config: ctx.config },
@@ -639,6 +666,27 @@ export function createMockIntegrationContext(
         endpointId,
       ),
   };
+  // The host's checks, so a provider the host would refuse fails the test.
+  const check = createProviderRegistrationCheck({
+    integrationId: ctx.id,
+    manifest: {
+      get id() {
+        return ctx.manifest.id ?? ctx.id;
+      },
+      get dataSources() {
+        return ctx.manifest.dataSources;
+      },
+    },
+  });
+  const registrars = ctx as unknown as Record<ProviderRegistrar, (provider: object) => void>;
+  for (const domain of Object.keys(PROVIDER_SHAPES) as ProviderDomain[]) {
+    const { registrar } = PROVIDER_SHAPES[domain];
+    const store = registrars[registrar];
+    registrars[registrar] = (provider) => {
+      check(domain, provider);
+      store(provider);
+    };
+  }
   return ctx;
 }
 

@@ -122,7 +122,6 @@
       "SMTP_USER": "${SMTP_USER:-}",
       "SMTP_PASSWORD": "${SMTP_PASSWORD:-}",
       "LOG_LEVEL": "${LOG_LEVEL:-info}",
-      "ISOCHRONE_PROVIDER": "${ISOCHRONE_PROVIDER:-valhalla}",
       "GITHUB_TOKEN": "${GITHUB_TOKEN:-}",
       "EXTENSION_CATALOG_URL": "${EXTENSION_CATALOG_URL:-}",
       "NODE_OPTIONS": "${OPENMAPX_API_NODE_OPTIONS:---max-old-space-size=1536}",

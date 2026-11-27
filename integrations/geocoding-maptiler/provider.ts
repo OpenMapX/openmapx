@@ -1,8 +1,3 @@
-import { formatAddress, formatStreetLine } from "@openmapx/integration-geocoding/format-address";
-import type {
-  GeocodingBias,
-  GeocodingProvider as GeocodingProviderImpl,
-} from "@openmapx/integration-geocoding/types";
 /**
  * MapTiler Geocoding API client.
  * Requires an API key: the integration's `apiKey`, else MAPTILER_API_KEY.
@@ -25,7 +20,14 @@ import {
 } from "@openmapx/core";
 import type { HttpClient, Logger } from "@openmapx/integration-framework";
 import type { ProviderDailyBudget } from "@openmapx/integration-framework/provider-daily-budget";
-import { lngLatOrNull, usableGeocoderRecords } from "@openmapx/integration-geocoding/records";
+import {
+  formatAddress,
+  formatStreetLine,
+  type GeocodingBias,
+  type GeocodingProvider as GeocodingProviderImpl,
+  lngLatOrNull,
+  usableGeocoderRecords,
+} from "@openmapx/provider-kit/geocoding";
 
 const BASE_URL = "https://api.maptiler.com/geocoding";
 

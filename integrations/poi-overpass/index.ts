@@ -13,14 +13,15 @@ import {
   type IntegrationContext,
   resolveIntegrationContributors,
 } from "@openmapx/integration-framework";
-import type { PoiSearchOutcome, PoiSearchProvider } from "@openmapx/integration-poi-search/types";
 import { OPENSTREETMAP_ATTRIBUTION } from "@openmapx/mobility-core/attribution";
+import type { PoiSearchOutcome, PoiSearchProvider } from "@openmapx/provider-kit/poi-search";
 
 const PRESET_SENTINEL = "__preset__";
 
 export const overpassProvider: PoiSearchProvider = {
   id: "overpass",
   categories: [...Object.keys(CATEGORY_FILTERS), PRESET_SENTINEL],
+  fusionRole: "base",
   async search(
     category: string,
     bbox: BoundingBox,

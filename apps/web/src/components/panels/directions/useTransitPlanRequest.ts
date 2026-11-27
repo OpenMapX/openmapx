@@ -13,6 +13,17 @@ import { useMemo } from "react";
 import type { TransitDirectionsSnapshot } from "./useTransitDirectionsPlan";
 
 /**
+ * The dataset a plan is made against: the metadata of the first planner, in
+ * the operator's order, that reports any. Whichever planner that is, its
+ * epoch binds the plan and its rental source names the rental filters.
+ */
+export function transitPlanningMetadata<M>(
+  capabilities: { providers: readonly { id: string; metadata?: M }[] } | undefined,
+): M | undefined {
+  return capabilities?.providers.find((provider) => provider.metadata)?.metadata;
+}
+
+/**
  * Resolves the directions panel's transit settings into what the planners are
  * asked: the debounced times, the MOTIS modes and access legs, the
  * Deutschlandticket gate, and whether the trip is a chain of connections.
@@ -80,9 +91,7 @@ export function useTransitPlanRequest({
 
   const accessModes = TRANSIT_ACCESS_MOTIS_MODES[transitAccessMode];
   const rentalFormFactors = TRANSIT_ACCESS_RENTAL_FORM_FACTORS[transitAccessMode];
-  const activePlanningMetadata = transitPlanningCapabilities?.providers.find(
-    (provider) => provider.id === "transit-motis-local",
-  )?.metadata;
+  const activePlanningMetadata = transitPlanningMetadata(transitPlanningCapabilities);
 
   // Snapshot of the resolved MOTIS options to hand to navigation, so an on-trip
   // replan reuses the same modes/access/wheelchair/D-Ticket gate the plan used.

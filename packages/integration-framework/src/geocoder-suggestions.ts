@@ -1,11 +1,11 @@
-import {
-  type AutocompleteResult,
-  type LngLat,
-  normalizeSearchTerm,
-  type SearchSuggestion,
-  type SearchSuggestionProviderResult,
-  type SearchSuggestionQuery,
+import type {
+  AutocompleteResult,
+  LngLat,
+  SearchSuggestion,
+  SearchSuggestionProviderResult,
+  SearchSuggestionQuery,
 } from "@openmapx/core";
+import { normalizeSearchTerm } from "@openmapx/core/search/searchSuggestion";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
   captureResultContributors,

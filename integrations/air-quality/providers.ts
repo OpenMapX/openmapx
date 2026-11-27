@@ -1,6 +1,7 @@
 import {
   type AirQualityProvider,
   assertAirQualityProviderContract,
+  compareAirQualityProviders,
   type IntegrationContext,
 } from "@openmapx/integration-framework";
 
@@ -40,12 +41,7 @@ export function discoverAirQualityProviders(
       }
     }
   }
-  found.sort(
-    (left, right) =>
-      left.provider.priority - right.provider.priority ||
-      left.provider.id.localeCompare(right.provider.id) ||
-      left.integrationId.localeCompare(right.integrationId),
-  );
+  found.sort(compareAirQualityProviders);
   const unique = new Map<string, DiscoveredAirQualityProvider>();
   for (const item of found) {
     if (unique.has(item.provider.id)) {

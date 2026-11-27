@@ -41,9 +41,12 @@ Configure the provider in the admin panel after preparing the service:
    `geocoding-*` integration that adapts its API to the OpenMapX result
    shape: `geocoding-photon`, `geocoding-nominatim`, `geocoding-pelias`.
 2. Put the provider in the chain. The `geocoding` integration takes a
-   comma-separated **provider order** (config key `provider`), the fallback
-   chain tried left to right. The default is `maptiler`; set it to your engine,
-   for example `photon` or `photon,maptiler`.
+   **provider order** (config key `providerOrder`, or
+   `INTEGRATION_GEOCODING_PROVIDER_ORDER` as a comma-separated list): the
+   integration ids of the geocoders to ask, tried left to right. Only listed
+   geocoders are asked. The default is `geocoding-maptiler`; set it to your
+   engine, for example `geocoding-photon` or
+   `geocoding-photon,geocoding-maptiler`.
 
 Each provider integration also has an `endpoint` config value. When you run the
 self-hosted service, you can leave it blank: the orchestrator resolves the
@@ -120,7 +123,7 @@ index age; scheduled refresh does not guarantee freshness. For disk sizing, a `P
 for two copies of the index, so size the volume for roughly double the planet
 footprint if you let updates run unattended.
 
-Enable the `geocoding-photon` integration and put `photon` in the
+Enable the `geocoding-photon` integration and put `geocoding-photon` in the
 provider order. Leave the integration's endpoint blank and it resolves to your
 running service; with no service, it falls back to Komoot's public instance.
 
@@ -173,7 +176,7 @@ compatibility and growth before leaving updates unattended. A custom replication
 configuration is host maintenance beyond the currently exposed controls; see
 [Nominatim replication settings](https://nominatim.org/release-docs/latest/customize/Settings/#replication-update-settings).
 
-Enable `geocoding-nominatim` and put `nominatim` in the provider
+Enable `geocoding-nominatim` and put `geocoding-nominatim` in the provider
 order. A blank endpoint resolves to your service, falling back to the public OSM
 instance. Because Nominatim also powers reverse geocoding and place enrichment
 elsewhere in the stack, test both search and enrichment when changing its endpoint.
@@ -232,7 +235,7 @@ index coexist during preparation. See the Elasticsearch (Pelias backend) row in
 [Requirements](../install/requirements.md). The managed refresh
 re-runs the build against a newer extract.
 
-Enable `geocoding-pelias` and put `pelias` in the provider order.
+Enable `geocoding-pelias` and put `geocoding-pelias` in the provider order.
 Leave `endpoint` unset for the selected local service. For an external Pelias,
 set the URL reachable from `api`; there is no public hosted Pelias fallback.
 

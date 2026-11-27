@@ -26,6 +26,7 @@ function integration(): LoadedIntegration {
     directory: "private-directory",
     config: { apiKey: "private-secret" },
     providers: new Map(),
+    loadState: "loaded",
     shutdownHandlers: [],
     manifest: {
       id: "fixture",

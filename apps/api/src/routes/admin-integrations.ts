@@ -1,5 +1,8 @@
-import { adminIntegrationJsonObjectSchema } from "@openmapx/core/api-contracts";
-import { integrationEnvVarName } from "@openmapx/integration-framework";
+import {
+  type AdminIntegrationSummary,
+  adminIntegrationJsonObjectSchema,
+} from "@openmapx/core/api-contracts";
+import { integrationEnvVarName, type LoadedIntegration } from "@openmapx/integration-framework";
 import type { FastifyInstance } from "fastify";
 import { getAllIntegrations, getIntegration, inspectIntegrationRuntime } from "../integration-host";
 import {
@@ -28,6 +31,28 @@ import { healthCheckSweepLimit } from "../utils/rate-limit";
 import { getAdminSession } from "../utils/require-admin";
 import { validateConfigBody } from "../utils/validate-config-body";
 import { registerIntegrationAdminRoute } from "./admin-integration-contract";
+
+/**
+ * The status the administration shows for an integration. Its code failing to
+ * load outranks every health check result, which may be cached from before the
+ * failure or come from a host check that never runs the code. `incompatible`
+ * counts as failed too: the code does not run either. The host switches a
+ * failed integration off at run time, so the load state is checked before
+ * `enabled`.
+ */
+function integrationStatus(
+  integration: Pick<LoadedIntegration, "enabled" | "loadState" | "manifest">,
+  configured: boolean,
+  health: { status: "up" | "down" | "unconfigured" } | null,
+): AdminIntegrationSummary["status"] {
+  if (integration.loadState === "failed" || integration.loadState === "incompatible")
+    return "failed";
+  if (!integration.enabled) return "disabled";
+  if (health?.status === "down") return "unhealthy";
+  if (health?.status === "unconfigured" || !configured) return "unconfigured";
+  if (integration.manifest.healthCheck && !health) return "unconfigured";
+  return "healthy";
+}
 
 async function persistAndApplyIntegrationConfig(options: {
   integrationId: string;
@@ -67,6 +92,9 @@ export async function adminIntegrationsRoute(app: FastifyInstance): Promise<void
         // `configured` is true when every declared secret has an effective
         // resolved value (or when the integration declares no secrets at all).
         const configured = statuses.every((s) => s.source !== "missing");
+        const health = cached
+          ? { status: cached.status, responseTime: cached.responseTime, error: cached.error }
+          : null;
         return {
           id: integration.id,
           name: getIntegrationDisplayName(integration),
@@ -75,13 +103,14 @@ export async function adminIntegrationsRoute(app: FastifyInstance): Promise<void
           domains: integration.manifest.domains,
           quality: integration.manifest.quality ?? "built-in",
           isBuiltIn: integration.isBuiltIn,
-          blockedCode: integration.blockedCode === true,
+          loadState: integration.loadState,
+          loadError: integration.loadError?.message ?? null,
+          loadErrorPhase: integration.loadError?.phase ?? null,
+          status: integrationStatus(integration, configured, health),
           enabled: integration.enabled,
           configured,
           hasHealthCheck: !!integration.manifest.healthCheck,
-          health: cached
-            ? { status: cached.status, responseTime: cached.responseTime, error: cached.error }
-            : null,
+          health,
           dependencies: integration.manifest.dependencies ?? [],
           requires: integration.manifest.requires ?? [],
           infrastructure: integration.manifest.infrastructure ?? null,
@@ -157,6 +186,9 @@ export async function adminIntegrationsRoute(app: FastifyInstance): Promise<void
     // Every declared secret has an effective resolved value (or the integration
     // declares none).
     const configured = credentialStatus.every((s) => s.source !== "missing");
+    const health = cached
+      ? { status: cached.status, responseTime: cached.responseTime, error: cached.error }
+      : null;
 
     return {
       id: integration.id,
@@ -169,13 +201,14 @@ export async function adminIntegrationsRoute(app: FastifyInstance): Promise<void
       domains: integration.manifest.domains,
       quality: integration.manifest.quality ?? "built-in",
       isBuiltIn: integration.isBuiltIn,
-      blockedCode: integration.blockedCode === true,
+      loadState: integration.loadState,
+      loadError: integration.loadError?.message ?? null,
+      loadErrorPhase: integration.loadError?.phase ?? null,
+      status: integrationStatus(integration, configured, health),
       enabled: integration.enabled,
       configured,
       hasHealthCheck: !!integration.manifest.healthCheck,
-      health: cached
-        ? { status: cached.status, responseTime: cached.responseTime, error: cached.error }
-        : null,
+      health,
       dependencies: integration.manifest.dependencies ?? [],
       requires: integration.manifest.requires ?? [],
       infrastructure: integration.manifest.infrastructure ?? null,

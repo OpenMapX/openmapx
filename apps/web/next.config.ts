@@ -95,6 +95,7 @@ const nextConfig: NextConfig = {
     "@openmapx/ourairports-data",
     "@openmapx/place-ids",
     "@openmapx/presets",
+    "@openmapx/provider-kit",
   ],
   // esbuild is loaded lazily by @openmapx/core's integration installer (only
   // when the CLI builds a community integration). Server components never run

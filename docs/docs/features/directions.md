@@ -39,10 +39,13 @@ before travelling.
 
 ## How routing works
 
-The routing integration tries compatible enabled providers in their configured
-adapter order. The built-in priorities are BRouter 5, Valhalla 10, and OSRM 20.
-An error can advance to the next compatible provider. Required capabilities,
-including time-aware requests, can exclude a provider.
+The routing integration tries compatible enabled engines in the order of its
+**Provider order** setting (**Admin → Integrations → Routing → Configuration**,
+or `INTEGRATION_ROUTING_PROVIDER_ORDER` with integration ids). The default is
+BRouter, Valhalla, OSRM. An engine the list does not name, an installed one
+included, follows the listed ones by its adapter priority. An error can advance
+to the next compatible engine. Required capabilities, including time-aware
+requests, can exclude an engine.
 
 | Provider | Ground modes                          | Relevant limits                                                                                 |
 | -------- | ------------------------------------- | ----------------------------------------------------------------------------------------------- |
@@ -66,6 +69,12 @@ Untimed cycling tries BRouter before Valhalla. Driving tries Valhalla before
 OSRM. Running a compatible service does not establish that it has data for the
 whole requested trip. Follow the [routing engine guide](../guides/routing-engines.md)
 for setup and public endpoint limits.
+
+When an engine fails or finds no route, the card offers the other available
+engines that can plan the same trip (**Try with …**) beside **Retry**, and the
+travel modes the available engines declare. EV and stop-window trips are not
+offered another engine. If a chosen engine is no longer available, the trip goes
+back to the provider order and a notice says so.
 
 ### Travel modes
 
@@ -112,8 +121,13 @@ without the engine's current traffic speeds. The caption appears when the
 comparison is at least five minutes and 10% of the comparison duration.
 
 Open **About traffic** for the estimate's source, road-update status, and limits.
-Missing or unusable coverage leaves the normal duration color; **Traffic data
-unavailable** appears in the details and screen-reader description. A positive
+The dialog names the routing integration that planned the route, or **Hosted …
+(Stadia Maps)** for the hosted Valhalla service.
+Missing, incomplete or unusable coverage leaves the normal duration color;
+**Current traffic speeds not confirmed** appears in the details and
+screen-reader description. Live speeds may have been applied to some roads of
+the route, or to none. A route can still show that available road updates were used: that verification
+covers road changes such as closures, not live speeds on every road. A positive
 delay estimate does not establish complete fresh congestion coverage for every
 road.
 

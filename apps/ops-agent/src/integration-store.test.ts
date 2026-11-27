@@ -972,7 +972,8 @@ describe("integration store", () => {
       { kind: "catalogIntegration.publish", integrationId: id, source, extensionId: "bundle" },
       signal,
     );
-  const files = (count: number) => Array.from({ length: count }, (_, i) => `assets/f${i}.bin`);
+  // Outside `assets/`, whose own file limit is lower than the store's.
+  const files = (count: number) => Array.from({ length: count }, (_, i) => `static/f${i}.bin`);
   /** These tests count files and bytes; flushing each extracted file to disk only slows them. */
   const skipFsync = () => vi.mocked(fsyncSync).mockImplementation(() => undefined);
 
@@ -992,7 +993,7 @@ describe("integration store", () => {
     skipFsync();
     const f = fixture();
     const deep = Array.from({ length: 6 }, () => "a".repeat(100)).join("/");
-    const paths = Array.from({ length: 1_000 }, (_, i) => `assets/${deep}/${i}.bin`);
+    const paths = Array.from({ length: 1_000 }, (_, i) => `static/${deep}/${i}.bin`);
     // 1,000 entries of about 620 + 96 bytes: 716 KB against a budget of 640 KiB
     await expect(
       publish(f, "long-paths", artifactWithPaths(f, "long-paths", paths)),

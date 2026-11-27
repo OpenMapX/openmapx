@@ -47,12 +47,14 @@ const APACHE_PACKAGES = new Set([
   "core", // Nearly all integrations depend on it; it is the shared foundation
   "extension-contracts", // portable Apache-2.0 authoring contracts
   "extension-cli", // standalone Apache-2.0 authoring CLI (scaffold / package / validate)
+  "integration-sdk", // public surface that installed extension backends import
   "presets", // integration-poi-search depends on it
   "brands", // brand/chain catalog distilled from NSI, mirrors presets
   "mobility-formats",
   "mobility-formats-tomp",
   "mobility-core",
   "place-ids",
+  "provider-kit", // shared helpers and types for the provider domains
   "motis-feed-proxy-config",
   "transitous-core",
   "hardlinks",

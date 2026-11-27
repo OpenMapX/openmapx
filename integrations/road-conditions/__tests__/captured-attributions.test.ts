@@ -40,6 +40,7 @@ function acquisition(native?: (typeof receipt)[], declared = false) {
     ...(native === undefined ? {} : { contributors: native }),
   });
   const ctx = {
+    getProviderOrder: () => [],
     getIntegrationsByDomain: () => [
       {
         id: "integration",

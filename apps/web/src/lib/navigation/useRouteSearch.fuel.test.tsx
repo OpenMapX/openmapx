@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import type { Route } from "@integrations/routing/types";
 import { type DataSourceResult, type OverpassFilter, useNavigationStore } from "@openmapx/core";
+import type { Route } from "@openmapx/provider-kit/routing";
 import { act, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { nth, renderHookWithQuery } from "@/test";

@@ -16,11 +16,11 @@ import {
   type TripSchedule,
   worstSupport,
 } from "@openmapx/core";
+import type { Route, RoutingOptions } from "@openmapx/provider-kit/routing";
 import { captureRoutingResult, type ResolvedProvider } from "./orchestrator.js";
 import { routingChainError } from "./provider-admission.js";
 import { concatenateRoutes } from "./route-concat.js";
 import type { ParsedScheduleRequest } from "./schedule-request.js";
-import type { Route, RoutingOptions } from "./types.js";
 
 /** No provider can honour every semantic this request needs. */
 export class NoScheduleProviderError extends Error {

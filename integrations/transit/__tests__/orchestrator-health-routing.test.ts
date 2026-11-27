@@ -71,9 +71,10 @@ function makeCtx(
           ownsHalfOpenProbe: false,
         }),
     } as ProviderHealthHandle,
+    getProviderOrder: () => [],
     getIntegrationsByDomain: (domain: string) => {
       if (domain !== "transit") return [];
-      return [{ providers: new Map([["transit", providers]]) }];
+      return [{ id: "transit-test", providers: new Map([["transit", providers]]) }];
     },
   } as unknown as IntegrationContext;
 }
@@ -402,7 +403,10 @@ it("keeps a real SDK HTTP failure unavailable while the provider health cache is
     makeCtx([provider], { isHealthy: async () => true }),
   );
   expect(
-    await orchestrator.refreshTrip(provider.id, { itineraryId: "bound-id", datasetEpoch: "epoch" }),
+    await orchestrator.refreshTrip(
+      { integrationId: "transit-test", providerId: provider.id },
+      { itineraryId: "bound-id", datasetEpoch: "epoch" },
+    ),
   ).toEqual({ status: "unavailable" });
 });
 
@@ -421,22 +425,72 @@ it.each(["absent", "unsupported", "disabled"])(
     if (reason === "disabled")
       Object.assign(ctx, {
         getDisallowedSourceIds: async () => new Set(["test"]),
+        getProviderOrder: () => [],
         getIntegrationsByDomain: () => [
           {
+            id: "transit-test",
             manifest: { dataSources: [{ sourceId: "test" }] },
             providers: new Map([["transit", [provider]]]),
           },
         ],
       });
     expect(
-      await createTransitOrchestrator(ctx).refreshTrip(provider.id, {
-        itineraryId: "bound",
-        datasetEpoch: "e",
-      }),
+      await createTransitOrchestrator(ctx).refreshTrip(
+        { integrationId: "transit-test", providerId: provider.id },
+        { itineraryId: "bound", datasetEpoch: "e" },
+      ),
     ).toMatchObject({ status: "gone" });
     expect(refresh).not.toHaveBeenCalled();
   },
 );
+it("never sends a refresh for an unloaded planner to another planner", async () => {
+  const refresh = vi.fn(async () => withAttribution({ id: "trip" } as never, ATTR, freshnessNow()));
+  const other = makeProvider({
+    id: "transit-other",
+    prefix: "other:",
+    capabilities: {
+      ...makeProvider({}).capabilities,
+      planningFeatures: { refresh: true } as never,
+    },
+    refreshTrip: refresh,
+  });
+  const orchestrator = createTransitOrchestrator(makeCtx([other], { isHealthy: async () => true }));
+  expect(
+    await orchestrator.refreshTrip(
+      { integrationId: "transit-test", providerId: "transit-removed" },
+      { itineraryId: "bound", datasetEpoch: "e" },
+    ),
+  ).toMatchObject({ status: "gone", result: { data: null } });
+  expect(refresh).not.toHaveBeenCalled();
+});
+
+it("discards refresh data if the planner was unloaded while the call ran", async () => {
+  let loaded = true;
+  const provider = makeProvider({
+    capabilities: {
+      ...makeProvider({}).capabilities,
+      planningFeatures: { refresh: true } as never,
+    },
+    refreshTrip: async () => {
+      loaded = false;
+      return withAttribution({ id: "trip" } as never, ATTR, freshnessNow());
+    },
+  });
+  const ctx = makeCtx([provider], { isHealthy: async () => true });
+  Object.assign(ctx, {
+    getIntegrationsByDomain: (domain: string) =>
+      domain === "transit" && loaded
+        ? [{ id: "transit-test", providers: new Map([["transit", [provider]]]) }]
+        : [],
+  });
+  expect(
+    await createTransitOrchestrator(ctx).refreshTrip(
+      { integrationId: "transit-test", providerId: provider.id },
+      { itineraryId: "bound", datasetEpoch: "e" },
+    ),
+  ).toMatchObject({ status: "gone", result: { data: null } });
+});
+
 it("discards ordinary refresh data if the source becomes disallowed during acquisition", async () => {
   let disabled = false;
   const provider = makeProvider({
@@ -452,17 +506,19 @@ it("discards ordinary refresh data if the source becomes disallowed during acqui
   const ctx = makeCtx([provider], { isHealthy: async () => true });
   Object.assign(ctx, {
     getDisallowedSourceIds: async () => new Set(disabled ? ["test"] : []),
+    getProviderOrder: () => [],
     getIntegrationsByDomain: () => [
       {
+        id: "transit-test",
         manifest: { dataSources: [{ sourceId: "test" }] },
         providers: new Map([["transit", [provider]]]),
       },
     ],
   });
   expect(
-    await createTransitOrchestrator(ctx).refreshTrip(provider.id, {
-      itineraryId: "bound",
-      datasetEpoch: "e",
-    }),
+    await createTransitOrchestrator(ctx).refreshTrip(
+      { integrationId: "transit-test", providerId: provider.id },
+      { itineraryId: "bound", datasetEpoch: "e" },
+    ),
   ).toMatchObject({ status: "gone", result: { data: null } });
 });

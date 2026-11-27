@@ -11,38 +11,46 @@ import {
   type ContributingRecord,
   captureIntegrationContributorCatalogue,
   captureResultContributors,
+  collectOrderedProviders,
   contributorsForRecords,
   type IntegrationContext,
   resolveCapturedContributors,
   withContributors,
 } from "@openmapx/integration-framework";
-import type { WeatherProvider } from "./types.js";
+import type { WeatherProvider } from "@openmapx/provider-kit/weather";
+
+/**
+ * The sources a provider answers from. The member comes from installed code
+ * the registrar does not shape-check, so a malformed value counts as absent
+ * rather than failing every request of the domain. An empty list counts as
+ * absent too: every source of an empty list is disallowed vacuously.
+ */
+function sourcesOf(provider: WeatherProvider): readonly string[] {
+  const declared: unknown = provider.sourceIds;
+  const ids = Array.isArray(declared)
+    ? declared.filter((id): id is string => typeof id === "string")
+    : [];
+  return ids.length > 0 ? ids : [provider.id];
+}
 
 export function createWeatherOrchestrator(ctx: IntegrationContext) {
-  function getProviders(): Array<{ provider: WeatherProvider; integrationId: string }> {
-    const integrations = ctx.getIntegrationsByDomain("weather");
-    const result: Array<{ provider: WeatherProvider; integrationId: string }> = [];
-
-    for (const integration of integrations) {
-      const ps = (integration.providers.get("weather") ?? []) as WeatherProvider[];
-      for (const provider of ps) {
-        result.push({ provider, integrationId: integration.id });
-      }
-    }
-
-    result.sort((a, b) => a.provider.priority - b.provider.priority);
-    return result;
-  }
-
   /**
-   * Providers in priority order, minus any whose source the operator's data-use
-   * policy currently disallows (a provider's `id` is its `dataSources` sourceId).
-   * The fallback loops walk this list, so a gated provider is skipped and the
-   * next eligible one is tried — exactly like an erroring provider.
+   * Providers in the operator's order, minus those the data-use policy
+   * disallows: every provider of a disallowed integration, and a provider all
+   * of whose sources (`sourceIds`, or its `id`) are disallowed. The fallback
+   * loops walk this list, so a gated provider is skipped and the next eligible
+   * one is tried, exactly like an erroring provider.
    */
   async function eligibleProviders() {
-    const disallowed = (await ctx.getDisallowedSourceIds?.()) ?? new Set<string>();
-    return getProviders().filter(({ provider }) => !disallowed.has(provider.id));
+    const [disallowedSources, disallowedIntegrations] = await Promise.all([
+      ctx.getDisallowedSourceIds?.() ?? new Set<string>(),
+      ctx.getDisallowedIntegrationIds?.() ?? new Set<string>(),
+    ]);
+    return collectOrderedProviders<WeatherProvider>(ctx, "weather").filter(
+      ({ provider, integrationId }) =>
+        !disallowedIntegrations.has(integrationId) &&
+        !sourcesOf(provider).every((id) => disallowedSources.has(id)),
+    );
   }
 
   async function getCurrentWeather(
@@ -55,6 +63,9 @@ export function createWeatherOrchestrator(ctx: IntegrationContext) {
         // runtime feed only after awaiting, so retain the exact lookup now.
         const catalogue = captureIntegrationContributorCatalogue(ctx, "weather");
         const response = await provider.getCurrentWeather(coords, options);
+        // An adapter may identify its serving feed only in the response.
+        if (response.source && (await ctx.getDisallowedSourceIds?.())?.has(response.source))
+          continue;
         const resolved = resolveCapturedContributors(catalogue, integrationId, {
           contributors: response.contributors,
           sourceIds: [response.source],

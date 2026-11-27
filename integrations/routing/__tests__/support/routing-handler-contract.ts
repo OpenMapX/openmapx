@@ -1,8 +1,8 @@
 import type { RoadConditionEvent } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import type { DirectionsResult, RoutingProvider, TravelMode } from "@openmapx/provider-kit/routing";
 import { describe, expect, it, vi } from "vitest";
 import { setup } from "../../index.js";
-import type { DirectionsResult, RoutingProvider, TravelMode } from "../../types.js";
 import { stubClosureExclusions } from "./closure-exclusion-stub.js";
 
 export interface RoutingProviderFixture {
@@ -123,6 +123,8 @@ export function createRoutingHandlerEnvironment(options: RoutingHandlerEnvironme
       }
       return options.additionalIntegrations?.[domain] ?? [];
     },
+    getProviderOrder: () => [],
+    getProviderOrderFingerprint: () => "order",
     getDisallowedSourceIds: async () => new Set<string>(),
     registerRoute(_method: string, path: string, handler: RoutingTestHandler) {
       handlers.set(path, handler);

@@ -101,8 +101,11 @@ If you self-host OpenMapX, a few recommendations:
   certificates).
 - Restrict admin routes to a trusted network or VPN where possible.
 - Review community extension manifests, source, requested network access, and
-  host ports before installing. Installed integration artifacts are declarative;
-  service components run container code. See the
+  host ports before installing, and install only extensions you trust. An
+  extension's integration backend code runs in the API process with the same
+  access as a built-in integration to the instance and its users' data; the
+  API's import check before loading catches packaging mistakes and is not a
+  sandbox. Service components run container code. See the
   [extension trust boundary](docs/docs/developer/building-an-external-extension.md).
 - Keep generated credentials, mobile signing output and host state (database
   backups, ops-agent state, maintenance records and the runtime-recovery

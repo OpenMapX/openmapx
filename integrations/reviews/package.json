@@ -11,10 +11,6 @@
       "types": "./index.ts",
       "default": "./index.ts"
     },
-    "./types": {
-      "types": "./types.ts",
-      "default": "./types.ts"
-    },
     "./orchestrator": {
       "types": "./orchestrator.ts",
       "default": "./orchestrator.ts"
@@ -22,6 +18,7 @@
   },
   "dependencies": {
     "@openmapx/integration-framework": "workspace:^",
-    "@openmapx/mangrove-client": "workspace:^"
+    "@openmapx/mangrove-client": "workspace:^",
+    "@openmapx/provider-kit": "workspace:^"
   }
 }

@@ -3,7 +3,6 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Route } from "@integrations/routing/types";
 import {
   type ActiveAlert,
   type FixInput,
@@ -12,6 +11,7 @@ import {
   useSettingsStore,
 } from "@openmapx/core";
 import { useNavIncidentResource } from "@openmapx/integration-framework/react";
+import type { Route } from "@openmapx/provider-kit/routing";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, render } from "@testing-library/react";
 import { Suspense } from "react";

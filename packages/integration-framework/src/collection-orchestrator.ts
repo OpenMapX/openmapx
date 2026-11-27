@@ -1,5 +1,7 @@
 import type { BBox, DataSourcePartialReason } from "@openmapx/core";
 import type { IntegrationContext, Logger } from "./context";
+import type { ProviderDomain } from "./contracts/provider-shapes";
+import { collectOrderedProviders } from "./provider-order";
 
 /** Records each provider's failures, so an outage is logged when it starts and when it ends. */
 export interface ProviderOutages {
@@ -43,7 +45,7 @@ export interface CollectionQuery {
 
 export interface CollectionOrchestratorOptions<TProvider, TItem, TQuery> {
   /** Domain and provider-map key the providers register under. */
-  domain: string;
+  domain: ProviderDomain;
   /** Prefix of the outage log lines, e.g. `parking`. */
   logPrefix: string;
   /** The contract's operation name, as the outage log shows it. */
@@ -64,12 +66,12 @@ export interface CollectionOrchestratorOptions<TProvider, TItem, TQuery> {
 }
 
 export interface CollectionOrchestrator<TProvider, TItem, TQuery> {
-  /** Every provider registered across enabled integrations, in registration order. */
+  /** Every provider registered across enabled integrations, in the operator's provider order. */
   providers(): TProvider[];
   /**
    * Fans the read out to every provider covering `bbox` in parallel,
-   * tolerating individual failures, and concatenates their items in
-   * registration order. There is no cross-provider dedup: each provider
+   * tolerating individual failures, and concatenates their items in the
+   * operator's provider order. There is no cross-provider dedup: each provider
    * dedups its own. The operator's disallowed sources are pushed into the
    * query and filtered again on each item's sources, so a provider that
    * ignores the hint still cannot leak them. `partial` is set when a provider
@@ -109,9 +111,7 @@ export function createCollectionOrchestrator<
 ): CollectionOrchestrator<TProvider, TItem, TQuery> {
   const outages = options.outages ?? createProviderOutages(ctx.log, options.logPrefix);
   const providers = (): TProvider[] =>
-    ctx
-      .getIntegrationsByDomain(options.domain)
-      .flatMap((i) => (i.providers.get(options.domain) ?? []) as TProvider[]);
+    collectOrderedProviders<TProvider>(ctx, options.domain).map((entry) => entry.provider);
 
   return {
     providers,

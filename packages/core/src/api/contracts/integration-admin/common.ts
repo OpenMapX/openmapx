@@ -37,6 +37,30 @@ const manifest = preserveManifestJson(
  * Provider configSchema remains data, never an executable route schema.
  */
 export const adminIntegrationManifestSchema = adminJsonWire(manifest);
+/**
+ * The operator's provider order of each domain that has one: the stored
+ * integration ids, and the integrations that serve the domain in effective
+ * order. Where unlisted integrations are excluded they still appear, after the
+ * listed ones and with `listed: false`, so they can be offered.
+ */
+export const adminProviderOrderSchema = z.strictObject({
+  domains: z.array(
+    z.strictObject({
+      domain: z.string(),
+      orchestratorId: z.string(),
+      unlisted: z.enum(["append", "exclude"]),
+      stored: z.array(z.string()),
+      effective: z.array(
+        z.strictObject({
+          integrationId: z.string(),
+          name: z.string(),
+          isBuiltIn: z.boolean(),
+          listed: z.boolean(),
+        }),
+      ),
+    }),
+  ),
+});
 export const adminIntegrationSummarySchema = z.strictObject({
   id: z.string(),
   name: z.string(),
@@ -45,7 +69,16 @@ export const adminIntegrationSummarySchema = z.strictObject({
   domains: integrationManifestSchema.shape.domains,
   quality: integrationManifestSchema.shape.quality.unwrap(),
   isBuiltIn: z.boolean(),
-  blockedCode: z.boolean(),
+  loadState: z.enum(["loaded", "disabled", "incompatible", "failed", "safe-mode"]),
+  loadError: z.string().nullable(),
+  /** The step at which the integration's code failed to load, beside `loadError`. */
+  loadErrorPhase: z.enum(["import", "migrate", "setup", "deadline"]).nullable(),
+  /**
+   * One status every client shows: `disabled` when switched off, `failed` when
+   * its code could not load (so no health check result can make it healthy),
+   * then the cached health check and the credentials decide.
+   */
+  status: z.enum(["healthy", "unhealthy", "unconfigured", "disabled", "failed"]),
   enabled: z.boolean(),
   configured: z.boolean(),
   hasHealthCheck: z.boolean(),
@@ -149,6 +182,7 @@ export type AdminIntegrationManifest = z.infer<typeof adminIntegrationManifestSc
 export type AdminIntegrationSummary = z.infer<typeof adminIntegrationSummarySchema>;
 export type AdminIntegrationResolvedConfig = z.infer<typeof adminIntegrationResolvedConfigSchema>;
 export type AdminIntegrationDetail = z.infer<typeof adminIntegrationDetailSchema>;
+export type AdminProviderOrder = z.infer<typeof adminProviderOrderSchema>;
 export type AdminIntegrationEnvVar = z.infer<typeof adminIntegrationEnvVarSchema>;
 export type AdminIntegrationEnvVars = z.infer<typeof adminIntegrationEnvVarsSchema>;
 export type AdminIntegrationConfigPatch = z.infer<typeof adminIntegrationConfigPatchSchema>;

@@ -1,5 +1,11 @@
+import { createHash } from "node:crypto";
 import type { BBox } from "@openmapx/core";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import {
+  effectiveProviderOrder,
+  type IntegrationContext,
+  type LoadedIntegration,
+} from "@openmapx/integration-framework";
+import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
 import { describe, expect, it } from "vitest";
 import { aggregateRoadConditions, aggregateRoadFlow, collectProviders } from "../orchestrator.js";
 import type { RoadConditionEvent, RoadConditionsProvider, RoadFlowSegment } from "../types.js";
@@ -60,13 +66,14 @@ function flowProvider(
 
 function ctxWith(
   providers: RoadConditionsProvider[],
-  opts?: { disallowed?: string[] },
+  opts?: { disallowed?: string[]; order?: string[] },
 ): IntegrationContext {
   const list = providers.map((p) => ({
     id: p.id,
     providers: new Map<string, RoadConditionsProvider[]>([["road-conditions", [p]]]),
   }));
   return {
+    getProviderOrder: (domain: string) => (domain === "road-conditions" ? (opts?.order ?? []) : []),
     getIntegrationsByDomain: () => list,
     getDisallowedSourceIds: opts?.disallowed ? async () => new Set(opts.disallowed) : undefined,
     log: { warn() {}, error() {}, info() {}, debug() {} },
@@ -77,6 +84,42 @@ describe("collectProviders", () => {
   it("flattens providers across all road-conditions integrations", () => {
     const ctx = ctxWith([provider("a", async () => []), provider("b", async () => [])]);
     expect(collectProviders(ctx).map((p) => p.id)).toEqual(["a", "b"]);
+  });
+
+  it("merges road conditions in the operator's order", async () => {
+    const providers = ["a", "b", "c"].map((id) =>
+      provider(id, async () => [ev({ id: "same", headline: text(`from ${id}`) })]),
+    );
+    const served = await aggregateRoadConditions(ctxWith(providers, { order: ["b"] }), BBOX);
+    expect(served.map((event) => [event.id, event.provider])).toEqual([["same", "b"]]);
+    expect(
+      collectProviders(ctxWith(providers, { order: ["c", "ghost"] })).map((p) => p.id),
+    ).toEqual(["c", "a", "b"]);
+    const unordered = await aggregateRoadConditions(ctxWith(providers), BBOX);
+    expect(unordered.map((event) => event.provider)).toEqual(["a"]);
+  });
+
+  it("serves, fingerprints and lists the same order", () => {
+    const integrations = ["a", "b", "c"].map((id) => ({
+      id: `road-${id}`,
+      config: {},
+      manifest: { id: `road-${id}`, domains: ["road-conditions"] },
+      providers: new Map([["road-conditions", [provider(id, async () => [])]]]),
+    })) as unknown as LoadedIntegration[];
+    const order = ["road-c", "ghost"];
+    const ctx = createMockIntegrationContext({ providerOrder: { "road-conditions": order } });
+    ctx.getIntegrationsByDomain = (domain) => (domain === "road-conditions" ? integrations : []);
+    const served = collectProviders(ctx).map((p) => p.id);
+    expect(served).toEqual(["c", "a", "b"]);
+    expect(
+      effectiveProviderOrder(order, integrations, "road-conditions").map((e) => e.integrationId),
+    ).toEqual(served.map((id) => `road-${id}`));
+    expect(ctx.getProviderOrderFingerprint("road-conditions")).toBe(
+      createHash("sha256")
+        .update(JSON.stringify(served.map((id) => [`road-${id}`, id])))
+        .digest("hex")
+        .slice(0, 16),
+    );
   });
 });
 

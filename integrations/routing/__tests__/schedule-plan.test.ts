@@ -1,10 +1,10 @@
 import type { DirectionsResult, RoutingOptions, TravelMode } from "@openmapx/core";
 import { nth } from "@openmapx/integration-framework/testing";
+import type { Route } from "@openmapx/provider-kit/routing";
 import { describe, expect, it, vi } from "vitest";
 import type { ResolvedProvider } from "../orchestrator.js";
 import { NoScheduleProviderError, runSchedulePlan } from "../schedule-plan.js";
 import { parseScheduleRequest } from "../schedule-request.js";
-import type { Route } from "../types.js";
 
 const COLOGNE: [number, number] = [6.96, 50.94];
 const BONN: [number, number] = [7.1, 50.73];

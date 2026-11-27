@@ -6,7 +6,8 @@ export interface TransitCatalogFeed {
   installedSourceId?: string | null;
   discoveryIds?: string[];
   name: string;
-  source: "transitous" | "mobilitydb" | "manual";
+  /** `transitous`, `mobilitydb` or `manual` for the built-in catalogues, otherwise an installed one's. */
+  source: string;
   countryCode: string;
   url: string;
   licensing?: Licensing;

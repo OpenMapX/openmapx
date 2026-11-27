@@ -5,6 +5,21 @@ import { NextIntlClientProvider } from "next-intl";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { RouteTrafficStatus } from "./RouteTrafficStatus";
 
+const catalog = vi.hoisted(() => ({ state: "ready" as "loading" | "failed" | "ready" }));
+vi.mock("@/lib/useRoutingEngines", () => {
+  const engine = { available: true, modes: ["driving"], timeAware: true, exclusions: true };
+  const engines = [
+    { ...engine, id: "routing-valhalla", name: "Valhalla", trafficProof: true },
+    { ...engine, id: "routing-osrm", name: "OSRM", trafficProof: false },
+  ];
+  // Before the capabilities answer, or after they fail, no engine is known.
+  const current = () => (catalog.state === "ready" ? engines : []);
+  return {
+    useRoutingEngines: current,
+    useRoutingEngineCatalog: () => ({ engines: current(), state: catalog.state }),
+  };
+});
+
 const now = Date.parse("2026-10-07T02:00:00Z");
 const route: Route = {
   mode: "driving",
@@ -47,6 +62,28 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
+  catalog.state = "ready";
+});
+it.each([
+  ["loading", "Checking which road updates were used…"],
+  ["failed", undefined],
+] as const)("stays neutral while the routing capabilities are %s", (state, line) => {
+  catalog.state = state;
+  render(view());
+  fireEvent.click(screen.getByRole("button", { name: "About traffic" }));
+  const dialog = screen.getByRole("dialog", { name: "About traffic" });
+  expect(dialog).not.toHaveTextContent("routing-valhalla");
+  expect(dialog).not.toHaveTextContent("Route provider");
+  expect(dialog).not.toHaveTextContent("We couldn’t confirm which road updates were used.");
+  if (line) expect(dialog).toHaveTextContent(line);
+});
+it("keeps the server's own assessment while the capabilities are loading", () => {
+  catalog.state = "loading";
+  render(view(route, "routing-valhalla", { ...impact, availability: "unavailable" }));
+  fireEvent.click(screen.getByRole("button", { name: "About traffic" }));
+  expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
+    "Road updates couldn’t be checked.",
+  );
 });
 it("expires held verification at the lease and never claims congestion causality", () => {
   render(view());
@@ -74,6 +111,21 @@ it("replaces old status on a new provider/route without proof", () => {
   expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent("OSRM");
   expect(screen.getByRole("dialog", { name: "About traffic" })).not.toHaveTextContent(
     "Available road updates were used",
+  );
+});
+it("names a hosted engine as hosted and an unnamed source as unknown", () => {
+  const rendered = render(view({ ...route, sourceIds: ["stadia-maps"] }));
+  fireEvent.click(screen.getByRole("button", { name: "About traffic" }));
+  expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
+    "Route provider: Hosted Valhalla (Stadia Maps)",
+  );
+  rendered.rerender(
+    <NextIntlClientProvider locale="en" messages={en}>
+      <RouteTrafficStatus route={route} impact={impact} />
+    </NextIntlClientProvider>,
+  );
+  expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
+    "Route provider: Routing source unknown",
   );
 });
 it("removes a prior successful claim on failed assessment", () => {
@@ -111,15 +163,18 @@ it("rearms expiry when a clock correction makes the first callback early", () =>
 
 it("keeps provider and application details out of the default summary", () => {
   render(view());
-  expect(screen.queryByText("Traffic data unavailable")).toBeNull();
-  expect(screen.queryByText(/Self-hosted Valhalla/)).toBeNull();
+  expect(screen.queryByText("Current traffic speeds not confirmed")).toBeNull();
+  expect(screen.queryByText(/Route provider: Valhalla/)).toBeNull();
   expect(screen.queryByText("Available road updates were used for this route.")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "About traffic" }));
   expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
-    "Traffic data unavailable",
+    "Current traffic speeds not confirmed",
   );
   expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
     "Available road updates were used for this route.",
+  );
+  expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
+    "Route provider: Valhalla",
   );
   fireEvent.click(screen.getByRole("button", { name: "Close" }));
   expect(screen.queryByRole("dialog")).toBeNull();

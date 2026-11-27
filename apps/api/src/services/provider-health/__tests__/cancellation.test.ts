@@ -98,6 +98,7 @@ describe("caller cancellation and provider health", () => {
       providerHealth: health,
       metricsRecorder: { recordProviderCall: vi.fn() },
       getDisallowedSourceIds: async () => new Set<string>(),
+      getProviderOrder: () => [],
       getIntegrationsByDomain: (domain: string) =>
         domain === "transit"
           ? [
@@ -166,6 +167,7 @@ describe("caller cancellation and provider health", () => {
       providerHealth: health,
       metricsRecorder: { recordProviderCall: vi.fn() },
       getDisallowedSourceIds: async () => new Set<string>(),
+      getProviderOrder: () => [],
       getIntegrationsByDomain: (domain: string) =>
         domain === "transit"
           ? [

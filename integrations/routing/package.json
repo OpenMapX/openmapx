@@ -10,16 +10,13 @@
     ".": {
       "types": "./index.ts",
       "default": "./index.ts"
-    },
-    "./types": {
-      "types": "./types.ts",
-      "default": "./types.ts"
     }
   },
   "dependencies": {
     "@openmapx/core": "workspace:^",
     "@openmapx/ev-charge-planner": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
-    "@openmapx/mobility-core": "workspace:^"
+    "@openmapx/mobility-core": "workspace:^",
+    "@openmapx/provider-kit": "workspace:^"
   }
 }

@@ -1,8 +1,8 @@
 import type { OverpassFilter, TagPredicate } from "@openmapx/core";
 import { MAX_POI_SEARCH_RESULTS, OverpassTimeoutError } from "@openmapx/core";
+import type { PoiSearchProvider, PoiSearchResult } from "@openmapx/provider-kit/poi-search";
 import { describe, expect, it, vi } from "vitest";
 import { createPoiSearchOrchestrator } from "../orchestrator";
-import type { PoiSearchProvider, PoiSearchResult } from "../types";
 
 const bbox = { south: 52.5, west: 13.4, north: 52.6, east: 13.5 };
 
@@ -14,6 +14,7 @@ const validFilter: OverpassFilter = {
 function makeCtx(provider: PoiSearchProvider) {
   return {
     getIntegrationsByDomain: () => [{ providers: new Map([["poi-search", [provider]]]) }],
+    getProviderOrder: () => [],
   } as unknown as Parameters<typeof createPoiSearchOrchestrator>[0];
 }
 
@@ -152,6 +153,7 @@ describe("orchestrator truncation reporting", () => {
   function providerReturning(value: unknown): PoiSearchProvider {
     return {
       id: "overpass",
+      fusionRole: "base",
       categories: ["cafes"],
       search: vi.fn(async () => value),
       searchText: vi.fn(async () => value),
@@ -198,6 +200,7 @@ describe("orchestrator truncation reporting", () => {
     let calls = 0;
     const provider = {
       id: "overpass",
+      fusionRole: "base",
       categories: ["cafes"],
       search: vi.fn(async () => {
         calls += 1;

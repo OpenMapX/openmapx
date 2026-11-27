@@ -1,12 +1,13 @@
+import type { PoiSearchProvider } from "@openmapx/provider-kit/poi-search";
 import { describe, expect, it, vi } from "vitest";
 import { createPoiSearchOrchestrator } from "../orchestrator";
-import type { PoiSearchProvider } from "../types";
 
 const bbox = { south: 52.5, west: 13.4, north: 52.6, east: 13.5 };
 
 function makeCtx(provider: PoiSearchProvider) {
   return {
     getIntegrationsByDomain: () => [{ providers: new Map([["poi-search", [provider]]]) }],
+    getProviderOrder: () => [],
   } as unknown as Parameters<typeof createPoiSearchOrchestrator>[0];
 }
 

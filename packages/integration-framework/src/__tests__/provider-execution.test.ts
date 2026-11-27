@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   classifyProviderFailure,
   ProviderCancelledError,
+  ProviderDeclinedError,
   ProviderPayloadError,
   ProviderRetiredError,
   ProviderTimeoutError,
@@ -197,6 +198,26 @@ describe("classifyProviderFailure for upstream 4xx and host retirement", () => {
     const wrapped = new TypeError("fetch failed", { cause: generation.signal.reason });
     expect(classifyProviderFailure(wrapped)).toBe("caller_cancelled");
     expect(classifyProviderFailure(wrapped, new AbortController().signal)).toBe("caller_cancelled");
+  });
+
+  it.each([
+    ["no-coverage", "input"],
+    ["unsupported", "input"],
+  ])("does not count a %s refusal against the provider", (reason, outcome) => {
+    expect(classifyProviderFailure(new ProviderDeclinedError(reason as never))).toBe(outcome);
+  });
+
+  it("counts a provider that declines because a required service is unavailable", () => {
+    const declined = new ProviderDeclinedError("unavailable", "routing engine is not running");
+    expect(declined.reason).toBe("unavailable");
+    expect(declined.message).toBe("routing engine is not running");
+    expect(classifyProviderFailure(declined)).toBe("connection");
+    expect(classifyProviderFailure(new Error("wrapped", { cause: declined }))).toBe("connection");
+    expect(
+      classifyProviderFailure(
+        new Error("wrapped", { cause: new ProviderDeclinedError("unsupported") }),
+      ),
+    ).toBe("input");
   });
 
   it("reads cancellation and deadline kinds that adapter clients convert aborts into", () => {

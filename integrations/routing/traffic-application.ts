@@ -18,7 +18,11 @@ import {
 } from "@openmapx/core/data-manager-sdk";
 import { envString } from "@openmapx/core/server-env";
 import { readDataManagerToken } from "@openmapx/core/service-secret-files";
-import type { IntegrationContext, RoadConditionsProvider } from "@openmapx/integration-framework";
+import {
+  collectOrderedProviders,
+  type IntegrationContext,
+  type RoadConditionsProvider,
+} from "@openmapx/integration-framework";
 import { assessRoadConditionForRoute } from "./road-condition-routing.js";
 
 /**
@@ -111,7 +115,8 @@ export function snapshotMatchesProof(
       proof.requestId.length > 0 &&
       snapshot.schemaVersion === 1 &&
       snapshot.mode === "active" &&
-      snapshot.providerId === "routing-valhalla" &&
+      typeof snapshot.providerId === "string" &&
+      snapshot.providerId.length > 0 &&
       snapshot.writeId &&
       snapshot.writeId === proof.writeId &&
       snapshot.engineBootId &&
@@ -151,15 +156,19 @@ async function readSnapshot(ctx: IntegrationContext): Promise<TrafficApplication
   }
 }
 
-/** Reconcile the actual returned routes with fresh writer and source evidence. */
+/**
+ * Reconcile the actual returned routes with fresh writer and source evidence.
+ * `providerId` is the routing integration that served them; the writer's
+ * snapshot vouches only for the engine it names.
+ */
 async function reconcileRouteTraffic(
   ctx: IntegrationContext,
   routes: Route[],
   fallback: RoadConditionRouteImpact | undefined,
   providerId: string | undefined,
 ): Promise<RoadConditionRouteImpact | undefined> {
-  if (providerId !== "routing-valhalla") return fallback;
   if (
+    !providerId ||
     !fallback ||
     !routes.length ||
     routes.some((r) => !r.trafficProof || (r.mode !== "driving" && r.mode !== "motorcycle"))
@@ -168,7 +177,12 @@ async function reconcileRouteTraffic(
   const proofs = routes.map((r) => r.trafficProof as RoutingTrafficProof);
   const snapshot = await readSnapshot(ctx);
   let now = Date.now();
-  if (!snapshot || proofs.some((p) => !snapshotMatchesProof(snapshot, p, now))) return fallback;
+  if (
+    !snapshot ||
+    snapshot.providerId !== providerId ||
+    proofs.some((p) => !snapshotMatchesProof(snapshot, p, now))
+  )
+    return fallback;
   const coords = routes.flatMap((r) => r.geometry);
   if (!coords.length) return fallback;
   const bbox: [number, number, number, number] = [Infinity, Infinity, -Infinity, -Infinity];
@@ -178,9 +192,10 @@ async function reconcileRouteTraffic(
     bbox[2] = Math.max(bbox[2], lon + 0.05);
     bbox[3] = Math.max(bbox[3], lat + 0.05);
   }
-  const providers = ctx
-    .getIntegrationsByDomain("road-conditions")
-    .flatMap((i) => (i.providers.get("road-conditions") ?? []) as RoadConditionsProvider[]);
+  // In the operator's order, the order the road-conditions merge uses.
+  const providers = collectOrderedProviders<RoadConditionsProvider>(ctx, "road-conditions").map(
+    ({ provider }) => provider,
+  );
   if (!providers.length) return fallback;
   const settled = await Promise.allSettled(
     providers.map(async (p) => {

@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 
-import type { Route } from "@integrations/routing/types";
 import {
   type FixInput,
   type IncidentAlert,
@@ -14,6 +13,7 @@ import {
 } from "@openmapx/core";
 import { createTranslator } from "@openmapx/i18n";
 import type { NavIncidentResource } from "@openmapx/integration-framework/react";
+import type { Route } from "@openmapx/provider-kit/routing";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { nth } from "@/test";

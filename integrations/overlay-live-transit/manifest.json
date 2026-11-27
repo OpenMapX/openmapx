@@ -28,6 +28,14 @@
       "enabled": {
         "type": "boolean",
         "default": true
+      },
+      "providerOrder": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 64,
+        "default": []
       }
     }
   },

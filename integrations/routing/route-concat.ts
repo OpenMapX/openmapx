@@ -8,7 +8,7 @@ import {
   captureGeometryContributors,
   type GeometryContributorSpan,
 } from "@openmapx/mobility-core/geometry-contributors";
-import type { Route, RouteLeg, RouteStep } from "./types.js";
+import type { Route, RouteLeg, RouteStep } from "@openmapx/provider-kit/routing";
 
 /** Coordinates within this many degrees of each other are the same point. */
 const JOIN_EPSILON = 1e-9;

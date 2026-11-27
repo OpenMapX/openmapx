@@ -51,6 +51,7 @@ function loaded(
     enabled: true,
     providers: new Map(provider ? [["search-suggestions", [provider]]] : []),
     strings: {},
+    loadState: "loaded",
     shutdownHandlers: [],
   };
 }

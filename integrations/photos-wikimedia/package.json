@@ -7,7 +7,7 @@
   "dependencies": {
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
-    "@openmapx/integration-photos": "workspace:^"
+    "@openmapx/provider-kit": "workspace:^"
   },
   "devDependencies": {
     "@openmapx/mobility-core": "workspace:^"

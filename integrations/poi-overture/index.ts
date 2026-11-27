@@ -15,12 +15,6 @@ import {
 import { overtureTaxonomyCategoryEvidence } from "@openmapx/core/places/overtureCategoryMap";
 import { OVERTURE_PLACES_SCHEMA_VERSION } from "@openmapx/core/published-data";
 import type { DatabaseClient, IntegrationContext } from "@openmapx/integration-framework";
-import type {
-  CategoryId,
-  PoiSearchOutcome,
-  PoiSearchProvider,
-  PoiSearchResult,
-} from "@openmapx/integration-poi-search/types";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
   contributorsForRecords,
@@ -28,6 +22,12 @@ import {
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
 import { registerPlaceResolver } from "@openmapx/place-ids";
+import type {
+  CategoryId,
+  PoiSearchOutcome,
+  PoiSearchProvider,
+  PoiSearchResult,
+} from "@openmapx/provider-kit/poi-search";
 
 interface OvertureRow {
   canonical_id?: string | null;
@@ -416,6 +416,8 @@ function bindDb(db: DatabaseClient): void {
 export const overtureProvider: PoiSearchProvider = {
   id: "overture",
   categories: [...OVERTURE_COMMERCIAL_CATEGORIES],
+  // Overture fills gaps in OSM; it never supplies the authoritative set.
+  fusionRole: "augment",
   async search(
     category: string,
     bbox: BoundingBox,

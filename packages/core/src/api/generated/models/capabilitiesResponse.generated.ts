@@ -10,6 +10,10 @@ export const CapabilitiesResponse = zod.strictObject({
       healthy: zod.boolean(),
       available: zod.boolean(),
       domains: zod.array(zod.string()),
+      modes: zod.array(zod.string()).optional(),
+      trafficProof: zod.boolean().optional(),
+      timeAware: zod.boolean().optional(),
+      exclusions: zod.boolean().optional(),
     }),
   ),
   features: zod.strictObject({

@@ -10,19 +10,12 @@
     ".": {
       "types": "./index.ts",
       "default": "./index.ts"
-    },
-    "./types": {
-      "types": "./types.ts",
-      "default": "./types.ts"
-    },
-    "./lib": {
-      "types": "./lib.ts",
-      "default": "./lib.ts"
     }
   },
   "dependencies": {
     "@openmapx/core": "workspace:^",
-    "@openmapx/integration-framework": "workspace:^"
+    "@openmapx/integration-framework": "workspace:^",
+    "@openmapx/provider-kit": "workspace:^"
   },
   "devDependencies": {
     "@openmapx/mobility-core": "workspace:^"

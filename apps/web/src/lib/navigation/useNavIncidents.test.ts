@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
-import type { Route } from "@integrations/routing/types";
 import { useNavigationStore, useSettingsStore } from "@openmapx/core";
+import type { Route } from "@openmapx/provider-kit/routing";
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { nth } from "@/test";

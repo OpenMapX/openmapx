@@ -109,6 +109,7 @@ function fakeCtx(overrides: Record<string, unknown> = {}) {
     cache,
     // LoadedIntegration shape: { id, providers: Map<domain, unknown[]> }
     getIntegrationsByDomain: chargingDomain(evProvider),
+    getProviderOrder: () => [],
     getDisallowedSourceIds: async () => new Set<string>(),
     ...overrides,
     _valhalla: valhalla,
@@ -679,6 +680,39 @@ describe("runEvPlan", () => {
         } as const,
       },
     ]);
+  });
+
+  it("orders charging sites for EV planning by the operator's list", async () => {
+    const fromA = sitesProvider([
+      chargingSite({ sources: ["a-src"], attributions: [{ sourceId: "a-src", name: "A" }] }),
+    ]);
+    const fromB = sitesProvider([
+      chargingSite({ sources: ["b-src"], attributions: [{ sourceId: "b-src", name: "B" }] }),
+    ]);
+    const ctx = fakeCtx({
+      getIntegrationsByDomain: (d: string) =>
+        d === "charging-sites"
+          ? [
+              { id: "a", providers: new Map([["charging-sites", [fromA]]]) },
+              { id: "b", providers: new Map([["charging-sites", [fromB]]]) },
+            ]
+          : [],
+      getProviderOrder: (d: string) => (d === "charging-sites" ? ["b", "a"] : []),
+    });
+    const getProviders = (): ResolvedRoutingProvider[] => [
+      { integrationId: "valhalla", provider: ctx._valhalla },
+    ];
+    const result = await runEvPlan(ctx as unknown as IntegrationContext, getProviders, {
+      waypoints: [
+        [0, 50],
+        [2.7, 50],
+      ],
+      vehicleId: "tesla:model_3:2024:model_3_long_range",
+      socStartPct: 40,
+      avoidClosures: false,
+    });
+    expect(nth(result.stops, 0).station.id).toBe(SITE_ID);
+    expect(nth(result.stops, 0).attributions).toEqual([{ sourceId: "b-src", name: "B" }]);
   });
 
   it("a stop's estimated cost is rounded to cents", async () => {

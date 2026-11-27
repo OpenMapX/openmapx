@@ -39,6 +39,7 @@ vi.mock("./extension-store", () => ({
 vi.mock("../integration-host", () => ({
   getAllIntegrations: () => [],
   reloadIntegrations: async () => ({ message: "ok", reloaded: 1, enabled: 1 }),
+  failedIntegrationLoads: () => [],
 }));
 const enabled = process.env.OPENMAPX_RUN_DATABASE_TESTS === "1";
 let fixture: Awaited<ReturnType<typeof createMigratedPostgresFixture>>;

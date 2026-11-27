@@ -52,7 +52,9 @@
         "benchmark-motis-reachability.ts",
         "ev-vehicles/generate.ts",
         // Regenerates the 3D view's embedded left-hand-traffic regions on demand.
-        "map-details/generate-driving-side.mjs"
+        "map-details/generate-driving-side.mjs",
+        // The Install smoke pipes this into `node` inside the API container.
+        "smoke/installed-code-loading.mjs"
       ],
       "ignoreDependencies": [
         // The Biome plugin test runs the root node_modules/.bin/biome binary by
@@ -67,6 +69,10 @@
     "apps/api": {
       "entry": [
         "scripts/**/*.ts",
+        // The installed-code loading test spawns the host by path, and the host
+        // imports the fixture bundle from the integration code cache by path.
+        "scripts/proof/host.mts",
+        "scripts/proof/fixture-bundle.mjs",
         // Memory tests spawn these children by path in heap-constrained processes.
         "src/privacy/__tests__/fixtures/*-memory-child.ts"
       ],
@@ -75,6 +81,9 @@
       // their manifests at runtime, so their API-only packages have no static
       // import path from this workspace.
       "ignoreDependencies": [
+        // Installed integration bundles reach the SDK through the code cache's
+        // link to the package this workspace resolves; nothing here imports it.
+        "@openmapx/integration-sdk",
         "@openmapx/mobility-formats",
         "gtfs-realtime-bindings-transit",
         "hafas-client"
@@ -185,6 +194,25 @@
       // The pinned Natural Earth generator loads this CommonJS package through
       // createRequire(), which static import analysis cannot discover.
       "ignoreDependencies": ["shapefile"]
+    },
+    "packages/integration-sdk": {
+      // Run by hand to test the packed package outside the monorepo.
+      "entry": ["scripts/check-external-consumer.mjs"],
+      // Bundles resolve zod through the integration code cache's link to this
+      // package's zod. The bundled declarations import `geojson` types, which
+      // no source file here names directly. The published build leaves the
+      // third-party libraries that inlined workspace modules call as imports,
+      // so the SDK declares them although no source file here names them.
+      "ignoreDependencies": [
+        "zod",
+        "@types/geojson",
+        "@fragaria/address-formatter",
+        "@photostructure/tz-lookup",
+        "escape-html",
+        "parse5",
+        "spdx-expression-parse",
+        "undici"
+      ]
     },
     "packages/presets": {
       // The schema is loaded with a template-literal dynamic import.

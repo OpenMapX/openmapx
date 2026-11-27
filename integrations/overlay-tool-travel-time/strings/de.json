@@ -1,11 +1,4 @@
 {
   "name": "Reisezeit",
-  "description": "Isochronen-Polygone für Straßenverkehr und geschätzte ÖPNV-Erreichbarkeitsbänder aus MOTIS. ÖPNV-Antworten liefern ihre tatsächliche Laufzeit-Attribution separat.",
-  "dataSources": {
-    "valhalla": {
-      "purpose": "Reisezeit-Erreichbarkeit zu Fuß, mit dem Fahrrad und dem Auto visualisieren (nur Straßen-Isochronen-Polygone)",
-      "dataSent": "Mittelpunkt-Koordinaten (Breitengrad, Längengrad), Reisemodus, Zeitkontur-Schwellenwerte in Minuten",
-      "dataReceived": "GeoJSON-Isochronen-Polygone, die den erreichbaren Bereich innerhalb der angegebenen Zeit-/Entfernungsschwellen zeigen"
-    }
-  }
+  "description": "Isochronen-Polygone für Straßenverkehr und geschätzte ÖPNV-Erreichbarkeitsbänder aus MOTIS. ÖPNV-Antworten liefern ihre tatsächliche Laufzeit-Attribution separat."
 }

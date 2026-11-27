@@ -36,6 +36,7 @@ import { useAdminToast } from "../shared/AdminToast";
 import { useConfigSourceLabel } from "../shared/configSourceLabel";
 import { ConfigSchemaForm } from "./ConfigSchemaForm";
 import { CredentialSetupGuide } from "./CredentialSetupGuide";
+import { isSwitchedOn } from "./IntegrationStatusDot";
 import { SetCredentialDialog } from "./SetCredentialDialog";
 
 type CredentialStatus = import("@openmapx/core/api-contracts").AdminIntegrationCredential;
@@ -188,8 +189,12 @@ function IntegrationAccordion({ entry }: { entry: IntegrationListEntry }) {
           {!entry.configured && (
             <Chip label={t("unconfiguredChip")} size="small" color="warning" variant="outlined" />
           )}
-          {!entry.enabled && (
-            <Chip label={t("disabledChip")} size="small" color="default" variant="outlined" />
+          {entry.status === "failed" ? (
+            <Chip label={t("failedToLoad")} size="small" color="error" variant="outlined" />
+          ) : (
+            !isSwitchedOn(entry.status) && (
+              <Chip label={t("disabledChip")} size="small" color="default" variant="outlined" />
+            )
           )}
         </Stack>
       </AccordionSummary>

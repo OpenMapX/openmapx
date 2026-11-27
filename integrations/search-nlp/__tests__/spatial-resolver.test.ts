@@ -5,21 +5,34 @@ import { resolveSpatialConstraint } from "../spatial-resolver";
 const mapBbox = { south: 48.85, west: 2.33, north: 48.87, east: 2.37 };
 const mapCenter: [number, number] = [2.3522, 48.8566];
 
-function makeCtx(geocode: GeocodingProvider["geocode"]): IntegrationContext {
-  const provider: GeocodingProvider = {
+function geocoder(geocode: GeocodingProvider["geocode"]): GeocodingProvider {
+  return {
     geocode,
     autocomplete: vi.fn().mockResolvedValue([]),
     reverseGeocode: vi.fn().mockResolvedValue(null),
   };
+}
+
+function ctxOf(
+  geocoders: Array<[string, GeocodingProvider["geocode"]]>,
+  order: readonly string[],
+): IntegrationContext {
+  const integrations = geocoders.map(([id, geocode]) => ({
+    id,
+    providers: new Map([["geocoding", [geocoder(geocode)]]]),
+  }));
   return {
-    getIntegrationsByDomain: () => [{ providers: new Map([["geocoding", [provider]]]) }],
+    getProviderOrder: (domain: string) => (domain === "geocoding" ? order : []),
+    getIntegrationsByDomain: () => integrations,
   } as unknown as IntegrationContext;
 }
 
+function makeCtx(geocode: GeocodingProvider["geocode"]): IntegrationContext {
+  return ctxOf([["geocoding-maptiler", geocode]], ["geocoding-maptiler"]);
+}
+
 function emptyCtx(): IntegrationContext {
-  return {
-    getIntegrationsByDomain: () => [],
-  } as unknown as IntegrationContext;
+  return ctxOf([], []);
 }
 
 describe("resolveSpatialConstraint", () => {
@@ -107,6 +120,45 @@ describe("resolveSpatialConstraint", () => {
       ctx,
     );
 
+    expect(result).toEqual(mapBbox);
+  });
+
+  it("near_place asks the first geocoder in the operator's selection", async () => {
+    const unlisted = vi.fn().mockResolvedValue([{ coordinates: [9, 9], confidence: 1 }]);
+    const second = vi.fn().mockResolvedValue([{ coordinates: [8, 8], confidence: 1 }]);
+    const first = vi.fn().mockResolvedValue([{ coordinates: [2.3, 48.9], confidence: 1 }]);
+    const ctx = ctxOf(
+      [
+        ["geocoding-nominatim", unlisted],
+        ["geocoding-photon", second],
+        ["community-geocoder", first],
+      ],
+      ["community-geocoder", "geocoding-photon"],
+    );
+
+    const result = await resolveSpatialConstraint(
+      { type: "near_place", place_name: "Gare du Nord" },
+      mapBbox,
+      mapCenter,
+      ctx,
+    );
+
+    expect(first).toHaveBeenCalledOnce();
+    expect(second).not.toHaveBeenCalled();
+    expect(unlisted).not.toHaveBeenCalled();
+    expect(result.west).toBeCloseTo(2.28, 5);
+  });
+
+  it("near_place with only unselected geocoders → returns mapBbox", async () => {
+    const unlisted = vi.fn().mockResolvedValue([{ coordinates: [9, 9], confidence: 1 }]);
+    const ctx = ctxOf([["geocoding-nominatim", unlisted]], ["geocoding-maptiler"]);
+    const result = await resolveSpatialConstraint(
+      { type: "near_place", place_name: "Somewhere" },
+      mapBbox,
+      mapCenter,
+      ctx,
+    );
+    expect(unlisted).not.toHaveBeenCalled();
     expect(result).toEqual(mapBbox);
   });
 

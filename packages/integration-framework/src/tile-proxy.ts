@@ -1,12 +1,12 @@
 import { Readable } from "node:stream";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
-import { USER_AGENT } from "@openmapx/core";
 import {
   MAX_RASTER_TILE_BYTES,
   MAX_VECTOR_TILE_BYTES,
   RASTER_IMAGE_MEDIA_TYPES,
   VECTOR_TILE_MEDIA_TYPES,
-} from "@openmapx/core/server";
+} from "@openmapx/core/http/boundedBinaryResponse";
+import { USER_AGENT } from "@openmapx/core/http/userAgent";
 import type { IntegrationContext, ResponseOptions, RouteHandler } from "./context";
 
 export interface WebMercatorTileCoordinates {

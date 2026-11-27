@@ -66,6 +66,7 @@ function ctxWith(
       opts.lines?.push({ level, message });
     };
   return {
+    getProviderOrder: () => [],
     getIntegrationsByDomain: (domain: string) =>
       domain === "cameras"
         ? providers.map((p) => ({

@@ -629,19 +629,20 @@ describe("integration-health ${endpoint:...} placeholders", () => {
     expect(JSON.stringify(status)).not.toMatch(/s3cret-pass|mapper/);
   });
 
-  it("does not resolve an endpoint for a community integration", async () => {
-    serviceUrls.set("overpass", "http://overpass:80");
+  it("resolves endpoint placeholders for an installed integration", async () => {
+    vi.stubEnv("OVERPASS_URL", "https://overpass.example.org");
 
-    const [status] = await executeIntegrationHealthCheck(
+    const [status] = await executeIntegrationHealthCheck({
       // biome-ignore lint/suspicious/noTemplateCurlyInString: manifest template syntax
-      makeIntegration({ type: "http", urlTemplate: "${endpoint:overpass}/api/status" }),
-    );
-
-    expect(status).toMatchObject({
-      status: "down",
-      error: "endpoint placeholders are reserved for built-in integrations",
+      ...makeIntegration({ type: "http", urlTemplate: "${endpoint:overpass}/api/status" }),
+      isBuiltIn: false,
     });
-    expect(coreServerMocks.safeFetchStatus).not.toHaveBeenCalled();
+
+    expect(status).toMatchObject({ status: "up", url: "https://overpass.example.org/api/status" });
+    expect(coreServerMocks.safeFetchStatus).toHaveBeenCalledWith(
+      "https://overpass.example.org/api/status",
+      expect.anything(),
+    );
   });
 
   it.each([

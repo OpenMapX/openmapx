@@ -11,33 +11,17 @@
       "types": "./index.ts",
       "default": "./index.ts"
     },
-    "./types": {
-      "types": "./types.ts",
-      "default": "./types.ts"
-    },
-    "./format-address": {
-      "types": "./format-address.ts",
-      "default": "./format-address.ts"
-    },
     "./place-lookup": {
       "types": "./place-lookup.ts",
       "default": "./place-lookup.ts"
-    },
-    "./query-expansion": {
-      "types": "./query-expansion.ts",
-      "default": "./query-expansion.ts"
-    },
-    "./records": {
-      "types": "./records.ts",
-      "default": "./records.ts"
     }
   },
   "dependencies": {
-    "@fragaria/address-formatter": "^7.1.2",
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/mobility-core": "workspace:^",
     "@openmapx/place-ids": "workspace:^",
+    "@openmapx/provider-kit": "workspace:^",
     "@openstreetmap/id-tagging-schema": "^7.3.0",
     "lru-cache": "11.5.3"
   }

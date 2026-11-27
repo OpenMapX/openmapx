@@ -149,6 +149,18 @@ export function registerIntegrationRoute<Path extends string>(
   target.sort((a, b) => b.score - a.score);
 }
 
+/**
+ * Removes every route one integration registered from the table registrations
+ * currently go to: the staged one while staging is active, the live one otherwise.
+ */
+export function dropIntegrationRoutes(integrationId: string): void {
+  const kept = (stagedIntegrationRoutes ?? integrationRoutes).filter(
+    (route) => route.integrationId !== integrationId,
+  );
+  if (stagedIntegrationRoutes) stagedIntegrationRoutes = kept;
+  else integrationRoutes = kept;
+}
+
 export function resetIntegrationRoutes(): void {
   integrationRoutes = [];
   stagedIntegrationRoutes = null;

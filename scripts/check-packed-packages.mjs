@@ -316,14 +316,26 @@ void artifact; void receipts; void serviceCheck;
   writeFileSync(manifestPath, JSON.stringify({ ...manifest, platform: "1.1" }));
   rejects(["validate", integration], /not compatible/);
   writeFileSync(manifestPath, JSON.stringify(manifest));
+  // Packaging works on an allowlist: authoring source beside the manifest is
+  // left behind, while a declared bundle that was never built is refused.
   writeFileSync(join(integration, "index.js"), "throw new Error('must never run');");
+  const withSource = join(artifacts, "with-source.tar.gz");
+  run(process.execPath, [cli, "package", integration, "--out", withSource], consumer);
+  assert(
+    !capture("tar", ["-tzf", withSource]).trim().split("\n").includes("index.js"),
+    "Authoring source must remain outside the integration artifact",
+  );
+  writeFileSync(
+    manifestPath,
+    JSON.stringify({ ...manifest, backend: { entry: "dist/backend/index.mjs" } }),
+  );
   rejects(
-    ["package", integration, "--out", join(artifacts, "forbidden.tar.gz")],
-    /backend|code|declarative/i,
+    ["package", integration, "--out", join(artifacts, "unbuilt.tar.gz")],
+    /dist\/backend\/index\.mjs is missing/,
   );
   assert(
-    !existsSync(join(artifacts, "forbidden.tar.gz")),
-    "Rejected code must not create an archive",
+    !existsSync(join(artifacts, "unbuilt.tar.gz")),
+    "A rejected package must not create an archive",
   );
   console.log(
     "Packed contracts/CLI, strict consumers, independent scaffold install, deterministic artifacts and rejection paths passed.",

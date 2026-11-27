@@ -1,5 +1,5 @@
 import type { TideResponseStation, TidesPayload } from "@openmapx/core";
-import { haversineKm } from "@openmapx/core";
+import { haversineKm } from "@openmapx/core/utils/geo-server";
 import type { PlaceResolverContext } from "@openmapx/place-ids";
 import { registerPlaceResolver } from "@openmapx/place-ids";
 import { captureCacheWriter } from "./cache-writer";

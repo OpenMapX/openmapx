@@ -1,4 +1,5 @@
-import { captureKnowledgeResult, type KnowledgeProvider } from "@openmapx/core";
+import type { KnowledgeProvider } from "@openmapx/core";
+import { captureKnowledgeResult } from "@openmapx/core/attribution/knowledgeContributors";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { type FieldContributors, snapshotContributors } from "@openmapx/mobility-core/contributors";
 

@@ -266,7 +266,11 @@ against a keyed request. `GET /plan` rejects an unparsable `time` or `date` with
 
 `getRoutesInBbox` and `getStopTransfers` remain optional methods outside the
 base capability flags. `refreshTrip` is advertised through
-`planningFeatures.refresh`. Transit reachability uses a separate contract because an estimated seed
+`planningFeatures.refresh`. When it is true and the returned plan names a
+`datasetEpoch`, each refresh-eligible itinerary gets a one-time refresh token,
+on `GET /plan` and on a replan alike. The token is bound to the integration and
+the provider id that answered, not to the plan's or itinerary's `source`, and
+is only ever redeemed with that same provider. Transit reachability uses a separate contract because an estimated seed
 surface and an exact destination check have different accuracy, privacy, and
 runtime requirements:
 

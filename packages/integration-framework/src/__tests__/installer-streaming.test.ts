@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 import { afterEach, expect, it, vi } from "vitest";
-import { createDeterministicTarGz } from "../deterministic-tar";
+import { createDeterministicTarGz, deterministicTarSize } from "../deterministic-tar";
 import { extractIntegrationArchive, installIntegration } from "../installer";
 
 const calls = vi.hoisted(() => ({
@@ -141,6 +141,18 @@ it("extracts an archive file within its byte bounds and refuses one beyond them"
     expect(existsSync(join(root, left))).toBe(false);
     expect(existsSync(join(root, `${left}-unwrapped`))).toBe(false);
   }
+});
+it("sizes the deterministic tar exactly, PAX path records included", () => {
+  const entries = [
+    { path: "manifest.json", contents: Buffer.from("{}") },
+    { path: `assets/${"a".repeat(100)}/${"b".repeat(100)}/x.svg`, contents: Buffer.alloc(513) },
+    { path: "assets/empty.svg", contents: Buffer.alloc(0) },
+  ];
+  expect(
+    deterministicTarSize(
+      entries.map((entry) => ({ path: entry.path, sizeBytes: entry.contents.length })),
+    ),
+  ).toBe(gunzipSync(createDeterministicTarGz(entries)).length);
 });
 it("refuses an uncompressed tar and keeps nothing", async () => {
   const root = mkdtempSync(join(tmpdir(), "openmapx-integration-raw-"));

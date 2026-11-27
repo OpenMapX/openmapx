@@ -25,9 +25,13 @@ export interface AddressEvidence {
   recordId?: string;
 }
 
-/** A direct root reference, distinct from identities borrowed during conflation. */
+/**
+ * A direct root reference, distinct from identities borrowed during conflation.
+ * `source` is the integration id of the geocoder that supplied it; only
+ * consumers that know a source's record ids act on its references.
+ */
 export interface DirectOsmReference {
-  source: "geocoding-maptiler";
+  source: string;
   recordId: string;
   osmRef: string;
 }

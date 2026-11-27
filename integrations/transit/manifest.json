@@ -5,6 +5,19 @@
   "license": "MIT",
   "domains": ["transit", "search-suggestions"],
   "backend": { "routes": true },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "providerOrder": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 64,
+        "default": []
+      }
+    }
+  },
   "quality": "built-in",
   "requires": [{ "capability": "transit-engine", "optional": true }]
 }

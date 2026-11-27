@@ -1,5 +1,6 @@
 import type { AutocompleteResult, IntegrationContext } from "@openmapx/integration-framework";
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import type { GeocodingProvider } from "@openmapx/provider-kit/geocoding";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setup } from "../index.js";
 import { MemCache } from "../mem-cache.js";
@@ -8,7 +9,6 @@ import {
   reverseGeocodeCountry,
   setPlaceLookupNominatimUrl,
 } from "../place-lookup.js";
-import type { GeocodingProvider } from "../types.js";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -29,7 +29,7 @@ function harness(label: string, shared = new Map<string, unknown>()) {
   };
   const keys: string[] = [];
   const ctx = createMockIntegrationContext({
-    config: { provider: "maptiler" },
+    providerOrder: { geocoding: ["geocoding-maptiler"] },
     cache: {
       get: async <T>(key: string) => (shared.get(key) as T | undefined) ?? null,
       set: async (key, value) => {
@@ -340,7 +340,7 @@ describe("country cache lifecycle", () => {
       reverseGeocode: async () => null,
     };
     const ctx = createMockIntegrationContext({
-      config: { provider: "maptiler" },
+      providerOrder: { geocoding: ["geocoding-maptiler"] },
       cache: {
         get: async () => null,
         set: async () => undefined,

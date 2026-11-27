@@ -60,6 +60,7 @@ const inventory = [
   ["testAdminIntegrationCredentials", "POST", "/api/admin/credentials/:integrationId/test"],
   ["setAdminIntegrationCredential", "PUT", "/api/admin/credentials/:integrationId/:key"],
   ["deleteAdminIntegrationCredential", "DELETE", "/api/admin/credentials/:integrationId/:key"],
+  ["getAdminProviderOrder", "GET", "/api/admin/provider-order"],
   ["getAdminOverview", "GET", "/api/admin/overview"],
   ["listAdminAttention", "GET", "/api/admin/attention"],
   ["acknowledgeAdminAttention", "POST", "/api/admin/attention/:key/acknowledge"],
@@ -80,7 +81,10 @@ const summary = {
   domains: ["routing"],
   quality: "built-in",
   isBuiltIn: true,
-  blockedCode: false,
+  loadState: "loaded",
+  loadError: null,
+  loadErrorPhase: null,
+  status: "healthy",
   enabled: true,
   configured: true,
   hasHealthCheck: true,
@@ -222,7 +226,18 @@ describe("integration administration canonical producer contracts", () => {
   });
   it("retains every actual success envelope without reducing it to browser DTOs", () => {
     const fixtures = {
-      listAdminIntegrations: [summary],
+      listAdminIntegrations: [
+        summary,
+        {
+          ...summary,
+          id: "broken",
+          enabled: false,
+          status: "disabled",
+          loadState: "failed",
+          loadError: "bad setup",
+          loadErrorPhase: "setup",
+        },
+      ],
       getAdminIntegration: detail,
       listAdminIntegrationEnvVars: {
         integrations: [
@@ -326,6 +341,20 @@ describe("integration administration canonical producer contracts", () => {
         runtime: "pending",
         runtimeGenerationId: null,
         reason: "integration_disabled",
+      },
+      getAdminProviderOrder: {
+        domains: [
+          {
+            domain: "geocoding",
+            orchestratorId: "geocoding",
+            unlisted: "exclude",
+            stored: ["sample", "removed"],
+            effective: [
+              { integrationId: "sample", name: "Sample", isBuiltIn: true, listed: true },
+              { integrationId: "other", name: "Other", isBuiltIn: false, listed: false },
+            ],
+          },
+        ],
       },
       getAdminOverview: overview,
       listAdminAttention: {

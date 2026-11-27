@@ -1,5 +1,6 @@
 import {
   deduplicatePhotos,
+  disallowedPhotoIntegrationIds,
   getPhotoProviders,
   searchHeroPhotos,
 } from "@integrations/photos/orchestrator";
@@ -12,12 +13,13 @@ import {
   type PlacePhoto,
 } from "@openmapx/core";
 import { contributorsForRecords } from "@openmapx/mobility-core/contributors";
-import { getAllIntegrations } from "../../integration-host.js";
+import { getIntegrationsByDomain, getProviderOrder } from "../../integration-host.js";
 import { isStaticImageHost } from "../../routes/image-hosts.js";
 import { BoundedWorkQueue } from "../../utils/bounded-work-queue.js";
 import { cacheGet, hashKey, TTL, withCache } from "../../utils/cache.js";
 import { getPlaceKnowledge } from "../knowledge/index";
 import { recordCardEnrichment } from "../metrics/index";
+import { photoProviderHost } from "./enrichment.js";
 
 /** Card photo budget measured from admission; queue time counts toward it. */
 export const CARD_DEADLINE_MS = 5_500;
@@ -302,6 +304,8 @@ async function cardPhoto(
     name: input.name,
     lang,
     tags,
+    // A photo of an integration the policy now disallows is not replayed.
+    disallowedPhotoIntegrations: await disallowedPhotoIntegrationIds(photoProviderHost),
   });
   const { photo } = await admitCardWork(
     cardPhotoQueue,
@@ -318,15 +322,19 @@ async function cardPhoto(
       let completedHeroes: PlacePhoto[] = [];
       let completedKnowledge: PlacePhoto[] = [];
       const work = Promise.allSettled([
-        searchHeroPhotos(tags, getPhotoProviders(getAllIntegrations()), {
-          strict: true,
-          signal: controller.signal,
-          onError: (error) => failures.push(error),
-          onPhotos: (photos) => completedHeroes.push(...photos),
-        }).then((photos) => {
-          completedHeroes = photos;
-          return photos;
-        }),
+        getPhotoProviders(photoProviderHost)
+          .then((providers) =>
+            searchHeroPhotos(tags, providers, {
+              strict: true,
+              signal: controller.signal,
+              onError: (error) => failures.push(error),
+              onPhotos: (photos) => completedHeroes.push(...photos),
+            }),
+          )
+          .then((photos) => {
+            completedHeroes = photos;
+            return photos;
+          }),
         tags.wikidata || tags.wikipedia
           ? getPlaceKnowledge(categoryPlaceToPlace({ ...input, osmTags: tags }), lang, {
               cardPhoto: true,
@@ -430,10 +438,14 @@ async function cardRating(
       const controller = new AbortController();
       abandoned.addEventListener("abort", () => controller.abort(abandoned.reason), { once: true });
       let timer: ReturnType<typeof setTimeout> | undefined;
-      const work = fetchAggregate(subject, getReviewProviders(getAllIntegrations()), {
-        signal: controller.signal,
-        strict: true,
-      });
+      const work = fetchAggregate(
+        subject,
+        getReviewProviders({ getProviderOrder, getIntegrationsByDomain }),
+        {
+          signal: controller.signal,
+          strict: true,
+        },
+      );
       pendingCardRating.set(key, work);
       markAbandoned(abandoned, work);
       void work.then(

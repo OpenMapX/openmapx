@@ -31,6 +31,7 @@ import {
   adminIntegrationSummarySchema,
   adminIntegrationValidationErrorSchema,
   adminIntegrationVaultUnavailableSchema,
+  adminProviderOrderSchema,
 } from "./common";
 import { configurationMigrationOperations } from "./configuration-migration";
 import { credentialTransferOperations } from "./credential-transfer";
@@ -284,6 +285,12 @@ export const integrationAdminOperations = {
       ),
       503: adminJson(httpErrorSchema),
     },
+  },
+  getAdminProviderOrder: {
+    method: "GET",
+    path: "/api/admin/provider-order",
+    auth: "admin",
+    responses: { ...common, 200: adminJson(adminProviderOrderSchema) },
   },
   getAdminOverview: {
     method: "GET",

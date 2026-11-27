@@ -11,11 +11,13 @@
   "configSchema": {
     "type": "object",
     "properties": {
-      "provider": {
-        "type": "string",
+      "providerOrder": {
+        "type": "array",
+        "items": { "type": "string" },
+        "maxItems": 64,
         "title": "Provider order",
-        "description": "Comma-separated provider list tried in order (fallback chain). Accepted names: entur, maptiler, nominatim, photon, pelias, motis, db-ris. Defaults to `maptiler`.",
-        "default": "maptiler"
+        "description": "Integration ids of the geocoders to ask, in order (fallback chain). Only listed geocoders are asked; an id that names no loaded geocoder is skipped. Also settable via INTEGRATION_GEOCODING_PROVIDER_ORDER.",
+        "default": ["geocoding-maptiler"]
       },
       "nominatimUrl": {
         "type": "string",

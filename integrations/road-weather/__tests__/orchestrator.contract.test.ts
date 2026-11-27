@@ -51,6 +51,7 @@ function ctxWith(
 ): IntegrationContext {
   const quiet = (): void => {};
   return {
+    getProviderOrder: () => [],
     getIntegrationsByDomain: (domain: string) =>
       domain === "road-weather"
         ? providers.map((p) => ({

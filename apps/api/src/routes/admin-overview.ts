@@ -52,8 +52,13 @@ export async function adminOverviewRoute(app: FastifyInstance): Promise<void> {
     const bannedUsers = bannedRow?.total ?? 0;
     const activeSessions24h = activeSessionRow?.total ?? 0;
 
+    // The host clears `enabled` when an integration's code fails to load, but
+    // the operator's switch stays on; count it as the integration list does:
+    // switched on and unhealthy.
+    const codeFailed = (i: (typeof integrations)[number]) =>
+      i.loadState === "failed" || i.loadState === "incompatible";
     const totalIntegrations = integrations.length;
-    const enabledIntegrations = integrations.filter((i) => i.enabled).length;
+    const enabledIntegrations = integrations.filter((i) => i.enabled || codeFailed(i)).length;
     const credentialStatuses = await Promise.all(
       integrations.filter((i) => i.enabled).map((i) => computeCredentialStatus(i)),
     );
@@ -61,6 +66,7 @@ export async function adminOverviewRoute(app: FastifyInstance): Promise<void> {
       (statuses) => statuses.length > 0 && statuses.every((s) => s.source === "missing"),
     ).length;
     const unhealthyIntegrations = integrations.filter((i) => {
+      if (codeFailed(i)) return true;
       if (!i.enabled || !i.manifest.healthCheck) return false;
       const cached = getCachedHealthStatus(i.id);
       return cached?.status === "down";

@@ -1,8 +1,9 @@
 import type { BBox } from "@openmapx/core";
-import type {
-  IntegrationContext,
-  RealtimeProvider,
-  TripUpdate,
+import {
+  collectOrderedProviders,
+  type IntegrationContext,
+  type RealtimeProvider,
+  type TripUpdate,
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import {
@@ -51,14 +52,11 @@ function providerMatches(provider: RealtimeProvider, bbox: BBox | undefined): bo
   return bboxesOverlap(bbox, provider.coverage.bbox);
 }
 
+/** Live-transit sources in the operator's order; unlisted ones follow by priority. */
 function collectRealtimeProviders(ctx: IntegrationContext): RealtimeProvider[] {
-  const providers: RealtimeProvider[] = [];
-  for (const integration of ctx.getIntegrationsByDomain("live-transit")) {
-    for (const p of (integration.providers.get("live-transit") ?? []) as RealtimeProvider[]) {
-      providers.push(p);
-    }
-  }
-  return providers.sort((a, b) => a.priority - b.priority);
+  return collectOrderedProviders<RealtimeProvider>(ctx, "live-transit").map(
+    ({ provider }) => provider,
+  );
 }
 
 function isAlreadyRealtime(dep: Departure): boolean {

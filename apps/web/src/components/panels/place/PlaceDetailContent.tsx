@@ -1,6 +1,5 @@
 "use client";
 
-import type { ReviewAggregate } from "@integrations/reviews/types";
 import CloseIcon from "@mui/icons-material/Close";
 import StarIcon from "@mui/icons-material/Star";
 import Box from "@mui/material/Box";
@@ -24,6 +23,7 @@ import {
   snapshotContributors,
 } from "@openmapx/mobility-core/contributors";
 import type { MergedRoute, TransportMode } from "@openmapx/mobility-core/transit";
+import type { ReviewAggregate } from "@openmapx/provider-kit/reviews";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { BrandLogo } from "@/components/search/BrandLogo";

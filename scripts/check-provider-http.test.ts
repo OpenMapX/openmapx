@@ -85,7 +85,7 @@ describe("credentialed fetchJson", () => {
   it("follows a renamed import and the shared weather wrapper", () => {
     const source = [
       'import { fetchJson as getJson } from "@openmapx/core";',
-      'import { fetchJsonWithTimeout } from "@openmapx/integration-weather/lib";',
+      'import { fetchJsonWithTimeout } from "@openmapx/provider-kit/weather";',
       "const appid = config.appid;",
       "getJson(url);",
       "fetchJsonWithTimeout(url);",

@@ -1,4 +1,3 @@
-import type { Route } from "@integrations/routing/types";
 import type { LngLat } from "@openmapx/core";
 import {
   approachTargetZoom,
@@ -20,6 +19,7 @@ import {
   useSettingsStore,
 } from "@openmapx/core";
 import { COAST_START_DELAY_MS } from "@openmapx/core/navigation";
+import type { Route } from "@openmapx/provider-kit/routing";
 import type * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
 import { useMapOptional } from "@/integration-api/map/MapContext";

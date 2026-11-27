@@ -20,7 +20,7 @@ import {
   installedExtensionComponent,
   installedIntegration,
 } from "../../db/schema";
-import { reloadIntegrations } from "../../integration-host";
+import { failedIntegrationLoads, reloadIntegrations } from "../../integration-host";
 import { actorUserIdOrNull } from "../../utils/actor";
 import { AdminJobFailure, JobObservationPending } from "../admin-job-failure";
 import { executeAdminJobOperation } from "../admin-job-ops";
@@ -30,7 +30,7 @@ import type { JobContext } from "../job-runner";
 
 type State = import("./state").StandaloneState;
 
-import { readStandaloneState, sealStandaloneState } from "./state";
+import { LOAD_FAILURE_MAX_LENGTH, readStandaloneState, sealStandaloneState } from "./state";
 
 async function authenticatePayload(ctx: JobContext) {
   const payload = ctx.payload;
@@ -353,10 +353,20 @@ export function handleStandaloneInstall(ctx: JobContext): Promise<Record<string,
       } else {
         state.phase = "reload_attempted";
         await save(ctx, state);
+        let loadFailure: string | undefined;
         try {
           await reloadIntegrations();
+          // The reload leaves out an installed integration whose code fails
+          // instead of failing; this job installed it, so the job restores.
+          const [failed] = failedIntegrationLoads([state.inspection.integrationId]);
+          if (failed) loadFailure = `Integration ${failed.id} failed to load: ${failed.message}`;
         } catch {
           state.phase = "restore";
+          await save(ctx, state);
+        }
+        if (loadFailure !== undefined) {
+          state.phase = "restore";
+          state.loadFailure = loadFailure.slice(0, LOAD_FAILURE_MAX_LENGTH);
           await save(ctx, state);
         }
         if (state.phase === "reload_attempted") {
@@ -423,7 +433,7 @@ export function handleStandaloneInstall(ctx: JobContext): Promise<Record<string,
     };
     if (state.outcome === "restored")
       throw new AdminJobFailure(
-        "Standalone integration was restored; installation did not commit",
+        state.loadFailure ?? "Standalone integration was restored; installation did not commit",
         result,
       );
     return result;

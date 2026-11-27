@@ -64,6 +64,7 @@ describe("effective configuration ownership metadata", () => {
           isBuiltIn: true,
           strings: {},
           providers: new Map(),
+          loadState: "loaded",
           shutdownHandlers: [],
         },
       ],

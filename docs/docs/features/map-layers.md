@@ -351,7 +351,9 @@ Two entries in the picker are interactive tools rather than passive layers:
 - **Measure**: draw a path on the map to read off its distance and area.
 - **Travel time**: paint an isochrone showing how far you can get within a
   time budget. Supports street modes (walking, cycling, driving) computed by
-  Valhalla, and public transit reachability computed by MOTIS (rendering a continuous
+  the first routing engine in the provider order that offers isochrones (built
+  in: Valhalla, through the `routing-valhalla` integration; with it disabled the
+  tool reports not configured), and public transit reachability computed by MOTIS (rendering a continuous
   estimated surface, with sampled GeoJSON export when explicitly enabled).
 
 :::note[Overlays follow your integrations]

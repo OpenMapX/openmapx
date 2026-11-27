@@ -4,11 +4,12 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest
 // Mock isochrone factory
 
 const mockIsochrone = vi.fn();
+const mockGetIsochroneProvider = vi.fn<
+  () => { integrationId: string; isochrone: typeof mockIsochrone } | null
+>(() => ({ integrationId: "routing-acme", isochrone: mockIsochrone }));
 
 vi.mock("../../services/isochrone/factory.js", () => ({
-  getIsochroneProvider: () => ({
-    isochrone: mockIsochrone,
-  }),
+  getIsochroneProvider: () => mockGetIsochroneProvider(),
 }));
 
 // Mock cache
@@ -161,6 +162,36 @@ describe("GET /isochrone", () => {
     const body = res.json();
     expect(body.error).toBe("Isochrone service unavailable");
     expect(res.headers["cache-control"]).toBe("no-cache");
+  });
+
+  it("answers 503 when no engine offers isochrones", async () => {
+    mockGetIsochroneProvider.mockReturnValueOnce(null);
+
+    const res = await app.inject({
+      method: "GET",
+      url: `/isochrone?${qs(VALID_PARAMS)}`,
+    });
+
+    expect(res.statusCode).toBe(503);
+    expect(res.json()).toEqual({ error: "Isochrone service unavailable" });
+    expect(res.headers["cache-control"]).toBe("no-cache");
+    expect(mockIsochrone).not.toHaveBeenCalled();
+  });
+
+  it("keeps each engine's isochrones apart in the cache", async () => {
+    const { hashKey } = await import("../../utils/cache.js");
+    mockIsochrone.mockResolvedValue(MOCK_ISOCHRONE_RESULT);
+    await app.inject({ method: "GET", url: `/isochrone?${qs(VALID_PARAMS)}` });
+    mockGetIsochroneProvider.mockReturnValueOnce({
+      integrationId: "routing-other",
+      isochrone: mockIsochrone,
+    });
+    await app.inject({ method: "GET", url: `/isochrone?${qs(VALID_PARAMS)}` });
+
+    const keys = vi.mocked(hashKey).mock.results.map((entry) => entry.value as string);
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).toContain("routing-acme");
+    expect(keys[1]).toContain("routing-other");
   });
 
   it("accepts walking mode", async () => {

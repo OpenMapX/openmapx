@@ -3,7 +3,7 @@ import { createApiClient } from "@openmapx/core";
 import { auditAdminOperations, integrationAdminOperations } from "@openmapx/core/api-contracts";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import Fastify from "fastify";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { integrationConfig } from "../../db/integration-config-schema";
 import { makeRateLimitTierHook } from "../../server-wiring";
 import { integrationConfigDbFixture } from "../../services/__tests__/helpers/integration-config-db";
@@ -128,6 +128,7 @@ const MOCK_INTEGRATION = {
   id: "geocoding-maptiler",
   enabled: true,
   isBuiltIn: true,
+  loadState: "loaded",
   directory: "/integrations/geocoding-maptiler",
   manifest: {
     id: "geocoding-maptiler",
@@ -167,6 +168,9 @@ vi.mock("../../integration-host.js", () => ({
   inspectIntegrationRuntime: () => null,
   getAllIntegrations: (...args: unknown[]) => mockGetAllIntegrations(...args),
   getIntegration: (...args: unknown[]) => mockGetIntegration(...args),
+  getIntegrationsByDomain: (domain: string) =>
+    domain === "geocoding" ? [{ ...MOCK_INTEGRATION, providers: new Map([[domain, [{}]]]) }] : [],
+  getProviderOrder: (domain: string) => (domain === "geocoding" ? ["geocoding-maptiler"] : []),
   reloadIntegrations: (...args: unknown[]) => mockReloadIntegrations(...args),
   resolveConfigWithSources: (...args: unknown[]) => mockResolveConfigWithSources(...args),
 }));
@@ -348,6 +352,7 @@ async function wire() {
     (await import("../admin-standalone-integrations")).adminStandaloneIntegrationsRoute,
     (await import("../admin-configuration-migration")).adminConfigurationMigrationRoute,
     (await import("../admin-credential-transfer")).adminCredentialTransferRoute,
+    (await import("../admin-provider-order")).adminProviderOrderRoute,
   ])
     await app.register(route, { prefix: "/api" });
   await app.ready();
@@ -459,10 +464,27 @@ describe("actual integration producers through generated SDK", () => {
             options,
           ),
         () => sdk.getAdminOverview(options),
+        () => sdk.getAdminProviderOrder(options),
       ];
       for (const call of cases)
         expect(await call(), call.toString()).toMatchObject({ status: 200 });
-      expect(cases).toHaveLength(19);
+      expect(cases).toHaveLength(20);
+      const order = await sdk.getAdminProviderOrder(options);
+      assert(order.status === 200);
+      expect(order.data.domains.find((entry) => entry.domain === "geocoding")).toEqual({
+        domain: "geocoding",
+        orchestratorId: "geocoding",
+        unlisted: "exclude",
+        stored: ["geocoding-maptiler"],
+        effective: [
+          {
+            integrationId: "geocoding-maptiler",
+            name: "MapTiler Geocoding",
+            isBuiltIn: true,
+            listed: true,
+          },
+        ],
+      });
       expect(await sdk.listAdminAttention(options)).toMatchObject({
         status: 200,
         data: { items: [] },
@@ -666,6 +688,55 @@ describe("actual integration producers through generated SDK", () => {
       await app.close();
     }
   });
+  it("reports an integration whose code failed to load as failed, with the load phase", async () => {
+    const sdk = await import("@openmapx/core/api-admin-sdk");
+    const { app, client } = await wire();
+    // The host switches every integration whose load failed off at run time.
+    const failed = {
+      ...MOCK_INTEGRATION,
+      enabled: false,
+      loadState: "failed",
+      loadError: { phase: "import", message: "SyntaxError: Unexpected token 'export'" },
+    };
+    mockResolveConfigWithSources.mockResolvedValue({
+      apiKey: { value: "synthetic-secret", source: "env" },
+    });
+    // A healthy cached check must not hide that the code never loaded.
+    mockGetCachedHealthStatus.mockReturnValue({ status: "up", responseTime: 12 });
+    try {
+      mockGetAllIntegrations.mockReturnValueOnce([failed, MOCK_INTEGRATION]);
+      const list = await sdk.listAdminIntegrations({ client });
+      expect(list.status).toBe(200);
+      expect(list.data).toMatchObject([
+        {
+          id: failed.id,
+          status: "failed",
+          loadErrorPhase: "import",
+          loadError: "SyntaxError: Unexpected token 'export'",
+        },
+        { id: MOCK_INTEGRATION.id, status: "healthy", loadErrorPhase: null, loadError: null },
+      ]);
+      mockGetIntegration.mockReturnValueOnce(failed);
+      const detail = await sdk.getAdminIntegration(failed.id, { client });
+      expect(detail.data).toMatchObject({ status: "failed", loadErrorPhase: "import" });
+      mockGetIntegration.mockReturnValueOnce({ ...failed, loadState: "incompatible" });
+      expect((await sdk.getAdminIntegration(failed.id, { client })).data).toMatchObject({
+        status: "failed",
+      });
+      // Switched off by the operator: it never tried to load.
+      mockGetIntegration.mockReturnValueOnce({
+        ...MOCK_INTEGRATION,
+        enabled: false,
+        loadState: "loaded",
+      });
+      expect((await sdk.getAdminIntegration(failed.id, { client })).data).toMatchObject({
+        status: "disabled",
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
   it("preserves 400/401/403/404/413/415/429/500/503 and bounded health inputs", async () => {
     const sdk = await import("@openmapx/core/api-admin-sdk");
     const { app, client } = await wire();

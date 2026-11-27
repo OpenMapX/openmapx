@@ -514,6 +514,13 @@ export interface AttributionIndexHandle {
   listMotisFeedTags(): string[];
 }
 
+/**
+ * What the host gives an integration's `setup`. Once the host has unloaded an
+ * installed integration (left it out, or retired its generation on a reload),
+ * the registering, emitting and subscribing methods do nothing and log one
+ * warning per method, so late work the integration scheduled cannot reach the
+ * next generation.
+ */
 export interface IntegrationContext {
   readonly id: string;
   readonly manifest: IntegrationManifest;
@@ -707,6 +714,28 @@ export interface IntegrationContext {
 
   /** Query all enabled integrations registered under a domain. */
   getIntegrationsByDomain(domain: string): LoadedIntegration[];
+
+  /**
+   * The operator's provider order for a domain: integration ids from the
+   * `providerOrder` setting of the domain's orchestrator integration, read
+   * whether or not that integration is enabled. An id may name an integration
+   * that is not loaded. Empty for a domain without an orchestrator.
+   * `collectOrderedProviders` applies it.
+   */
+  getProviderOrder(domain: string): readonly string[];
+
+  /**
+   * First 16 hex characters of the SHA-256 of the providers that serve a
+   * domain, in the order `collectOrderedProviders` serves them: listed
+   * integrations in list order, then unlisted ones in the domain's fallback
+   * order (provider `priority` and the like), each provider named by its
+   * integration id and its own id. Unlisted providers count only where the
+   * domain appends them. It changes whenever that order changes, whether
+   * through the operator's list, a priority or a provider joining or leaving,
+   * so a cache key that includes it stops serving answers built from another
+   * order of providers.
+   */
+  getProviderOrderFingerprint(domain: string): string;
 
   /**
    * Source IDs (`dataSources[].sourceId`) currently disallowed by the operator's

@@ -1,9 +1,5 @@
-import {
-  type BBox,
-  type BoundingBox,
-  type DataSourcePartialReason,
-  isSafeHttpUrl,
-} from "@openmapx/core";
+import type { BBox, BoundingBox, DataSourcePartialReason } from "@openmapx/core";
+import { isSafeHttpUrl } from "@openmapx/core/utils/format";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
@@ -16,6 +12,7 @@ import {
   createProviderOutages,
 } from "./collection-orchestrator";
 import type { IntegrationContext } from "./context";
+import type { ProviderDomain } from "./contracts/provider-shapes";
 
 type SiteProvider = CollectionProvider;
 
@@ -29,7 +26,7 @@ type SiteQuery = CollectionQuery;
 
 export interface SiteOrchestratorOptions<TProvider, TSite, TQuery> {
   /** Domain and provider-map key the providers register under. */
-  domain: string;
+  domain: ProviderDomain;
   /** Prefix of the outage log lines, e.g. `parking`. */
   logPrefix: string;
   /**
@@ -53,12 +50,12 @@ export interface SiteOrchestratorOptions<TProvider, TSite, TQuery> {
 }
 
 export interface SiteOrchestrator<TProvider, TSite, TQuery> {
-  /** Every provider registered across enabled integrations, in registration order. */
+  /** Every provider registered across enabled integrations, in the operator's provider order. */
   providers(): TProvider[];
   /**
    * Fans the search out to every provider covering `bbox` in parallel,
-   * tolerating individual failures, and concatenates their sites in
-   * registration order. There is no cross-provider dedup: each provider
+   * tolerating individual failures, and concatenates their sites in the
+   * operator's provider order. There is no cross-provider dedup: each provider
    * dedups its own. The operator's disallowed sources are pushed into the
    * query and filtered again on each site's `sources`, so a provider that
    * ignores the hint still cannot leak them. `partial` is set when a provider
@@ -71,7 +68,7 @@ export interface SiteOrchestrator<TProvider, TSite, TQuery> {
   ): Promise<{ sites: TSite[]; partial?: DataSourcePartialReason }>;
   /**
    * The site with this id, from the provider that holds it. Every provider is
-   * asked in parallel and the first one in registration order that returns
+   * asked in parallel and the first one in the operator's provider order that returns
    * the site answers, so a detail never needs a preceding search. The
    * disallowed sources are pushed into the read as a search pushes them, so a
    * site opens with the sources it was listed with, and filtered again on the

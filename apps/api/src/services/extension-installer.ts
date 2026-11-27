@@ -10,7 +10,7 @@ import {
   installedIntegration,
   serviceRepository,
 } from "../db/schema";
-import { reloadIntegrations } from "../integration-host";
+import { failedIntegrationLoads, reloadIntegrations } from "../integration-host";
 import { actorUserIdOrNull } from "../utils/actor";
 import { dockerComposeAction } from "../utils/docker-compose";
 import { sanitizeExtensionOutputString } from "../utils/safe-log-fields";
@@ -696,6 +696,10 @@ async function installExtensionNow(
       await ctx.log("Reloading integrations...");
       const r = await reloadIntegrations();
       await ctx.log(`Reload complete: ${r.reloaded} reloaded, ${r.enabled} enabled`);
+      // The reload leaves out an installed integration whose code fails
+      // instead of failing; this change installed it, so the change fails.
+      const [failed] = failedIntegrationLoads(integrationComponents.map(({ id }) => id));
+      if (failed) throw new Error(`Integration ${failed.id} failed to load: ${failed.message}`);
     }
     await ctx.setProgress(90);
 

@@ -1,4 +1,5 @@
 import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
+import type { ReviewSubject } from "@openmapx/provider-kit/reviews";
 import {
   fetchAggregate,
   fetchReviews,
@@ -7,7 +8,6 @@ import {
   submitReview,
   uploadReviewImage,
 } from "./orchestrator.js";
-import type { ReviewSubject } from "./types.js";
 
 /** Cache TTL for read endpoints (10 minutes). */
 const READ_TTL_SECONDS = 600;
@@ -41,7 +41,7 @@ export function setup(ctx: IntegrationContext): void {
     const key = reviewCacheKey("list", subject);
     try {
       const reviews = await ctx.cache.withCache(key, READ_TTL_SECONDS, () => {
-        const providers = getReviewProviders(ctx.getIntegrationsByDomain("reviews"));
+        const providers = getReviewProviders(ctx);
         return fetchReviews(subject, providers);
       });
       // Redis handles server-side caching; tell the browser to always revalidate
@@ -64,7 +64,7 @@ export function setup(ctx: IntegrationContext): void {
     const key = reviewCacheKey("agg", subject);
     try {
       const aggregate = await ctx.cache.withCache(key, READ_TTL_SECONDS, () => {
-        const providers = getReviewProviders(ctx.getIntegrationsByDomain("reviews"));
+        const providers = getReviewProviders(ctx);
         return fetchAggregate(subject, providers);
       });
       reply.header("Cache-Control", "no-store");
@@ -95,7 +95,7 @@ export function setup(ctx: IntegrationContext): void {
         return;
       }
       try {
-        const providers = getReviewProviders(ctx.getIntegrationsByDomain("reviews"));
+        const providers = getReviewProviders(ctx);
         const result = await submitReview(jwt, providers);
         // Best-effort cache invalidation for this subject's reads.
         if (
@@ -167,7 +167,7 @@ export function setup(ctx: IntegrationContext): void {
         (typeof body.filename === "string" && body.filename.trim()) || `upload.${ext}`;
       const blob = new Blob([buffer], { type: normalizedMime });
       try {
-        const providers = getReviewProviders(ctx.getIntegrationsByDomain("reviews"));
+        const providers = getReviewProviders(ctx);
         const result = await uploadReviewImage(blob, filename, providers);
         reply.send(result);
       } catch (err) {

@@ -11,9 +11,17 @@ import {
   currentOvertureSnapshot,
   OVERTURE_PLACES_SCHEMA_VERSION,
 } from "@openmapx/core/published-data";
-import { httpError, type IntegrationContext } from "@openmapx/integration-framework";
+import {
+  collectOrderedProviders,
+  httpError,
+  type IntegrationContext,
+} from "@openmapx/integration-framework";
 import { getPresetById } from "@openmapx/presets";
-import type { PoiSearchProvider, PoiSearchResult, PoiSearchReturn } from "./types.js";
+import type {
+  PoiSearchProvider,
+  PoiSearchResult,
+  PoiSearchReturn,
+} from "@openmapx/provider-kit/poi-search";
 
 /**
  * What every orchestrator search returns.
@@ -37,9 +45,6 @@ const MAX_SHRINK_RETRIES = 3;
 const SHRINK_FACTOR = 0.6;
 const PRESET_PREFIX = "preset:";
 const PRESET_SENTINEL = "__preset__";
-// Id of the authoritative base POI provider (OSM via Overpass); all other
-// matching providers are treated as augments to its result set.
-const BASE_PROVIDER_ID = "overpass";
 
 interface ConflationLinkRow {
   osm_type: string;
@@ -171,14 +176,23 @@ function finalize(run: ProviderRun, bbox: BoundingBox): PoiSearchResponse {
 }
 
 export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
+  /**
+   * The provider whose results are authoritative in a fused category search:
+   * the first in the operator's order that declares `"base"` (OSM via
+   * Overpass, built in), else the first that does not declare `"augment"`.
+   */
+  function fusionBase(providers: readonly PoiSearchProvider[]): PoiSearchProvider | undefined {
+    return (
+      providers.find((p) => p.fusionRole === "base") ??
+      providers.find((p) => p.fusionRole !== "augment")
+    );
+  }
+
+  /** Every POI provider, in the operator's order. */
   function getProviders(): PoiSearchProvider[] {
-    const integrations = ctx.getIntegrationsByDomain("poi-search");
-    const providers: PoiSearchProvider[] = [];
-    for (const integration of integrations) {
-      const registered = (integration.providers.get("poi-search") ?? []) as PoiSearchProvider[];
-      providers.push(...registered);
-    }
-    return providers;
+    return collectOrderedProviders<PoiSearchProvider>(ctx, "poi-search").map(
+      ({ provider }) => provider,
+    );
   }
 
   async function search(
@@ -221,11 +235,14 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
       return finalize(run, bbox);
     }
 
-    // The OSM/Overpass provider is the authoritative base set; every other
-    // matching provider augments it (Overture gap-fill today). The split keys
-    // off the base provider's id.
-    const baseProvider = matching.find((p) => p.id === BASE_PROVIDER_ID);
-    const augmentProviders = matching.filter((p) => p.id !== BASE_PROVIDER_ID);
+    // One base identity for the whole request, chosen over every provider and
+    // not per category, so a provider is never promoted just because the base
+    // lacks a category: it is the base only for categories it covers, and
+    // without it every matching provider augments an empty set.
+    const designatedBase = fusionBase(providers);
+    const baseProvider =
+      designatedBase && matching.includes(designatedBase) ? designatedBase : undefined;
+    const augmentProviders = matching.filter((p) => p !== baseProvider);
 
     const basePromise = baseProvider
       ? runWithShrink(

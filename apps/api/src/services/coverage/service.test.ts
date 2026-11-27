@@ -103,6 +103,7 @@ describe("CoverageService", () => {
       ["parking-sites", [{ id: "parking", searchSites: async () => ({ sites: [] }) }]],
     ]),
     strings: {},
+    loadState: "loaded",
     shutdownHandlers: [],
   });
 
@@ -328,6 +329,44 @@ describe("CoverageService", () => {
     expect(report.summary.find((item) => item.domain === "parking")?.status).not.toBe(
       "operational",
     );
+  });
+
+  it("cites an installed details provider's own catalog as its enrichment evidence", async () => {
+    const pois = integration();
+    pois.id = "poi-acme";
+    pois.manifest.id = "poi-acme";
+    pois.manifest.domains = ["poi-search"];
+    pois.isBuiltIn = false;
+    pois.providers = new Map([
+      [
+        "poi-search",
+        [
+          {
+            id: "acme-pois",
+            categories: ["cafes"],
+            search: async () => [],
+            getDetail: async () => null,
+          },
+        ],
+      ],
+    ]);
+    const catalog = {
+      ...makeStream("2026-09-10T13:00:00.000Z"),
+      key: "integration:poi-acme:catalog",
+      owner: { kind: "integration" as const, id: "poi-acme" },
+      stream: "catalog" as const,
+    };
+    const collection = makeCollection(catalog);
+    collection.catalog = buildCoverageCatalog([pois]);
+    collection.policy = { allowGreyArea: true, allowNonCommercial: true };
+    const service = createCoverageService({
+      now: () => new Date(collection.generatedAt),
+      collector: async () => collection,
+    });
+    const report = await service.report({ regionId: REGION.key });
+    const byId = (id: string) => report.capabilities.find((item) => item.operationId === id);
+    expect(byId("pois.search")?.evidenceKeys).toEqual([catalog.key]);
+    expect(byId("pois.overture-enrichment")?.evidenceKeys).toEqual([catalog.key]);
   });
 
   it("links a service-owned transit source to the canonical service and transit pages", async () => {
@@ -732,6 +771,7 @@ describe("coverage of the OpenConditions place domains", () => {
           : []),
       ]),
       strings: {},
+      loadState: "loaded",
       shutdownHandlers: [],
     };
   }
@@ -745,6 +785,7 @@ describe("coverage of the OpenConditions place domains", () => {
     enabled: true,
     providers: new Map([["routing", [{ id: "valhalla", supportedModes: ["driving"] }]]]),
     strings: {},
+    loadState: "loaded",
     shutdownHandlers: [],
   });
 

@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
-import type {
-  IntegrationContext,
-  TransitProvider,
-  TripPlanRequest,
+import {
+  collectOrderedProviders,
+  type IntegrationContext,
+  type TransitProvider,
+  type TripPlanRequest,
 } from "@openmapx/integration-framework";
 import type { TransitTripResolveRequest, TripItinerary } from "@openmapx/mobility-core/transit";
-import type { TransitOrchestrator } from "./orchestrator.js";
+import type { PlannedTrip, TransitOrchestrator, TransitPlanner } from "./orchestrator.js";
 import { createRefreshReplay } from "./refresh-replay.js";
 import { signRefreshHandle, verifyRefreshHandle } from "./refresh-token.js";
 import { envelope } from "./route-helpers.js";
@@ -18,9 +19,14 @@ import {
 
 const REFRESH_TTL_SECONDS = 15 * 60;
 
-/** Server-side state behind a refresh token for an itinerary found by search. */
+/**
+ * Server-side state behind a refresh token for an itinerary found by search.
+ * `integrationId` is absent only in state written before tokens named the
+ * integration; such a token finds no planner and replans.
+ */
 interface SearchRefreshState {
   kind?: "search";
+  integrationId?: string;
   providerId: string;
   instance: string;
   datasetEpoch: string;
@@ -37,6 +43,7 @@ interface ReferenceRefreshState {
 
 /** Where a search itinerary came from, so a refresh can ask the same planner again. */
 export interface SearchRefreshOrigin {
+  integrationId: string;
   providerId: string;
   instance: string;
   datasetEpoch: string;
@@ -104,16 +111,62 @@ export function createRefreshSession(
     return store({ kind: "reference", request });
   }
 
-  function sourceIds(providerId: string | undefined, tripIds: readonly string[] = []): string[] {
-    return ctx.getIntegrationsByDomain("transit").flatMap((integration) => {
-      const providers = (integration.providers.get("transit") ?? []) as TransitProvider[];
-      const matches = providers.some((p) =>
-        providerId ? p.id === providerId : tripIds.some((id) => id.startsWith(p.prefix)),
-      );
-      return matches
-        ? (integration.manifest.dataSources ?? []).map((source) => source.sourceId)
-        : [];
-    });
+  /** Whether the loaded planner `planner` names declares itinerary refresh. */
+  function canRefresh(planner: Partial<TransitPlanner> | undefined): boolean {
+    return (
+      planner?.integrationId !== undefined &&
+      planner.providerId !== undefined &&
+      collectOrderedProviders<TransitProvider>(ctx, "transit").some(
+        ({ integrationId, provider }) =>
+          integrationId === planner.integrationId &&
+          provider.id === planner.providerId &&
+          provider.capabilities?.planningFeatures?.refresh === true,
+      )
+    );
+  }
+
+  /**
+   * Where the tokens of a planned answer point, or nothing when they cannot be
+   * refreshed. `/plan` and a replan both use this, so the same answer from
+   * the same planner gets a token on either path or on neither.
+   */
+  function originForPlan(
+    planned: PlannedTrip,
+    requestFingerprint: string,
+    request: TripPlanRequest,
+  ): SearchRefreshOrigin | undefined {
+    const { data: plan, planner } = planned;
+    if (!plan?.datasetEpoch || !planner || !canRefresh(planner)) return undefined;
+    return {
+      integrationId: planner.integrationId,
+      providerId: planner.providerId,
+      instance: plan.instance ?? planner.providerId,
+      datasetEpoch: plan.datasetEpoch,
+      requestFingerprint,
+      request,
+    };
+  }
+
+  function sourceIds(
+    planner: Partial<TransitPlanner> | undefined,
+    tripIds: readonly string[] = [],
+  ): string[] {
+    const matching = new Set(
+      collectOrderedProviders<TransitProvider>(ctx, "transit")
+        .filter(({ integrationId, provider: p }) =>
+          planner
+            ? p.id === planner.providerId &&
+              (planner.integrationId === undefined || integrationId === planner.integrationId)
+            : tripIds.some((id) => id.startsWith(p.prefix)),
+        )
+        .map((entry) => entry.integrationId),
+    );
+    const manifests = new Map(
+      ctx.getIntegrationsByDomain("transit").map((integration) => [integration.id, integration]),
+    );
+    return [...matching].flatMap((id) =>
+      (manifests.get(id)?.manifest.dataSources ?? []).map((source) => source.sourceId),
+    );
   }
 
   async function refreshReference(state: ReferenceRefreshState) {
@@ -150,15 +203,18 @@ export function createRefreshSession(
   }
 
   async function refreshSearch(state: SearchRefreshState) {
-    let ids = sourceIds(state.providerId);
-    const outcome = await orchestrator.refreshTrip(state.providerId, {
-      itineraryId: state.itineraryId,
-      datasetEpoch: state.datasetEpoch,
-      modes: state.request.modes,
-      wheelchairRequired: state.request.wheelchairRequired,
-      requireBikeTransport: state.request.requireBikeTransport,
-      detailedTransfers: true,
-    });
+    let ids = sourceIds(state);
+    const outcome = await orchestrator.refreshTrip(
+      { integrationId: state.integrationId ?? "", providerId: state.providerId },
+      {
+        itineraryId: state.itineraryId,
+        datasetEpoch: state.datasetEpoch,
+        modes: state.request.modes,
+        wheelchairRequired: state.request.wheelchairRequired,
+        requireBikeTransport: state.request.requireBikeTransport,
+        detailedTransfers: true,
+      },
+    );
     if (outcome.status === "unavailable")
       return {
         status: 503,
@@ -169,6 +225,22 @@ export function createRefreshSession(
     let fallbackOccurred = false;
     let resultAttributions = refreshed.attributions;
     let resultFreshness = refreshed.freshness;
+    // Where the next token points. A refreshed itinerary stays with the
+    // planner that issued the token; a replanned one belongs to the planner
+    // that was called for the new search, with that planner's itinerary id
+    // and epoch, so the next refresh never asks a provider about another's trip.
+    let next: SearchRefreshOrigin | undefined;
+    const epoch = itinerary?.datasetEpoch ?? state.datasetEpoch;
+    if (itinerary && state.integrationId && epoch && canRefresh(state)) {
+      next = {
+        integrationId: state.integrationId,
+        providerId: state.providerId,
+        instance: state.instance,
+        datasetEpoch: epoch,
+        requestFingerprint: state.requestFingerprint,
+        request: state.request,
+      };
+    }
     if (!itinerary) {
       fallbackOccurred = true;
       const fallback = await orchestrator.planTrip({
@@ -179,6 +251,7 @@ export function createRefreshSession(
       itinerary = fallback.data?.itineraries[0] ?? null;
       resultAttributions = fallback.attributions;
       resultFreshness = fallback.freshness;
+      next = originForPlan(fallback, state.requestFingerprint, state.request);
     }
     if (!itinerary)
       return {
@@ -190,15 +263,7 @@ export function createRefreshSession(
         undefined,
         itinerary.legs.flatMap((leg) => (leg.tripId ? [leg.tripId] : [])),
       );
-    if (itinerary.source === "transit-motis-local") {
-      itinerary.refreshToken = await issueForSearch(itinerary, {
-        providerId: state.providerId,
-        instance: state.instance,
-        datasetEpoch: itinerary.datasetEpoch ?? state.datasetEpoch,
-        requestFingerprint: state.requestFingerprint,
-        request: state.request,
-      });
-    }
+    if (next) itinerary.refreshToken = await issueForSearch(itinerary, next);
     return {
       status: 200,
       sourceIds: ids,
@@ -227,7 +292,7 @@ export function createRefreshSession(
     });
   }
 
-  return { issueForSearch, issueForReference, verify, refresh };
+  return { issueForSearch, issueForReference, verify, refresh, canRefresh, originForPlan };
 }
 
 export type RefreshSession = ReturnType<typeof createRefreshSession>;

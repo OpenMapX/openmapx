@@ -13,6 +13,7 @@ import Accordion from "@mui/material/Accordion";
 import AccordionDetails from "@mui/material/AccordionDetails";
 import AccordionSummary from "@mui/material/AccordionSummary";
 import Alert from "@mui/material/Alert";
+import AlertTitle from "@mui/material/AlertTitle";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
@@ -34,6 +35,7 @@ import Tabs from "@mui/material/Tabs";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { buildLicensingHtml, safeHref } from "@openmapx/core";
+import { ORCHESTRATOR_BY_DOMAIN } from "@openmapx/integration-framework";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
@@ -57,13 +59,16 @@ import { ConfigSchemaForm } from "./ConfigSchemaForm";
 import { CredentialSetupGuide } from "./CredentialSetupGuide";
 import { DomainChip } from "./DomainChip";
 import { HealthHistoryChart } from "./HealthHistoryChart";
-import { IntegrationStatusDot } from "./IntegrationStatusDot";
+import { IntegrationStatusDot, isSwitchedOn } from "./IntegrationStatusDot";
+import { declaresProviderOrder, ProviderOrderEditor } from "./ProviderOrderEditor";
 import { RequiredServicesPanel } from "./RequiredServicesPanel";
 import { SetCredentialDialog } from "./SetCredentialDialog";
 import { StatusBadge } from "./StatusBadge";
 
 type CredentialStatus = import("@openmapx/core/api-contracts").AdminIntegrationCredential;
 type IntegrationDetailData = import("@openmapx/core/api-contracts").AdminIntegrationDetail;
+
+const PROVIDER_ORDER_KEYS = ["providerOrder"] as const;
 
 const SOURCE_COLOR: Record<string, "default" | "primary" | "secondary" | "success" | "info"> = {
   default: "default",
@@ -319,6 +324,38 @@ function OverviewTab({ data }: { data: IntegrationDetailData }) {
   );
 }
 
+const LOAD_PHASE_KEY = {
+  import: "loadFailedPhaseImport",
+  migrate: "loadFailedPhaseMigrate",
+  setup: "loadFailedPhaseSetup",
+  deadline: "loadFailedPhaseDeadline",
+} as const;
+
+/** Why an integration is not running: the step its code failed at, and the error. */
+function LoadFailureNotice({ data }: { data: IntegrationDetailData }) {
+  const t = useTranslations("adminIntegrations");
+  return (
+    <Alert
+      severity="error"
+      variant="outlined"
+      sx={{ "& .MuiAlert-message": { minWidth: 0, overflowWrap: "anywhere" } }}
+    >
+      <AlertTitle>{t("loadFailedTitle")}</AlertTitle>
+      <Stack sx={{ gap: 0.75 }}>
+        {data.loadErrorPhase && (
+          <Typography variant="body2">{t(LOAD_PHASE_KEY[data.loadErrorPhase])}</Typography>
+        )}
+        {data.loadError && (
+          <Typography variant="body2" component="code" sx={{ fontFamily: "monospace" }}>
+            {data.loadError}
+          </Typography>
+        )}
+        <Typography variant="body2">{t("loadFailedFix")}</Typography>
+      </Stack>
+    </Alert>
+  );
+}
+
 function ConfigTab({
   data,
   integrationId,
@@ -330,6 +367,15 @@ function ConfigTab({
   const sourceLabel = useConfigSourceLabel();
   const entries = Object.entries(data.resolvedConfig);
   const { paged: pagedEntries, paginationProps: entriesPagination } = useClientPagination(entries);
+  // Only an orchestrator that stores an order can take one; for the others a
+  // saved order would be refused as an unknown setting.
+  const orderedDomains = declaresProviderOrder(data.manifest.configSchema)
+    ? Object.entries(ORCHESTRATOR_BY_DOMAIN).flatMap(([domain, owner]) =>
+        owner === integrationId ? [domain] : [],
+      )
+    : [];
+  // The editor owns the setting; the generic form must not offer it a second time.
+  const editorKeys = orderedDomains.length > 0 ? PROVIDER_ORDER_KEYS : undefined;
 
   return (
     <Stack
@@ -337,6 +383,11 @@ function ConfigTab({
         gap: 3,
       }}
     >
+      {orderedDomains.map((domain) => (
+        <Box key={domain} sx={{ maxWidth: 760 }}>
+          <ProviderOrderEditor orchestratorId={integrationId} domain={domain} />
+        </Box>
+      ))}
       {/* Editable config form */}
       {data.manifest.configSchema && (
         <Box sx={{ maxWidth: 760 }}>
@@ -352,6 +403,7 @@ function ConfigTab({
             </Typography>
             <ConfigSchemaForm
               integrationId={integrationId}
+              excludeKeys={editorKeys}
               schema={data.manifest.configSchema}
               resolvedConfig={data.resolvedConfig}
               ownership={data.ownership}
@@ -808,11 +860,17 @@ function HealthTab({
                     gap: 1,
                   }}
                 >
+                  {/* The latest check's own result, beside its label. */}
                   <IntegrationStatusDot
-                    enabled={data.enabled}
-                    configured={data.configured}
-                    health={health}
-                    hasHealthCheck={data.hasHealthCheck}
+                    status={
+                      data.status === "disabled" || data.status === "failed"
+                        ? data.status
+                        : health.status === "up"
+                          ? "healthy"
+                          : health.status === "down"
+                            ? "unhealthy"
+                            : "unconfigured"
+                    }
                     size={14}
                   />
                   <Typography
@@ -1117,6 +1175,7 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
   }
 
   const isBusy = toggleMutation.isPending || reloadMutation.isPending;
+  const switchedOn = isSwitchedOn(data.status);
 
   return (
     <Stack
@@ -1144,13 +1203,7 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
               flexGrow: 1,
             }}
           >
-            <IntegrationStatusDot
-              enabled={data.enabled}
-              configured={data.configured}
-              health={data.health}
-              hasHealthCheck={data.hasHealthCheck}
-              size={14}
-            />
+            <IntegrationStatusDot status={data.status} size={14} />
             <Typography
               component="h1"
               variant="h5"
@@ -1176,15 +1229,16 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
               flexShrink: 0,
             }}
           >
+            {/* A failed integration is still switched on: Reload retries it, Disable stops it. */}
             <Button
               size="small"
-              variant={data.enabled ? "outlined" : "contained"}
-              color={data.enabled ? "error" : "success"}
+              variant={switchedOn ? "outlined" : "contained"}
+              color={switchedOn ? "error" : "success"}
               startIcon={isBusy ? <CircularProgress size={14} /> : <PowerSettingsNewIcon />}
-              onClick={() => toggleMutation.mutate(!data.enabled)}
+              onClick={() => toggleMutation.mutate(!switchedOn)}
               disabled={isBusy}
             >
-              {data.enabled ? t("disable") : t("enable")}
+              {switchedOn ? t("disable") : t("enable")}
             </Button>
             <Button
               size="small"
@@ -1219,6 +1273,7 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
           </Typography>
         )}
       </Stack>
+      {data.status === "failed" && <LoadFailureNotice data={data} />}
       {reloadJobId && <AdminJobLink id={reloadJobId} source="application" />}
       <Divider />
       <Box>

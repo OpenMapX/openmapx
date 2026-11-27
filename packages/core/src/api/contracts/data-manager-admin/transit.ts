@@ -103,7 +103,13 @@ export const transitCatalogFeedSchema = z.strictObject({
   installedSourceId: z.string().nullable(),
   discoveryIds: z.array(z.string()),
   name: z.string(),
-  source: z.enum(["transitous", "mobilitydb", "manual"]),
+  source: z
+    .string()
+    .min(1)
+    .max(64)
+    .describe(
+      "Catalogue the feed comes from: `transitous`, `mobilitydb` or `manual` for the built-in catalogues, otherwise the source an installed catalogue names",
+    ),
   countryCode: z.string(),
   url: z.string(),
   licensing: licensingSchema

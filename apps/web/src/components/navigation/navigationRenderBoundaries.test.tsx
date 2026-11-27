@@ -2,7 +2,6 @@
 
 // Accepted fixes update hot readouts while cold controls and unrelated roots stay stable.
 
-import type { Route } from "@integrations/routing/types";
 import {
   createNavigationSessionSnapshot,
   type NavigationSessionSnapshot,
@@ -14,6 +13,7 @@ import {
   NavIncidentContext,
   type NavIncidentResource,
 } from "@openmapx/integration-framework/react";
+import type { Route } from "@openmapx/provider-kit/routing";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";

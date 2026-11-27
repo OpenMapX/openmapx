@@ -28,6 +28,7 @@ vi.mock("./administrative-configuration-writer-owner", () => ({
             config: {},
             strings: {},
             providers: new Map(),
+            loadState: "loaded",
             shutdownHandlers: [],
           },
         ],

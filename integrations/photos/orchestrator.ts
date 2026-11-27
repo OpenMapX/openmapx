@@ -8,16 +8,14 @@ import {
   type RequestJsonScope,
 } from "@openmapx/core";
 import { parseRetryAfterMs } from "@openmapx/core/retry-after";
-import type { IntegrationContext, LoadedIntegration } from "@openmapx/integration-framework";
+import { collectOrderedProviders, type IntegrationContext } from "@openmapx/integration-framework";
 import {
   lookupByNameAndCoords,
   lookupByOsmRef,
 } from "@openmapx/integration-geocoding/place-lookup";
-import type { PhotoProvider, PhotoQuery } from "./types.js";
+import type { PhotoProvider, PhotoQuery } from "@openmapx/provider-kit/photos";
 
-// Providers in this list are ordered last (street-level imagery — shown after editorial photos)
-const DEPRIORITIZED_PROVIDER_IDS = new Set(["mapillary", "panoramax"]);
-
+// The photos integration's own provider: OSM image tags, put first in every gallery.
 const OSM_IMAGES_PROVIDER_ID = "osm-images";
 interface ImageTagOptions {
   strict?: boolean;
@@ -64,22 +62,43 @@ export function createOsmImagePhotoProvider(
 }
 
 /**
- * Collect photo providers from integrations registered under the "photos" domain.
- * Street-level imagery providers (mapillary, panoramax) are sorted to the end.
+ * What choosing photo providers reads. The data-use policy is a required
+ * member, not an optional argument, so no caller can ask for providers
+ * without it: a photo carries no reference to the integration that supplied
+ * it, so a disallowed integration can only be left out before acquisition.
  */
-export function getPhotoProviders(integrations: LoadedIntegration[]): PhotoProvider[] {
-  const providers: PhotoProvider[] = [];
-  for (const integration of integrations) {
-    if (!integration.enabled || !integration.manifest.domains.includes("photos")) continue;
-    for (const p of (integration.providers.get("photos") ?? []) as PhotoProvider[]) {
-      providers.push(p);
-    }
-  }
-  return providers.sort((a, b) => {
-    const aLast = DEPRIORITIZED_PROVIDER_IDS.has(a.id) ? 1 : 0;
-    const bLast = DEPRIORITIZED_PROVIDER_IDS.has(b.id) ? 1 : 0;
-    return aLast - bLast;
-  });
+export type PhotoProviderSource = Pick<
+  IntegrationContext,
+  "getProviderOrder" | "getIntegrationsByDomain"
+> &
+  Pick<Required<IntegrationContext>, "getDisallowedIntegrationIds">;
+
+/**
+ * Photo providers in the operator's order. Unlisted ones follow in
+ * registration order, street-level imagery (mapillary, panoramax) last. The
+ * providers of an integration the data-use policy disallows are left out.
+ */
+export async function getPhotoProviders(source: PhotoProviderSource): Promise<PhotoProvider[]> {
+  const disallowed = await source.getDisallowedIntegrationIds();
+  return collectOrderedProviders<PhotoProvider>(source, "photos")
+    .filter(({ integrationId }) => !disallowed.has(integrationId))
+    .map(({ provider }) => provider);
+}
+
+/**
+ * The photo integrations the data-use policy disallows, sorted. A cache of
+ * photos keys by this, so a policy change does not replay a photo of an
+ * integration now disallowed, while gating an integration that supplies no
+ * photos leaves photo caches alone.
+ */
+export async function disallowedPhotoIntegrationIds(
+  source: PhotoProviderSource,
+): Promise<string[]> {
+  const disallowed = await source.getDisallowedIntegrationIds();
+  const photoIntegrations = new Set(
+    source.getIntegrationsByDomain("photos").map((integration) => integration.id),
+  );
+  return [...photoIntegrations].filter((id) => disallowed.has(id)).sort();
 }
 
 /**

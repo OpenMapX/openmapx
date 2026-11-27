@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 
-import type { Route } from "@integrations/routing/types";
 import {
   type DirectionsResult,
   type OverpassFilter,
@@ -9,6 +8,7 @@ import {
   setRouteMatcherCounting,
   useNavigationStore,
 } from "@openmapx/core";
+import type { Route } from "@openmapx/provider-kit/routing";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { nth } from "@/test";

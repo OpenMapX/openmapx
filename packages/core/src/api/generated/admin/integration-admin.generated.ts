@@ -170,6 +170,14 @@ import type {
   GetAdminOverview415,
   GetAdminOverview429,
   GetAdminOverview500,
+  GetAdminProviderOrder200,
+  GetAdminProviderOrder400,
+  GetAdminProviderOrder401,
+  GetAdminProviderOrder403,
+  GetAdminProviderOrder413,
+  GetAdminProviderOrder415,
+  GetAdminProviderOrder429,
+  GetAdminProviderOrder500,
   InstallAdminStandaloneIntegration202,
   InstallAdminStandaloneIntegration400,
   InstallAdminStandaloneIntegration401,
@@ -371,6 +379,7 @@ import {
   getAdminIntegrationHealthRequest,
   getAdminIntegrationRequest,
   getAdminOverviewRequest,
+  getAdminProviderOrderRequest,
   installAdminStandaloneIntegrationRequest,
   listAdminAttentionRequest,
   listAdminCredentialsRequest,
@@ -3298,6 +3307,81 @@ export const getAdminOverview = async (
     ...options,
     method: "GET",
   });
+};
+
+export type getAdminProviderOrderResponse200 = {
+  data: GetAdminProviderOrder200;
+  status: 200;
+};
+
+export type getAdminProviderOrderResponse400 = {
+  data: GetAdminProviderOrder400;
+  status: 400;
+};
+
+export type getAdminProviderOrderResponse401 = {
+  data: GetAdminProviderOrder401;
+  status: 401;
+};
+
+export type getAdminProviderOrderResponse403 = {
+  data: GetAdminProviderOrder403;
+  status: 403;
+};
+
+export type getAdminProviderOrderResponse413 = {
+  data: GetAdminProviderOrder413;
+  status: 413;
+};
+
+export type getAdminProviderOrderResponse415 = {
+  data: GetAdminProviderOrder415;
+  status: 415;
+};
+
+export type getAdminProviderOrderResponse429 = {
+  data: GetAdminProviderOrder429;
+  status: 429;
+};
+
+export type getAdminProviderOrderResponse500 = {
+  data: GetAdminProviderOrder500;
+  status: 500;
+};
+
+export type getAdminProviderOrderResponseSuccess = getAdminProviderOrderResponse200 & {
+  headers: Headers;
+};
+export type getAdminProviderOrderResponseError = (
+  | getAdminProviderOrderResponse400
+  | getAdminProviderOrderResponse401
+  | getAdminProviderOrderResponse403
+  | getAdminProviderOrderResponse413
+  | getAdminProviderOrderResponse415
+  | getAdminProviderOrderResponse429
+  | getAdminProviderOrderResponse500
+) & {
+  headers: Headers;
+};
+
+export type getAdminProviderOrderResponse =
+  | getAdminProviderOrderResponseSuccess
+  | getAdminProviderOrderResponseError;
+
+export const getGetAdminProviderOrderUrl = () => {
+  return `/api/admin/provider-order`;
+};
+
+export const getAdminProviderOrder = async (
+  options?: Parameters<typeof getAdminProviderOrderRequest>[1],
+): Promise<getAdminProviderOrderResponse> => {
+  return getAdminProviderOrderRequest<getAdminProviderOrderResponse>(
+    getGetAdminProviderOrderUrl(),
+    {
+      ...options,
+      method: "GET",
+    },
+  );
 };
 
 export type listAdminStandaloneIntegrationsResponse200 = {

@@ -186,6 +186,15 @@ describe("direct OSM details identity", () => {
     ])
       expect(directPlaceDetailsId(p, false)).toBe(place.id);
     expect(directPlaceDetailsId(place, true)).toBe(place.id);
+    expect(
+      directPlaceDetailsId(
+        {
+          ...place,
+          directOsmReference: { ...place.directOsmReference, source: "community-geocoder" },
+        },
+        false,
+      ),
+    ).toBe(place.id);
     expect(directPlaceDetailsId({ ...place, primaryScheme: "coordinate" }, false)).toBe(null);
   });
   it("uses the reference of the geocoder row a Wikidata place was merged with", () => {

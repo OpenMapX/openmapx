@@ -241,7 +241,10 @@ it("serializes independent hourly/daily suppliers and keeps receipts on forecast
   const ctx = context([integration(first, [hourlySource]), integration(second, [dailySource])]);
   // JSON storage exercises the actual portable envelope/point shape, including [].
   const values = new Map([
-    ["weather:forecast:52.00,13.00:48:3:metric", JSON.stringify({ hourly: [], daily: [] })],
+    [
+      "weather:forecast:contributors-v1:52.00,13.00:48:3:metric:[]",
+      JSON.stringify({ hourly: [], daily: [] }),
+    ],
   ]);
   ctx.cache.withCache = async <T>(
     key: string,

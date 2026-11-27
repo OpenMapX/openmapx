@@ -66,6 +66,26 @@ export class ProviderPayloadError extends Error {
   }
 }
 
+export type ProviderDeclineReason = "no-coverage" | "unsupported" | "unavailable";
+
+/**
+ * The provider cannot answer this request: it lies outside the provider's
+ * coverage (`no-coverage`), asks for a mode or option it does not support
+ * (`unsupported`), or needs a service that is not there (`unavailable`). A chain
+ * moves on to its next provider as for any thrown error. Provider health records
+ * the first two as the non-counted `input` outcome, so they cannot open the
+ * provider's circuit; a missing service is an ordinary failure.
+ */
+export class ProviderDeclinedError extends Error {
+  readonly reason: ProviderDeclineReason;
+
+  constructor(reason: ProviderDeclineReason, message?: string) {
+    super(message ?? `provider declined the request: ${reason}`);
+    this.name = "ProviderDeclinedError";
+    this.reason = reason;
+  }
+}
+
 function issuePath(error: unknown): string {
   const issues = (error as { issues?: Array<{ path?: PropertyKey[] }> } | null)?.issues;
   const path = issues?.[0]?.path?.map(String).join(".");
@@ -183,7 +203,8 @@ const KIND_OUTCOMES: Readonly<Record<string, ProviderHealthFailureOutcome>> = {
  * Upstream 4xx responses other than 401, 403 and 429 count as `connection`
  * failures: a retired endpoint or a broken request builder must be able to open
  * the circuit. Only a request the adapter itself knows is bad caller input
- * (code `invalid_request`) is the non-counted `input`.
+ * (code `invalid_request`) or one it declines as outside its coverage or
+ * capabilities (`ProviderDeclinedError`) is the non-counted `input`.
  */
 export function classifyProviderFailure(
   error: unknown,
@@ -208,6 +229,9 @@ export function classifyProviderFailure(
   // Adapters wrap upstream errors to keep credential-bearing URLs out of
   // messages, so the structured code or status may sit on a cause.
   for (const item of chain) {
+    if (item instanceof ProviderDeclinedError) {
+      return item.reason === "unavailable" ? "connection" : "input";
+    }
     if (stringField(item, "name") === "ZodError") return "invalid_payload";
     const code = stringField(item, "code");
     const byCode = code ? CODE_OUTCOMES[code] : undefined;

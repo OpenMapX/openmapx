@@ -17,6 +17,7 @@ function integration(dataSources: IntegrationManifest["dataSources"]): LoadedInt
     enabled: true,
     providers: new Map(),
     strings: {},
+    loadState: "loaded",
     shutdownHandlers: [],
   };
 }
@@ -79,4 +80,48 @@ it("counts a journey-platform-only live provider without claiming unsupported me
     } as never,
   ]);
   expect(buildCoverageCatalog([fixture]).providers[0]?.supports["transit.realtime"]).toBe(true);
+});
+
+it("reports traffic-aware routing for any engine that declares proofs", () => {
+  const engine = (id: string, provider: Record<string, unknown>) => {
+    const fixture = integration([]);
+    fixture.id = id;
+    fixture.manifest = { ...fixture.manifest, id, domains: ["routing"] };
+    fixture.providers.set("routing", [
+      { supportedModes: ["driving"], getRoute: async () => null, ...provider },
+    ]);
+    return fixture;
+  };
+  const catalog = buildCoverageCatalog([
+    engine("routing-acme", { id: "acme", supportsTrafficProof: true }),
+    engine("routing-valhalla", { id: "valhalla" }),
+  ]);
+  expect(
+    catalog.providers.map((p) => [p.integrationId, p.supports["traffic.traffic-aware-routing"]]),
+  ).toEqual([
+    ["routing-acme", true],
+    ["routing-valhalla", false],
+  ]);
+});
+
+it("reports enrichment for an installed provider that offers details", () => {
+  const pois = (id: string, provider: Record<string, unknown>) => {
+    const fixture = integration([]);
+    fixture.id = id;
+    fixture.isBuiltIn = false;
+    fixture.providers.set("poi-search", [
+      { categories: ["cafes"], search: async () => [], ...provider },
+    ]);
+    return fixture;
+  };
+  const catalog = buildCoverageCatalog([
+    pois("poi-acme", { id: "acme-pois", getDetail: async () => null }),
+    pois("poi-plain", { id: "plain-pois" }),
+  ]);
+  expect(
+    catalog.providers.map((p) => [p.integrationId, p.supports["pois.overture-enrichment"]]),
+  ).toEqual([
+    ["poi-acme", true],
+    ["poi-plain", false],
+  ]);
 });

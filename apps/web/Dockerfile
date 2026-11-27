@@ -34,6 +34,7 @@ COPY packages/ourairports-data/package.json packages/ourairports-data/
 COPY packages/open-landmarks-client/package.json packages/open-landmarks-client/
 COPY packages/place-ids/package.json packages/place-ids/
 COPY packages/presets/package.json packages/presets/
+COPY packages/provider-kit/package.json packages/provider-kit/
 COPY packages/brands/package.json packages/brands/
 COPY packages/transitous-core/package.json packages/transitous-core/
 COPY apps/web/package.json apps/web/

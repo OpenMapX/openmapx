@@ -2,11 +2,8 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { ID_SCHEME_PATTERN } from "@openmapx/core/place-ids";
 import {
   type ActivationTransactionScope,
-  assertAirQualityProviderContract,
-  assertLandmarkModelProviderContract,
   type CacheClient,
   type CustomHealthCheckFn,
   createActivationTransactionScope,
@@ -14,11 +11,16 @@ import {
   type IntegrationContext,
   type IntegrationDataSource,
   IntegrationEventBus,
+  type IntegrationLoadError,
   type IntegrationManifest,
   type IntegrationStrings,
   type LoadedIntegration,
   type Logger,
+  ORCHESTRATOR_BY_DOMAIN,
+  orchestratorOf,
   PLATFORM_VERSION,
+  providerOrderFingerprintInput,
+  readProviderOrder,
   resolveIntegrationPlatformEndpoint,
   satisfiesPlatformVersion,
   validateDataSource,
@@ -32,29 +34,45 @@ import { parseLicensing } from "@openmapx/mobility-core/licensing";
 import {
   beginPlaceResolverStaging,
   commitPlaceResolverStaging,
+  restorePlaceResolvers,
   rollbackPlaceResolverStaging,
+  setPlaceResolverRegistrationHook,
+  snapshotPlaceResolvers,
 } from "@openmapx/place-ids";
 import type { FastifyInstance } from "fastify";
 import { integrationSql } from "./db";
+import { assertBundleImports } from "./integration-bundle-imports";
 import { createCacheClient, createHttpClient, createLogger } from "./integration-clients";
+import { type IntegrationCodeCache, prepareIntegrationCodeCache } from "./integration-code-cache";
 import {
   type ConfigSource,
   type ConfigValueWithSource,
-  resolveConfig,
   resolveConfigWithSources,
   resolveIntegrationConfigWithSourcesStrict,
   warnInvalidConfig,
 } from "./integration-config";
 import { createIntegrationDb } from "./integration-db";
 import { readIntegrationFile, setVerifiedIntegrationFiles } from "./integration-files";
+import { createProviderRegistrars, type ProviderRegistrars } from "./integration-registrars";
 import {
   beginIntegrationRouteStaging,
   commitIntegrationRouteStaging,
+  dropIntegrationRoutes,
   registerIntegrationRoute,
   registerIntegrationRouteDispatcher,
   resetIntegrationRoutes,
   rollbackIntegrationRouteStaging,
 } from "./integration-routes";
+import {
+  bindPlaceResolverToScope,
+  bindProviderToScope,
+  currentIntegrationScope,
+  type IntegrationScope,
+  ignoredAfterUnload,
+  runInIntegrationScope,
+  SETUP_DEADLINE_MS,
+  SETUP_WARNING_MS,
+} from "./integration-scope";
 import { processLogger } from "./process-logger";
 import { redis } from "./redis";
 import {
@@ -95,6 +113,18 @@ type SetupFunction = (ctx: IntegrationContext) => void | Promise<void>;
 
 let eventBus = new IntegrationEventBus();
 const integrations = new Map<string, LoadedIntegration>();
+/** The live generation's `providerOrder` of each orchestrator integration, by its id. */
+let providerOrders: ReadonlyMap<string, readonly string[]> = new Map();
+
+const ORCHESTRATOR_IDS = new Set(
+  Object.values(ORCHESTRATOR_BY_DOMAIN).filter((id): id is string => id !== null),
+);
+
+/** The live generation's provider order for `domain`; empty for a domain without an orchestrator. */
+export function getProviderOrder(domain: string): readonly string[] {
+  const orchestrator = orchestratorOf(domain);
+  return orchestrator ? (providerOrders.get(orchestrator) ?? []) : [];
+}
 
 export type IntegrationDirectoryInput = string | { directory: string; isBuiltIn: boolean };
 type NormalizedIntegrationDirectory = { directory: string; isBuiltIn: boolean };
@@ -251,12 +281,7 @@ function loadStrings(directory: string): IntegrationStrings {
   return strings;
 }
 
-function resolveBackendEntryPoint(directory: string, isBuiltIn: boolean): string | null {
-  // Community directories are writable installation inputs. Importing any JS
-  // from them here would execute it with the API process's database, secrets,
-  // filesystem, and Docker authority. Community backends require an isolated
-  // service boundary; until one exists, their files are deliberately inert.
-  if (!isBuiltIn) return null;
+function resolveBuiltInBackendEntryPoint(directory: string): string | null {
   const bundled = integrationBackendBundlePath(directory);
   if (existsSync(bundled)) return bundled;
   const modulePath = join(directory, "index.ts");
@@ -265,17 +290,40 @@ function resolveBackendEntryPoint(directory: string, isBuiltIn: boolean): string
   return existsSync(jsModulePath) ? jsModulePath : null;
 }
 
-function hasBlockedCommunityBackend(directory: string, manifest: IntegrationManifest): boolean {
-  if (manifest.backend?.routes || manifest.backend?.entry) return true;
-  return [
-    integrationBackendBundlePath(directory),
-    join(directory, "index.ts"),
-    join(directory, "index.js"),
-  ].some((path) => existsSync(path));
+/** The only backend entry an installed integration can declare. */
+const INSTALLED_BACKEND_ENTRY = "dist/backend/index.mjs";
+
+let codeCache: IntegrationCodeCache | null = null;
+
+/**
+ * Prepared on first use after each boot rather than at boot, so a host
+ * without installed backend code never touches the cache directory.
+ */
+function integrationCodeCache(): IntegrationCodeCache {
+  codeCache ??= prepareIntegrationCodeCache();
+  return codeCache;
 }
 
-// Cache-bust the dynamic import by the entry file's mtime+size so a reload
-// (`reloadIntegrations` — fired by extension install/update and credential
+/**
+ * The `file:` URL of an installed integration's verified backend bundle in the
+ * code cache, or null when its manifest declares no backend entry. Only bytes
+ * the operations agent recorded are read, and the URL is keyed by their
+ * SHA-256, so unchanged bytes reuse the module Node already holds and new
+ * bytes get a fresh one.
+ */
+async function installedBackendImportSpecifier(
+  integration: LoadedIntegration,
+): Promise<string | null> {
+  if (integration.manifest.backend?.entry !== INSTALLED_BACKEND_ENTRY) return null;
+  const bytes = readIntegrationFile(integration.directory, INSTALLED_BACKEND_ENTRY);
+  if (!bytes) throw new Error("backend entry is missing or changed since installation");
+  const sha256 = createHash("sha256").update(bytes).digest("hex");
+  assertBundleImports(bytes, sha256);
+  return pathToFileURL(integrationCodeCache().materialize(integration.id, sha256, bytes)).href;
+}
+
+// Cache-bust a built-in's dynamic import by the entry file's mtime+size so a
+// reload (`reloadIntegrations` — fired by extension install/update and credential
 // set/delete) picks up CHANGED backend code WITHOUT restarting the API. ESM
 // `import()` is keyed by URL and process-lifetime cached, so re-importing the
 // same file URL returns the stale module — which is why a store update of an
@@ -610,6 +658,64 @@ function setRuntimeDataSources(
   return [...accepted];
 }
 
+type DiscoveredManifest = Awaited<ReturnType<typeof discoverManifests>>[number];
+
+/**
+ * Resolves each integration's configuration at most once per generation, and
+ * the provider order of every orchestrator before any setup runs: a provider's
+ * integration may ask for the order of a domain whose orchestrator is set up
+ * after it, or never because it is disabled. Only the manifest a generation
+ * would load for an id supplies an order, by the same tests its load applies.
+ */
+async function prepareGenerationConfig(
+  sorted: DiscoveredManifest[],
+  resolve: (
+    manifest: IntegrationManifest,
+    directory: string,
+  ) => Promise<Record<string, ConfigValueWithSource>>,
+): Promise<{
+  configOf: (manifest: IntegrationManifest, directory: string) => Promise<Record<string, unknown>>;
+  orders: ReadonlyMap<string, readonly string[]>;
+}> {
+  const configs = new Map<string, Promise<Record<string, ConfigValueWithSource>>>();
+  const withSourcesOf = (manifest: IntegrationManifest, directory: string) => {
+    let pending = configs.get(directory);
+    if (!pending) {
+      pending = resolve(manifest, directory);
+      configs.set(directory, pending);
+    }
+    return pending;
+  };
+  const configOf = async (manifest: IntegrationManifest, directory: string) =>
+    Object.fromEntries(
+      Object.entries(await withSourcesOf(manifest, directory)).map(([key, entry]) => [
+        key,
+        entry.value,
+      ]),
+    );
+  const orders = new Map<string, readonly string[]>();
+  const seen = new Set<string>();
+  for (const { manifest: raw, directory, isBuiltIn } of sorted) {
+    if (!validateManifest(raw, { firstParty: isBuiltIn }).valid) continue;
+    const manifest = raw as IntegrationManifest;
+    if (seen.has(manifest.id)) continue;
+    if (!isBuiltIn && !satisfiesPlatformVersion(manifest.platform ?? "")) continue;
+    seen.add(manifest.id);
+    if (!ORCHESTRATOR_IDS.has(manifest.id)) continue;
+    const entry = (await withSourcesOf(manifest, directory)).providerOrder;
+    orders.set(
+      manifest.id,
+      readProviderOrder(entry?.value, (entries) =>
+        processLogger.warn(
+          { component: "integration-host", integrationId: manifest.id, source: entry?.source },
+          `providerOrder from ${entry?.source} has ${entries} entries; only the first 64 are used`,
+        ),
+      ),
+    );
+  }
+  return { configOf, orders };
+}
+
 function buildIntegrationContext(args: {
   id: string;
   manifest: IntegrationManifest;
@@ -624,6 +730,8 @@ function buildIntegrationContext(args: {
   integration: LoadedIntegration;
   eventBus: IntegrationEventBus;
   integrationsByDomain: (domain: string) => LoadedIntegration[];
+  /** The generation's provider order of each orchestrator integration, by its id. */
+  providerOrders: ReadonlyMap<string, readonly string[]>;
   activationScope: ActivationTransactionScope;
 }): IntegrationContext {
   const {
@@ -639,6 +747,7 @@ function buildIntegrationContext(args: {
     shutdownHandlers,
     eventBus: contextEventBus,
     integrationsByDomain,
+    providerOrders: generationProviderOrders,
     activationScope,
   } = args;
   const { integration } = args;
@@ -647,7 +756,35 @@ function buildIntegrationContext(args: {
       [...requiresMap].map(([key, service]) => [key, Object.freeze({ ...service })]),
     ),
   );
-  return {
+  const subscriptions = new Set<() => void>();
+  // An installed integration that fails is left out of a generation that goes
+  // on, so nothing it registers may activate before its setup has returned.
+  let pendingActivations: Array<{ activate: () => void; rollback?: () => void }> | null =
+    integration.isBuiltIn ? null : [];
+  const scope: IntegrationScope = {
+    integrationId: id,
+    isBuiltIn: integration.isBuiltIn,
+    revoked: false,
+  };
+  integrationScopes.set(integration, scope);
+  const inScope =
+    <A extends unknown[], R>(fn: (...args: A) => R) =>
+    (...args: A): R =>
+      runInIntegrationScope(scope, () => fn(...args));
+  // Work an unloaded integration scheduled may still run; it must not reach
+  // the generation that left the integration out, and gets `inert()` back.
+  const live =
+    <A extends unknown[], R>(method: string, fn: (...args: A) => R, inert: () => R) =>
+    (...args: A): R =>
+      ignoredAfterUnload(scope, method, hostLog) ? inert() : fn(...args);
+  const nothing = () => undefined;
+  const registrars = createProviderRegistrars({
+    integrationId: id,
+    manifest,
+    providers,
+    bind: (domain, provider) => bindProviderToScope(provider, scope, { domain, log: hostLog }),
+  });
+  const ctx: IntegrationContext = {
     id,
     manifest,
     config,
@@ -676,176 +813,90 @@ function buildIntegrationContext(args: {
         endpointId,
       );
     },
-    registerTransitProvider(provider) {
-      const existing = providers.get("transit") ?? [];
-      existing.push(provider);
-      providers.set("transit", existing);
-    },
-    registerRealtimeProvider(provider) {
-      const existing = providers.get("live-transit") ?? [];
-      existing.push(provider);
-      providers.set("live-transit", existing);
-    },
-    registerMobilityDataSource(provider) {
-      // The id is the scheme of the place ids its items open as.
-      if (!ID_SCHEME_PATTERN.test(provider.id))
-        throw new Error(
-          `Data source id "${provider.id}" must start with a letter and use only lower-case letters, digits and hyphens, because it names its places' id scheme`,
-        );
-      const existing = providers.get("data-source") ?? [];
-      existing.push(provider);
-      providers.set("data-source", existing);
-    },
-    registerWeatherProvider(provider) {
-      const existing = providers.get("weather") ?? [];
-      existing.push(provider);
-      providers.set("weather", existing);
-    },
-    registerAirQualityProvider(provider) {
-      const allowedSourceIds = new Set(manifest.dataSources?.map(({ sourceId }) => sourceId) ?? []);
-      assertAirQualityProviderContract(provider, allowedSourceIds);
-      const existing = providers.get("air-quality") ?? [];
-      existing.push(provider);
-      providers.set("air-quality", existing);
-    },
-    registerGeocodingProvider(provider) {
-      const existing = providers.get("geocoding") ?? [];
-      existing.push(provider);
-      providers.set("geocoding", existing);
-    },
-    registerRoutingProvider(provider) {
-      const existing = providers.get("routing") ?? [];
-      existing.push(provider);
-      providers.set("routing", existing);
-    },
-    registerRideProvider(provider) {
-      const existing = providers.get("ride-hailing") ?? [];
-      existing.push(provider);
-      providers.set("ride-hailing", existing);
-    },
-    registerRoadConditionsProvider(provider) {
-      const existing = providers.get("road-conditions") ?? [];
-      existing.push(provider);
-      providers.set("road-conditions", existing);
-    },
-    registerFuelStationProvider(provider) {
-      const existing = providers.get("fuel-stations") ?? [];
-      existing.push(provider);
-      providers.set("fuel-stations", existing);
-    },
-    registerParkingSiteProvider(provider) {
-      const existing = providers.get("parking-sites") ?? [];
-      existing.push(provider);
-      providers.set("parking-sites", existing);
-    },
-    registerChargingSiteProvider(provider) {
-      const existing = providers.get("charging-sites") ?? [];
-      existing.push(provider);
-      providers.set("charging-sites", existing);
-    },
-    registerCameraProvider(provider) {
-      const existing = providers.get("cameras") ?? [];
-      existing.push(provider);
-      providers.set("cameras", existing);
-    },
-    registerMessageSignProvider(provider) {
-      const existing = providers.get("message-signs") ?? [];
-      existing.push(provider);
-      providers.set("message-signs", existing);
-    },
-    registerLandmarkModelProvider(provider) {
-      const allowedSourceIds = new Set(manifest.dataSources?.map(({ sourceId }) => sourceId) ?? []);
-      assertLandmarkModelProviderContract(provider, manifest.id, allowedSourceIds);
-      const existing = providers.get("landmark-models") ?? [];
-      existing.push(provider);
-      providers.set("landmark-models", existing);
-    },
-    registerRoadWeatherProvider(provider) {
-      const existing = providers.get("road-weather") ?? [];
-      existing.push(provider);
-      providers.set("road-weather", existing);
-    },
-    registerServiceVehicleProvider(provider) {
-      const existing = providers.get("service-vehicles") ?? [];
-      existing.push(provider);
-      providers.set("service-vehicles", existing);
-    },
-    registerBorderCrossingProvider(provider) {
-      const existing = providers.get("border-crossings") ?? [];
-      existing.push(provider);
-      providers.set("border-crossings", existing);
-    },
-    registerHazardsProvider(provider) {
-      const existing = providers.get("hazards") ?? [];
-      existing.push(provider);
-      providers.set("hazards", existing);
-    },
-    registerPhotoProvider(provider) {
-      const existing = providers.get("photos") ?? [];
-      existing.push(provider);
-      providers.set("photos", existing);
-    },
-    registerStreetLevelProvider(provider) {
-      const existing = providers.get("street-level-imagery") ?? [];
-      existing.push(provider);
-      providers.set("street-level-imagery", existing);
-    },
-    registerReviewProvider(provider) {
-      const existing = providers.get("reviews") ?? [];
-      existing.push(provider);
-      providers.set("reviews", existing);
-    },
-    registerPoiSearchProvider(provider) {
-      const existing = providers.get("poi-search") ?? [];
-      existing.push(provider);
-      providers.set("poi-search", existing);
-    },
-    registerSearchSuggestionProvider(provider) {
-      const existing = providers.get("search-suggestions") ?? [];
-      existing.push(provider);
-      providers.set("search-suggestions", existing);
-    },
-    registerKnowledgeProvider(provider) {
-      const existing = providers.get("knowledge") ?? [];
-      existing.push(provider);
-      providers.set("knowledge", existing);
-    },
-    registerGtfsCatalogProvider(provider) {
-      const existing = providers.get("gtfs-catalog") ?? [];
-      existing.push(provider);
-      providers.set("gtfs-catalog", existing);
-    },
-    registerRoute(method, path, handler, options) {
-      registerIntegrationRoute(id, method, path, handler, options);
-    },
-    registerHealthCheck(fn: CustomHealthCheckFn) {
-      integration.customHealthCheck = fn;
-    },
-    registerDisclosure(disclosure) {
-      if (!integration.disclosures) integration.disclosures = [];
-      integration.disclosures.push(disclosure);
-    },
-    setDataSources(list) {
-      return setRuntimeDataSources(integration, log, list);
-    },
-    emit(event: string, data: unknown) {
-      contextEventBus.emit({
-        type: event,
-        integrationId: id,
-        ...(typeof data === "object" && data !== null ? data : {}),
-      } as never);
-    },
-    on(event: string, handler: (data: unknown) => void) {
-      return contextEventBus.on(event as never, handler as never);
-    },
-    onActivate(activate: () => void, rollback?: () => void) {
-      activationScope.register(activate, rollback);
-    },
-    onShutdown(cleanup: () => Promise<void>) {
-      shutdownHandlers.push(cleanup);
-    },
+    ...(Object.fromEntries(
+      Object.entries(registrars as unknown as Record<string, (provider: object) => void>).map(
+        ([name, register]) => [name, live(name, register, nothing)],
+      ),
+    ) as unknown as ProviderRegistrars),
+    registerRoute: live(
+      "registerRoute",
+      (method, path, handler, options) => {
+        registerIntegrationRoute(id, method, path, inScope(handler), options);
+      },
+      nothing,
+    ),
+    registerHealthCheck: live(
+      "registerHealthCheck",
+      (fn: CustomHealthCheckFn) => {
+        integration.customHealthCheck = inScope(fn);
+      },
+      nothing,
+    ),
+    registerDisclosure: live(
+      "registerDisclosure",
+      (disclosure) => {
+        if (!integration.disclosures) integration.disclosures = [];
+        integration.disclosures.push(disclosure);
+      },
+      nothing,
+    ),
+    setDataSources: live(
+      "setDataSources",
+      (list) => setRuntimeDataSources(integration, log, list),
+      () => [],
+    ),
+    emit: live(
+      "emit",
+      (event: string, data: unknown) => {
+        contextEventBus.emit({
+          type: event,
+          integrationId: id,
+          ...(typeof data === "object" && data !== null ? data : {}),
+        } as never);
+      },
+      nothing,
+    ),
+    on: live(
+      "on",
+      (event: string, handler: (data: unknown) => void) => {
+        const unsubscribe = contextEventBus.on(event as never, inScope(handler) as never);
+        const tracked = () => {
+          subscriptions.delete(tracked);
+          unsubscribe();
+        };
+        subscriptions.add(tracked);
+        return tracked;
+      },
+      () => nothing,
+    ),
+    onActivate: live(
+      "onActivate",
+      (activate: () => void, rollback?: () => void) => {
+        const scoped = { activate: inScope(activate), rollback: rollback && inScope(rollback) };
+        if (pendingActivations) pendingActivations.push(scoped);
+        else activationScope.register(scoped.activate, scoped.rollback);
+      },
+      nothing,
+    ),
+    onShutdown: live(
+      "onShutdown",
+      (cleanup: () => Promise<void>) => {
+        shutdownHandlers.push(inScope(cleanup));
+      },
+      nothing,
+    ),
     getIntegrationsByDomain(domain: string) {
       return integrationsByDomain(domain);
+    },
+    getProviderOrder(domain: string) {
+      const orchestrator = orchestratorOf(domain);
+      return orchestrator ? (generationProviderOrders.get(orchestrator) ?? []) : [];
+    },
+    getProviderOrderFingerprint(domain: string) {
+      return createHash("sha256")
+        .update(providerOrderFingerprintInput(ctx, domain))
+        .digest("hex")
+        .slice(0, 16);
     },
     getDisallowedSourceIds() {
       return disallowedSourceResolver
@@ -870,6 +921,248 @@ function buildIntegrationContext(args: {
         : Promise.resolve(new Set<string>());
     },
   };
+  contextControls.set(ctx, {
+    releaseActivations() {
+      const released = pendingActivations ?? [];
+      pendingActivations = null;
+      for (const { activate, rollback } of released) activationScope.register(activate, rollback);
+    },
+    discardActivations() {
+      pendingActivations = null;
+    },
+    unsubscribeAll() {
+      for (const unsubscribe of [...subscriptions]) unsubscribe();
+    },
+  });
+  return ctx;
+}
+
+/** Host-side controls over a context's registrations that the integration cannot reach. */
+interface IntegrationContextControl {
+  /** Hands the `onActivate` registrations held back during setup to the generation's scope. */
+  releaseActivations(): void;
+  /** Drops the held-back registrations of an integration that is left out. */
+  discardActivations(): void;
+  /** Removes every `ctx.on` subscription the context made. */
+  unsubscribeAll(): void;
+}
+
+const contextControls = new WeakMap<IntegrationContext, IntegrationContextControl>();
+
+/** The scope each loaded integration's code runs in, for this generation. */
+const integrationScopes = new WeakMap<LoadedIntegration, IntegrationScope>();
+
+/**
+ * Revokes the scope of an installed integration that is left out or whose
+ * generation is retired, so the work it scheduled can no longer register.
+ */
+function revokeInstalledScope(integration: LoadedIntegration): void {
+  if (integration.isBuiltIn) return;
+  const scope = integrationScopes.get(integration);
+  if (scope) scope.revoked = true;
+}
+
+/** Host warnings whose second argument is a record of structured log fields. */
+const hostLog: Logger = (() => {
+  const write =
+    (level: "info" | "warn" | "error" | "debug") => (message: string, fields?: unknown) =>
+      (_fastify?.log ?? processLogger)[level](
+        typeof fields === "object" && fields !== null ? fields : {},
+        message,
+      );
+  return { info: write("info"), warn: write("warn"), error: write("error"), debug: write("debug") };
+})();
+
+class LoadDeadlineError extends Error {
+  constructor() {
+    super(`Import and setup did not finish within ${SETUP_DEADLINE_MS / 1000} seconds`);
+    this.name = "LoadDeadlineError";
+  }
+}
+
+interface LoadDeadline {
+  /** Settles as `step` does, unless the deadline passes first. */
+  within<T>(step: () => Promise<T>): Promise<T>;
+  clear(): void;
+}
+
+/**
+ * The one deadline an installed integration's import and `setup` share, so a
+ * bundle whose top-level `await` never settles is left out as a hung setup
+ * is. When it passes, the scope is revoked at once, before anything the
+ * integration scheduled can run, and the step in progress rejects with
+ * `LoadDeadlineError`. A step that settles later is ignored, and no further
+ * step starts.
+ */
+function startLoadDeadline(scope: IntegrationScope): LoadDeadline {
+  let expired = false;
+  let abandon: ((error: Error) => void) | undefined;
+  const timer = setTimeout(() => {
+    expired = true;
+    scope.revoked = true;
+    abandon?.(new LoadDeadlineError());
+  }, SETUP_DEADLINE_MS);
+  timer.unref?.();
+  return {
+    within<T>(step: () => Promise<T>): Promise<T> {
+      if (expired) return Promise.reject(new LoadDeadlineError());
+      return new Promise<T>((resolve, reject) => {
+        abandon = reject;
+        try {
+          step().then(resolve, reject);
+        } catch (error) {
+          reject(error);
+        }
+      }).finally(() => {
+        abandon = undefined;
+      });
+    },
+    clear() {
+      clearTimeout(timer);
+    },
+  };
+}
+
+/**
+ * Runs an integration's `setup` in its scope. A setup still running after
+ * `SETUP_WARNING_MS` is named in a warning, unless its integration was left
+ * out by then.
+ */
+function runSetup(
+  integration: LoadedIntegration,
+  scope: IntegrationScope,
+  setup: () => void | Promise<void>,
+): Promise<void> {
+  const warning = setTimeout(() => {
+    if (scope.revoked) return;
+    (_fastify?.log ?? processLogger).warn(
+      { integrationId: integration.id },
+      `Integration ${integration.id} has not finished setting up after ${SETUP_WARNING_MS / 1000} seconds`,
+    );
+  }, SETUP_WARNING_MS);
+  warning.unref?.();
+  return new Promise<void>((resolve, reject) => {
+    try {
+      Promise.resolve(runInIntegrationScope(scope, setup)).then(resolve, reject);
+    } catch (error) {
+      reject(error);
+    }
+  }).finally(() => clearTimeout(warning));
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/**
+ * Imports an integration's backend and runs its `setup`. A built-in's failure
+ * is rethrown for the caller to handle. An installed integration that fails is
+ * left out: it is recorded as failed and disabled, everything it registered is
+ * undone, its shutdown handlers run, and the generation goes on without it.
+ */
+async function loadIntegrationBackend(args: {
+  integration: LoadedIntegration;
+  ctx: IntegrationContext;
+  shutdownHandlers: Array<() => Promise<void>>;
+}): Promise<"loaded" | "left-out"> {
+  const { integration, ctx, shutdownHandlers } = args;
+  const scope = integrationScopes.get(integration);
+  if (!scope) throw new Error(`Integration ${integration.id} has no context`);
+  let phase: IntegrationLoadError["phase"] = "import";
+  if (integration.isBuiltIn) {
+    try {
+      const entryPoint = resolveBuiltInBackendEntryPoint(integration.directory);
+      if (entryPoint) {
+        const specifier = backendEntryImportSpecifier(entryPoint);
+        const mod = (await runInIntegrationScope(scope, () => import(specifier))) as {
+          setup?: SetupFunction;
+        };
+        phase = "setup";
+        const { setup } = mod;
+        if (typeof setup === "function") await runSetup(integration, scope, () => setup(ctx));
+      }
+      return "loaded";
+    } catch (error) {
+      integration.loadState = "failed";
+      integration.loadError = { phase, message: errorMessage(error) };
+      throw error;
+    }
+  }
+
+  const control = contextControls.get(ctx);
+  const resolvers = snapshotPlaceResolvers();
+  const declaredDataSources = integration.manifest.dataSources;
+  try {
+    const specifier = await installedBackendImportSpecifier(integration);
+    if (specifier) {
+      const deadline = startLoadDeadline(scope);
+      try {
+        const mod = (await deadline.within(() =>
+          runInIntegrationScope(scope, () => import(specifier)),
+        )) as { setup?: SetupFunction };
+        phase = "setup";
+        const { setup } = mod;
+        if (typeof setup === "function")
+          await deadline.within(() => runSetup(integration, scope, () => setup(ctx)));
+      } finally {
+        deadline.clear();
+      }
+    }
+    phase = "setup";
+    control?.releaseActivations();
+    return "loaded";
+  } catch (error) {
+    scope.revoked = true;
+    if (error instanceof LoadDeadlineError) phase = "deadline";
+    control?.discardActivations();
+    control?.unsubscribeAll();
+    dropIntegrationRoutes(integration.id);
+    restorePlaceResolvers(resolvers);
+    integration.providers.clear();
+    integration.customHealthCheck = undefined;
+    integration.disclosures = undefined;
+    integration.manifest.dataSources = declaredDataSources;
+    integration.enabled = false;
+    integration.loadState = "failed";
+    integration.loadError = { phase, message: errorMessage(error) };
+    _fastify?.log.error(
+      { err: error, integrationId: integration.id, phase },
+      `Leaving out installed integration ${integration.id}: its backend failed to ${phase === "import" ? "import" : phase === "deadline" ? "import and set up in time" : "set up"}`,
+    );
+    const handlers = shutdownHandlers.splice(0);
+    for (const handler of handlers) {
+      try {
+        await handler();
+      } catch (shutdownError) {
+        _fastify?.log.warn(
+          { err: shutdownError, integrationId: integration.id },
+          `A shutdown handler of the left-out integration ${integration.id} failed`,
+        );
+      }
+    }
+    return "left-out";
+  }
+}
+
+/**
+ * The integrations of the live generation whose load failed, limited to `ids`
+ * when given. Install and update jobs use it to fail a change whose
+ * integration the reload left out.
+ */
+export function failedIntegrationLoads(
+  ids?: readonly string[],
+): Array<{ id: string; phase: IntegrationLoadError["phase"]; message: string }> {
+  const wanted = ids ? new Set(ids) : null;
+  const failed: Array<{ id: string; phase: IntegrationLoadError["phase"]; message: string }> = [];
+  for (const integration of integrations.values()) {
+    if (integration.loadState !== "failed" || (wanted && !wanted.has(integration.id))) continue;
+    failed.push({
+      id: integration.id,
+      phase: integration.loadError?.phase ?? "setup",
+      message: integration.loadError?.message ?? "",
+    });
+  }
+  return failed;
 }
 
 export async function initIntegrations(
@@ -881,6 +1174,13 @@ export async function initIntegrations(
   _fastify = fastify;
   _integrationDirs = normalizeIntegrationDirs(integrationDirs);
   resetIntegrationRoutes();
+  codeCache = null;
+  setPlaceResolverRegistrationHook((_scheme, resolver) => {
+    const scope = currentIntegrationScope();
+    if (!scope) return resolver;
+    if (ignoredAfterUnload(scope, "registerPlaceResolver", hostLog)) return null;
+    return scope.isBuiltIn ? resolver : bindPlaceResolverToScope(resolver, scope, hostLog);
+  });
 
   const discovered = await discoverManifests(_integrationDirs);
   const sorted = topologicalSort(discovered);
@@ -968,6 +1268,9 @@ export async function initIntegrations(
     fastify.log.warn(err, "AttributionIndex initialization failed (continuing without it)");
   }
 
+  const { configOf, orders } = await prepareGenerationConfig(sorted, resolveConfigWithSources);
+  providerOrders = orders;
+
   for (const { manifest: raw, directory, isBuiltIn } of sorted) {
     const validation = validateManifest(raw, { firstParty: isBuiltIn });
     if (!validation.valid) {
@@ -994,7 +1297,7 @@ export async function initIntegrations(
       continue;
     }
 
-    const config = await resolveConfig(manifest, directory);
+    const config = await configOf(manifest, directory);
     warnInvalidConfig(manifest, config, id, (msg) => fastify.log.warn(msg));
 
     const log = createLogger(id, fastify);
@@ -1013,16 +1316,9 @@ export async function initIntegrations(
       providers,
       strings: loadStrings(directory),
       customHealthCheck: undefined,
+      loadState: "loaded",
       shutdownHandlers,
     };
-
-    if (!isBuiltIn && hasBlockedCommunityBackend(directory, manifest)) {
-      integration.blockedCode = true;
-      fastify.log.warn(
-        { integrationId: id },
-        "Community backend code is not executed in the API process; use an isolated service component",
-      );
-    }
 
     if (!integration.enabled) {
       integrations.set(id, integration);
@@ -1059,20 +1355,22 @@ export async function initIntegrations(
       integration,
       eventBus,
       integrationsByDomain: getIntegrationsByDomain,
+      providerOrders: orders,
       activationScope,
     });
 
-    // Try to load the integration's setup function
     try {
-      const entryPoint = resolveBackendEntryPoint(directory, isBuiltIn);
-
-      if (entryPoint) {
-        const mod = (await import(backendEntryImportSpecifier(entryPoint))) as {
-          setup?: SetupFunction;
-        };
-        if (typeof mod.setup === "function") {
-          await mod.setup(ctx);
+      if ((await loadIntegrationBackend({ integration, ctx, shutdownHandlers })) === "left-out") {
+        for (const rollbackError of activationScope.rollback()) {
+          fastify.log.warn(rollbackError, `Failed to roll back activation for integration ${id}`);
         }
+        integrations.set(id, integration);
+        eventBus.emit({
+          type: "integration.error",
+          integrationId: id,
+          error: new Error(integration.loadError?.message),
+        });
+        continue;
       }
 
       stageIntegrationRuntimeEvidence(integration, generationId);
@@ -1086,6 +1384,10 @@ export async function initIntegrations(
       }
       fastify.log.error(err, `Failed to load integration ${id}`);
       integration.enabled = false;
+      if (integration.loadState !== "failed") {
+        integration.loadState = "failed";
+        integration.loadError = { phase: "setup", message: errorMessage(err) };
+      }
       integrations.set(id, integration);
       eventBus.emit({
         type: "integration.error",
@@ -1378,6 +1680,14 @@ async function doReloadIntegrations(
       _fastify.log.debug("Service registry unavailable during reload");
     }
 
+    const { configOf, orders: stagedProviderOrders } = await prepareGenerationConfig(
+      sorted,
+      context
+        ? (manifest, directory) =>
+            resolveIntegrationConfigWithSourcesStrict(manifest, directory, context)
+        : resolveConfigWithSources,
+    );
+
     for (const { manifest: raw, directory, isBuiltIn } of sorted) {
       const validation = validateManifest(raw, { firstParty: isBuiltIn });
       if (!validation.valid) {
@@ -1411,13 +1721,7 @@ async function doReloadIntegrations(
         continue;
       }
 
-      const config = context
-        ? Object.fromEntries(
-            Object.entries(
-              await resolveIntegrationConfigWithSourcesStrict(manifest, directory, context),
-            ).map(([key, entry]) => [key, entry.value]),
-          )
-        : await resolveConfig(manifest, directory);
+      const config = await configOf(manifest, directory);
       const log = createLogger(id, _fastify);
       const http = createHttpClient(log);
       const cache = createCacheClient(id);
@@ -1436,16 +1740,9 @@ async function doReloadIntegrations(
         providers,
         strings: loadStrings(directory),
         customHealthCheck: undefined,
+        loadState: "loaded",
         shutdownHandlers,
       };
-
-      if (!isBuiltIn && hasBlockedCommunityBackend(directory, manifest)) {
-        integration.blockedCode = true;
-        _fastify.log.warn(
-          { integrationId: id },
-          "Community backend code is not executed in the API process; use an isolated service component",
-        );
-      }
 
       if (!integration.enabled) {
         next.set(id, integration);
@@ -1484,19 +1781,19 @@ async function doReloadIntegrations(
           Array.from(next.values()).filter(
             (candidate) => candidate.enabled && candidate.manifest.domains.includes(domain),
           ),
+        providerOrders: stagedProviderOrders,
         activationScope,
       });
 
       try {
-        const entryPoint = resolveBackendEntryPoint(directory, isBuiltIn);
-
-        if (entryPoint) {
-          const mod = (await import(backendEntryImportSpecifier(entryPoint))) as {
-            setup?: SetupFunction;
-          };
-          if (typeof mod.setup === "function") {
-            await mod.setup(ctx);
-          }
+        if ((await loadIntegrationBackend({ integration, ctx, shutdownHandlers })) === "left-out") {
+          next.set(id, integration);
+          stagedEventBus.emit({
+            type: "integration.error",
+            integrationId: id,
+            error: new Error(integration.loadError?.message),
+          });
+          continue;
         }
 
         stageIntegrationRuntimeEvidence(integration, generationId);
@@ -1522,10 +1819,14 @@ async function doReloadIntegrations(
     activationScope.activate();
     integrations.clear();
     for (const [id, integration] of next) integrations.set(id, integration);
+    providerOrders = stagedProviderOrders;
     commitIntegrationRouteStaging();
     commitPlaceResolverStaging();
     eventBus = stagedEventBus;
     activationScope.complete();
+    // The previous generation stops serving here. Revoking it before the next
+    // await keeps its late work out of the registries just committed.
+    for (const integration of previousIntegrations) revokeInstalledScope(integration);
   } catch (err) {
     for (const rollbackError of activationScope.rollback()) {
       _fastify.log.warn(rollbackError, "Failed to roll back staged integration activation");
@@ -1534,6 +1835,7 @@ async function doReloadIntegrations(
     rollbackPlaceResolverStaging();
     stagedEventBus.removeAll();
     for (const integration of next.values()) {
+      revokeInstalledScope(integration);
       for (const handler of integration.shutdownHandlers) {
         try {
           await handler();
@@ -1582,6 +1884,7 @@ async function doReloadIntegrations(
 export async function shutdownIntegrations(): Promise<void> {
   for (const integration of integrations.values()) {
     eventBus.emit({ type: "integration.unloaded", integrationId: integration.id });
+    revokeInstalledScope(integration);
 
     for (const handler of integration.shutdownHandlers) {
       try {
@@ -1592,6 +1895,7 @@ export async function shutdownIntegrations(): Promise<void> {
     }
   }
   integrations.clear();
+  providerOrders = new Map();
   eventBus.removeAll();
   resetIntegrationRoutes();
 

@@ -48,6 +48,7 @@ function ctxWith(
 ): IntegrationContext {
   const quiet = (): void => {};
   return {
+    getProviderOrder: () => [],
     getIntegrationsByDomain: (domain: string) =>
       domain === "message-signs"
         ? providers.map((p) => ({

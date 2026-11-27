@@ -72,7 +72,10 @@ const transitCollection = vi.hoisted(() => ({
   journey: undefined as import("@openmapx/mobility-core/transit").VehicleJourney | undefined,
   alerts: [] as import("@openmapx/mobility-core/transit").ServiceAlert[],
 }));
-let capabilityServices: Record<string, { available: boolean }> = {};
+let capabilityServices: Record<
+  string,
+  { available: boolean; modes?: string[]; timeAware?: boolean; exclusions?: boolean }
+> = {};
 vi.mock("@openmapx/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@openmapx/core")>();
   return {
@@ -105,7 +108,11 @@ vi.mock("@openmapx/core", async (importOriginal) => {
     useRideQuotes: () => ({ results: [], expiresAt: null, refetch: vi.fn() }),
     useVehicleJourney: () => ({ data: transitCollection.journey }),
     useRouteAlerts: () => ({ data: transitCollection.alerts }),
-    useCapabilities: () => ({ services: capabilityServices }),
+    useCapabilities: () => ({
+      services: capabilityServices,
+      data: { services: capabilityServices, features: { osmContributions: false } },
+      isError: false,
+    }),
     useOptimizeRoute: () => ({
       mutate: (...a: unknown[]) => optimizeMutate(...a),
       isPending: false,
@@ -723,7 +730,14 @@ describe("DirectionsPanelContent", () => {
 
   it("successful empty road response offers input alternatives and supported modes", () => {
     seedOriginDestination();
-    capabilityServices = { "routing-valhalla": { available: true } };
+    capabilityServices = {
+      "routing-valhalla": {
+        available: true,
+        modes: ["driving", "walking", "cycling", "motorcycle"],
+        timeAware: true,
+        exclusions: true,
+      },
+    };
     useDirectionsMock.mockReturnValue({
       data: {
         waypoints: [
@@ -752,8 +766,8 @@ describe("DirectionsPanelContent", () => {
   it("does not advertise unverified or unavailable mode shortcuts", () => {
     seedOriginDestination();
     capabilityServices = {
-      "routing-osrm": { available: true },
-      "routing-valhalla": { available: false },
+      "routing-osrm": { available: true, modes: ["driving"] },
+      "routing-valhalla": { available: false, modes: ["driving", "walking", "cycling"] },
     };
     useDirectionsMock.mockReturnValue({
       data: {
@@ -772,6 +786,91 @@ describe("DirectionsPanelContent", () => {
     expect(screen.queryByRole("button", { name: "directions.tryMode" })).toBeNull();
     screen.getByRole("button", { name: "directions.changeOrigin" });
     screen.getByRole("button", { name: "directions.changeDestination" });
+  });
+
+  it("plans an empty answer again on another engine that can serve the trip", () => {
+    seedOriginDestination();
+    capabilityServices = {
+      // Incidents are avoided by default, so an engine must honour exclusions.
+      "routing-first": { available: true, modes: ["driving"], exclusions: true },
+      "routing-second": { available: true, modes: ["driving"], exclusions: true },
+      "routing-plain": { available: true, modes: ["driving"], exclusions: false },
+      "routing-bike": { available: true, modes: ["cycling"], exclusions: true },
+    };
+    useDirectionsMock.mockImplementation((arg: unknown) => ({
+      data: {
+        waypoints: [
+          [13.3, 52.5],
+          [11.5, 48.1],
+        ],
+        routes: [],
+        activeRouteIndex: 0,
+        provider: (arg as { provider?: string }).provider ?? "routing-first",
+      },
+      isLoading: false,
+      isError: false,
+    }));
+
+    renderPanel();
+    const engines = screen.getAllByRole("button", { name: "directions.tryEngine" });
+    expect(engines).toHaveLength(1);
+    fireEvent.click(nth(engines, 0));
+    expect(useDirectionsStore.getState().routingProvider).toBe("routing-second");
+    expect(useDirectionsMock).toHaveBeenLastCalledWith(
+      expect.objectContaining({ provider: "routing-second" }),
+    );
+  });
+
+  it("releases a pinned engine that is no longer loaded and says so", () => {
+    seedOriginDestination();
+    capabilityServices = {
+      "routing-first": { available: true, modes: ["driving"], exclusions: true },
+      "routing-second": { available: true, modes: ["driving"], exclusions: true },
+    };
+    act(() => useDirectionsStore.getState().setRoutingProvider("routing-gone"));
+    // The host answers a pin on an unloaded engine with 503; the usual order answers.
+    useDirectionsMock.mockImplementation((arg: unknown) =>
+      (arg as { provider?: string }).provider === "routing-gone"
+        ? { data: undefined, isLoading: false, isError: true, refetch: vi.fn() }
+        : {
+            data: {
+              waypoints: [
+                [13.3, 52.5],
+                [11.5, 48.1],
+              ],
+              routes: [],
+              activeRouteIndex: 0,
+              provider: "routing-first",
+            },
+            isLoading: false,
+            isError: false,
+          },
+    );
+
+    renderPanel();
+    expect(useDirectionsStore.getState().routingProvider).toBeNull();
+    expect(useDirectionsMock).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ provider: "routing-gone" }),
+    );
+    expect(screen.getByText("directions.engineUnavailable")).toBeInTheDocument();
+  });
+
+  it("keeps a pin on a loaded engine that failed, so another can be tried", () => {
+    seedOriginDestination();
+    capabilityServices = {
+      "routing-first": { available: true, modes: ["driving"], exclusions: true },
+      "routing-second": { available: true, modes: ["driving"], exclusions: true },
+    };
+    act(() => useDirectionsStore.getState().setRoutingProvider("routing-second"));
+    useDirectionsMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch: vi.fn(),
+    });
+    renderPanel();
+    expect(useDirectionsStore.getState().routingProvider).toBe("routing-second");
+    expect(screen.queryByText("directions.engineUnavailable")).toBeNull();
   });
 
   it("clearing a waypoint suppresses an old request failure", () => {

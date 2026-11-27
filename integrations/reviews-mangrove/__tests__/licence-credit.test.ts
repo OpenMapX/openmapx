@@ -3,8 +3,8 @@ import {
   type IntegrationContext,
 } from "@openmapx/integration-framework";
 import { createMockIntegrationContext, nth } from "@openmapx/integration-framework/testing";
-import type { ReviewProvider } from "@openmapx/integration-reviews/types";
 import { contributorKey, contributorsForRecords } from "@openmapx/mobility-core/contributors";
+import type { ReviewProvider } from "@openmapx/provider-kit/reviews";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mangroveGetReviews } from "../client.js";
 import { setup } from "../index.js";

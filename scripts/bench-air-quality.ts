@@ -190,6 +190,7 @@ function fixtureIntegration(provider: AirQualityProvider): LoadedIntegration {
     enabled: true,
     providers: new Map([["air-quality", [provider]]]),
     strings: {},
+    loadState: "loaded",
     shutdownHandlers: [],
   };
 }

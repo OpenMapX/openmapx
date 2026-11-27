@@ -1,4 +1,4 @@
-import type { SearchResult } from "@integrations/geocoding/types";
+import type { SearchResult } from "@openmapx/provider-kit/geocoding";
 import { describe, expect, it } from "vitest";
 import { isConfidentPlaceMatch, typedAddressIn } from "../placeMatch";
 

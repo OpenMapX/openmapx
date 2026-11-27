@@ -59,6 +59,22 @@ export interface RouteRecoveryActions {
   onEditDestination: () => void;
   modes: GroundFallbackMode[];
   onSelectMode: (mode: GroundFallbackMode) => void;
+  /** Other routing engines that can plan the same trip. */
+  engines: readonly { integrationId: string; name: string }[];
+  onSelectEngine: (integrationId: string) => void;
+}
+
+function OtherEngines({ actions }: { actions: RouteRecoveryActions }) {
+  const t = useTranslations("directions");
+  return actions.engines.map((engine) => (
+    <Button
+      key={engine.integrationId}
+      size="small"
+      onClick={() => actions.onSelectEngine(engine.integrationId)}
+    >
+      {t("tryEngine", { name: engine.name })}
+    </Button>
+  ));
 }
 
 function RouteRecovery({
@@ -87,9 +103,12 @@ function RouteRecovery({
         )}
       </Typography>
       {failed ? (
-        <Button size="small" onClick={onRetry} sx={{ mt: 1 }}>
-          {tc("retry")}
-        </Button>
+        <Box sx={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 1, mt: 1 }}>
+          <Button size="small" onClick={onRetry}>
+            {tc("retry")}
+          </Button>
+          <OtherEngines actions={actions} />
+        </Box>
       ) : (
         <Box sx={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 1, mt: 1 }}>
           <Button size="small" onClick={actions.onEditOrigin}>
@@ -103,6 +122,7 @@ function RouteRecovery({
               {t("tryMode", { mode: t(mode) })}
             </Button>
           ))}
+          <OtherEngines actions={actions} />
         </Box>
       )}
     </Box>

@@ -113,6 +113,7 @@ export function useGroundDirectionsPlan() {
       bikeSpeedKmh: s.bikeSpeedKmh,
       timeMode: s.timeMode,
       tripTime: s.tripTime,
+      routingProvider: s.routingProvider,
     })),
   );
   const settings = useSettingsStore(
@@ -214,8 +215,10 @@ export function useGroundDirectionsPlan() {
         lang: locale,
         departAt,
         arriveBy,
+        provider: directions.routingProvider ?? undefined,
       }),
     [
+      directions.routingProvider,
       routeMode,
       directions.avoidHighways,
       directions.avoidTolls,
@@ -364,6 +367,8 @@ export function useGroundDirectionsPlan() {
       ...groundRequest,
       waypoints: routeWaypoints,
       mode: candidate,
+      // The pin belongs to the shown mode; the other modes were planned unpinned.
+      provider: candidate === routeMode ? groundRequest.provider : undefined,
       departAt: candidate === "driving" ? departAt : undefined,
       arriveBy: candidate === "driving" ? arriveBy : undefined,
     }),

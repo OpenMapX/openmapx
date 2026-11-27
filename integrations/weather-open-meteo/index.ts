@@ -7,8 +7,7 @@ import type {
   WeatherResponse,
 } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
-import { fetchJsonWithTimeout, round4 } from "@openmapx/integration-weather/lib";
-import type { WeatherProvider } from "@openmapx/integration-weather/types";
+import { fetchJsonWithTimeout, round4, type WeatherProvider } from "@openmapx/provider-kit/weather";
 
 const BASE = "https://api.open-meteo.com/v1/forecast";
 

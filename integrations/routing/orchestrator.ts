@@ -1,6 +1,7 @@
 import type { DirectionsResult, TravelMode } from "@openmapx/core";
 import {
   captureResultContributors,
+  collectOrderedProviders,
   dataSourceToAttribution,
   type IntegrationContext,
   readCapturedFieldContributors,
@@ -8,8 +9,8 @@ import {
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { captureGeometryContributors } from "@openmapx/mobility-core/geometry-contributors";
+import type { RoutingProvider } from "@openmapx/provider-kit/routing";
 import { createRoutingProviderAdmission } from "./provider-admission.js";
-import type { RoutingProvider } from "./types.js";
 
 export interface ResolvedProvider {
   provider: RoutingProvider;
@@ -18,46 +19,27 @@ export interface ResolvedProvider {
   contributors?: readonly Attribution[];
 }
 
-/**
- * Stable-sort matching providers by their adapter-declared priority. Providers
- * without a priority keep registration order after explicitly prioritized
- * providers.
- */
-function orderByPreference(entries: ResolvedProvider[]): ResolvedProvider[] {
-  const DEFAULT_PRIORITY = Number.POSITIVE_INFINITY;
-  return entries
-    .map((entry, index) => ({ entry, index }))
-    .sort(
-      (a, b) =>
-        (a.entry.provider.priority ?? DEFAULT_PRIORITY) -
-          (b.entry.provider.priority ?? DEFAULT_PRIORITY) || a.index - b.index,
-    )
-    .map(({ entry }) => entry);
-}
-
 export function createRoutingOrchestrator(ctx: IntegrationContext) {
   // Every provider handed out is wrapped, so each engine call on any path
   // (directions, optimize, schedule, EV, match) passes the shared admission.
   const admission = createRoutingProviderAdmission(ctx);
 
+  /** Every engine in the operator's order, unlisted ones after it by their priority. */
   function collectProviders(): ResolvedProvider[] {
-    const routingIntegrations = ctx.getIntegrationsByDomain("routing");
-    const resolved: ResolvedProvider[] = [];
-
-    for (const integration of routingIntegrations) {
-      const registered = (integration.providers.get("routing") ?? []) as RoutingProvider[];
-      for (const provider of registered) {
-        resolved.push({
-          provider: admission.admitted(provider, integration.id),
-          integrationId: integration.id,
-          contributors: snapshotContributors(
-            (integration.manifest?.dataSources ?? []).map(dataSourceToAttribution),
-          ),
-        });
-      }
-    }
-
-    return resolved;
+    const dataSources = new Map(
+      ctx
+        .getIntegrationsByDomain("routing")
+        .map((integration) => [integration.id, integration.manifest?.dataSources ?? []]),
+    );
+    return collectOrderedProviders<RoutingProvider>(ctx, "routing").map(
+      ({ integrationId, provider }) => ({
+        provider: admission.admitted(provider, integrationId),
+        integrationId,
+        contributors: snapshotContributors(
+          (dataSources.get(integrationId) ?? []).map(dataSourceToAttribution),
+        ),
+      }),
+    );
   }
 
   /**
@@ -86,22 +68,22 @@ export function createRoutingOrchestrator(ctx: IntegrationContext) {
 
   /**
    * Returns every provider that supports the requested mode (and any extra
-   * filters), in registration order. The route handler iterates this chain so
-   * that a single provider's outage falls back to the next compatible provider
-   * instead of failing the request.
+   * filters), in the operator's order. The route handler iterates this chain
+   * so that a single provider's outage falls back to the next compatible
+   * provider instead of failing the request.
    */
   function getRoutingProviders(
     mode: TravelMode,
     filters: ProviderFilters = {},
   ): ResolvedProvider[] {
-    return orderByPreference(collectProviders().filter((e) => matches(e.provider, mode, filters)));
+    return collectProviders().filter((e) => matches(e.provider, mode, filters));
   }
 
   function getOptimizeProviders(
     mode: TravelMode,
     filters: ProviderFilters = {},
   ): ResolvedProvider[] {
-    const providers = orderByPreference(collectProviders());
+    const providers = collectProviders();
     const matching = providers.filter(
       (entry) => entry.provider.optimizeRoute && matches(entry.provider, mode, filters),
     );
@@ -124,11 +106,11 @@ export function createRoutingOrchestrator(ctx: IntegrationContext) {
   }
 
   function getMatchProvider(mode: TravelMode): ResolvedProvider | null {
-    const providers = collectProviders();
-    for (const entry of providers) {
-      if (entry.provider.getMatch && entry.provider.supportedModes.includes(mode)) return entry;
-    }
-    return null;
+    return (
+      collectProviders().find(
+        (entry) => entry.provider.getMatch && entry.provider.supportedModes.includes(mode),
+      ) ?? null
+    );
   }
 
   return {

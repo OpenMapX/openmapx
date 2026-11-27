@@ -132,7 +132,6 @@ export * from "./getAmbientPlacesStatus429";
 export * from "./getAmbientPlacesStatus500";
 export * from "./getAppliedTrafficConditions200";
 export * from "./getAppliedTrafficConditions200Mode";
-export * from "./getAppliedTrafficConditions200ProviderId";
 export * from "./getAppliedTrafficConditions200ReceiptsItem";
 export * from "./getAppliedTrafficConditions200ReceiptsItemEffect";
 export * from "./getAppliedTrafficConditions200ReceiptsItemIntendedSpansItem";

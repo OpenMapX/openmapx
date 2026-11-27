@@ -22,9 +22,12 @@ function makeIntegrations(count: number): IntegrationSummary[] {
     domains: ["geocoding"],
     quality: "built-in" as const,
     isBuiltIn: true,
-    blockedCode: false,
+    loadState: "loaded" as const,
+    loadError: null,
     requires: [],
     enabled: i % 2 === 0,
+    status: i % 2 === 0 ? ("healthy" as const) : ("disabled" as const),
+    loadErrorPhase: null,
     configured: true,
     hasHealthCheck: false,
     health: null,
@@ -74,5 +77,90 @@ describe("IntegrationList pagination", () => {
     // After the filter, page must be back to 0, so the first matching row is
     // visible and the pager reports page 1 of the filtered set.
     await screen.findByText("Provider 000");
+  });
+});
+
+describe("IntegrationList load state", () => {
+  it("marks an integration whose code failed to load", async () => {
+    const [loaded, failed] = makeIntegrations(2);
+    fetchMock.mockImplementation(() =>
+      Response.json([
+        loaded,
+        {
+          ...failed,
+          enabled: false,
+          status: "failed",
+          loadState: "failed",
+          loadError: "bad setup",
+          loadErrorPhase: "setup",
+        },
+      ]),
+    );
+    const user = userEvent.setup();
+    render(<IntegrationList />, { wrapper: createQueryWrapper() });
+
+    const chips = await screen.findAllByText("Failed to load");
+    expect(chips).toHaveLength(1);
+    await user.hover(chips[0] as HTMLElement);
+    expect(
+      await screen.findByText(
+        "This integration was left out because its code failed to load: bad setup",
+      ),
+    ).toBeTruthy();
+  });
+
+  // The host switches an integration whose load failed off at run time, so the
+  // API sends `enabled: false` with it; the operator's switch is still on.
+  it("counts, filters and switches an integration that failed to load by its status", async () => {
+    const [loaded, failed] = makeIntegrations(2);
+    fetchMock.mockImplementation(() =>
+      Response.json([
+        loaded,
+        {
+          ...failed,
+          name: "Acme transit",
+          enabled: false,
+          status: "failed",
+          loadState: "failed",
+          loadError: "SyntaxError",
+          loadErrorPhase: "import",
+        },
+      ]),
+    );
+    const user = userEvent.setup();
+    render(<IntegrationList />, { wrapper: createQueryWrapper() });
+
+    await screen.findByText("Acme transit");
+    expect(screen.getByRole("img", { name: "Failed to load" })).toBeInTheDocument();
+    expect(screen.getAllByRole("img", { name: "Healthy" })).toHaveLength(1);
+    expect(screen.getByText("1 unhealthy")).toBeInTheDocument();
+    expect(screen.getByText("2 enabled")).toBeInTheDocument();
+    expect(screen.getByText("0 disabled")).toBeInTheDocument();
+    const switches = screen.getAllByRole("switch");
+    expect(switches.map((control) => (control as HTMLInputElement).checked)).toEqual([true, true]);
+
+    await user.click(screen.getByText("All statuses"));
+    await user.click(await screen.findByRole("option", { name: "Unhealthy" }));
+    expect(await screen.findByText("Acme transit")).toBeInTheDocument();
+    expect(screen.queryByText("Provider 000")).toBeNull();
+  });
+
+  it("marks an integration whose code cannot run on this platform as failed to load", async () => {
+    const [failed] = makeIntegrations(1);
+    fetchMock.mockImplementation(() =>
+      Response.json([
+        {
+          ...failed,
+          enabled: false,
+          status: "failed",
+          loadState: "incompatible",
+          loadError: null,
+          loadErrorPhase: null,
+        },
+      ]),
+    );
+    render(<IntegrationList />, { wrapper: createQueryWrapper() });
+
+    expect(await screen.findAllByText("Failed to load")).toHaveLength(1);
   });
 });

@@ -1,4 +1,4 @@
-import type { SearchResult } from "@integrations/geocoding/types";
+import type { SearchResult } from "@openmapx/provider-kit/geocoding";
 
 // Connectors/articles that must not count toward query coverage (EN + DE).
 const STOPWORDS = new Set([

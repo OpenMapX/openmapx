@@ -43,6 +43,8 @@ function makeRouteCtx(): IntegrationContext & { routes: Map<string, RouteHandler
       routes.set(`${method} ${path}`, handler);
     },
     getIntegrationsByDomain: () => [],
+    getProviderOrder: () => [],
+    getProviderOrderFingerprint: () => "order",
     getRequiredService: () => ({}),
     cache: {
       async withCache<T>(_k: string, _ttl: number, fn: () => Promise<T>): Promise<T> {

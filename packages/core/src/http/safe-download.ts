@@ -15,10 +15,12 @@ import {
 } from "./fetchWithRedirects";
 import { createPinnedFetchTransport } from "./pinned-fetch";
 import { parseRetryAfterMs } from "./retry-after";
+import { SafeFetchHttpError } from "./safe-fetch-error";
 import { assertHttpProtocol, validatePublicUrl } from "./validate-url";
 
 export { hostMatchesAllowlist } from "./fetchWithRedirects";
 export { createPinnedFetchTransport } from "./pinned-fetch";
+export { SafeFetchHttpError } from "./safe-fetch-error";
 
 export interface SafeDownloadOptions {
   url: URL;
@@ -618,21 +620,6 @@ export interface SafeStatusResponse {
   status: number;
   headers: Headers;
   finalUrl: string;
-}
-
-/** Safe metadata for non-success HTTP responses; deliberately excludes their body and request headers. */
-export class SafeFetchHttpError extends Error {
-  readonly status: number;
-  readonly retryAfterSeconds: number | null;
-  readonly finalUrl: string;
-
-  constructor(status: number, finalUrl: string, retryAfterSeconds: number | null) {
-    super(`Request failed: HTTP ${status} for ${finalUrl}`);
-    this.name = "SafeFetchHttpError";
-    this.status = status;
-    this.retryAfterSeconds = retryAfterSeconds;
-    this.finalUrl = finalUrl;
-  }
 }
 
 /**

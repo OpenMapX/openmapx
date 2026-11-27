@@ -3,6 +3,7 @@ import type { BBox } from "@openmapx/core";
 import {
   captureTransitContributors,
   classifyProviderFailure,
+  collectOrderedProviders,
   type IntegrationContext,
   type MetricsRecorder,
   type ProviderCallContext,
@@ -100,15 +101,14 @@ function providerRole(
   return provider.role;
 }
 
-const ROLE_RANK = { baseline: 0, regional: 1, fallback: 2, enrichment: 3 } as const;
-
-function compareProviderPolicy(a: TransitProvider, b: TransitProvider): number {
-  return (
-    ROLE_RANK[providerRole(a)] - ROLE_RANK[providerRole(b)] ||
-    a.priority - b.priority ||
-    a.id.localeCompare(b.id)
-  );
+/** A transit planner: the integration that registered it and its provider id there. */
+export interface TransitPlanner {
+  integrationId: string;
+  providerId: string;
 }
+
+/** A plan together with the planner that was called for it. */
+export type PlannedTrip = MobilityResult<TripPlan | null> & { planner?: TransitPlanner };
 
 export class UnsupportedTransitPlanningCapabilitiesError extends Error {
   constructor(readonly capabilities: string[]) {
@@ -327,16 +327,35 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     });
   }
 
-  /** Lazily collect all transit providers from registered integrations. */
+  /**
+   * Every transit provider in served order: by role, the operator's order
+   * inside a role, then priority and id. Planning, prefix lookups and stop
+   * search all walk this one order.
+   */
   function collectProviders(): TransitProvider[] {
-    const integrations = ctx.getIntegrationsByDomain("transit");
-    const providers: TransitProvider[] = [];
-    for (const integration of integrations) {
-      for (const p of (integration.providers.get("transit") ?? []) as TransitProvider[]) {
-        providers.push(p);
-      }
-    }
-    return providers;
+    return collectOrderedProviders<TransitProvider>(ctx, "transit").map(({ provider }) => provider);
+  }
+
+  /**
+   * Who a provider is: its integration and its own id. Provider ids are unique
+   * only within an integration, so anything that must reach the same planner
+   * again keeps both.
+   */
+  function plannerOf(provider: TransitProvider): TransitPlanner | undefined {
+    const entry = collectOrderedProviders<TransitProvider>(ctx, "transit").find(
+      (candidate) => candidate.provider === provider,
+    );
+    return entry?.integrationId
+      ? { integrationId: entry.integrationId, providerId: provider.id }
+      : undefined;
+  }
+
+  /** The loaded provider a planner identity names, if it is still loaded. */
+  function findPlanner(planner: TransitPlanner): TransitProvider | undefined {
+    return collectOrderedProviders<TransitProvider>(ctx, "transit").find(
+      (entry) =>
+        entry.integrationId === planner.integrationId && entry.provider.id === planner.providerId,
+    )?.provider;
   }
 
   /**
@@ -372,10 +391,10 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   }
 
   /**
-   * Build prefix map sorted by priority (lower = higher priority) and return
-   * the first provider that both matches the id's prefix AND is currently
-   * healthy. When the highest-priority match is in cooldown but another
-   * provider shares the same prefix, we fall through to it — today most
+   * Walk the providers in served order and return the first one that both
+   * matches the id's prefix AND is currently healthy. When the first match
+   * is in cooldown but another provider shares the same prefix, we fall
+   * through to it — today most
    * prefixes are unique to a single provider so the fallback is rare, but
    * the iteration costs nothing and keeps the contract correct as new
    * providers come online.
@@ -386,8 +405,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
    */
   async function resolveByPrefix(id: string): Promise<TransitProvider | null> {
     const banned = await disallowedProviderIds();
-    const providers = collectProviders().sort((a, b) => a.priority - b.priority);
-    for (const provider of providers) {
+    for (const provider of collectProviders()) {
       if (!id.startsWith(provider.prefix)) continue;
       if (banned.has(provider.id)) continue;
       if (await providerHealth.isHealthy(provider.id)) return provider;
@@ -406,9 +424,8 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     offers: (provider: TransitProvider) => boolean,
   ): Promise<TransitProvider | "unavailable" | null> {
     const banned = await disallowedProviderIds();
-    const providers = collectProviders().sort((a, b) => a.priority - b.priority);
     let coolingDown = false;
-    for (const provider of providers) {
+    for (const provider of collectProviders()) {
       if (!id.startsWith(provider.prefix)) continue;
       if (banned.has(provider.id)) continue;
       if (await providerHealth.isHealthy(provider.id)) return provider;
@@ -449,9 +466,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   }
 
   function providersOverlapping(bbox: BBox): TransitProvider[] {
-    return collectProviders()
-      .filter((p) => providerOverlapsBbox(p, bbox))
-      .sort(compareProviderPolicy);
+    return collectProviders().filter((p) => providerOverlapsBbox(p, bbox));
   }
 
   async function getProvidersForBbox(bbox: BBox): Promise<TransitProvider[]> {
@@ -612,9 +627,9 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     context?: ProviderCallContext,
     place?: { lat: number; lng: number },
   ): Promise<MobilityResult<TransitStop[]>> {
-    const candidates = (
-      bbox ? providersOverlapping(bbox) : collectProviders().sort((a, b) => a.priority - b.priority)
-    ).filter((p) => p.searchStopsByName);
+    const candidates = (bbox ? providersOverlapping(bbox) : collectProviders()).filter(
+      (p) => p.searchStopsByName,
+    );
     const { healthy, coolingDown } = await partitionByHealth(candidates);
 
     const results = await pMapSettled(
@@ -655,10 +670,13 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     };
   }
 
-  async function planTrip(
-    params: TripPlanRequest,
-    waypointCount = 2,
-  ): Promise<MobilityResult<TripPlan | null>> {
+  /**
+   * The first plan in served order. `planner` is the provider that was called
+   * for the answer, not what the answer says about itself: a planner's
+   * `source` fields name instances and services, and differ between the plan
+   * and its itineraries.
+   */
+  async function planTrip(params: TripPlanRequest, waypointCount = 2): Promise<PlannedTrip> {
     const tripBbox: BBox = [
       Math.min(params.from.lng, params.to.lng) - 0.5,
       Math.min(params.from.lat, params.to.lat) - 0.5,
@@ -668,15 +686,13 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
 
     const matching = (await getProvidersForBbox(tripBbox)).filter((p) => p.planTrip);
     const required = requiredPlanningCapabilities(params, waypointCount);
-    const eligible = matching
-      .filter((provider) => supportsPlanningRequest(provider, required))
-      .sort(compareProviderPolicy);
+    const eligible = matching.filter((provider) => supportsPlanningRequest(provider, required));
     if (matching.length > 0 && eligible.length === 0 && required.length > 0) {
       recordDecision("plan", undefined, "unsupported");
       throw new UnsupportedTransitPlanningCapabilitiesError(required);
     }
 
-    // Waterfall: try each in priority order, return first success
+    // Waterfall: try each in served order, return first success
     for (const provider of eligible) {
       const planFn = provider.planTrip;
       if (!planFn) continue;
@@ -696,6 +712,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
           data: { ...first, provider: first.provider ?? provider.prefix.replace(/:$/, "") },
           attributions: contributorsForRecords(first.itineraries),
           freshness: res?.freshness ?? freshnessNow(),
+          planner: plannerOf(provider),
         };
       }
       // A healthy, covered baseline returning no itinerary is authoritative.
@@ -717,9 +734,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     return emptyResult<TripPlan | null>(null);
   }
 
-  async function resolveTrip(
-    input: TransitTripResolveRequest,
-  ): Promise<MobilityResult<TripPlan | null>> {
+  async function resolveTrip(input: TransitTripResolveRequest): Promise<PlannedTrip> {
     const params = parseTripReferenceRequest(input);
     const [firstLeg] = params.reference.legs;
     // parseTripReferenceRequest rejects a reference without legs.
@@ -793,17 +808,18 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
       throw new TripReferenceUnsupportedError("Exact trip source no longer permitted");
     // The route attaches one-time refresh handles; callers must not mutate a
     // cached envelope or another request's token.
-    return structuredClone(result);
+    return { ...structuredClone(result), planner: plannerOf(provider) };
   }
 
+  /** Refresh an itinerary with exactly the planner that produced it. */
   async function refreshTrip(
-    providerId: string,
+    planner: TransitPlanner,
     params: TripRefreshRequest,
   ): Promise<
     | { status: "ok" | "gone"; result: MobilityResult<TripItinerary | null> }
     | { status: "unavailable" }
   > {
-    const provider = collectProviders().find((candidate) => candidate.id === providerId);
+    const provider = findPlanner(planner);
     const gone = () => ({
       status: "gone" as const,
       result: emptyResult<TripItinerary | null>(null, { hasRealtimeData: true }),
@@ -825,11 +841,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     const outcome = await timed(providerHealth, metricsRecorder, provider.id, "refreshTrip", () =>
       fn(params),
     );
-    if (
-      (await disallowedProviderIds()).has(provider.id) ||
-      !collectProviders().some((p) => p.id === provider.id)
-    )
-      return gone();
+    if ((await disallowedProviderIds()).has(provider.id) || !findPlanner(planner)) return gone();
     if (!outcome.ok || !outcome.value.data) {
       recordDecision("refresh", provider, "refresh_fallback");
       return outcome.ok ? { status: "gone", result: outcome.value } : { status: "unavailable" };
@@ -1041,9 +1053,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     bbox: BBox,
     zoom?: number,
   ): Promise<MobilityResult<TransitRoute[]>> {
-    const matching = (await getProvidersForBbox(bbox))
-      .filter((p) => p.getRoutesInBbox)
-      .sort(compareProviderPolicy);
+    const matching = (await getProvidersForBbox(bbox)).filter((p) => p.getRoutesInBbox);
     for (const provider of matching) {
       const fn = provider.getRoutesInBbox;
       if (!fn) continue;
@@ -1291,9 +1301,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   }
 
   async function reachabilityProvider(): Promise<TransitProvider | null> {
-    const candidates = collectProviders()
-      .filter((provider) => provider.getReachabilitySurface)
-      .sort(compareProviderPolicy);
+    const candidates = collectProviders().filter((provider) => provider.getReachabilitySurface);
     const healthy = await filterHealthy(candidates);
     return healthy[0] ?? null;
   }

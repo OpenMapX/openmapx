@@ -13,7 +13,13 @@ function canonical(value: unknown): unknown {
   return value;
 }
 
-/** Hash configuration; credentials may affect identity but never appear in keys. */
+/**
+ * Hash configuration; credentials may affect identity but never appear in keys.
+ * The selected chain enters as the geocoding order fingerprint, which names the
+ * served geocoders in order and is derived from ids alone, so it holds across
+ * restarts and changes whenever the chain does, an environment override
+ * included.
+ */
 export function geocodingCacheIdentity(ctx: IntegrationContext): string {
   const providers = ctx
     .getIntegrationsByDomain("geocoding")
@@ -30,6 +36,15 @@ export function geocodingCacheIdentity(ctx: IntegrationContext): string {
     ctx.getRequiredService(key),
   ]);
   return createHash("sha256")
-    .update(JSON.stringify(canonical({ config: ctx.config, providers, services })))
+    .update(
+      JSON.stringify(
+        canonical({
+          chain: ctx.getProviderOrderFingerprint("geocoding"),
+          config: ctx.config,
+          providers,
+          services,
+        }),
+      ),
+    )
     .digest("hex");
 }

@@ -1,9 +1,9 @@
 import type { LoadedIntegration } from "@openmapx/integration-framework";
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
 import type { LngLat } from "@openmapx/mobility-core/geometry";
+import type { DirectionsResult, RoutingProvider } from "@openmapx/provider-kit/routing";
 import { describe, expect, it, vi } from "vitest";
 import { setup } from "../index.js";
-import type { DirectionsResult, RoutingProvider } from "../types.js";
 
 const COLOGNE: LngLat = [6.96, 50.94];
 const BONN: LngLat = [7.1, 50.73];
@@ -19,6 +19,7 @@ function routingIntegration(id: string, provider: RoutingProvider): LoadedIntegr
     enabled: true,
     providers: new Map([["routing", [provider]]]),
     strings: {},
+    loadState: "loaded",
     shutdownHandlers: [],
   };
 }

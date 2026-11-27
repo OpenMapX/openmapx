@@ -35,15 +35,15 @@ The main implementation boundaries are:
 An integration is a directory. Built-in integrations live under `integrations/`
 and run directly from workspace TypeScript source; community integrations live
 in the operations agent's integration store, which the API mounts at
-`custom_integrations/`, and contain declarative metadata and
-safe static assets (see
+`custom_integrations/`, and contain metadata, assets and optionally a bundled
+backend (`dist/backend/index.mjs`) (see
 [Built-in versus community](#built-in-versus-community)). The directory can contain these entry files:
 
 - **`manifest.json`**: declarative metadata. Required. This is what the host
   discovers and validates; an integration with only a manifest and no code is a
   valid (if inert) integration.
-- **`index.ts`**: the trusted built-in runtime entry point. Optional and not
-  permitted in an installable community artifact.
+- **`index.ts`**: the built-in runtime entry point; an installed integration
+  ships the bundled `dist/backend/index.mjs` instead. Optional.
   It exports a `setup(ctx)` function that the host invokes once at load time,
   passing the [`IntegrationContext`](#the-integration-context). This is where an
   integration registers providers, routes, and lifecycle hooks.
@@ -272,9 +272,9 @@ is only ever where a probe goes:
 
 - it must be the whole URL prefix of `urlTemplate`, used once, followed by a
   path or nothing; validation rejects it anywhere else, including headers;
-- only built-in integrations resolve it; a community manifest's probe is marked
-  down;
 - the operator's credentials go only to the endpoint's own origin.
+
+Built-in and installed integrations resolve it alike.
 
 The resolved instance (a self-hosted service, an integration's URL setting or
 the operator's URL) may be an internal host. Every other probe URL must be
@@ -1135,6 +1135,8 @@ interface IntegrationContext {
   onActivate(activate: () => void, rollback?: () => void): void;
   onShutdown(cleanup: () => Promise<void>): void;
   getIntegrationsByDomain(domain: string): LoadedIntegration[];
+  getProviderOrder(domain: string): readonly string[];
+  getProviderOrderFingerprint(domain: string): string;
 
   getRequiredService(key: string): { serviceId: string; url: string; enabled: boolean } | null;
   resolvePlatformEndpoint(id: PlatformEndpointId): ResolvedPlatformEndpoint | null;
@@ -1155,6 +1157,31 @@ Register cleanup as resources are created. Abort pending requests, cancel timers
 and unsubscribe listeners; prevent retired requests from publishing into new
 state.
 `getIntegrationsByDomain` lets an orchestrator enumerate its peers.
+`getProviderOrder(domain)` returns the operator's order for a domain: the
+integration ids in the `providerOrder` setting of the domain's orchestrator
+integration (`ORCHESTRATOR_BY_DOMAIN`), read even while that integration is
+disabled. `collectOrderedProviders(ctx, domain)` applies it: providers of listed
+integrations first, in list order, then all the others in the domain's fallback
+order: provider `priority` ascending for routing, weather and live transit, the
+air-quality orchestrator's own policy, street-level imagery last for photos,
+registry order elsewhere. Transit keeps its roles ahead of the list: baseline,
+regional, fallback, then enrichment providers, each role in the operator's
+order, then by `priority` and id; its planning, prefix and lookup resolution,
+stop search without a bounding box and the provider-priority lookup used to
+deduplicate stops all use that one order. Stop deduplication still ranks by
+`priority` first, so that order only breaks ties between equal priorities.
+It appends the
+others by default; a caller passes `unlisted: UNLISTED_BY_DOMAIN[domain]` (or
+`"exclude"`) to drop them, as geocoding's list is a selection. A listed
+integration that is not loaded is skipped. An order keeps each id once and at
+most 64 entries, whether it comes from stored configuration or from the
+`INTEGRATION_<ID>_PROVIDER_ORDER` override, which takes precedence; a longer one
+is cut with a warning. Operators read the served order at
+`GET /api/admin/provider-order` and change it through the orchestrator's
+configuration. `getProviderOrderFingerprint(domain)` follows the same served
+order, including the fallback part, so it changes whenever the order in which
+the domain's providers are served changes; include it in cache keys whose
+answers depend on which providers served them.
 `getRequiredService(key)` is how an integration reads a resolved requirement at
 runtime (see below). `resolvePlatformEndpoint(id)` returns the instance of a
 platform backend the integration should query, as its health checks probe it
@@ -1178,7 +1205,7 @@ attribution and freshness flow through every call unmodified.
 | `air-quality`          | `AirQualityProvider`         | Current, forecast, station and raster evidence; see [Air-quality integrations](./air-quality-integrations.md).                                      |
 | `search-suggestions`   | `SearchSuggestionProvider`   | Unified autocomplete contributions.                                                                                                                 |
 | `street-level-imagery` | `StreetLevelProvider`        | Image search, links, coverage and nearby street-level imagery.                                                                                      |
-| `routing`              | `RoutingProvider`            | Turn-by-turn directions, plus optional isochrones and map-matching.                                                                                 |
+| `routing`              | `RoutingProvider`            | Turn-by-turn directions, plus optional isochrones (`getIsochrone`), map-matching and traffic proofs (`supportsTrafficProof`).                       |
 | `transit`              | `TransitProvider`            | Stops, departures/arrivals, routes, trip planning, vehicle positions, alerts.                                                                       |
 | `live-transit`         | `RealtimeProvider`           | Realtime overlays: vehicle positions, service alerts, trip-update deltas.                                                                           |
 | `data-source`          | `MobilityDataSourceProvider` | Map data sources: bike/car/scooter sharing, and the user-facing merger over the charging-sites, parking-sites, fuel-stations and cameras providers. |
@@ -1726,12 +1753,18 @@ The host treats the two install locations differently, and the
   integration store, `infra/docker/state/ops-agent/custom-integrations/`, which
   records the SHA-256 of every file it installs; the API mounts the store
   read-only at `custom_integrations/` and serves only files that match. Their
-  manifests and safe static assets are discovered, but backend and frontend
-  JavaScript is never imported by the API: that process holds
-  database credentials and application secrets and is not a sandbox. Host and
-  Docker operations are separately owned by the operations agent. The installer rejects such entry points.
-  Backend behavior belongs in a separately containerized service component;
-  executable presentation remains disabled until a cross-origin sandbox exists. A community
+  manifests and assets are discovered, and a backend bundle the manifest
+  declares at `dist/backend/index.mjs` is verified against the recorded digest,
+  copied into the API's code cache and imported into the API process. Installed
+  backend code is trusted like a built-in: it runs with the process's database
+  credentials, application secrets and network access, so operators install only
+  integrations they trust. Before the import, the API refuses a bundle that
+  imports anything but the SDK, `zod` and Node built-ins; that check gives an
+  honest packaging mistake a clear error and is not a sandbox. A failing
+  installed integration is left out while the rest load; a failing built-in
+  aborts a reload. Host and Docker operations are separately owned by the
+  operations agent. Frontend code is still rejected; executable presentation
+  remains disabled until a cross-origin sandbox exists. A community
   integration must declare a minimum `platform` version in its manifest; if the
   running platform's major version differs, or its minor is lower, the host skips
   the integration with a warning. The platform version uses simple

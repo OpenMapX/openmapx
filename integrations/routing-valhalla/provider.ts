@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { drivingSideIn } from "./driving-side.js";
+import { requestValhallaIsochrone } from "./isochrone.js";
 import { type CoverageTraceResponse, traceRouteCoverage } from "./live-coverage.js";
 import { readTrafficProof } from "./traffic-proof.js";
 /**
@@ -21,6 +22,8 @@ import type {
 import { decodePolyline } from "@openmapx/core";
 import type { HttpClient } from "@openmapx/integration-framework";
 import type {
+  IsochroneResult,
+  IsochroneTravelMode,
   ManeuverLane,
   ManeuverSign,
   MatchEdge,
@@ -30,7 +33,7 @@ import type {
   MatchTracePoint,
   RoutingOptions,
   RoutingProvider,
-} from "@openmapx/integration-routing/types";
+} from "@openmapx/provider-kit/routing";
 import {
   sanitizeValhallaExclusions,
   type LngLat as ValhallaLngLat,
@@ -1072,6 +1075,8 @@ export function createValhallaService(
     supportsTimeAware: true,
     supportsExclusions: true,
     supportsDirectedExclusions: true,
+    // A self-hosted engine answers with the live-traffic writer's proof.
+    supportsTrafficProof: true,
     temporal: {
       tripDepartAt: "native",
       tripArriveBy: "native",
@@ -1330,6 +1335,20 @@ export function createValhallaService(
             ? null
             : { seconds: cell.time, km: cell.distance },
         ),
+      );
+    },
+
+    getIsochrone(
+      origin: [number, number],
+      mode: IsochroneTravelMode,
+      contourMinutes: number[],
+    ): Promise<IsochroneResult> {
+      return requestValhallaIsochrone(
+        valhallaClient(http, settings()),
+        costingFor(mode),
+        origin,
+        mode,
+        contourMinutes,
       );
     },
   };

@@ -1,8 +1,8 @@
+import type { ResolvedPlatformEndpoint } from "@openmapx/core";
 import {
   platformEndpointServiceId,
-  type ResolvedPlatformEndpoint,
   resolvePlatformEndpoint,
-} from "@openmapx/core";
+} from "@openmapx/core/utils/platform-endpoints";
 import type { PlatformEndpointId } from "@openmapx/extension-contracts";
 
 export interface PlatformEndpointIntegration {

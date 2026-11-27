@@ -3,9 +3,9 @@ import {
   parseNavigationSessionSnapshot,
 } from "@openmapx/core/navigation";
 import { nth } from "@openmapx/integration-framework/testing";
+import type { Route, RouteStep } from "@openmapx/provider-kit/routing";
 import { describe, expect, it } from "vitest";
 import { concatenateRoutes } from "../route-concat.js";
-import type { Route, RouteStep } from "../types.js";
 
 function step(instruction: string): RouteStep {
   return { instruction, distance: 100, duration: 60, coordinates: [] };

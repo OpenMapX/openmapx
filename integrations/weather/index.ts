@@ -24,9 +24,12 @@ export function setup(ctx: IntegrationContext): void {
       units: (scalarQueries(req.query).units as "metric" | "imperial") ?? "metric",
     };
 
-    const key = `weather:current:contributors-v2:${roundCoord2(lat)},${roundCoord2(lng)}:${options.units}`;
-
     try {
+      // As for the forecast: a policy change must reacquire from eligible
+      // fallbacks instead of replaying a supplier the policy now disallows.
+      const disallowed = (await ctx.getDisallowedSourceIds?.()) ?? new Set<string>();
+      const policyKey = JSON.stringify([...disallowed].sort());
+      const key = `weather:current:contributors-v2:${roundCoord2(lat)},${roundCoord2(lng)}:${options.units}:${policyKey}:${ctx.getProviderOrderFingerprint("weather")}`;
       const result = await ctx.cache.withCache(key, 300, async () => {
         const data = await orchestrator.getCurrentWeather(coords, options);
         if (!data) throw new Error("No weather data available");
@@ -61,7 +64,7 @@ export function setup(ctx: IntegrationContext): void {
       // replaying a cached supplier the host response filter would remove.
       const disallowed = (await ctx.getDisallowedSourceIds?.()) ?? new Set<string>();
       const policyKey = JSON.stringify([...disallowed].sort());
-      const key = `weather:forecast:contributors-v1:${roundCoord2(lat)},${roundCoord2(lng)}:${hours}:${days}:${options.units}:${policyKey}`;
+      const key = `weather:forecast:contributors-v1:${roundCoord2(lat)},${roundCoord2(lng)}:${hours}:${days}:${options.units}:${policyKey}:${ctx.getProviderOrderFingerprint("weather")}`;
       const result = await ctx.cache.withCache(key, 600, async () => {
         const [hourly, daily] = await Promise.all([
           orchestrator.getHourlyForecast(coords, hours, options),

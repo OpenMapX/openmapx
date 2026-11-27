@@ -172,9 +172,14 @@ function roundWaypoints(waypoints: [number, number][]): [number, number][] {
   return waypoints.map((waypoint) => [round(waypoint[0], 4), round(waypoint[1], 4)]);
 }
 
+/**
+ * `providerOrder` is the routing engines' order fingerprint, so answers an
+ * engine served before the operator reordered the engines are not reused.
+ */
 export function createDirectionsCacheIdentity(
   request: ParsedDirectionsRequest,
   exclusionsHash: string | null,
+  providerOrder: string,
 ): Record<string, unknown> {
   const { routingOptions } = request;
   return {
@@ -189,6 +194,7 @@ export function createDirectionsCacheIdentity(
     lang: routingOptions.lang ?? "en",
     mode: request.travelMode,
     ...(request.provider && { provider: request.provider }),
+    providerOrder,
     ...(request.operation === "optimize" ? { optimize: true } : {}),
     units: routingOptions.units,
     waypoints: roundWaypoints(request.waypoints),

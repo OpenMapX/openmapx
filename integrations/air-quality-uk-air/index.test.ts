@@ -2,10 +2,11 @@ import { createMockIntegrationContext } from "@openmapx/integration-framework/te
 import { describe, expect, it } from "vitest";
 
 import { setup } from "./index.js";
+import manifest from "./manifest.json";
 
 describe("UK-AIR integration", () => {
   it("registers its canonical air-quality provider", () => {
-    const ctx = createMockIntegrationContext();
+    const ctx = createMockIntegrationContext({ manifest: manifest as never });
     setup(ctx);
     expect(ctx.registered.airQuality).toHaveLength(1);
     expect(ctx.registered.airQuality[0]).toMatchObject({

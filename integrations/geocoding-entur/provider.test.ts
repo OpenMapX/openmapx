@@ -348,6 +348,7 @@ it.each(["deadline", "caller"] as const)(
         enabled: true,
         providers: new Map([["search-suggestions", [provider]]]),
         strings: {},
+        loadState: "loaded",
         shutdownHandlers: [],
       },
     ];

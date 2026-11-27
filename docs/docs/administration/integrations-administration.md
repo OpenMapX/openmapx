@@ -49,6 +49,13 @@ and reloads integrations. Use Credentials for secrets and the enable/disable
 control for `enabled`. An API save failure can leave an unknown host outcome;
 inspect the returned error and current state before trying again.
 
+An orchestrator integration (routing, geocoding, weather, POI search and the
+others that combine providers) shows a **Provider order** control above the
+form. Move entries to change which provider is asked first; a geocoder must be
+added to be used at all. An entry that is not loaded keeps its place and is used
+again once it loads. An order set by `INTEGRATION_<ID>_PROVIDER_ORDER` or
+`config.json` is shown read-only.
+
 ### The config cascade
 
 Each setting's effective value is resolved through a layered cascade. The
@@ -192,6 +199,12 @@ roll up into a single signal: any sub-check down makes the integration down,
 otherwise any up makes it up. Probe history is retained, so the
 [Monitoring](./monitoring.md) view can show trends rather than just the current
 state.
+
+An integration whose code failed to load shows **Failed to load** in the list
+and a red status that outranks any health result, and counts as enabled and
+unhealthy, in the list and on the overview. Its detail page names the step that
+failed (import, setup or deadline) and the error. It is still switched on, so the page offers **Reload** to try
+loading it again after a fix, and **Disable** to stop loading it.
 
 :::note[Health checks must target public hosts]
 Public status uses the scheduled health snapshot. To prevent server-side requests to arbitrary internal targets, a manifest's external `healthCheck` URL or TCP target must resolve to a public host. A check pointed at

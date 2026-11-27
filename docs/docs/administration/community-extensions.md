@@ -7,17 +7,23 @@ sidebar_position: 4
 # Community extensions
 
 Install community components through **Admin → Extensions** or
-`pnpm openmapx ext`. An extension can contain declarative integration artifacts,
-container services, or both.
+`pnpm openmapx ext`. An extension can contain integration artifacts, container
+services, or both. An integration artifact can include backend code.
 
 :::warning[Review third-party code and access]
 
-Service containers execute third-party code. The sandbox restricts their host
-access, but does not audit their behavior. Installable integration artifacts
-cannot contain backend or frontend runtime entry points; community presentation
-execution remains disabled. A verified catalog entry establishes identity and
-validation of exact bytes, not a security audit. Review the service commit,
-container image, credentials, network access and host ports before installation.
+An integration's backend code (`dist/backend/index.mjs`) runs inside the
+OpenMapX API process, with the same access as a built-in integration: to this
+instance, its database, its credentials and its users' data. The host does not
+sandbox it. Before loading a bundle, the API checks its imports and refuses one
+that imports unbundled packages or OpenMapX internals; that check catches
+packaging mistakes and is not a security boundary. Install only integrations you
+trust. Service containers also execute third-party code; their sandbox restricts
+host access but does not audit their behavior. Frontend code from community
+integrations is still rejected. A verified catalog entry means a maintainer
+reviewed that exact version and the host checks its pinned bytes; it is not a
+security audit. Review the integration source, service commit, container image,
+credentials, network access and host ports before installation.
 
 :::
 
@@ -63,7 +69,8 @@ the manifest and everything it references at the pinned revisions:
   omitted ref, and the reviewer has read the code and `Dockerfile` at that commit.
 - The container image, requested host ports, bind mounts, environment and
   credentials, and outbound network access are what the extension's purpose needs.
-- Each integration artifact contains no backend or frontend runtime entry point,
+- Each integration artifact contains no frontend runtime entry point, the
+  reviewer has read its backend bundle (`dist/backend/index.mjs`) and its source,
   and its files match the digest.
 - The extension states the license and attribution of the data it serves.
 
@@ -103,11 +110,12 @@ URL. Direct URL installs always have community trust.
 
 ## Standalone integrations
 
-Use **Extensions → Install integration** for a declarative integration that has
-no `extension.json` bundle. Choose an HTTPS repository and optional ref, an HTTPS
+Use **Extensions → Install integration** for an integration that has no
+`extension.json` bundle. Choose an HTTPS repository and optional ref, an HTTPS
 artifact URL with its SHA-256, or a local `.tar.gz` archive. Archives are limited
-to 200 MiB compressed and expanded. Symbolic links, executable community modules,
-incompatible protocols and unsafe archive paths are rejected.
+to 200 MiB compressed and expanded. Symbolic links, frontend code, incompatible
+protocols and unsafe archive paths are rejected. A backend bundle is accepted and
+runs in the API process with full access, so install only integrations you trust.
 
 **Review source** prepares the exact bytes without replacing the installed
 integration. Check the integration ID, version, content digest and resolved Git
@@ -301,8 +309,9 @@ from what its manifest declares: published host ports lower it, auth-in-front
 and an owned (scoped) database schema raise it, while privileged/deployment-variable declarations lower it. The score is clamped
 to the 1 to 8 range. Prohibited community declarations still fail installation
 regardless of score; the rating does not assess executable code. Integrations get
-no numeric rating because installable integration artifacts are declarative-only;
-their companion services use the service rating instead.
+no numeric rating: an integration's backend code runs in the API process with
+full access, which no declaration score can express. Their companion services use
+the service rating instead.
 
 ### Install-time hardening
 
@@ -312,10 +321,12 @@ and their extracted contents are each capped at 200 MiB; an artifact must be a
 gzip-compressed tar; tar extraction accepts
 only regular files and directories, so it refuses path escapes (zip-slip),
 absolute paths and every symbolic or hard link; and an artifact shipping a
-`node_modules/` directory is rejected. Backend and frontend runtime
-entry points are also rejected; executable behavior must move into an isolated
-service. These reduce the blast radius of a
-malformed archive. They cannot establish that the author's code is safe.
+`node_modules/` directory is rejected. Frontend runtime entry points are also
+rejected. A backend bundle is accepted only at `dist/backend/index.mjs`, together
+with `migrations/*.sql` (stored with the integration; a later release applies
+them) and `assets/**`, within the archive limits, and runs in
+the API process with full access. These reduce the blast radius of a malformed
+archive. They cannot establish that the author's code is safe.
 
 The agent also refuses an archive it would not load, before it replaces
 anything:

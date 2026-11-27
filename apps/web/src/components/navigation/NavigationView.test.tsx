@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
-import type { Route } from "@integrations/routing/types";
 import { useNavigationStore, useSettingsStore } from "@openmapx/core";
 import {
   NavIncidentContext,
   type NavIncidentResource,
 } from "@openmapx/integration-framework/react";
+import type { Route } from "@openmapx/provider-kit/routing";
 import { act, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createQueryWrapper } from "@/test";
