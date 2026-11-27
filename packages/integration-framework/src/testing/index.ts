@@ -771,7 +771,7 @@ export function createMockIntegrationContext(
         scheduleRegistrationProblem(name, options, handler) ??
         (options.cron === undefined ? null : cronShapeProblem(name, options.cron));
       if (problem) throw new Error(problem);
-      if (registered.tasks.some((task) => task.name === name)) {
+      if (registered.tasks.some((scheduled) => scheduled.name === name)) {
         throw new Error(`Scheduled task ${name} is already scheduled by ${ctx.id}`);
       }
       registered.tasks.push({ name, options: { ...options }, handler });
