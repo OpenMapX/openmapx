@@ -76,6 +76,39 @@ describe("createMockIntegrationContext", () => {
     await expect(later).resolves.toBe("later");
   });
 
+  it("runs one transaction at a time, in the order they were called, as the host does", async () => {
+    const events: string[] = [];
+    let finishFirst!: () => void;
+    const firstGate = new Promise<void>((resolve) => {
+      finishFirst = resolve;
+    });
+    const db = createMockIntegrationContext({
+      db: {
+        execute: async <T>() => [] as T,
+        transaction: <T>(fn: (tx: { execute: <R>() => Promise<R> }) => Promise<T>) =>
+          fn({ execute: async <R>() => [] as R }),
+      },
+    }).db;
+
+    const first = db?.transaction(async () => {
+      events.push("first started");
+      await firstGate;
+      events.push("first finished");
+      throw new Error("first failed");
+    });
+    const second = db?.transaction(async () => {
+      events.push("second started");
+      return "second";
+    });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(events).toEqual(["first started"]);
+
+    finishFirst();
+    await expect(first).rejects.toThrow("first failed");
+    await expect(second).resolves.toBe("second");
+    expect(events).toEqual(["first started", "first finished", "second started"]);
+  });
+
   it("refuses at registration the providers the host refuses", () => {
     const ctx = createMockIntegrationContext({ id: "demo" });
     const weather = {

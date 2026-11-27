@@ -78,10 +78,18 @@ export function warnAfterUnload(scope: IntegrationScope, method: string, log: Lo
 
 /**
  * The longest the host waits for one shutdown handler of an installed
- * integration, so that none can hold up start-up, a reload or the process's
- * shutdown.
+ * integration when that integration is left out or a reload retires it, so
+ * that none can hold up start-up or a reload.
  */
 export const SHUTDOWN_HANDLER_DEADLINE_MS = 10_000;
+
+/**
+ * The longest the host waits, in all, for the shutdown handlers of every
+ * installed integration as the process stops. They run side by side, and the
+ * budget stays well inside the container's stop grace period, so the
+ * database pools still close before the process is killed.
+ */
+export const PROCESS_SHUTDOWN_BUDGET_MS = 5_000;
 
 /** A `setup` still running after this long is named in a warning. */
 export const SETUP_WARNING_MS = 10_000;

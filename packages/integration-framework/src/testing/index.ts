@@ -365,12 +365,16 @@ function unstubbedDatabase(
 }
 
 /**
- * `db` with the host's transaction rule: a `transaction` started inside the
+ * `db` with the host's transaction rules: transactions run one at a time, in
+ * the order they were called, and a `transaction` started inside the
  * callback of another one is refused, as the host refuses it, so a test
- * catches a nested call that would wait forever in the host.
+ * catches a nested call that would wait forever in the host and never passes
+ * on an interleaving the host does not produce.
  */
 function withHostTransactionRules(db: DatabaseClient): DatabaseClient {
   const insideTransaction = new AsyncLocalStorage<{ open: boolean }>();
+  // Settles once the last transaction called so far has settled.
+  let queue: Promise<unknown> = Promise.resolve();
   return {
     execute: (...args) => db.execute(...args),
     transaction: (fn, options) => {
@@ -382,11 +386,13 @@ function withHostTransactionRules(db: DatabaseClient): DatabaseClient {
         );
       }
       const inside = { open: true };
-      return Promise.resolve(
-        db.transaction((tx) => insideTransaction.run(inside, () => fn(tx)), options),
-      ).finally(() => {
-        inside.open = false;
-      });
+      const result = queue
+        .then(() => db.transaction((tx) => insideTransaction.run(inside, () => fn(tx)), options))
+        .finally(() => {
+          inside.open = false;
+        });
+      queue = result.catch(() => {});
+      return result;
     },
     ...(db.schema === undefined ? {} : { schema: db.schema }),
   };

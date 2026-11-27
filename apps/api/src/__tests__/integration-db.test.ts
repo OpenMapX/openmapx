@@ -275,7 +275,10 @@ describe("integration ctx.db", () => {
     expect(outcomes).toEqual([]);
     await vi.advanceTimersByTimeAsync(1);
 
-    expect(await outcome).toBeInstanceOf(ProviderTimeoutError);
+    const error = await outcome;
+    expect(error).toBeInstanceOf(ProviderTimeoutError);
+    // The callback was running: no wait for a connection is involved.
+    expect((error as Error).message).not.toMatch(/waiting for a database connection/);
     expect(cancel).toHaveBeenCalledOnce();
     expect(outcomes).toEqual(["rollback"]);
   });

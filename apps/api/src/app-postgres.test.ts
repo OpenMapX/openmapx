@@ -302,7 +302,9 @@ describeDatabase("the real application from createApp()", () => {
 
     const healthRefreshes = [...timers.values()].filter(
       (timer) =>
-        timer.origin.includes("integration-host") && [5_000, 60_000].includes(timer.delay ?? 0),
+        timer.origin.includes("startIntegrationHealthRefresh") &&
+        timer.origin.includes("integration-host") &&
+        [5_000, 60_000].includes(timer.delay ?? 0),
     );
     expect(healthRefreshes.map((timer) => timer.kind).sort()).toEqual(["interval", "timeout"]);
     expect(pendingTimers()).toEqual([]);

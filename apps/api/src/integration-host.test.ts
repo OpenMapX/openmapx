@@ -1708,11 +1708,11 @@ describe("initIntegrations — loader", () => {
         await work;
       }
 
-      it("does not let a shutdown handler that never settles hold up a reload or shutdown", async () => {
+      it("does not let a shutdown handler that never settles hold up a reload", async () => {
         writeInstalled(
           "stuck-shutdown",
           [
-            "// does not let a shutdown handler that never settles hold up a reload or shutdown",
+            "// does not let a shutdown handler that never settles hold up a reload",
             "export function setup(ctx) {",
             "  globalThis.__omxInstalledSetups = (globalThis.__omxInstalledSetups ?? 0) + 1;",
             "  ctx.onShutdown(() => {",
@@ -1740,18 +1740,67 @@ describe("initIntegrations — loader", () => {
         await settlesPastHungShutdownHandler(shutdownIntegrations(), 3);
 
         expect(g.__omxInstalledSetups).toBe(3);
-        expect(g.__omxInstalledLaterHandlers).toBe(3);
+        expect(g.__omxInstalledLaterHandlers).toBe(2);
         expect(
           warn.mock.calls
             .map(([, message]) => String(message))
-            .filter((message) => message.includes("did not finish")),
+            .filter((message) => message.startsWith("A shutdown handler")),
         ).toEqual(
           Array.from(
-            { length: 3 },
+            { length: 2 },
             () =>
               "A shutdown handler of integration stuck-shutdown did not finish within 10 seconds; going on without it",
           ),
         );
+      });
+
+      it("gives the shutdown handlers of installed integrations one budget in all at process shutdown", async () => {
+        const hangingOnShutdown = (id: string) => [
+          `// gives the shutdown handlers of installed integrations one budget in all: ${id}`,
+          "export function setup(ctx) {",
+          "  ctx.onShutdown(() => {",
+          "    globalThis.__omxInstalledHangs = (globalThis.__omxInstalledHangs ?? 0) + 1;",
+          "    return new Promise(() => {});",
+          "  });",
+          "}",
+        ];
+        writeInstalled("stuck-a", hangingOnShutdown("stuck-a").join("\n"));
+        writeInstalled("stuck-b", hangingOnShutdown("stuck-b").join("\n"));
+        writeInstalled(
+          "tidy",
+          [
+            "// gives the shutdown handlers of installed integrations one budget in all: tidy",
+            "export function setup(ctx) {",
+            "  ctx.onShutdown(async () => { globalThis.__omxInstalledTidied = true; });",
+            "}",
+          ].join("\n"),
+        );
+        const warn = vi.fn();
+        const app = makeApp();
+        // biome-ignore lint/suspicious/noExplicitAny: test-only log patch
+        (app as any).log = { info: vi.fn(), warn, error: vi.fn(), debug: vi.fn() };
+        await initIntegrations(app, [installed()]);
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+        let settled = false;
+        const shutdown = shutdownIntegrations().then(() => {
+          settled = true;
+        });
+        await vi.advanceTimersByTimeAsync(4_999);
+        expect(g.__omxInstalledHangs).toBe(2);
+        expect(settled).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        await shutdown;
+
+        expect(g.__omxInstalledTidied).toBe(true);
+        expect(
+          warn.mock.calls.filter(([, message]) => String(message).includes("did not finish")),
+        ).toEqual([
+          [
+            { integrationIds: ["stuck-a", "stuck-b"] },
+            "Shutdown handlers of integrations stuck-a, stuck-b did not finish within 5 seconds in all; shutting down without them",
+          ],
+        ]);
       });
 
       it("does not let a shutdown handler that never settles hold up start-up when its integration is left out", async () => {

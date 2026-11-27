@@ -1233,8 +1233,12 @@ local to `setup` where possible.
 `onShutdown` registers cleanup run when a generation retires or is discarded.
 Register cleanup as resources are created. Abort pending requests, cancel timers
 and unsubscribe listeners; prevent retired requests from publishing into new
-state. The host waits at most 10 seconds for each handler of an installed
-integration, logs a warning naming the integration, and goes on without it.
+state. When a reload retires an installed integration or it is left out, the
+host waits at most 10 seconds for each of its handlers, logs a warning naming
+the integration, and goes on without it. When the API process stops, the
+installed integrations run their handlers side by side, each its own in
+order, and all of them share 5 seconds in total; the host then logs the
+integrations still running and shuts down without them.
 `getIntegrationsByDomain` lets an orchestrator enumerate its peers.
 `getProviderOrder(domain)` returns the operator's order for a domain: the
 integration ids in the `providerOrder` setting of the domain's orchestrator

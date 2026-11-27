@@ -70,6 +70,7 @@ import {
   currentIntegrationScope,
   type IntegrationScope,
   ignoredAfterUnload,
+  PROCESS_SHUTDOWN_BUDGET_MS,
   runInIntegrationScope,
   SETUP_DEADLINE_MS,
   SETUP_WARNING_MS,
@@ -985,8 +986,8 @@ const hostLog: Logger = (() => {
  * Runs an integration's shutdown handlers one after another and passes each
  * failure to `onError`. A handler of an installed integration is awaited for
  * at most `SHUTDOWN_HANDLER_DEADLINE_MS` and then left running, so none can
- * hold up start-up, the reload queue or the process's shutdown. A built-in's
- * handlers are awaited to their end.
+ * hold up start-up or the reload queue. A built-in's handlers are awaited to
+ * their end. The process's shutdown uses `shutdownIntegrations` instead.
  */
 async function runShutdownHandlers(
   integration: Pick<LoadedIntegration, "id" | "isBuiltIn">,
@@ -1957,11 +1958,60 @@ async function doReloadIntegrations(
   };
 }
 
+/**
+ * Runs the shutdown handlers of every integration as the process stops. Each
+ * installed integration runs its handlers in order, side by side with the
+ * other installed integrations, and all of them share
+ * `PROCESS_SHUTDOWN_BUDGET_MS`: once it is spent, the integrations still
+ * running are named in a warning and shutdown goes on without them. A
+ * built-in's handlers are awaited to their end.
+ */
 export async function shutdownIntegrations(): Promise<void> {
+  const pending = new Set<string>();
+  const installedRuns: Promise<void>[] = [];
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const budgetSpent = new Promise<void>((resolve) => {
+    timer = setTimeout(() => {
+      if (pending.size > 0) {
+        const integrationIds = [...pending].sort();
+        hostLog.warn(
+          `Shutdown handlers of integrations ${integrationIds.join(", ")} did not finish within ${PROCESS_SHUTDOWN_BUDGET_MS / 1000} seconds in all; shutting down without them`,
+          { integrationIds },
+        );
+      }
+      resolve();
+    }, PROCESS_SHUTDOWN_BUDGET_MS);
+    timer.unref?.();
+  });
+  const builtIns: LoadedIntegration[] = [];
   for (const integration of integrations.values()) {
     eventBus.emit({ type: "integration.unloaded", integrationId: integration.id });
     revokeInstalledScope(integration);
-    await runShutdownHandlers(integration, integration.shutdownHandlers, () => {});
+    if (integration.isBuiltIn) {
+      builtIns.push(integration);
+      continue;
+    }
+    pending.add(integration.id);
+    installedRuns.push(
+      (async () => {
+        for (const handler of integration.shutdownHandlers) {
+          try {
+            // A handler that throws at once fails like one whose promise rejects.
+            await new Promise<void>((run) => run(handler()));
+          } catch {
+            // A failing handler does not keep the integration's others from running.
+          }
+        }
+        pending.delete(integration.id);
+      })(),
+    );
+  }
+  try {
+    for (const integration of builtIns)
+      await runShutdownHandlers(integration, integration.shutdownHandlers, () => {});
+    await Promise.race([Promise.all(installedRuns), budgetSpent]);
+  } finally {
+    clearTimeout(timer);
   }
   integrations.clear();
   providerOrders = new Map();
