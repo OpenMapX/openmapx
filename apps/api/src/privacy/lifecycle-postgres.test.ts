@@ -13,6 +13,7 @@ import { createMigratedPostgresFixture } from "../test/postgres-fixture.js";
 import { SUBJECT_DATA_CATALOGUE } from "./catalogue.js";
 import { runPrivacyDatabaseCleanup } from "./cleanup.js";
 import { schedulePrivacyDeadlineReminders } from "./deadline-reminders.js";
+import { preservationAllowsDeletion } from "./preservation.js";
 import { PrivacyRequestService } from "./request-service.js";
 
 const OPERATOR_SOURCES = SUBJECT_DATA_CATALOGUE.filter((r) => r.strategy === "operator_task")
@@ -374,6 +375,18 @@ suite("privacy request lifecycle on PostgreSQL", () => {
     ]);
   });
 
+  async function holds(requestId: string) {
+    return fixture.db
+      .select({
+        registrationId: dataSubjectRequestPreservation.registrationId,
+        status: dataSubjectRequestPreservation.status,
+        releasedAt: dataSubjectRequestPreservation.releasedAt,
+      })
+      .from(dataSubjectRequestPreservation)
+      .where(eq(dataSubjectRequestPreservation.requestId, requestId))
+      .orderBy(dataSubjectRequestPreservation.registrationId);
+  }
+
   async function events(requestId: string) {
     return fixture.db
       .select({
@@ -461,6 +474,8 @@ suite("privacy request lifecycle on PostgreSQL", () => {
       timeZone: "UTC",
     });
     expect(started.id).toBe(request.id);
+    const holdsBefore = await holds(request.id);
+    expect(holdsBefore.some((hold) => hold.status === "held")).toBe(true);
     const completed = await service().recordDecision({
       requestId: request.id,
       version: (await service().getById(request.id)).version,
@@ -501,10 +516,61 @@ suite("privacy request lifecycle on PostgreSQL", () => {
         .filter((task) => task.status === "open")
         .map((task) => task.registrationId),
     ).toEqual(["extension:acme-tracker"]);
+    // Completing released the case's retention holds; the reopened case holds
+    // its rows again, so a repeat export finds what a case open throughout would.
+    expect(await holds(request.id)).toEqual(holdsBefore);
+    const held = holdsBefore.find((hold) => hold.status === "held");
+    assert(held);
+    const [guard] = await fixture.db.execute<{ allowed: boolean }>(
+      sql`select ${preservationAllowsDeletion({
+        registrationId: held.registrationId,
+        candidateTimestamp: sql`${new Date("2026-03-01T11:00:00Z").toISOString()}::timestamptz`,
+        subjectIds: [sql`${userId}`],
+      })} as allowed`,
+    );
+    expect(guard?.allowed).toBe(false);
     // The download that follows leaves the case with the administrator.
     expect((await service().finishExport(request.id, { kind: "subject", id: userId })).status).toBe(
       "in_progress",
     );
+  });
+
+  it("refuses the late export of a completed case once the person opened a new request of its kind", async () => {
+    const userId = await subject();
+    const request = await service().create({
+      userId,
+      kind: "portability",
+      channel: "self_service",
+      locale: "en",
+      timeZone: "UTC",
+    });
+    await resolveAll(request.id);
+    const completed = await service().recordDecision({
+      requestId: request.id,
+      version: (await service().getById(request.id)).version,
+      decision: "completed",
+      reasonCode: "data-provided",
+      actorId: ADMINS[0],
+      idempotencyKey: `complete-before-new-${request.id}`,
+    });
+    const newer = await service().create({
+      userId,
+      kind: "portability",
+      channel: "self_service",
+      locale: "en",
+      timeZone: "UTC",
+    });
+    expect(newer.id).not.toBe(request.id);
+
+    await expect(
+      service().recordExtensionsLeftOut(request.id, [
+        { integrationId: "acme-tracker", warningCode: "extension-handler-failed" },
+      ]),
+    ).rejects.toMatchObject({ code: "REQUEST_NOT_ACTIVE", statusCode: 409 });
+    expect(await service().getById(request.id)).toMatchObject({
+      status: "completed",
+      version: completed.version,
+    });
   });
 
   it("refuses to open extension tasks on a refused case", async () => {

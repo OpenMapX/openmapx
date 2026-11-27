@@ -71,8 +71,11 @@ export const adminIntegrationSummarySchema = z.strictObject({
   isBuiltIn: z.boolean(),
   loadState: z.enum(["loaded", "disabled", "incompatible", "failed", "safe-mode"]),
   loadError: z.string().nullable(),
-  /** The step at which the integration's code failed to load, beside `loadError`. */
-  loadErrorPhase: z.enum(["import", "migrate", "setup", "deadline"]).nullable(),
+  /**
+   * The step at which the integration's code failed to load, beside
+   * `loadError`; `platform` when the host could not try its code at all.
+   */
+  loadErrorPhase: z.enum(["import", "migrate", "setup", "deadline", "platform"]).nullable(),
   /**
    * One status every client shows: `failed` when its code could not load (so
    * no health check result can make it healthy), `disabled` when the operator

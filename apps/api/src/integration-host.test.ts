@@ -2582,12 +2582,12 @@ describe("initIntegrations — loader", () => {
         expect(getIntegration("installed-demo")).toMatchObject({
           enabled: false,
           loadState: "failed",
-          loadError: { phase: "import", message: "could not read extension state" },
+          loadError: { phase: "platform", message: "could not read extension state" },
         });
         expect(g.__omxInstalledEvaluated).toBeUndefined();
         expect(getIntegration("built-in-demo")?.loadState).toBe("loaded");
         expect(failedIntegrationLoads(["installed-demo"])).toEqual([
-          { id: "installed-demo", phase: "import", message: "could not read extension state" },
+          { id: "installed-demo", phase: "platform", message: "could not read extension state" },
         ]);
       });
 
@@ -2604,7 +2604,7 @@ describe("initIntegrations — loader", () => {
 
         expect(getIntegration("installed-demo")).toMatchObject({
           loadState: "failed",
-          loadError: { phase: "import", message: "could not read extension state" },
+          loadError: { phase: "platform", message: "could not read extension state" },
         });
         expect(getIntegration("built-in-demo")?.loadState).toBe("loaded");
       });
@@ -2646,17 +2646,19 @@ describe("initIntegrations — loader", () => {
         expect(resolver).toHaveBeenCalledTimes(1);
         expect(getIntegration("installed-demo")).toMatchObject({
           loadState: "failed",
-          loadError: { phase: "import", message: "could not read extension state" },
+          loadError: { phase: "platform", message: "could not read extension state" },
         });
         expect(getIntegration("built-in-demo")?.loadState).toBe("loaded");
       });
 
-      it("lets the place links of an integration it holds back fall back like a switched-off one", async () => {
+      it("lets only the place links of an operator-disabled extension fall back to coordinates", async () => {
         writeInstalled("held-safe", recording("held back: safe mode"));
         initSafeMode({ OPENMAPX_SAFE_MODE: "1" }, runtimeDir);
         await initIntegrations(makeApp(), [installed()]);
         expect(getIntegration("held-safe")?.loadState).toBe("safe-mode");
-        expect(isEnabledIntegrationScheme("held-safe")).toBe(false);
+        // A transient hold keeps refusing a substitute place, which would be
+        // cached under the extension's id after it loads again.
+        expect(isEnabledIntegrationScheme("held-safe")).toBe(true);
 
         initSafeMode({}, runtimeDir);
         writeInstalled("held-disabled", recording("held back: disabled"));
@@ -2673,7 +2675,7 @@ describe("initIntegrations — loader", () => {
         expect(getIntegration("held-disabled")?.loadState).toBe("disabled");
         expect(getIntegration("held-incompatible")?.loadState).toBe("incompatible");
         expect(isEnabledIntegrationScheme("held-disabled")).toBe(false);
-        expect(isEnabledIntegrationScheme("held-incompatible")).toBe(false);
+        expect(isEnabledIntegrationScheme("held-incompatible")).toBe(true);
         // Code that ran and failed keeps refusing a substitute place.
         expect(getIntegration("loads-and-throws")?.loadState).toBe("failed");
         expect(isEnabledIntegrationScheme("loads-and-throws")).toBe(true);
@@ -2686,7 +2688,7 @@ describe("initIntegrations — loader", () => {
           loadState: "failed",
           loadError: { message: "could not read extension state" },
         });
-        expect(isEnabledIntegrationScheme("held-safe")).toBe(false);
+        expect(isEnabledIntegrationScheme("held-safe")).toBe(true);
       });
 
       it("marks what safe mode held back as failed when the reload after leaving it fails", async () => {
@@ -2700,7 +2702,7 @@ describe("initIntegrations — loader", () => {
           enabled: false,
           loadState: "failed",
           loadError: {
-            phase: "import",
+            phase: "platform",
             message: "not loaded: the reload after leaving safe mode failed (disk full)",
           },
         });
@@ -2720,13 +2722,14 @@ describe("initIntegrations — loader", () => {
         await vi.advanceTimersByTimeAsync(24_999);
         expect(settled).toBe(false);
         await vi.advanceTimersByTimeAsync(1);
-        // Without the bound this never settles and the test times out.
+        // Fails in two seconds, not at the test timeout, when the bound is gone.
+        await vi.waitFor(() => expect(settled).toBe(true), { timeout: 2_000 });
         await booting;
 
         expect(getIntegration("installed-demo")).toMatchObject({
           enabled: false,
           loadState: "failed",
-          loadError: { phase: "import", message: "could not read extension state" },
+          loadError: { phase: "platform", message: "could not read extension state" },
         });
         expect(g.__omxInstalledEvaluated).toBeUndefined();
         expect(getIntegration("built-in-demo")?.loadState).toBe("loaded");

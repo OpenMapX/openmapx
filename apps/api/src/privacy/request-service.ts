@@ -986,80 +986,109 @@ export class PrivacyRequestService {
     const taskIds = leftOut.map(
       ({ integrationId }) => `${EXTENSION_LOGICAL_ID_PREFIX}${integrationId}`,
     );
-    await this.database.transaction(async (tx) => {
-      const [current] = await tx
-        .select()
-        .from(dataSubjectRequest)
-        .where(eq(dataSubjectRequest.id, requestId))
-        .for("update")
-        .limit(1);
-      if (!current) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
-      const reopening = current.status === "completed";
-      if (!reopening && !acceptsTaskResolution(current.status))
-        throw new PrivacyRequestError("REQUEST_NOT_ACTIVE", 409);
-      await tx
-        .insert(dataSubjectRequestTask)
-        .values(
-          leftOut.map(({ warningCode }, index) => ({
-            requestId,
-            registrationId: taskIds[index] as string,
-            source: "extension" as const,
-            status: "open" as const,
-            publicCode: warningCode,
+    await this.database
+      .transaction(async (tx) => {
+        const [current] = await tx
+          .select()
+          .from(dataSubjectRequest)
+          .where(eq(dataSubjectRequest.id, requestId))
+          .for("update")
+          .limit(1);
+        if (!current) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
+        const reopening = current.status === "completed";
+        if (!reopening && !acceptsTaskResolution(current.status))
+          throw new PrivacyRequestError("REQUEST_NOT_ACTIVE", 409);
+        await tx
+          .insert(dataSubjectRequestTask)
+          .values(
+            leftOut.map(({ warningCode }, index) => ({
+              requestId,
+              registrationId: taskIds[index] as string,
+              source: "extension" as const,
+              status: "open" as const,
+              publicCode: warningCode,
+              createdAt: now,
+              updatedAt: now,
+            })),
+          )
+          .onConflictDoUpdate({
+            target: [dataSubjectRequestTask.requestId, dataSubjectRequestTask.registrationId],
+            set: {
+              status: "open",
+              publicCode: sql`excluded.public_code`,
+              resolutionCode: null,
+              resolvedAt: null,
+              updatedAt: now,
+            },
+          });
+        const [updated] = await tx
+          .update(dataSubjectRequest)
+          .set({
+            version: sql`${dataSubjectRequest.version} + 1`,
+            updatedAt: now,
+            // An open operator task means the case is being worked on.
+            ...(reopening ? { status: "in_progress", completedAt: null, closedAt: null } : {}),
+          })
+          .where(eq(dataSubjectRequest.id, current.id))
+          .returning({ id: dataSubjectRequest.id });
+        if (!updated) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
+        if (reopening && current.closedAt)
+          // Completing released the case's retention holds. The reopened case
+          // may stay open for days and be exported again, so the holds that
+          // completion released come back with the status each had before.
+          await tx
+            .update(dataSubjectRequestPreservation)
+            .set({
+              releasedAt: null,
+              status: sql`case
+              when ${dataSubjectRequestPreservation.capturedAt} is not null then 'captured'
+              when ${dataSubjectRequestPreservation.outcomeCode} like '%-preservation-action-required' then 'action_required'
+              when ${dataSubjectRequestPreservation.outcomeCode} = 'managed-source-capture-required' then 'source_capture_pending'
+              else 'held'
+            end`,
+            })
+            .where(
+              and(
+                eq(dataSubjectRequestPreservation.requestId, current.id),
+                eq(dataSubjectRequestPreservation.releasedAt, current.closedAt),
+              ),
+            );
+        if (reopening)
+          await tx.insert(dataSubjectRequestEvent).values({
+            requestId: current.id,
+            eventType: "status_changed",
+            actorKind: "system",
+            actorUserId: null,
+            payload: boundedEventPayload({
+              from: current.status,
+              to: "in_progress",
+              reasonCode: "export-incomplete",
+            }),
+            payloadVersion: 1,
             createdAt: now,
-            updatedAt: now,
-          })),
-        )
-        .onConflictDoUpdate({
-          target: [dataSubjectRequestTask.requestId, dataSubjectRequestTask.registrationId],
-          set: {
-            status: "open",
-            publicCode: sql`excluded.public_code`,
-            resolutionCode: null,
-            resolvedAt: null,
-            updatedAt: now,
-          },
-        });
-      const [updated] = await tx
-        .update(dataSubjectRequest)
-        .set({
-          version: sql`${dataSubjectRequest.version} + 1`,
-          updatedAt: now,
-          // An open operator task means the case is being worked on.
-          ...(reopening ? { status: "in_progress", completedAt: null, closedAt: null } : {}),
-        })
-        .where(eq(dataSubjectRequest.id, current.id))
-        .returning({ id: dataSubjectRequest.id });
-      if (!updated) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
-      if (reopening)
+          });
+        // The event payload holds at most 32 entries per list; the tasks
+        // themselves are all recorded above.
         await tx.insert(dataSubjectRequestEvent).values({
           requestId: current.id,
-          eventType: "status_changed",
+          eventType: "export_incomplete",
           actorKind: "system",
           actorUserId: null,
           payload: boundedEventPayload({
-            from: current.status,
-            to: "in_progress",
-            reasonCode: "export-incomplete",
+            tasks: taskIds.slice(0, 32),
+            codes: leftOut.slice(0, 32).map(({ warningCode }) => warningCode),
           }),
           payloadVersion: 1,
           createdAt: now,
         });
-      // The event payload holds at most 32 entries per list; the tasks
-      // themselves are all recorded above.
-      await tx.insert(dataSubjectRequestEvent).values({
-        requestId: current.id,
-        eventType: "export_incomplete",
-        actorKind: "system",
-        actorUserId: null,
-        payload: boundedEventPayload({
-          tasks: taskIds.slice(0, 32),
-          codes: leftOut.slice(0, 32).map(({ warningCode }) => warningCode),
-        }),
-        payloadVersion: 1,
-        createdAt: now,
+      })
+      .catch((error: unknown) => {
+        // The person opened a new request of the same kind after this case was
+        // completed, so it cannot become active again.
+        if (isUniqueViolation(error, ACTIVE_REQUEST_KIND_KEY))
+          throw new PrivacyRequestError("REQUEST_NOT_ACTIVE", 409);
+        throw error;
       });
-    });
   }
 
   /** Record an export failure without identifiers in the payload. */

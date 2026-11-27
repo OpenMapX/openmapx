@@ -10,7 +10,12 @@ export type IntegrationStrings = LocaleStrings;
 export type IntegrationLoadState = "loaded" | "disabled" | "incompatible" | "failed" | "safe-mode";
 
 export interface IntegrationLoadError {
-  phase: "import" | "migrate" | "setup" | "deadline";
+  /**
+   * The step at which loading stopped. `platform` means the host could not
+   * try the integration's code at all (its extension state could not be read,
+   * or the reload after leaving safe mode failed), so nothing points at it.
+   */
+  phase: "import" | "migrate" | "setup" | "deadline" | "platform";
   message: string;
 }
 

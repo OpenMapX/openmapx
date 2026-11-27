@@ -33,11 +33,12 @@ reason, and the attention list on the overview shows **Safe mode is on**, or
 **Safe mode after repeated crashes** when the API turned it on by itself (see
 [Automatic safe mode](#automatic-safe-mode)).
 
-Place links of an installed extension whose code the API kept out (safe mode,
-a disabled extension, an incompatible release, or extension state that could
-not be read) open like links of an integration switched off in its settings:
-the place is looked up by its name and coordinates. An extension whose code
-ran and failed keeps answering such links with "not found".
+Place links of an extension an operator disabled open like links of an
+integration switched off in its settings: the place is looked up by its name
+and coordinates. While the API keeps an extension's code out for any other
+reason (safe mode, an incompatible release, extension state that could not be
+read), and when its code ran and failed, its place links answer "not found",
+so no other place is shown, and cached, under the extension's place id.
 
 ## Automatic safe mode
 
@@ -124,9 +125,10 @@ choose one of:
 - **Admin → Integrations → Leave safe mode.** After you confirm, the API
   removes the safe-mode file and loads the installed extensions at once,
   without a restart, and forgets the crashes counted so far. The action is
-  recorded in the audit log as **Left safe mode**. If that reload fails, safe mode is still left: the extensions it
-  held back show **Failed to load** with the reason, and **Reload** on their
-  detail page tries again.
+  recorded in the audit log as **Left safe mode**. If that reload fails, safe
+  mode is still left: the extensions it held back show **Failed to load**, and
+  their detail page says that the platform could not load them, with the
+  reason, and offers **Reload** to try again.
 - From the host: `pnpm openmapx control safe-mode off`. It removes the
   safe-mode file and clears the crashes counted in the boot marker, then
   restarts the running `api` service.
@@ -182,12 +184,12 @@ its data.
 
 ## Other states in the integration list
 
-| Chip                   | Meaning                                                                                                                                               | What to do                                                                           |
-| :--------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------------------------------- |
-| **Safe mode**          | The API runs in safe mode.                                                                                                                            | Leave safe mode once the cause is fixed.                                             |
-| **Extension disabled** | An operator disabled the extension the integration belongs to.                                                                                        | See [Disable an extension without the API](#disable-an-extension-without-the-api).   |
-| **Not compatible**     | This OpenMapX release cannot run the extension; the detail page names the version it needs, for example `requires platform 2.0, this is 1.0`.         | Update OpenMapX, or install a version of the extension made for this release.        |
-| **Failed to load**     | The extension's code failed to import, migrate or set up, or the API could not read which extensions are disabled (`could not read extension state`). | Fix or update the extension; for the extension state, check the database and reload. |
+| Chip                   | Meaning                                                                                                                                               | What to do                                                                                                            |
+| :--------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------------------------------------------------- |
+| **Safe mode**          | The API runs in safe mode.                                                                                                                            | Leave safe mode once the cause is fixed.                                                                              |
+| **Extension disabled** | An operator disabled the extension the integration belongs to.                                                                                        | See [Disable an extension without the API](#disable-an-extension-without-the-api).                                    |
+| **Not compatible**     | This OpenMapX release cannot run the extension; the detail page names the version it needs, for example `requires platform 2.0, this is 1.0`.         | Update OpenMapX, or install a version of the extension made for this release.                                         |
+| **Failed to load**     | The extension's code failed to import, migrate or set up, or the API could not read which extensions are disabled (`could not read extension state`). | Fix or update the extension; when the detail page says the platform could not load it, check the database and reload. |
 
 When the API cannot read which extensions are disabled, it retries once after
 five seconds at startup and then loads no installed extension in that

@@ -90245,7 +90245,8 @@
                               "import",
                               "migrate",
                               "setup",
-                              "deadline"
+                              "deadline",
+                              "platform"
                             ]
                           },
                           {
@@ -93410,7 +93411,8 @@
                             "import",
                             "migrate",
                             "setup",
-                            "deadline"
+                            "deadline",
+                            "platform"
                           ]
                         },
                         {

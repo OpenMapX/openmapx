@@ -837,8 +837,12 @@ database role:
   constraint of the integration that fails on such a deletion still makes it
   fail. Objects a file creates outside its schema are not judged at all, and
   neither are keys that reach the schema another way: a key that another
-  integration's migration adds to this schema's tables
-  (`ALTER TABLE ext_other.…`), or one created through `ctx.db` at run time.
+  integration runs into this schema's tables from its own migration files
+  (`ALTER TABLE ext_<this integration's id>.…`), or one created through
+  `ctx.db` at run time. When such a key refuses an account deletion, the
+  deletion fails: the API logs the key, its table and schema, raises an
+  attention item naming the extension, and answers the request with `409`
+  `EXTENSION_BLOCKS_ACCOUNT_DELETION`.
 
 - A migration waits at most 120 seconds for each lock, including the lock
   that keeps two runs of the same integration apart, and all files of a start

@@ -332,18 +332,23 @@ const LOAD_PHASE_KEY = {
   deadline: "loadFailedPhaseDeadline",
 } as const;
 
-/** Why an integration is not running: the step its code failed at, and the error. */
+/**
+ * Why an integration is not running: the step its code failed at, and the
+ * error. When the platform could not try its code at all, nothing is wrong
+ * with the integration and Reload is the way forward.
+ */
 function LoadFailureNotice({ data }: { data: IntegrationDetailData }) {
   const t = useTranslations("adminIntegrations");
+  const platform = data.loadErrorPhase === "platform";
   return (
     <Alert
       severity="error"
       variant="outlined"
       sx={{ "& .MuiAlert-message": { minWidth: 0, overflowWrap: "anywhere" } }}
     >
-      <AlertTitle>{t("loadFailedTitle")}</AlertTitle>
+      <AlertTitle>{t(platform ? "loadFailedPlatformTitle" : "loadFailedTitle")}</AlertTitle>
       <Stack sx={{ gap: 0.75 }}>
-        {data.loadErrorPhase && (
+        {data.loadErrorPhase && data.loadErrorPhase !== "platform" && (
           <Typography variant="body2">{t(LOAD_PHASE_KEY[data.loadErrorPhase])}</Typography>
         )}
         {data.loadError && (
@@ -351,7 +356,9 @@ function LoadFailureNotice({ data }: { data: IntegrationDetailData }) {
             {data.loadError}
           </Typography>
         )}
-        <Typography variant="body2">{t("loadFailedFix")}</Typography>
+        <Typography variant="body2">
+          {t(platform ? "loadFailedPlatformFix" : "loadFailedFix")}
+        </Typography>
       </Stack>
     </Alert>
   );

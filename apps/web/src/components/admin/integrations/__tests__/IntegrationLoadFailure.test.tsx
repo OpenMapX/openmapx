@@ -92,6 +92,39 @@ it("shows an integration whose code failed to load as failed, with the phase and
   await waitFor(() => expect(posted).toEqual(["/api/admin/integrations/transit-acme/disable"]));
 });
 
+it("says the platform failed, not the integration, when its code was never tried", async () => {
+  const posted = serve({
+    ...detail,
+    id: "acme-places",
+    name: "Acme Places",
+    isBuiltIn: false,
+    enabled: false,
+    status: "failed",
+    loadState: "failed",
+    loadError: "not loaded: the reload after leaving safe mode failed (disk full)",
+    loadErrorPhase: "platform",
+  });
+  mount("acme-places");
+
+  await screen.findByRole("heading", { level: 1, name: "Acme Places" });
+  const notice = screen.getByRole("alert");
+  expect(notice).toHaveTextContent(
+    "This integration is not loaded: the platform could not load it.",
+  );
+  expect(notice).toHaveTextContent(
+    "not loaded: the reload after leaving safe mode failed (disk full)",
+  );
+  expect(notice).toHaveTextContent(
+    "Nothing points to a fault in the integration. Select Reload to try again.",
+  );
+  expect(notice).not.toHaveTextContent("its code failed to load");
+  expect(notice).not.toHaveTextContent("Fix or update the integration");
+
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "Reload" }));
+  await waitFor(() => expect(posted).toEqual([expect.stringMatching(/\/reload$/)]));
+});
+
 it("labels a failed integration as failed, not disabled, on the bulk configuration page", async () => {
   vi.stubGlobal("fetch", async (input: string | Request) => {
     const url = new URL(typeof input === "string" ? input : input.url);

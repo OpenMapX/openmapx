@@ -27,8 +27,13 @@ Every request is in one of five states:
 Allowed moves: `open` to `in_progress`, `waiting_on_requester` or
 `refused`; `in_progress` to `waiting_on_requester`, `completed` or `refused`;
 `waiting_on_requester` to `in_progress`, `completed` or `refused`. `completed`
-and `refused` are final and release the case's retention holds. Every move is
-recorded as a case event with its reason code.
+and `refused` release the case's retention holds. `refused` is final, and so
+is `completed` with one exception: when the person's export finishes after the
+case was completed and had to leave an extension's data out, the system moves
+the case back to `in_progress` (reason `export-incomplete`) with an operator
+task for that extension, and puts back the retention holds the completion
+released until the case is closed again. Every move is recorded as a case event
+with its reason code.
 
 ## Self-service download
 

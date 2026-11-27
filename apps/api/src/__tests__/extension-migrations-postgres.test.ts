@@ -604,6 +604,21 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           ].join("\n"),
         },
         "0001_init.sql",
+        "p1",
+      ],
+      [
+        "when only a sub-partition cascades",
+        {
+          "0001_init.sql": [
+            "create table p (id int primary key, uid text) partition by range (id);",
+            "create table p1 partition of p for values from (0) to (100) partition by range (id);",
+            "create table p11 partition of p1 for values from (0) to (50);",
+            'alter table p11 add constraint p11_uid_fkey foreign key (uid) references public."user"(id) on delete cascade;',
+            "create table x (pid int references p(id));",
+          ].join("\n"),
+        },
+        "0001_init.sql",
+        "p11",
       ],
       [
         "when a later file attaches the partition",
@@ -618,12 +633,13 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           ].join("\n"),
         },
         "0002_attach.sql",
+        "p1",
       ],
     ])(
       "refuses a key to a partitioned table whose partition alone cascades from a platform table, %s",
-      async (_label, files, file) => {
+      async (_label, files, file, partition) => {
         await expect(migrations.applyExtensionMigrations(shipping(files))).rejects.toThrow(
-          `Migration ${file} of demo adds foreign key x_pid_fkey on ext_demo.x to ext_demo.p1 with ON DELETE NO ACTION; rows of ext_demo.p1 are deleted by a cascade from public."user" through p1_uid_fkey; ${DECLARE} ${SO_DELETION_WORKS}`,
+          `Migration ${file} of demo adds foreign key x_pid_fkey on ext_demo.x to ext_demo.${partition} with ON DELETE NO ACTION; rows of ext_demo.${partition} are deleted by a cascade from public."user" through ${partition}_uid_fkey; ${DECLARE} ${SO_DELETION_WORKS}`,
         );
         expect(await leftBehind()).toEqual({ schema: false, rows: 0, stray: null });
       },
@@ -653,6 +669,68 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         await raw`select (select count(*)::int from ext_demo.p) as p,
           (select count(*)::int from ext_demo.x) as x`,
       ).toEqual([{ p: 0, x: 0 }]);
+    });
+
+    it("answers a clear conflict and tells the operator when a key the check does not see blocks an account deletion", async () => {
+      await raw.unsafe("drop schema if exists ext_blocked cascade");
+      await migrations.applyExtensionMigrations(
+        shipping(
+          {
+            "0001_init.sql":
+              'create table t (id int primary key, uid text references public."user"(id) on delete cascade); create table s (tid int);',
+          },
+          "blocked",
+        ),
+      );
+      // Another integration's migration adds a refusing key to this schema,
+      // which the check of the first integration's files never sees.
+      await migrations.applyExtensionMigrations(
+        shipping(
+          {
+            "0001_other.sql":
+              "alter table ext_blocked.s add constraint s_t foreign key (tid) references ext_blocked.t(id) on delete restrict;",
+          },
+          "other",
+        ),
+      );
+      await raw`insert into "user" (id, name, email, role, created_at, updated_at)
+        values ('blocked-owner', 'Owner', 'blocked-owner@example.test', 'user', now(), now())`;
+      await raw.unsafe(
+        "insert into ext_blocked.t values (1, 'blocked-owner'); insert into ext_blocked.s values (1);",
+      );
+      const error = vi.spyOn(processLogger, "error");
+
+      await expect(deleteAccount("blocked-owner")).rejects.toMatchObject({
+        statusCode: 409,
+        body: { code: "EXTENSION_BLOCKS_ACCOUNT_DELETION" },
+      });
+
+      expect(await raw`select count(*)::int as n from "user" where id = 'blocked-owner'`).toEqual([
+        { n: 1 },
+      ]);
+      expect(error).toHaveBeenCalledWith(
+        { integrationId: "blocked", schema: "ext_blocked", table: "s", constraint: "s_t" },
+        "An extension's foreign key refused an account deletion",
+      );
+      expect(JSON.stringify(error.mock.calls)).not.toContain("blocked-owner");
+      expect(
+        await raw`select key, severity, source, title, detail from attention_item
+          where key = 'account-deletion-blocked:blocked'`,
+      ).toEqual([
+        {
+          key: "account-deletion-blocked:blocked",
+          severity: "warning",
+          source: "privacy",
+          title: "blocked blocks account deletion",
+          detail:
+            "blocked's foreign key s_t on table s refused an account deletion. Update or remove the extension, then the person can delete the account again.",
+        },
+      ]);
+      error.mockRestore();
+      await raw`delete from attention_item`;
+      await raw.unsafe(
+        "drop schema ext_blocked cascade; drop schema if exists ext_other cascade; delete from \"user\" where id = 'blocked-owner'",
+      );
     });
 
     it("lets the account be deleted through the erasure path with every accepted shape", async () => {

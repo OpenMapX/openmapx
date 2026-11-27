@@ -820,7 +820,7 @@ async function readInstalledLoadGates(
   for (const { directory } of installed)
     gates.set(directory, {
       loadState: "failed",
-      loadError: { phase: "import", message: EXTENSION_STATE_UNREADABLE },
+      loadError: { phase: "platform", message: EXTENSION_STATE_UNREADABLE },
     });
   return gates;
 }
@@ -1372,7 +1372,8 @@ function asError(error: unknown): Error {
   return new Error(describeThrown(error));
 }
 
-const LOAD_FAILURE_STEP: Record<IntegrationLoadError["phase"], string> = {
+/** The steps at which an integration's own code can fail. */
+const LOAD_FAILURE_STEP: Record<Exclude<IntegrationLoadError["phase"], "platform">, string> = {
   import: "import",
   migrate: "migrate its database schema",
   setup: "set up",
@@ -2003,14 +2004,17 @@ export function isIntegrationScheme(scheme: string): boolean {
  * enabled integration fall through to coord-fallback, re-opening the
  * tag-substitution leak the 404 trap closes.
  *
- * An installed integration a gate held back (safe mode, its disabled
- * extension, an incompatible release, or extension state that could not be
- * read) counts as switched off: its code never ran, so its links fall back
- * like those of an integration switched off in its settings.
+ * An installed integration held back because the operator disabled its
+ * extension counts as switched off, a long-lived choice like a setting. The
+ * other holds (safe mode, an incompatible release, extension state that could
+ * not be read) are transient: the links keep answering "not found", because a
+ * substitute place would be cached under the extension's id and outlive the
+ * hold once the extension loads again.
  */
 export function isEnabledIntegrationScheme(scheme: string): boolean {
   const i = integrations.get(scheme);
-  return i !== undefined && i.config?.enabled !== false && !heldBackRecords.has(i);
+  if (i === undefined || i.config?.enabled === false) return false;
+  return !(heldBackRecords.has(i) && i.loadState === "disabled");
 }
 
 /**
@@ -2023,7 +2027,7 @@ export function markSafeModeRecordsFailed(message: string): void {
     if (integration.loadState !== "safe-mode") continue;
     integration.loadState = "failed";
     integration.loadError = {
-      phase: "import",
+      phase: "platform",
       message: `not loaded: the reload after leaving safe mode failed (${message})`,
     };
   }

@@ -30,6 +30,10 @@ export function DeletionSection({
     try {
       const { error } = await authClient.deleteUser({});
       if (error) {
+        if (error.code === "EXTENSION_BLOCKS_ACCOUNT_DELETION") {
+          setMessage({ type: "error", text: t("deletionBlockedByExtension") });
+          return;
+        }
         setMessage(refusalMessage(error) ?? { type: "error", text: t("failedDeleteAccount") });
         return;
       }

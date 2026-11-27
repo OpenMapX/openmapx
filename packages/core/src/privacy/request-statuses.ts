@@ -1,6 +1,9 @@
-/** Lifecycle of a data-subject request. Every status change in the API goes
- * through `isValidRequestTransition`; the predicates below are the only place
- * that groups statuses, so callers never repeat their own status lists. */
+/** Lifecycle of a data-subject request. Every status change an actor makes
+ * goes through `isValidRequestTransition`. The one exception is the system's
+ * reopen of a `completed` case whose export finished afterwards and left an
+ * extension's data out: it moves the case back to `in_progress` outside this
+ * table. The predicates below are the only place that groups statuses, so
+ * callers never repeat their own status lists. */
 export const REQUEST_STATUSES = [
   "open",
   "in_progress",

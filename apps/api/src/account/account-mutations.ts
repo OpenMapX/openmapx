@@ -16,6 +16,7 @@ import {
   isTransactionalAuthDatabase,
   withAuthDatabase,
 } from "./auth-database";
+import { throwIfExtensionBlocksDeletion } from "./extension-deletion-block";
 export const accountRoleSchema = z.enum(["user", "admin"]);
 export type AccountRole = z.infer<typeof accountRoleSchema>;
 export interface AccountMutationIntent {
@@ -110,6 +111,7 @@ export async function withAccountMutation<T>(
     return result;
   } catch (error) {
     if (error instanceof MutationResponseRollback) return error.response as T;
+    if (intent.action === "delete") await throwIfExtensionBlocksDeletion(error);
     return mapAccountConstraint(error);
   }
 }
