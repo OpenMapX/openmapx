@@ -42,6 +42,11 @@ import type { MobilityDataSourceProvider } from "../contracts/mobility-data-sour
 import type { ParkingSiteProvider } from "../contracts/parking-site-provider.js";
 import type { PhotoProvider } from "../contracts/photo-provider.js";
 import type { PoiSearchProvider } from "../contracts/poi-search-provider.js";
+import {
+  PROVIDER_SHAPES,
+  type ProviderDomain,
+  type ProviderRegistrar,
+} from "../contracts/provider-shapes";
 import type { RealtimeProvider } from "../contracts/realtime-provider.js";
 import type { ReviewProvider } from "../contracts/review-provider.js";
 import type { RideProvider } from "../contracts/ride-provider.js";
@@ -56,6 +61,7 @@ import type { WeatherProvider } from "../contracts/weather-provider.js";
 import { type IntegrationDataSource, validateDataSource } from "../manifest";
 import { resolveIntegrationPlatformEndpoint } from "../platform-endpoints";
 import { providerOrderFingerprintInput, readProviderOrder } from "../provider-order";
+import { createProviderRegistrationCheck } from "../provider-registration";
 import { storedRouteHandler } from "../route-handler";
 
 export interface FakeMobilityHttpRequest {
@@ -660,6 +666,27 @@ export function createMockIntegrationContext(
         endpointId,
       ),
   };
+  // The host's checks, so a provider the host would refuse fails the test.
+  const check = createProviderRegistrationCheck({
+    integrationId: ctx.id,
+    manifest: {
+      get id() {
+        return ctx.manifest.id ?? ctx.id;
+      },
+      get dataSources() {
+        return ctx.manifest.dataSources;
+      },
+    },
+  });
+  const registrars = ctx as unknown as Record<ProviderRegistrar, (provider: object) => void>;
+  for (const domain of Object.keys(PROVIDER_SHAPES) as ProviderDomain[]) {
+    const { registrar } = PROVIDER_SHAPES[domain];
+    const store = registrars[registrar];
+    registrars[registrar] = (provider) => {
+      check(domain, provider);
+      store(provider);
+    };
+  }
   return ctx;
 }
 

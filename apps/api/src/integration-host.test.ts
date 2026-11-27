@@ -926,6 +926,7 @@ describe("initIntegrations — loader", () => {
           '  ctx.registerRoute("GET", "/owned", (_request, reply) => reply.send({ owned: true }));',
           '  registerPlaceResolver("bad", async () => null);',
           '  ctx.on("integration.loaded", (event) => globalThis.__omxInstalledSpy(event));',
+          '  ctx.registerDisclosure({ kind: "ai-search", mode: "off" });',
           "  ctx.onActivate(() => { globalThis.__omxInstalledActivated = true; });",
           "  ctx.onShutdown(async () => {",
           "    globalThis.__omxInstalledShutdowns = (globalThis.__omxInstalledShutdowns ?? 0) + 1;",
@@ -948,6 +949,7 @@ describe("initIntegrations — loader", () => {
           loadState: "failed",
           loadError: { phase: "setup", message: "bad setup" },
         });
+        expect(getIntegration("bad")?.disclosures).toBeUndefined();
         expect(getIntegration("good")?.loadState).toBe("loaded");
         expect((await app.inject("/api/integrations/good/ok")).statusCode).toBe(200);
         expect((await app.inject("/api/integrations/bad/owned")).statusCode).toBe(404);
@@ -1029,6 +1031,87 @@ describe("initIntegrations — loader", () => {
       expect((await app.inject("/api/integrations/demo/owned")).statusCode).toBe(200);
     });
 
+    it("ignores late context calls of a retired generation with one warning per method", async () => {
+      writeInstalled(
+        "late",
+        [
+          "// ignores late context calls of a retired generation with one warning per method",
+          'import { registerPlaceResolver } from "@openmapx/integration-sdk/places";',
+          "const weather = (id) => ({ id, priority: 1, getCurrentWeather: async () => null });",
+          "let generation = 0;",
+          "export function setup(ctx) {",
+          "  generation += 1;",
+          "  ctx.registerWeatherProvider(weather(`p${generation}`));",
+          "  if (generation === 2) {",
+          '    ctx.on("late.refreshed", () => { globalThis.__omxInstalledHeard = true; });',
+          "    return;",
+          "  }",
+          "  setTimeout(async () => {",
+          "    await globalThis.__omxInstalledGate;",
+          '    ctx.registerWeatherProvider(weather("late-1"));',
+          '    ctx.registerWeatherProvider(weather("late-2"));',
+          '    ctx.registerRoute("GET", "/late", (_request, reply) => reply.send({ late: true }));',
+          '    ctx.emit("late.refreshed", {});',
+          '    const unsubscribe = ctx.on("late.refreshed", () => {});',
+          "    unsubscribe();",
+          "    const accepted = ctx.setDataSources([]);",
+          '    registerPlaceResolver("late", async () => null);',
+          "    ctx.onShutdown(async () => {});",
+          "    globalThis.__omxInstalledLateDone = { accepted };",
+          "  }, 0);",
+          "}",
+        ].join("\n"),
+        { domains: ["weather"] },
+      );
+      let open: () => void = () => {};
+      g.__omxInstalledGate = new Promise<void>((resolve) => {
+        open = resolve;
+      });
+      const rejections: unknown[] = [];
+      const onRejection = (reason: unknown) => rejections.push(reason);
+      process.on("unhandledRejection", onRejection);
+      const warn = vi.fn();
+      const app = makeApp();
+      // biome-ignore lint/suspicious/noExplicitAny: test-only log patch
+      (app as any).log = { info: vi.fn(), warn, error: vi.fn(), debug: vi.fn() };
+      try {
+        await initIntegrations(app, [installed()]);
+        await reloadIntegrations();
+
+        open();
+        await vi.waitFor(() => expect(g.__omxInstalledLateDone).toBeDefined());
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(rejections).toEqual([]);
+        expect(g.__omxInstalledLateDone).toEqual({ accepted: [] });
+        expect(getIntegration("late")?.loadState).toBe("loaded");
+        expect(
+          getIntegrationProviders("late", "weather").map(
+            (provider) => (provider as { id: string }).id,
+          ),
+        ).toEqual(["p2"]);
+        expect((await app.inject("/api/integrations/late/late")).statusCode).toBe(404);
+        expect(g.__omxInstalledHeard).toBeUndefined();
+        expect(getPlaceResolver("late")).toBeUndefined();
+        const ignored = warn.mock.calls
+          .map(([, message]) => String(message))
+          .filter((message) => message.includes("was unloaded"));
+        expect(ignored.sort()).toEqual(
+          [
+            "emit",
+            "on",
+            "onShutdown",
+            "registerPlaceResolver",
+            "registerRoute",
+            "registerWeatherProvider",
+            "setDataSources",
+          ].map((method) => `Integration late was unloaded; ignoring ${method}`),
+        );
+      } finally {
+        process.off("unhandledRejection", onRejection);
+      }
+    });
+
     describe("integration scope and setup deadline", () => {
       afterEach(() => {
         vi.useRealTimers();
@@ -1048,8 +1131,8 @@ describe("initIntegrations — loader", () => {
             '  ctx.registerWeatherProvider(weather("p1"));',
             "  setTimeout(AsyncResource.bind(() => {",
             '    registerPlaceResolver("late", async () => null);',
-            '    try { ctx.registerWeatherProvider(weather("p2")); }',
-            "    catch (error) { globalThis.__omxInstalledLate = String(error); }",
+            '    ctx.registerWeatherProvider(weather("p2"));',
+            "    globalThis.__omxInstalledLate = true;",
             "  }), 61_000);",
             "  globalThis.__omxInstalledEntered = true;",
             "  await new Promise(() => {});",
@@ -1058,8 +1141,12 @@ describe("initIntegrations — loader", () => {
           { domains: ["weather"] },
         );
         vi.useFakeTimers({ toFake: ["setTimeout"] });
+        const warn = vi.fn();
+        const app = makeApp();
+        // biome-ignore lint/suspicious/noExplicitAny: test-only log patch
+        (app as any).log = { info: vi.fn(), warn, error: vi.fn(), debug: vi.fn() };
 
-        const boot = initIntegrations(makeApp(), [installed()]);
+        const boot = initIntegrations(app, [installed()]);
         await vi.waitFor(() => expect(g.__omxInstalledEntered).toBe(true), { timeout: 5_000 });
         await vi.advanceTimersByTimeAsync(61_000);
         await boot;
@@ -1071,8 +1158,17 @@ describe("initIntegrations — loader", () => {
         });
         expect(getIntegrationsByDomain("weather")).toHaveLength(0);
         expect(getIntegrationProviders("hang", "weather")).toHaveLength(0);
-        expect(g.__omxInstalledLate).toMatch(/Integration hang was unloaded/);
+        expect(g.__omxInstalledLate).toBe(true);
         expect(getPlaceResolver("late")).toBeUndefined();
+        expect(
+          warn.mock.calls
+            .map(([, message]) => String(message))
+            .filter((message) => message.includes("was unloaded"))
+            .sort(),
+        ).toEqual([
+          "Integration hang was unloaded; ignoring registerPlaceResolver",
+          "Integration hang was unloaded; ignoring registerWeatherProvider",
+        ]);
       });
 
       /**
@@ -1346,6 +1442,32 @@ describe("initIntegrations — loader", () => {
         expect(registered).not.toBe(g.__omxInstalledProvider);
         expect(registered?.id).toBe("w");
         expect(await registered?.getCurrentWeather()).toBe("demo");
+      });
+
+      it("runs an installed place resolver in the integration's scope, up to a deadline", async () => {
+        g.__omxInstalledScope = currentIntegrationScope;
+        writeInstalled(
+          "demo",
+          [
+            "// runs an installed place resolver in the integration's scope, up to a deadline",
+            'import { registerPlaceResolver } from "@openmapx/integration-sdk/places";',
+            "export function setup() {",
+            '  registerPlaceResolver("demo", async (value) => {',
+            '    if (value === "hang") return new Promise(() => {});',
+            "    return { scope: globalThis.__omxInstalledScope()?.integrationId ?? null };",
+            "  });",
+            "}",
+          ].join("\n"),
+        );
+        await initIntegrations(makeApp(), [installed()]);
+        const resolver = getPlaceResolver("demo");
+
+        expect(await resolver?.("1", {})).toEqual({ scope: "demo" });
+        vi.useFakeTimers({ toFake: ["setTimeout"] });
+        const hung = resolver?.("hang", {});
+        const outcome = expect(hung).rejects.toThrow("provider deadline exceeded");
+        await vi.advanceTimersByTimeAsync(435_000);
+        await outcome;
       });
     });
 

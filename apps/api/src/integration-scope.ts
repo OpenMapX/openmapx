@@ -29,9 +29,30 @@ export function currentIntegrationScope(): IntegrationScope | undefined {
   return storage.getStore();
 }
 
-/** The error every registering context method throws once its scope is revoked. */
-export function assertIntegrationScopeLive(scope: IntegrationScope): void {
-  if (scope.revoked) throw new Error(`Integration ${scope.integrationId} was unloaded`);
+const ignoredMethods = new WeakMap<IntegrationScope, Set<string>>();
+
+/**
+ * Whether a context method called in `scope` is to be ignored because the
+ * scope was revoked. Work an integration scheduled can still run after it was
+ * left out or its generation retired. Nobody awaits that work, so a throw
+ * would become an unhandled rejection, which stops the API. The method does
+ * nothing instead, and its first ignored call per scope is logged.
+ */
+export function ignoredAfterUnload(scope: IntegrationScope, method: string, log: Logger): boolean {
+  if (!scope.revoked) return false;
+  let ignored = ignoredMethods.get(scope);
+  if (!ignored) {
+    ignored = new Set();
+    ignoredMethods.set(scope, ignored);
+  }
+  if (!ignored.has(method)) {
+    ignored.add(method);
+    log.warn(`Integration ${scope.integrationId} was unloaded; ignoring ${method}`, {
+      integrationId: scope.integrationId,
+      method,
+    });
+  }
+  return true;
 }
 
 /** A `setup` still running after this long is named in a warning. */
@@ -101,6 +122,37 @@ export const PROVIDER_CALL_DEADLINE_MS: Readonly<Record<ProviderDomain, number>>
   // A data source opens a site through the fuel or parking providers above.
   "data-source": 315_000,
 });
+
+/**
+ * The longest the host waits for a place resolver of an installed
+ * integration, by the rule above. The longest built-in resolver is a data
+ * source's: it opens the site (the chain behind `data-source`, 210 s), looks
+ * for the OSM feature on the Overpass primary and the public mirror (35 s
+ * each), then reverse-geocodes (10 s): 290 s, times one and a half.
+ * Built-in resolvers are not bound.
+ */
+export const PLACE_RESOLVER_DEADLINE_MS = 435_000;
+
+/**
+ * Returns a resolver that runs `resolver` inside `scope`, cut off with
+ * `ProviderTimeoutError` at `PLACE_RESOLVER_DEADLINE_MS`.
+ */
+export function bindPlaceResolverToScope<A extends unknown[], R>(
+  resolver: (...args: A) => Promise<R>,
+  scope: IntegrationScope,
+  log: Logger,
+): (...args: A) => Promise<R> {
+  return (...args: A) =>
+    callInScope(() => resolver(...args), {
+      scope,
+      deadlineMs: PLACE_RESOLVER_DEADLINE_MS,
+      onSlow: (durationMs) =>
+        log.warn(`Place resolver of ${scope.integrationId} took ${durationMs} ms`, {
+          integrationId: scope.integrationId,
+          durationMs,
+        }),
+    }) as Promise<R>;
+}
 
 function isThenable(value: unknown): value is PromiseLike<unknown> {
   return (

@@ -464,6 +464,33 @@ it("never sends a refresh for an unloaded planner to another planner", async () 
   expect(refresh).not.toHaveBeenCalled();
 });
 
+it("discards refresh data if the planner was unloaded while the call ran", async () => {
+  let loaded = true;
+  const provider = makeProvider({
+    capabilities: {
+      ...makeProvider({}).capabilities,
+      planningFeatures: { refresh: true } as never,
+    },
+    refreshTrip: async () => {
+      loaded = false;
+      return withAttribution({ id: "trip" } as never, ATTR, freshnessNow());
+    },
+  });
+  const ctx = makeCtx([provider], { isHealthy: async () => true });
+  Object.assign(ctx, {
+    getIntegrationsByDomain: (domain: string) =>
+      domain === "transit" && loaded
+        ? [{ id: "transit-test", providers: new Map([["transit", [provider]]]) }]
+        : [],
+  });
+  expect(
+    await createTransitOrchestrator(ctx).refreshTrip(
+      { integrationId: "transit-test", providerId: provider.id },
+      { itineraryId: "bound", datasetEpoch: "e" },
+    ),
+  ).toMatchObject({ status: "gone", result: { data: null } });
+});
+
 it("discards ordinary refresh data if the source becomes disallowed during acquisition", async () => {
   let disabled = false;
   const provider = makeProvider({

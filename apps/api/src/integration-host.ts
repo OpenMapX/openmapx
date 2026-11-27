@@ -36,7 +36,7 @@ import {
   commitPlaceResolverStaging,
   restorePlaceResolvers,
   rollbackPlaceResolverStaging,
-  setPlaceResolverRegistrationGuard,
+  setPlaceResolverRegistrationHook,
   snapshotPlaceResolvers,
 } from "@openmapx/place-ids";
 import type { FastifyInstance } from "fastify";
@@ -64,10 +64,11 @@ import {
   rollbackIntegrationRouteStaging,
 } from "./integration-routes";
 import {
-  assertIntegrationScopeLive,
+  bindPlaceResolverToScope,
   bindProviderToScope,
   currentIntegrationScope,
   type IntegrationScope,
+  ignoredAfterUnload,
   runInIntegrationScope,
   SETUP_DEADLINE_MS,
   SETUP_WARNING_MS,
@@ -771,13 +772,12 @@ function buildIntegrationContext(args: {
     (...args: A): R =>
       runInIntegrationScope(scope, () => fn(...args));
   // Work an unloaded integration scheduled may still run; it must not reach
-  // the generation that left the integration out.
+  // the generation that left the integration out, and gets `inert()` back.
   const live =
-    <A extends unknown[], R>(fn: (...args: A) => R) =>
-    (...args: A): R => {
-      assertIntegrationScopeLive(scope);
-      return fn(...args);
-    };
+    <A extends unknown[], R>(method: string, fn: (...args: A) => R, inert: () => R) =>
+    (...args: A): R =>
+      ignoredAfterUnload(scope, method, hostLog) ? inert() : fn(...args);
+  const nothing = () => undefined;
   const registrars = createProviderRegistrars({
     integrationId: id,
     manifest,
@@ -815,44 +815,76 @@ function buildIntegrationContext(args: {
     },
     ...(Object.fromEntries(
       Object.entries(registrars as unknown as Record<string, (provider: object) => void>).map(
-        ([name, register]) => [name, live(register)],
+        ([name, register]) => [name, live(name, register, nothing)],
       ),
     ) as unknown as ProviderRegistrars),
-    registerRoute: live((method, path, handler, options) => {
-      registerIntegrationRoute(id, method, path, inScope(handler), options);
-    }),
-    registerHealthCheck: live((fn: CustomHealthCheckFn) => {
-      integration.customHealthCheck = inScope(fn);
-    }),
-    registerDisclosure: live((disclosure) => {
-      if (!integration.disclosures) integration.disclosures = [];
-      integration.disclosures.push(disclosure);
-    }),
-    setDataSources: live((list) => setRuntimeDataSources(integration, log, list)),
-    emit: live((event: string, data: unknown) => {
-      contextEventBus.emit({
-        type: event,
-        integrationId: id,
-        ...(typeof data === "object" && data !== null ? data : {}),
-      } as never);
-    }),
-    on: live((event: string, handler: (data: unknown) => void) => {
-      const unsubscribe = contextEventBus.on(event as never, inScope(handler) as never);
-      const tracked = () => {
-        subscriptions.delete(tracked);
-        unsubscribe();
-      };
-      subscriptions.add(tracked);
-      return tracked;
-    }),
-    onActivate: live((activate: () => void, rollback?: () => void) => {
-      const scoped = { activate: inScope(activate), rollback: rollback && inScope(rollback) };
-      if (pendingActivations) pendingActivations.push(scoped);
-      else activationScope.register(scoped.activate, scoped.rollback);
-    }),
-    onShutdown: live((cleanup: () => Promise<void>) => {
-      shutdownHandlers.push(inScope(cleanup));
-    }),
+    registerRoute: live(
+      "registerRoute",
+      (method, path, handler, options) => {
+        registerIntegrationRoute(id, method, path, inScope(handler), options);
+      },
+      nothing,
+    ),
+    registerHealthCheck: live(
+      "registerHealthCheck",
+      (fn: CustomHealthCheckFn) => {
+        integration.customHealthCheck = inScope(fn);
+      },
+      nothing,
+    ),
+    registerDisclosure: live(
+      "registerDisclosure",
+      (disclosure) => {
+        if (!integration.disclosures) integration.disclosures = [];
+        integration.disclosures.push(disclosure);
+      },
+      nothing,
+    ),
+    setDataSources: live(
+      "setDataSources",
+      (list) => setRuntimeDataSources(integration, log, list),
+      () => [],
+    ),
+    emit: live(
+      "emit",
+      (event: string, data: unknown) => {
+        contextEventBus.emit({
+          type: event,
+          integrationId: id,
+          ...(typeof data === "object" && data !== null ? data : {}),
+        } as never);
+      },
+      nothing,
+    ),
+    on: live(
+      "on",
+      (event: string, handler: (data: unknown) => void) => {
+        const unsubscribe = contextEventBus.on(event as never, inScope(handler) as never);
+        const tracked = () => {
+          subscriptions.delete(tracked);
+          unsubscribe();
+        };
+        subscriptions.add(tracked);
+        return tracked;
+      },
+      () => nothing,
+    ),
+    onActivate: live(
+      "onActivate",
+      (activate: () => void, rollback?: () => void) => {
+        const scoped = { activate: inScope(activate), rollback: rollback && inScope(rollback) };
+        if (pendingActivations) pendingActivations.push(scoped);
+        else activationScope.register(scoped.activate, scoped.rollback);
+      },
+      nothing,
+    ),
+    onShutdown: live(
+      "onShutdown",
+      (cleanup: () => Promise<void>) => {
+        shutdownHandlers.push(inScope(cleanup));
+      },
+      nothing,
+    ),
     getIntegrationsByDomain(domain: string) {
       return integrationsByDomain(domain);
     },
@@ -1088,6 +1120,7 @@ async function loadIntegrationBackend(args: {
     restorePlaceResolvers(resolvers);
     integration.providers.clear();
     integration.customHealthCheck = undefined;
+    integration.disclosures = undefined;
     integration.manifest.dataSources = declaredDataSources;
     integration.enabled = false;
     integration.loadState = "failed";
@@ -1142,7 +1175,12 @@ export async function initIntegrations(
   _integrationDirs = normalizeIntegrationDirs(integrationDirs);
   resetIntegrationRoutes();
   codeCache = null;
-  setPlaceResolverRegistrationGuard(() => currentIntegrationScope()?.revoked !== true);
+  setPlaceResolverRegistrationHook((_scheme, resolver) => {
+    const scope = currentIntegrationScope();
+    if (!scope) return resolver;
+    if (ignoredAfterUnload(scope, "registerPlaceResolver", hostLog)) return null;
+    return scope.isBuiltIn ? resolver : bindPlaceResolverToScope(resolver, scope, hostLog);
+  });
 
   const discovered = await discoverManifests(_integrationDirs);
   const sorted = topologicalSort(discovered);

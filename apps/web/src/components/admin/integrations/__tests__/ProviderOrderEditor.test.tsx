@@ -202,6 +202,37 @@ describe("provider order editor", () => {
     expect(await screen.findByText("Gamma moved to position 1")).toBeInTheDocument();
   });
 
+  it("leaves focus where the operator moved it while a save was open", async () => {
+    let release = () => {};
+    const server: Server = {
+      domains: [weather],
+      details: { weather: orchestrator("weather", []) },
+      patchGate: new Promise((resolve) => {
+        release = resolve;
+      }),
+    };
+    const patches = serve(server);
+    mount("weather", "weather");
+    const gammaUp = await screen.findByRole("button", { name: "Move Gamma up" });
+    await waitFor(() => expect(gammaUp).not.toBeDisabled());
+    gammaUp.focus();
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(patches).toHaveLength(1));
+
+    const elsewhere = screen.getByRole("button", { name: "Move Alpha down" });
+    elsewhere.focus();
+    release();
+    server.patchGate = undefined;
+    expect(await screen.findByText("Gamma moved to position 2")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Move Gamma up" })).not.toHaveAttribute(
+        "aria-disabled",
+        "true",
+      ),
+    );
+    expect(document.activeElement).toBe(elsewhere);
+  });
+
   it("keeps keyboard focus in the list after adding and removing", async () => {
     const patches = serve({
       domains: [geocoding],

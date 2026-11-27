@@ -15,9 +15,11 @@ import { createSafePinoOptions } from "./utils/safe-log-fields";
 export const processLogger = pino(
   {
     ...createSafePinoOptions(envString("LOG_LEVEL", "info")),
-    mixin() {
+    // A line written through an integration's own logger already names it as
+    // `integration`; one key per line keeps searches by integration simple.
+    mixin(fields: object) {
       const scope = currentIntegrationScope();
-      return scope ? { integrationId: scope.integrationId } : {};
+      return scope && !("integration" in fields) ? { integrationId: scope.integrationId } : {};
     },
   },
   pino.multistream([{ stream: process.stdout }, { stream: appLogger.createPinoStream() }]),

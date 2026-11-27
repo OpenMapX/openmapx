@@ -153,6 +153,7 @@ export function ProviderOrderEditor({
   const editor = useRef<HTMLDivElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const focusAfterSave = useRef<Change["focus"] | null>(null);
+  const restoredTo = useRef<Element | null>(null);
 
   const save = useMutation({
     mutationKey: ["integration-provider-order", admin.apiUrl, orchestratorId],
@@ -185,6 +186,7 @@ export function ProviderOrderEditor({
       wanted
         .map(([id, control]) => controls.current.get(`${id}:${control}`))
         .find((element) => element && !element.hasAttribute("disabled")) ?? heading.current;
+    restoredTo.current = target ?? null;
     if (target && target !== active) target.focus();
     if (!save.isPending) focusAfterSave.current = null;
   });
@@ -278,7 +280,14 @@ export function ProviderOrderEditor({
     });
 
   return (
-    <Card variant="outlined" ref={editor}>
+    <Card
+      variant="outlined"
+      ref={editor}
+      onFocus={(event) => {
+        // The operator went on to another control while the save was open.
+        if (event.target !== restoredTo.current) focusAfterSave.current = null;
+      }}
+    >
       <CardContent>
         <Stack sx={{ gap: 1.5 }}>
           <Stack direction="row" sx={{ alignItems: "center", gap: 1, flexWrap: "wrap" }}>

@@ -6,7 +6,7 @@ import {
   registerPlaceResolver,
   restorePlaceResolvers,
   rollbackPlaceResolverStaging,
-  setPlaceResolverRegistrationGuard,
+  setPlaceResolverRegistrationHook,
   snapshotPlaceResolvers,
 } from "./resolvers.js";
 
@@ -69,18 +69,32 @@ describe("place resolver snapshots", () => {
   });
 });
 
-describe("place resolver registration guard", () => {
-  it("ignores a registration the guard refuses and accepts it again once cleared", () => {
-    setPlaceResolverRegistrationGuard((scheme) => scheme !== "guard-refused");
+describe("place resolver registration hook", () => {
+  it("ignores a registration the hook refuses and accepts it again once cleared", () => {
+    setPlaceResolverRegistrationHook((scheme, resolver) =>
+      scheme === "guard-refused" ? null : resolver,
+    );
     try {
       registerPlaceResolver("guard-refused", async () => "refused");
       registerPlaceResolver("guard-accepted", async () => "accepted");
       expect(getPlaceResolver("guard-refused")).toBeUndefined();
       expect(getPlaceResolver("guard-accepted")).toBeTypeOf("function");
     } finally {
-      setPlaceResolverRegistrationGuard(null);
+      setPlaceResolverRegistrationHook(null);
     }
     registerPlaceResolver("guard-refused", async () => "accepted later");
     expect(getPlaceResolver("guard-refused")).toBeTypeOf("function");
+  });
+
+  it("registers the resolver the hook returns in place of the given one", async () => {
+    setPlaceResolverRegistrationHook((_scheme, resolver) => async (value, ctx) => ({
+      wrapped: await resolver(value, ctx),
+    }));
+    try {
+      registerPlaceResolver("hook-wrapped", async (value) => value);
+    } finally {
+      setPlaceResolverRegistrationHook(null);
+    }
+    expect(await getPlaceResolver("hook-wrapped")?.("1", {})).toEqual({ wrapped: "1" });
   });
 });

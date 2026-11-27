@@ -418,6 +418,7 @@ export {
   readProviderOrder,
   UNLISTED_BY_DOMAIN,
 } from "./provider-order";
+export { createProviderRegistrationCheck } from "./provider-registration";
 export {
   listQuery,
   QueryValidationError,

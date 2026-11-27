@@ -38,30 +38,41 @@ export type PlaceResolver<TPlace = unknown> = (
 
 const registry = new Map<string, PlaceResolver<unknown>>();
 let stagedRegistry: Map<string, PlaceResolver<unknown>> | null = null;
-let registrationGuard: ((scheme: string) => boolean) | null = null;
+/**
+ * The host's hook for every registration: returns the resolver to register,
+ * which may wrap the given one, or `null` to ignore the registration.
+ */
+export type PlaceResolverRegistrationHook = (
+  scheme: string,
+  resolver: PlaceResolver<unknown>,
+) => PlaceResolver<unknown> | null;
+
+let registrationHook: PlaceResolverRegistrationHook | null = null;
 
 /**
- * Install the host's check for every later registration, or remove it with
- * `null`. The host refuses registrations made by integration code it has
- * already unloaded, which may still run work it scheduled.
+ * Install the host's hook for every later registration, or remove it with
+ * `null`. The host ignores registrations made by integration code it has
+ * already unloaded, which may still run work it scheduled, and wraps the
+ * resolvers of the code it runs in a scope.
  */
-export function setPlaceResolverRegistrationGuard(
-  guard: ((scheme: string) => boolean) | null,
-): void {
-  registrationGuard = guard;
+export function setPlaceResolverRegistrationHook(hook: PlaceResolverRegistrationHook | null): void {
+  registrationHook = hook;
 }
 
 /**
  * Register (or replace) the resolver for a scheme. Idempotent so
- * integrations can re-register on hot reload. A registration the host's guard
+ * integrations can re-register on hot reload. A registration the host's hook
  * refuses is ignored.
  */
 export function registerPlaceResolver<TPlace = unknown>(
   scheme: string,
   fn: PlaceResolver<TPlace>,
 ): void {
-  if (registrationGuard && !registrationGuard(scheme)) return;
-  (stagedRegistry ?? registry).set(scheme, fn as PlaceResolver<unknown>);
+  const resolver = registrationHook
+    ? registrationHook(scheme, fn as PlaceResolver<unknown>)
+    : (fn as PlaceResolver<unknown>);
+  if (!resolver) return;
+  (stagedRegistry ?? registry).set(scheme, resolver);
 }
 
 /** Begin a detached resolver generation for an atomic integration reload. */

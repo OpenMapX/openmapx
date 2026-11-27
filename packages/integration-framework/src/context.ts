@@ -514,6 +514,13 @@ export interface AttributionIndexHandle {
   listMotisFeedTags(): string[];
 }
 
+/**
+ * What the host gives an integration's `setup`. Once the host has unloaded an
+ * installed integration (left it out, or retired its generation on a reload),
+ * the registering, emitting and subscribing methods do nothing and log one
+ * warning per method, so late work the integration scheduled cannot reach the
+ * next generation.
+ */
 export interface IntegrationContext {
   readonly id: string;
   readonly manifest: IntegrationManifest;
