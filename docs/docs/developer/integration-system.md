@@ -788,11 +788,12 @@ database role:
   was applied"), and a new file is numbered above every applied one
   ("... is older than a migration that was already applied"). Fix a mistake
   with a new file.
-- The first run creates the schema `ext_<id>`. Before each file, the session's
-  settings are reset and the search path is set to that schema, then
-  `extensions`, so unqualified names are created and found in the schema
-  whatever the file before changed. `public` is not on the path; name
-  platform tables with their schema.
+- The first run creates the schema `ext_<id>`. The migration session's search
+  path is that schema, then `extensions`, so unqualified names are created and
+  found in the schema; a `RESET ALL` or `SET search_path TO DEFAULT` in a file
+  returns to it. `public` is not on the path; name platform tables with their
+  schema. The settings a file changes end with the file: before the API's own
+  statements and the next file run, every setting returns to the session's.
 - A file runs as one string through PL/pgSQL `EXECUTE` inside the migration
   transaction. Comments, `$$`-quoted function bodies and `DO` blocks work as
   usual. The error of a failing statement names the file and, where
@@ -802,19 +803,37 @@ database role:
   transaction control, also not inside a `DO` block, nor a statement that
   cannot run inside a transaction or function, such as
   `CREATE INDEX CONCURRENTLY`, `REINDEX CONCURRENTLY`, `VACUUM` or
-  `CREATE DATABASE`. Use a plain `CREATE INDEX`. A file may not change the
-  role, create extensions or create schemas other than its own, and it must
-  not change `lock_timeout` or `transaction_timeout`.
-- A foreign key from the schema to a table outside it, such as
-  `public."user"(id)`, must be `ON DELETE CASCADE` or `ON DELETE SET NULL`.
-  Any other key would make deleting the referenced row fail, which would
-  block account deletion; the file is refused with a message that names the
-  key.
+  `CREATE DATABASE`. Use a plain `CREATE INDEX`. `COPY ... FROM STDIN`, which
+  `pg_dump` data files use, is not available either; load data with `INSERT`.
+  A file may not change the role, create extensions or create schemas other
+  than its own, and it must not change `lock_timeout` or
+  `transaction_timeout`.
+- After each file, the foreign keys of the whole schema are checked, so that
+  deleting a row outside the schema, such as an account, cannot fail because
+  of them:
+  - A key to a table outside the schema, such as `public."user"(id)`, must be
+    `ON DELETE CASCADE`, or `ON DELETE SET NULL` where every column it sets to
+    null is nullable (with a column list, `SET NULL (col)`, only the listed
+    columns count). `NO ACTION`, `RESTRICT` and `SET DEFAULT` are refused.
+  - A table of the schema that such a cascade deletes rows from, directly or
+    through further cascades, may only be referenced by keys that are
+    `ON DELETE CASCADE` or `SET NULL` on nullable columns. A child table of a
+    cascading table therefore needs `ON DELETE CASCADE` as well.
+
+  A refused key fails the run, with a message that names the file, the key,
+  its table and what to change. The check covers foreign keys only: a trigger
+  or check constraint of the integration that fails on such a deletion still
+  makes it fail.
+
 - A migration waits at most 120 seconds for each lock, including the lock
   that keeps two runs of the same integration apart, and all files of a start
-  run at most 30 minutes in all. Both limits are set on the database session as well, so the server
-  ends a migration whose API process went away and releases its lock. A stop
-  request during start-up cancels running migrations.
+  run at most 30 minutes in all. Both limits are set on the database session
+  as well, so the server ends a migration whose API process went away and
+  releases its lock. A file that changes them loses this protection: one
+  that turns `transaction_timeout` off is, if the API dies, no longer
+  bounded by the server, and its statement runs on until it ends. A stop
+  request, during start-up or while a reload is migrating, cancels running
+  migrations.
 - When a file fails or a limit is reached, everything is rolled back. An
   installed integration is then left out with phase `migrate`, and a built-in
   fails as well; fix the file and install the integration again.

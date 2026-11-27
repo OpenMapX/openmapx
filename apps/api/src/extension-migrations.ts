@@ -50,27 +50,108 @@ const ACTIVE_SQL_TRANSACTION = "25001";
  * `EXECUTE` runs inside the caller's transaction, and the server refuses any
  * statement in it that would end or start one, so a file can neither commit
  * part of the run nor carry on outside it.
+ *
+ * `reset all` in the same statement returns every setting the file changed
+ * to the session's own (its search path and limits are startup parameters)
+ * before the runner's next statement starts, so a file's statement timeout
+ * or search path cannot apply to the runner's checks, its bookkeeping or the
+ * next file. A statement timeout set during a statement does not apply to
+ * that statement itself.
  */
 const CREATE_RUN_MIGRATION =
-  "create function pg_temp.openmapx_run_migration(migration text) returns void language plpgsql as $run$ begin execute migration; end $run$";
+  "create function pg_temp.openmapx_run_migration(migration text) returns void language plpgsql as $run$ begin execute migration; reset all; end $run$";
 const RUN_MIGRATION = "select pg_temp.openmapx_run_migration($1)";
 
 /**
- * A foreign key from the integration's schema to a table outside it that
- * would block deleting the row it references. Account deletion and the
- * platform's other cleanups delete rows in many tables, and the set grows
- * with the platform, so every table outside the schema counts.
+ * The first foreign key of the integration's schema that could stop the
+ * platform from deleting a row outside the schema, such as an account.
+ * Account deletion and the platform's other cleanups delete rows in many
+ * tables, and the set grows with the platform, so every table outside the
+ * schema counts. The effect is judged over the whole schema:
+ *
+ * - a key to a table outside the schema must delete (`CASCADE`) or clear
+ *   (`SET NULL`, only on nullable columns) the referencing rows;
+ * - the tables such a cascade deletes rows from, directly or through
+ *   further cascades in the schema, are `reachable`, and every key to one of
+ *   them must delete or clear its rows in the same way.
+ *
+ * `SET NULL` with a column list clears only the listed columns. `NO ACTION`
+ * is refused as well, although it lets a cascade through that deletes the
+ * referencing rows in the same statement: whether it does depends on data.
+ * Keys of a partition copy their parent's key and are judged with it.
  */
-const BLOCKING_FOREIGN_KEY = `select c.conname as name, format('%I.%I', target_ns.nspname, target.relname) as target
-  from pg_constraint c
-  join pg_class target on target.oid = c.confrelid
-  join pg_namespace target_ns on target_ns.oid = target.relnamespace
-  where c.contype = 'f'
-    and c.connamespace = to_regnamespace($1)
-    and target.relnamespace <> c.connamespace
-    and c.confdeltype not in ('c', 'n')
-  order by c.conname
-  limit 1`;
+const BLOCKING_FOREIGN_KEY = `with recursive fk as (
+    select c.oid, c.conname::text as name, c.conrelid, c.confrelid, c.conparentid,
+      c.confdeltype::text as action,
+      target.relnamespace <> c.connamespace as leaves,
+      format('%I.%I', source_ns.nspname, source.relname) as source,
+      format('%I.%I', target_ns.nspname, target.relname) as target,
+      (select string_agg(quote_ident(a.attname), ', ' order by a.attnum)
+         from pg_catalog.pg_attribute a
+        where a.attrelid = c.conrelid and a.attnotnull
+          and a.attnum = any(coalesce(nullif(c.confdelsetcols, '{}'), c.conkey))) as not_null_columns
+    from pg_catalog.pg_constraint c
+    join pg_catalog.pg_class source on source.oid = c.conrelid
+    join pg_catalog.pg_namespace source_ns on source_ns.oid = source.relnamespace
+    join pg_catalog.pg_class target on target.oid = c.confrelid
+    join pg_catalog.pg_namespace target_ns on target_ns.oid = target.relnamespace
+    where c.contype = 'f' and c.connamespace = pg_catalog.to_regnamespace($1)
+  ),
+  reachable as (
+    select conrelid as relid, target as origin, array[name] as path, array[conrelid] as visited
+      from fk where leaves and action = 'c'
+    union all
+    select fk.conrelid, r.origin, r.path || fk.name, r.visited || fk.conrelid
+      from fk join reachable r on fk.confrelid = r.relid
+      where not fk.leaves and fk.action = 'c' and fk.conrelid <> all(r.visited)
+  ),
+  refused as (
+    select distinct on (fk.oid) fk.name, fk.source, fk.target, fk.action, fk.not_null_columns,
+        r.origin, r.path
+      from fk left join reachable r on not fk.leaves and r.relid = fk.confrelid
+      where (fk.leaves or r.relid is not null)
+        and fk.conparentid = 0
+        and (fk.action not in ('c', 'n') or (fk.action = 'n' and fk.not_null_columns is not null))
+      order by fk.oid, cardinality(r.path)
+  )
+  select name, source, target, action, not_null_columns, origin, path
+    from refused order by name limit 1`;
+
+interface BlockingForeignKey {
+  readonly name: string;
+  readonly source: string;
+  readonly target: string;
+  /** `confdeltype`: `a` NO ACTION, `r` RESTRICT, `d` SET DEFAULT, `n` SET NULL. */
+  readonly action: string;
+  /** The NOT NULL columns a `SET NULL` key would clear, comma-separated. */
+  readonly not_null_columns: string | null;
+  /** For a key inside the schema: the outside table the cascade starts from. */
+  readonly origin: string | null;
+  /** For a key inside the schema: the keys the cascade follows, in order. */
+  readonly path: string[] | null;
+}
+
+const DELETE_ACTIONS: Record<string, string> = {
+  a: "NO ACTION",
+  r: "RESTRICT",
+  d: "SET DEFAULT",
+};
+
+function foreignKeyRefusal(prefix: string, key: BlockingForeignKey): string {
+  const columns = key.not_null_columns;
+  const clearsNotNull = key.action === "n" && columns !== null;
+  const problem = clearsNotNull
+    ? `that sets the NOT NULL column${columns.includes(",") ? "s" : ""} ${columns} to null on delete`
+    : `with ON DELETE ${DELETE_ACTIONS[key.action] ?? key.action}`;
+  const cascade =
+    key.origin === null || key.path === null
+      ? ""
+      : `; rows of ${key.target} are deleted by a cascade from ${key.origin} through ${key.path.join(", ")}`;
+  const change = clearsNotNull
+    ? `make ${columns} nullable or declare ON DELETE CASCADE`
+    : "declare ON DELETE CASCADE, or ON DELETE SET NULL on nullable columns";
+  return `${prefix} adds foreign key ${key.name} on ${key.source} to ${key.target} ${problem}${cascade}; ${change} so the platform can still delete the rows it references, for example an account`;
+}
 
 /** The tables that hold an integration's rows outside its own schema. */
 const INTEGRATION_BOOKKEEPING_TABLES = [
@@ -179,10 +260,13 @@ export async function applyExtensionMigrations(args: {
   });
 
   // The transaction starts after the lock wait, so the server's bound on it
-  // ends no later than the client's deadline, which reports the outcome.
+  // ends no later than the client's deadline, which reports the outcome. As
+  // startup parameters these are what a `RESET ALL`, the file's or the
+  // runner's, returns to.
   const session = openMigrationSession({
     lock_timeout: String(lockTimeoutMs),
     transaction_timeout: String(deadlineMs),
+    search_path: integrationSearchPath(schema),
   });
   let stopped: Error | undefined;
   let current: Statement | undefined;
@@ -298,29 +382,27 @@ async function migrateInTransaction(
 
   if (pending.length > 0) await run(tx, CREATE_RUN_MIGRATION);
   for (const file of pending) {
-    // Whatever the file before changed, each file starts from the session's
-    // own settings, with the timeouts it was opened with, in the schema.
-    await run(tx, "reset all");
-    await run(tx, "select set_config('search_path', $1, true)", [integrationSearchPath(schema)]);
+    const prefix = `Migration ${file.name} of ${integrationId}`;
     try {
       await run(tx, RUN_MIGRATION, [file.text]);
     } catch (error) {
       throw migrationFailure(integrationId, file, error);
     }
-    const [blocking] = await run<Array<{ name: string; target: string }>>(
-      tx,
-      BLOCKING_FOREIGN_KEY,
-      [schema],
-    );
-    if (blocking)
-      throw new Error(
-        `Migration ${file.name} of ${integrationId} adds foreign key ${blocking.name} to ${blocking.target} without ON DELETE CASCADE or ON DELETE SET NULL; declare one of them so the platform can still delete the rows it references, for example an account`,
-      );
-    await run(
-      tx,
-      "insert into public.extension_migration (integration_id, name, sha256) values ($1, $2, $3)",
-      [integrationId, file.name, file.sha256],
-    );
+    let blocking: BlockingForeignKey | undefined;
+    try {
+      [blocking] = await run<BlockingForeignKey[]>(tx, BLOCKING_FOREIGN_KEY, [schema]);
+      if (!blocking)
+        await run(
+          tx,
+          "insert into public.extension_migration (integration_id, name, sha256) values ($1, $2, $3)",
+          [integrationId, file.name, file.sha256],
+        );
+    } catch (error) {
+      // What the file left that `reset all` cannot undo, such as a read-only
+      // transaction, fails the runner's own statements.
+      throw new Error(`${prefix} failed: ${errorText(error)}`, { cause: error });
+    }
+    if (blocking) throw new Error(foreignKeyRefusal(prefix, blocking));
   }
   const shipped = new Set(files.map((file) => file.name));
   return {
@@ -337,14 +419,17 @@ function lineAt(text: string, position: number): number {
   return before.split("\n").length;
 }
 
+function errorText(error: unknown): string {
+  return String((error as { message?: unknown } | null)?.message ?? error);
+}
+
 /** The error of a file that failed, naming the file and, where known, its line. */
 function migrationFailure(integrationId: string, file: ShippedMigration, error: unknown): Error {
   const failed = error as {
-    message?: unknown;
     internal_position?: unknown;
     internal_query?: unknown;
   } | null;
-  const message = String(failed?.message ?? error);
+  const message = errorText(error);
   const prefix = `Migration ${file.name} of ${integrationId}`;
   if (
     hasCode(error, INVALID_TRANSACTION_TERMINATION) ||

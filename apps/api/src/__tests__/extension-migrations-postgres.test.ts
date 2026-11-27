@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -56,6 +57,47 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           }),
           integrationId,
         },
+      );
+    }
+
+    /**
+     * Deletes the account as a self-service deletion does: in an account
+     * mutation, with the production erasure hooks, journal and key files.
+     */
+    async function deleteAccount(userId: string) {
+      const { initializeErasureJournal } = await import("@openmapx/core/erasure-journal");
+      const { eq } = await import("drizzle-orm");
+      const { withAccountMutation } = await import("../account/account-mutations");
+      const { userErasureHooks } = await import("../services/user-erasure");
+      const { user } = await import("../db/schema");
+      const files = mkdtempSync(join(root, "erasure-"));
+      const journalKey = randomBytes(32);
+      const journalPath = join(files, "journal.jsonl");
+      initializeErasureJournal(journalPath, journalKey, new Date());
+      writeFileSync(join(files, "journal-key"), journalKey.toString("base64url"), { mode: 0o444 });
+      writeFileSync(join(files, "offline-key"), randomBytes(32).toString("base64url"), {
+        mode: 0o444,
+      });
+      vi.stubEnv("ERASURE_JOURNAL_PATH", journalPath);
+      vi.stubEnv("ERASURE_JOURNAL_KEY_FILE", join(files, "journal-key"));
+      vi.stubEnv("ERASURE_JOURNAL_KEY_UID", String(process.getuid?.() ?? 0));
+      vi.stubEnv("OFFLINE_PACKAGE_PRINCIPAL_KEY_FILE", join(files, "offline-key"));
+      vi.stubEnv("OFFLINE_PACKAGE_PRINCIPAL_KEY_UID", undefined);
+      const subject = { id: userId, email: `${userId}@example.test` };
+      await withAccountMutation(
+        {
+          actorId: userId,
+          targetId: userId,
+          action: "delete",
+          mutationKey: `erasure-${userId}`,
+          selfServiceDelete: true,
+        },
+        async (tx) => {
+          await userErasureHooks.before(subject);
+          await tx.delete(user).where(eq(user.id, userId));
+          await userErasureHooks.after(subject);
+        },
+        pools.db,
       );
     }
 
@@ -290,6 +332,49 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       ]);
     });
 
+    it("returns to the session's settings after each file, so the runner's own statements run under them", async () => {
+      expect(
+        await migrations.applyExtensionMigrations(
+          shipping({
+            "0001_init.sql": `${INIT} set statement_timeout = 1; set search_path = public;`,
+            "0002_next.sql": "select pg_sleep(0.05); create table y (id int);",
+          }),
+        ),
+      ).toEqual({ applied: ["0001_init.sql", "0002_next.sql"], schemaAhead: false });
+      expect(
+        await raw`select to_regclass('ext_demo.y') is not null as in_schema,
+          to_regclass('public.y') is null as not_public`,
+      ).toEqual([{ in_schema: true, not_public: true }]);
+    });
+
+    it("names the file when what it left behind fails the runner's own statements", async () => {
+      await expect(
+        migrations.applyExtensionMigrations(
+          shipping({
+            "0001_init.sql": INIT,
+            "0002_read_only.sql": "set transaction_read_only = on;",
+          }),
+        ),
+      ).rejects.toThrow(
+        "Migration 0002_read_only.sql of demo failed: cannot execute INSERT in a read-only transaction",
+      );
+      expect(await leftBehind()).toEqual({ schema: false, rows: 0, stray: null });
+    });
+
+    it.each([
+      ["RESET ALL", "reset all;"],
+      ["RESET search_path", "reset search_path;"],
+      ["SET search_path TO DEFAULT", "set search_path to default;"],
+    ])("keeps a file in its schema after the file runs %s", async (_label, reset) => {
+      await migrations.applyExtensionMigrations(
+        shipping({ "0001_init.sql": `${reset} create table stray (id int);` }),
+      );
+      expect(
+        await raw`select to_regclass('ext_demo.stray') is not null as in_schema,
+          to_regclass('public.stray') is null as not_public`,
+      ).toEqual([{ in_schema: true, not_public: true }]);
+    });
+
     it("gives the migration session server-side limits that outlive the API process", async () => {
       await migrations.applyExtensionMigrations({
         ...shipping({
@@ -304,54 +389,192 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       ]);
     });
 
-    it("refuses a foreign key that would block deleting a platform row, and leaves nothing behind", async () => {
-      await expect(
-        migrations.applyExtensionMigrations(
-          shipping({
-            "0001_init.sql": INIT,
-            "0002_notes.sql":
-              'create table notes (id int primary key, user_id text not null references public."user"(id), body text);',
-          }),
-        ),
-      ).rejects.toThrow(
-        'Migration 0002_notes.sql of demo adds foreign key notes_user_id_fkey to public."user" without ON DELETE CASCADE or ON DELETE SET NULL; declare one of them so the platform can still delete the rows it references, for example an account',
-      );
-      expect(await leftBehind()).toEqual({ schema: false, rows: 0, stray: null });
+    const DECLARE = "declare ON DELETE CASCADE, or ON DELETE SET NULL on nullable columns";
+    const SO_DELETION_WORKS =
+      "so the platform can still delete the rows it references, for example an account";
 
+    it.each([
+      [
+        "no ON DELETE",
+        'create table notes (id int primary key, user_id text not null references public."user"(id), body text);',
+        `foreign key notes_user_id_fkey on ext_demo.notes to public."user" with ON DELETE NO ACTION; ${DECLARE} ${SO_DELETION_WORKS}`,
+      ],
+      [
+        "ON DELETE RESTRICT",
+        "create table visits (session_id text references public.session(id) on delete restrict);",
+        "foreign key visits_session_id_fkey on ext_demo.visits to public.session with ON DELETE RESTRICT",
+      ],
+      [
+        "ON DELETE SET DEFAULT",
+        `create table visits (user_id text default 'gone' references public."user"(id) on delete set default);`,
+        'foreign key visits_user_id_fkey on ext_demo.visits to public."user" with ON DELETE SET DEFAULT',
+      ],
+      [
+        "a key to another integration's schema",
+        "create table visits (thing int references ext_manual.things(id));",
+        "foreign key visits_thing_fkey on ext_demo.visits to ext_manual.things with ON DELETE NO ACTION",
+      ],
+    ])(
+      "refuses a key out of the schema with %s, and leaves nothing behind",
+      async (_label, table, refusal) => {
+        await api.unsafe(
+          "create schema ext_manual; create table ext_manual.things (id int primary key);",
+        );
+        await expect(
+          migrations.applyExtensionMigrations(
+            shipping({ "0001_init.sql": INIT, "0002_visits.sql": table }),
+          ),
+        ).rejects.toThrow(`Migration 0002_visits.sql of demo adds ${refusal}`);
+        expect(await leftBehind()).toEqual({ schema: false, rows: 0, stray: null });
+      },
+    );
+
+    it("names the file that added a refused key when later files of the run follow it", async () => {
       await expect(
         migrations.applyExtensionMigrations(
           shipping({
-            "0001_init.sql":
-              "create table visits (session_id text references public.session(id) on delete restrict);",
+            "0001_init.sql": 'create table notes (user_id text references public."user"(id));',
+            "0002_index.sql": "create index notes_user_idx on notes (user_id);",
           }),
         ),
       ).rejects.toThrow(
-        "Migration 0001_init.sql of demo adds foreign key visits_session_id_fkey to public.session without ON DELETE CASCADE or ON DELETE SET NULL",
+        'Migration 0001_init.sql of demo adds foreign key notes_user_id_fkey on ext_demo.notes to public."user" with ON DELETE NO ACTION',
       );
       expect(await leftBehind()).toEqual({ schema: false, rows: 0, stray: null });
     });
 
-    it("lets user tables cascade from or clear the platform user, so the account can be deleted", async () => {
-      await migrations.applyExtensionMigrations(
-        shipping({
-          "0001_init.sql": [
-            'create table notes (user_id text not null references public."user"(id) on delete cascade, body text);',
-            'create table edits (id int primary key, editor text references public."user"(id) on delete set null);',
-            "create table edit_notes (edit_id int not null references edits(id), body text);",
-          ].join("\n"),
-        }),
+    it.each([
+      [
+        "on the whole key",
+        'create table notes (user_id text not null references public."user"(id) on delete set null);',
+      ],
+      [
+        "with a column list",
+        'create table notes (user_id text not null, foreign key (user_id) references public."user"(id) on delete set null (user_id));',
+      ],
+    ])("refuses ON DELETE SET NULL %s on a NOT NULL column", async (_label, table) => {
+      await expect(
+        migrations.applyExtensionMigrations(shipping({ "0001_init.sql": table })),
+      ).rejects.toThrow(
+        `Migration 0001_init.sql of demo adds foreign key notes_user_id_fkey on ext_demo.notes to public."user" that sets the NOT NULL column user_id to null on delete; make user_id nullable or declare ON DELETE CASCADE ${SO_DELETION_WORKS}`,
       );
-      await raw`insert into "user" (id, name, email, role, created_at, updated_at)
-        values ('note-owner', 'Owner', 'owner@example.test', 'user', now(), now())`;
-      await raw`insert into ext_demo.notes (user_id, body) values ('note-owner', 'hello')`;
-      await raw`insert into ext_demo.edits (id, editor) values (1, 'note-owner')`;
+      expect(await leftBehind()).toEqual({ schema: false, rows: 0, stray: null });
+    });
 
-      await api`delete from "user" where id = 'note-owner'`;
+    it("refuses a key without ON DELETE to a table that cascades from a platform table", async () => {
+      await expect(
+        migrations.applyExtensionMigrations(
+          shipping({
+            "0001_init.sql": [
+              'create table notes (id int primary key, user_id text not null references public."user"(id) on delete cascade);',
+              "create table tags (note_id int not null references notes(id), label text);",
+            ].join("\n"),
+          }),
+        ),
+      ).rejects.toThrow(
+        `Migration 0001_init.sql of demo adds foreign key tags_note_id_fkey on ext_demo.tags to ext_demo.notes with ON DELETE NO ACTION; rows of ext_demo.notes are deleted by a cascade from public."user" through notes_user_id_fkey; ${DECLARE} ${SO_DELETION_WORKS}`,
+      );
+      expect(await leftBehind()).toEqual({ schema: false, rows: 0, stray: null });
+    });
+
+    it("follows a cascade three tables deep", async () => {
+      await expect(
+        migrations.applyExtensionMigrations(
+          shipping({
+            "0001_init.sql": [
+              'create table notes (id int primary key, user_id text not null references public."user"(id) on delete cascade);',
+              "create table tags (id int primary key, note_id int not null references notes(id) on delete cascade);",
+              "create table votes (tag_id int not null references tags(id) on delete set null);",
+            ].join("\n"),
+          }),
+        ),
+      ).rejects.toThrow(
+        'Migration 0001_init.sql of demo adds foreign key votes_tag_id_fkey on ext_demo.votes to ext_demo.tags that sets the NOT NULL column tag_id to null on delete; rows of ext_demo.tags are deleted by a cascade from public."user" through notes_user_id_fkey, tags_note_id_fkey; make tag_id nullable or declare ON DELETE CASCADE',
+      );
+      expect(await leftBehind()).toEqual({ schema: false, rows: 0, stray: null });
+    });
+
+    it("refuses a key that a later file adds to a table an earlier file created", async () => {
+      const notes = [
+        'create table notes (id int primary key, user_id text not null references public."user"(id) on delete cascade);',
+        "create table tags (note_id int, label text);",
+      ].join("\n");
+      const addKey =
+        "alter table tags add constraint tags_note_fkey foreign key (note_id) references notes(id) on delete restrict;";
+      const refusal =
+        'Migration 0002_key.sql of demo adds foreign key tags_note_fkey on ext_demo.tags to ext_demo.notes with ON DELETE RESTRICT; rows of ext_demo.notes are deleted by a cascade from public."user" through notes_user_id_fkey';
+
+      await expect(
+        migrations.applyExtensionMigrations(
+          shipping({ "0001_init.sql": notes, "0002_key.sql": addKey }),
+        ),
+      ).rejects.toThrow(refusal);
+      expect(await leftBehind()).toEqual({ schema: false, rows: 0, stray: null });
+
+      await migrations.applyExtensionMigrations(shipping({ "0001_init.sql": notes }));
+      await expect(
+        migrations.applyExtensionMigrations(
+          shipping({ "0001_init.sql": notes, "0002_key.sql": addKey }),
+        ),
+      ).rejects.toThrow(refusal);
+      expect(await leftBehind()).toEqual({ schema: true, rows: 1, stray: null });
+    });
+
+    it("lets the account be deleted through the erasure path with every accepted shape", async () => {
+      expect(
+        await migrations.applyExtensionMigrations(
+          shipping({
+            "0001_init.sql": [
+              'create table notes (id int primary key, parent_id int references notes(id) on delete cascade, user_id text not null references public."user"(id) on delete cascade);',
+              "create table tags (id int primary key, note_id int not null references notes(id) on delete cascade);",
+              "create table votes (tag_id int references tags(id) on delete set null, label text not null);",
+              'create table edits (id int primary key, editor text references public."user"(id) on delete set null);',
+              "create table edit_notes (edit_id int not null references edits(id), body text);",
+            ].join("\n"),
+            "0002_more.sql": [
+              'create table pins (owner text not null, note_id int, foreign key (owner) references public."user"(id) on delete cascade);',
+              "alter table pins add constraint pins_note_fkey foreign key (note_id) references notes(id) on delete set null (note_id);",
+              'create table reviews (reviewer text, label text not null, foreign key (reviewer) references public."user"(id) on delete set null (reviewer));',
+            ].join("\n"),
+          }),
+        ),
+      ).toEqual({ applied: ["0001_init.sql", "0002_more.sql"], schemaAhead: false });
+      await raw`insert into "user" (id, name, email, role, created_at, updated_at)
+        values ('note-owner', 'Owner', 'note-owner@example.test', 'user', now(), now())`;
+      await raw.unsafe(`
+        insert into ext_demo.notes (id, parent_id, user_id) values (1, null, 'note-owner'), (2, 1, 'note-owner');
+        insert into ext_demo.tags (id, note_id) values (10, 2);
+        insert into ext_demo.votes (tag_id, label) values (10, 'up');
+        insert into ext_demo.edits (id, editor) values (1, 'note-owner');
+        insert into ext_demo.edit_notes (edit_id, body) values (1, 'kept');
+        insert into ext_demo.reviews (reviewer, label) values ('note-owner', 'fine');`);
+      await api`insert into "user" (id, name, email, role, created_at, updated_at)
+        values ('pin-owner', 'Pins', 'pin-owner@example.test', 'user', now(), now())`;
+      await raw`insert into ext_demo.pins (owner, note_id) values ('pin-owner', 1)`;
+
+      await deleteAccount("note-owner");
 
       expect(
         await raw`select (select count(*)::int from ext_demo.notes) as notes,
-          (select editor from ext_demo.edits where id = 1) as editor`,
-      ).toEqual([{ notes: 0, editor: null }]);
+          (select count(*)::int from ext_demo.tags) as tags,
+          (select json_agg(json_build_object('tag', tag_id, 'label', label)) from ext_demo.votes) as votes,
+          (select editor from ext_demo.edits where id = 1) as editor,
+          (select count(*)::int from ext_demo.edit_notes) as edit_notes,
+          (select json_agg(json_build_object('owner', owner, 'note', note_id)) from ext_demo.pins) as pins,
+          (select json_agg(json_build_object('reviewer', reviewer, 'label', label)) from ext_demo.reviews) as reviews,
+          (select count(*)::int from "user" where id = 'note-owner') as users`,
+      ).toEqual([
+        {
+          notes: 0,
+          tags: 0,
+          votes: [{ tag: null, label: "up" }],
+          editor: null,
+          edit_notes: 1,
+          pins: [{ owner: "pin-owner", note: null }],
+          reviews: [{ reviewer: null, label: "fine" }],
+          users: 0,
+        },
+      ]);
     });
 
     it("refuses an applied migration whose bytes changed", async () => {

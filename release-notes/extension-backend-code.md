@@ -60,14 +60,20 @@ each once, all files of one start in one transaction, and each is recorded with
 its SHA-256. A file may not change after it was applied, a new file may not be
 numbered below an applied one, and a file may not contain transaction control
 (`COMMIT`, `ROLLBACK`, `BEGIN`, `SAVEPOINT`) or statements that cannot run inside
-a transaction, such as `CREATE INDEX CONCURRENTLY` or `VACUUM`. Each file starts
-with the session's settings reset and the search path set to the schema, then
-`extensions`. A foreign key from the schema to a platform table must be
-`ON DELETE CASCADE` or `ON DELETE SET NULL`, so an integration can never block
-account deletion. Migrations wait at most 2 minutes for a lock and run at most 30
-minutes in all; both limits are also set on the database session, so PostgreSQL
-ends a migration whose API process went away, and a stop request during start-up
-cancels running migrations. While migrations run at start-up the API does not yet
+a transaction, such as `CREATE INDEX CONCURRENTLY` or `VACUUM`, nor
+`COPY ... FROM STDIN`. Each file runs with the search path set to the schema,
+then `extensions`, and the settings it changes end with it. After each file the
+API refuses the migration when a foreign key of the schema could make deleting a
+row outside it fail, for example an account: a key to a table outside the schema
+must be `ON DELETE CASCADE`, or `ON DELETE SET NULL` on nullable columns, and so
+must every key to a table of the schema that such a cascade deletes rows from.
+The check covers foreign keys only; a trigger or a check constraint of the
+integration can still make a deletion fail. Migrations wait at most 2 minutes for
+a lock and run at most 30 minutes in all; both limits are also set on the
+database session, so PostgreSQL ends a migration whose API process went away,
+unless a file turned the session's time limit off itself. A stop request, during
+start-up or while a reload is migrating, cancels running migrations. While
+migrations run at start-up the API does not yet
 serve requests, and a long migration can make the container unhealthy; restarting
 it then starts the migration over. When a file fails or a limit is reached,
 everything is rolled back and the integration is left out with the step

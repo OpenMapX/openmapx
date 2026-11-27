@@ -20,6 +20,7 @@ import { startAccountMailWorker } from "./account/account-mail-outbox";
 import { auth } from "./auth";
 import { db, openMigrationSession, sql } from "./db/index";
 import { type MigrationRun, startMigrations } from "./db/migration-runner";
+import { cancelRunningExtensionMigrations } from "./extension-migrations";
 import {
   getAllIntegrations,
   initIntegrations,
@@ -636,6 +637,12 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
       stopDataUsePolicyRefresh();
       // Returns at once; a handler still running ends with the process.
       stopIntegrationTasks();
+      // A reload may be migrating an integration while the API serves; left
+      // running, its statement would outlive the process and hold the lock
+      // the next start waits for.
+      await cancelRunningExtensionMigrations().catch((err) =>
+        server.log.warn(err, "Could not stop the running database migration"),
+      );
       await shutdownServer(server, {
         graceMs: SHUTDOWN_GRACE_MS,
         forceMs: SHUTDOWN_FORCE_MS,

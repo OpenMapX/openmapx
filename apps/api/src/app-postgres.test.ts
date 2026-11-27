@@ -8,6 +8,20 @@ import { createMigratedPostgresFixture } from "./test/postgres-fixture";
 
 const describeDatabase = process.env.OPENMAPX_RUN_DATABASE_TESTS === "1" ? describe : describe.skip;
 
+/** The lifecycle calls of createApp() and stop(), in the order they happened. */
+const lifecycle = vi.hoisted(() => [] as string[]);
+
+vi.mock("./extension-migrations", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./extension-migrations")>();
+  return {
+    ...actual,
+    cancelRunningExtensionMigrations: () => {
+      lifecycle.push("cancel extension migrations");
+      return actual.cancelRunningExtensionMigrations();
+    },
+  };
+});
+
 const TRUSTED_ORIGIN = "https://web.example.test";
 const PUBLIC_RATE_LIMIT = 3;
 const CLOSED_LOCAL_URL = "http://127.0.0.1:9";
@@ -297,7 +311,10 @@ describeDatabase("the real application from createApp()", () => {
     } finally {
       await new Promise<void>((resolve) => blocker.close(() => resolve()));
     }
+    expect(lifecycle).not.toContain("cancel extension migrations");
     await app.stop();
+    // A reload may be migrating an integration while the API serves.
+    expect(lifecycle).toContain("cancel extension migrations");
     await expect(app.stop()).resolves.toBeUndefined();
 
     const healthRefreshes = [...timers.values()].filter(

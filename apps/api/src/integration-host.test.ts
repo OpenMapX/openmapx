@@ -1916,6 +1916,7 @@ describe("initIntegrations — loader", () => {
           [
             "// gives the shutdown handlers of installed integrations one budget in all: tidy",
             "export function setup(ctx) {",
+            "  ctx.onShutdown(() => { throw new Error('first handler failed'); });",
             "  ctx.onShutdown(async () => { globalThis.__omxInstalledTidied = true; });",
             "}",
           ].join("\n"),
