@@ -1,6 +1,10 @@
 import { toPoiSearchOutcome } from "@openmapx/core";
 import { OVERTURE_PLACES_SCHEMA_VERSION } from "@openmapx/core/published-data";
-import { createMockIntegrationContext, nth } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  fakeDatabaseClient,
+  nth,
+} from "@openmapx/integration-framework/testing";
 import type { PoiSearchProvider, PoiSearchReturn } from "@openmapx/provider-kit/poi-search";
 import { assert, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -64,9 +68,8 @@ const FIXTURE_ROWS = [
 ];
 
 function makeFakeDb(rows: unknown[] = FIXTURE_ROWS) {
-  return {
-    execute: vi.fn().mockResolvedValue(rows),
-  };
+  const execute = vi.fn().mockResolvedValue(rows);
+  return { ...fakeDatabaseClient(execute), execute };
 }
 
 describe("poi-overture setup", () => {
@@ -328,9 +331,7 @@ describe("poi-overture health check", () => {
   });
 
   it("returns down when overture_places.places query throws", async () => {
-    const db = {
-      execute: vi.fn().mockRejectedValue(new Error("relation does not exist")),
-    };
+    const db = fakeDatabaseClient(vi.fn().mockRejectedValue(new Error("relation does not exist")));
     const ctx = createMockIntegrationContext({ db });
     const { setup } = await import("../index.js");
     setup(ctx);

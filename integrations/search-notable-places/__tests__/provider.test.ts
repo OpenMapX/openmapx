@@ -1,5 +1,8 @@
 import { NOTABLE_PLACES_SCHEMA_VERSION } from "@openmapx/core/published-data";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  fakeDatabaseClient,
+} from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
 import { createNotablePlacesSuggestionProvider } from "../provider.js";
 
@@ -31,7 +34,7 @@ describe("notable-places suggestion provider", () => {
       },
     ]);
     const provider = createNotablePlacesSuggestionProvider(
-      createMockIntegrationContext({ db: { execute } }),
+      createMockIntegrationContext({ db: fakeDatabaseClient(execute) }),
     );
 
     const result = await provider.searchSuggestions(
@@ -94,7 +97,7 @@ describe("notable-places suggestion provider", () => {
       },
     ]);
     const provider = createNotablePlacesSuggestionProvider(
-      createMockIntegrationContext({ db: { execute } }),
+      createMockIntegrationContext({ db: fakeDatabaseClient(execute) }),
     );
 
     const result = await provider.searchSuggestions(
@@ -122,7 +125,7 @@ describe("notable-places suggestion provider", () => {
       },
     ]);
     const provider = createNotablePlacesSuggestionProvider(
-      createMockIntegrationContext({ db: { execute } }),
+      createMockIntegrationContext({ db: fakeDatabaseClient(execute) }),
     );
 
     const result = await provider.searchSuggestions(
@@ -162,7 +165,7 @@ describe("notable-places suggestion provider", () => {
       },
     ]);
     const provider = createNotablePlacesSuggestionProvider(
-      createMockIntegrationContext({ db: { execute } }),
+      createMockIntegrationContext({ db: fakeDatabaseClient(execute) }),
     );
 
     const result = await provider.searchSuggestions(
@@ -197,7 +200,7 @@ describe("notable-places suggestion provider", () => {
       },
     ]);
     const provider = createNotablePlacesSuggestionProvider(
-      createMockIntegrationContext({ db: { execute } }),
+      createMockIntegrationContext({ db: fakeDatabaseClient(execute) }),
     );
 
     const result = await provider.searchSuggestions(
@@ -235,7 +238,7 @@ describe("notable-places suggestion provider", () => {
       },
     ]);
     const provider = createNotablePlacesSuggestionProvider(
-      createMockIntegrationContext({ db: { execute } }),
+      createMockIntegrationContext({ db: fakeDatabaseClient(execute) }),
     );
 
     await provider.searchSuggestions({ query: "eiffel tower", lang: "en", limit: 8 }, options);
@@ -246,7 +249,7 @@ describe("notable-places suggestion provider", () => {
   it("answers nothing until a snapshot is published, without reading the index", async () => {
     const execute = vi.fn().mockResolvedValueOnce([{ exists: false }]);
     const provider = createNotablePlacesSuggestionProvider(
-      createMockIntegrationContext({ db: { execute } }),
+      createMockIntegrationContext({ db: fakeDatabaseClient(execute) }),
     );
 
     const result = await provider.searchSuggestions(
@@ -266,7 +269,7 @@ describe("notable-places suggestion provider", () => {
         { epoch: "epoch-1", status: "ready", schema_version: NOTABLE_PLACES_SCHEMA_VERSION + 1 },
       ]);
     const provider = createNotablePlacesSuggestionProvider(
-      createMockIntegrationContext({ db: { execute } }),
+      createMockIntegrationContext({ db: fakeDatabaseClient(execute) }),
     );
 
     const result = await provider.searchSuggestions(
@@ -281,7 +284,7 @@ describe("notable-places suggestion provider", () => {
   it("leaves queries too short to say anything about fame alone", async () => {
     const execute = vi.fn();
     const provider = createNotablePlacesSuggestionProvider(
-      createMockIntegrationContext({ db: { execute } }),
+      createMockIntegrationContext({ db: fakeDatabaseClient(execute) }),
     );
 
     const result = await provider.searchSuggestions({ query: "lo", lang: "en", limit: 8 }, options);

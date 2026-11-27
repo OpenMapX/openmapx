@@ -1,5 +1,8 @@
 import { OSM_SEARCH_SCHEMA_VERSION } from "@openmapx/core/published-data";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  fakeDatabaseClient,
+} from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
 import { createOsmAliasSuggestionProvider } from "../provider.js";
 
@@ -28,7 +31,7 @@ describe("OSM alias suggestion provider", () => {
         },
       ]);
     const provider = createOsmAliasSuggestionProvider(
-      createMockIntegrationContext({ db: { execute } }),
+      createMockIntegrationContext({ db: fakeDatabaseClient(execute) }),
     );
 
     const result = await provider.searchSuggestions(
@@ -73,7 +76,7 @@ describe("OSM alias suggestion provider", () => {
       ])
       .mockResolvedValueOnce([]);
     const provider = createOsmAliasSuggestionProvider(
-      createMockIntegrationContext({ db: { execute } }),
+      createMockIntegrationContext({ db: fakeDatabaseClient(execute) }),
     );
 
     await provider.searchSuggestions(
@@ -88,7 +91,7 @@ describe("OSM alias suggestion provider", () => {
   it("returns nothing, without reading the index, until an index is built", async () => {
     const execute = vi.fn().mockResolvedValueOnce([{ exists: false }]);
     const provider = createOsmAliasSuggestionProvider(
-      createMockIntegrationContext({ db: { execute } }),
+      createMockIntegrationContext({ db: fakeDatabaseClient(execute) }),
     );
 
     const result = await provider.searchSuggestions(

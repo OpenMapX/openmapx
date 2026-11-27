@@ -1,5 +1,21 @@
 import { describe, expect, it, vi } from "vitest";
-import { createMockIntegrationContext } from "./index";
+import { createMockIntegrationContext, fakeDatabaseClient } from "./index";
+
+describe("fakeDatabaseClient", () => {
+  it("answers execute and every statement of a transaction with the one stub", async () => {
+    const execute = vi.fn(async () => [{ id: 1 }]);
+    const db = fakeDatabaseClient(execute, { schema: "ext_demo" });
+
+    expect(await db.execute("select 1", [2])).toEqual([{ id: 1 }]);
+    expect(await db.transaction(async (tx) => tx.execute("select 3", [4]))).toEqual([{ id: 1 }]);
+    expect(execute.mock.calls).toEqual([
+      ["select 1", [2]],
+      ["select 3", [4]],
+    ]);
+    expect(db.schema).toBe("ext_demo");
+    expect(fakeDatabaseClient(execute).schema).toBeUndefined();
+  });
+});
 
 describe("createMockIntegrationContext", () => {
   it("resolves a declared required service in the mock context", () => {

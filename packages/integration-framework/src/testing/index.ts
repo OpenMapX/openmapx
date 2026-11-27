@@ -400,6 +400,27 @@ function withHostTransactionRules(db: DatabaseClient): DatabaseClient {
   };
 }
 
+/**
+ * A complete `ctx.db` stub built from one `execute`: `transaction` runs its
+ * callback with a transaction whose statements go to the same `execute`, so
+ * a test that stubs statements needs no separate transaction stub. Pass it
+ * as `db` to `createMockIntegrationContext`.
+ */
+export function fakeDatabaseClient(
+  execute: (...args: Parameters<DatabaseClient["execute"]>) => Promise<unknown>,
+  options: { schema?: string } = {},
+): DatabaseClient {
+  return {
+    execute: <T>(...args: Parameters<DatabaseClient["execute"]>) => execute(...args) as Promise<T>,
+    transaction: (fn) =>
+      fn({
+        execute: <T>(...args: Parameters<DatabaseClient["execute"]>) =>
+          execute(...args) as Promise<T>,
+      }),
+    ...(options.schema === undefined ? {} : { schema: options.schema }),
+  };
+}
+
 /** A `Logger` that swallows everything. Override per-call to assert. */
 export function createNoopLogger(): Logger {
   return { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
