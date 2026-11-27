@@ -105,6 +105,17 @@ export function createRefreshSession(
     return store({ kind: "reference", request });
   }
 
+  /** Whether the loaded planner whose id is `providerId` declares itinerary refresh. */
+  function canRefresh(providerId: string | undefined): boolean {
+    return (
+      providerId !== undefined &&
+      collectOrderedProviders<TransitProvider>(ctx, "transit").some(
+        ({ provider }) =>
+          provider.id === providerId && provider.capabilities.planningFeatures?.refresh === true,
+      )
+    );
+  }
+
   function sourceIds(providerId: string | undefined, tripIds: readonly string[] = []): string[] {
     const matching = new Set(
       collectOrderedProviders<TransitProvider>(ctx, "transit")
@@ -195,7 +206,7 @@ export function createRefreshSession(
         undefined,
         itinerary.legs.flatMap((leg) => (leg.tripId ? [leg.tripId] : [])),
       );
-    if (itinerary.source === "transit-motis-local") {
+    if (canRefresh(itinerary.source)) {
       itinerary.refreshToken = await issueForSearch(itinerary, {
         providerId: state.providerId,
         instance: state.instance,
@@ -232,7 +243,7 @@ export function createRefreshSession(
     });
   }
 
-  return { issueForSearch, issueForReference, verify, refresh };
+  return { issueForSearch, issueForReference, verify, refresh, canRefresh };
 }
 
 export type RefreshSession = ReturnType<typeof createRefreshSession>;

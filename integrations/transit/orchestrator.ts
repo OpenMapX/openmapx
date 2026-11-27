@@ -3,7 +3,7 @@ import type { BBox } from "@openmapx/core";
 import {
   captureTransitContributors,
   classifyProviderFailure,
-  compareTransitProviders,
+  collectOrderedProviders,
   type IntegrationContext,
   type MetricsRecorder,
   type ProviderCallContext,
@@ -318,16 +318,13 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     });
   }
 
-  /** Lazily collect all transit providers from registered integrations. */
+  /**
+   * Every transit provider in served order: by role, the operator's order
+   * inside a role, then priority and id. Planning, prefix lookups and stop
+   * search all walk this one order.
+   */
   function collectProviders(): TransitProvider[] {
-    const integrations = ctx.getIntegrationsByDomain("transit");
-    const providers: TransitProvider[] = [];
-    for (const integration of integrations) {
-      for (const p of (integration.providers.get("transit") ?? []) as TransitProvider[]) {
-        providers.push(p);
-      }
-    }
-    return providers;
+    return collectOrderedProviders<TransitProvider>(ctx, "transit").map(({ provider }) => provider);
   }
 
   /**
@@ -363,10 +360,10 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   }
 
   /**
-   * Build prefix map sorted by priority (lower = higher priority) and return
-   * the first provider that both matches the id's prefix AND is currently
-   * healthy. When the highest-priority match is in cooldown but another
-   * provider shares the same prefix, we fall through to it — today most
+   * Walk the providers in served order and return the first one that both
+   * matches the id's prefix AND is currently healthy. When the first match
+   * is in cooldown but another provider shares the same prefix, we fall
+   * through to it — today most
    * prefixes are unique to a single provider so the fallback is rare, but
    * the iteration costs nothing and keeps the contract correct as new
    * providers come online.
@@ -377,8 +374,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
    */
   async function resolveByPrefix(id: string): Promise<TransitProvider | null> {
     const banned = await disallowedProviderIds();
-    const providers = collectProviders().sort((a, b) => a.priority - b.priority);
-    for (const provider of providers) {
+    for (const provider of collectProviders()) {
       if (!id.startsWith(provider.prefix)) continue;
       if (banned.has(provider.id)) continue;
       if (await providerHealth.isHealthy(provider.id)) return provider;
@@ -397,9 +393,8 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     offers: (provider: TransitProvider) => boolean,
   ): Promise<TransitProvider | "unavailable" | null> {
     const banned = await disallowedProviderIds();
-    const providers = collectProviders().sort((a, b) => a.priority - b.priority);
     let coolingDown = false;
-    for (const provider of providers) {
+    for (const provider of collectProviders()) {
       if (!id.startsWith(provider.prefix)) continue;
       if (banned.has(provider.id)) continue;
       if (await providerHealth.isHealthy(provider.id)) return provider;
@@ -440,9 +435,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   }
 
   function providersOverlapping(bbox: BBox): TransitProvider[] {
-    return collectProviders()
-      .filter((p) => providerOverlapsBbox(p, bbox))
-      .sort(compareTransitProviders);
+    return collectProviders().filter((p) => providerOverlapsBbox(p, bbox));
   }
 
   async function getProvidersForBbox(bbox: BBox): Promise<TransitProvider[]> {
@@ -603,9 +596,9 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     context?: ProviderCallContext,
     place?: { lat: number; lng: number },
   ): Promise<MobilityResult<TransitStop[]>> {
-    const candidates = (
-      bbox ? providersOverlapping(bbox) : collectProviders().sort((a, b) => a.priority - b.priority)
-    ).filter((p) => p.searchStopsByName);
+    const candidates = (bbox ? providersOverlapping(bbox) : collectProviders()).filter(
+      (p) => p.searchStopsByName,
+    );
     const { healthy, coolingDown } = await partitionByHealth(candidates);
 
     const results = await pMapSettled(
@@ -659,15 +652,13 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
 
     const matching = (await getProvidersForBbox(tripBbox)).filter((p) => p.planTrip);
     const required = requiredPlanningCapabilities(params, waypointCount);
-    const eligible = matching
-      .filter((provider) => supportsPlanningRequest(provider, required))
-      .sort(compareTransitProviders);
+    const eligible = matching.filter((provider) => supportsPlanningRequest(provider, required));
     if (matching.length > 0 && eligible.length === 0 && required.length > 0) {
       recordDecision("plan", undefined, "unsupported");
       throw new UnsupportedTransitPlanningCapabilitiesError(required);
     }
 
-    // Waterfall: try each in priority order, return first success
+    // Waterfall: try each in served order, return first success
     for (const provider of eligible) {
       const planFn = provider.planTrip;
       if (!planFn) continue;
@@ -1032,9 +1023,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     bbox: BBox,
     zoom?: number,
   ): Promise<MobilityResult<TransitRoute[]>> {
-    const matching = (await getProvidersForBbox(bbox))
-      .filter((p) => p.getRoutesInBbox)
-      .sort(compareTransitProviders);
+    const matching = (await getProvidersForBbox(bbox)).filter((p) => p.getRoutesInBbox);
     for (const provider of matching) {
       const fn = provider.getRoutesInBbox;
       if (!fn) continue;
@@ -1282,9 +1271,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   }
 
   async function reachabilityProvider(): Promise<TransitProvider | null> {
-    const candidates = collectProviders()
-      .filter((provider) => provider.getReachabilitySurface)
-      .sort(compareTransitProviders);
+    const candidates = collectProviders().filter((provider) => provider.getReachabilitySurface);
     const healthy = await filterHealthy(candidates);
     return healthy[0] ?? null;
   }

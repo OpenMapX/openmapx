@@ -119,6 +119,7 @@ describe("vehicle journey lookup across a merged departure's trip ids", () => {
         recordFailure: async () => {},
       },
       getDisallowedSourceIds: async () => new Set<string>(),
+      getProviderOrder: () => [],
       getIntegrationsByDomain: (domain: string) =>
         domain === "transit"
           ? [{ manifest: { dataSources: [] }, providers: new Map([["transit", providers]]) }]

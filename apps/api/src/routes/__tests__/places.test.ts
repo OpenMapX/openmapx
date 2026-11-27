@@ -85,6 +85,8 @@ const mockIsIntegrationScheme = vi.fn().mockReturnValue(false);
 const mockIsEnabledIntegrationScheme = vi.fn().mockReturnValue(false);
 vi.mock("../../integration-host.js", () => ({
   getAllIntegrations: vi.fn().mockReturnValue([]),
+  getIntegrationsByDomain: vi.fn().mockReturnValue([]),
+  getProviderOrder: vi.fn().mockReturnValue([]),
   isIntegrationScheme: (scheme: string) => mockIsIntegrationScheme(scheme),
   isEnabledIntegrationScheme: (scheme: string) => mockIsEnabledIntegrationScheme(scheme),
 }));

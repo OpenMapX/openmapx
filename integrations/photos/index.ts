@@ -28,16 +28,22 @@ export function setup(ctx: IntegrationContext): void {
 
     const nameKey = name ? `:${name.slice(0, 40)}` : "";
     const placeKey = placeId ? `:${placeId.slice(0, 40)}` : "";
-    const cacheKey = `cache:photos:v3:${lat.toFixed(4)}:${lng.toFixed(4)}:${limit}${nameKey}${placeKey}`;
 
     try {
+      // A photo carries no reference to the integration that supplied it, so
+      // a disallowed integration is left out before acquisition, and a policy
+      // change must not replay a gallery acquired under the previous one.
+      const disallowedIntegrations =
+        (await ctx.getDisallowedIntegrationIds?.()) ?? new Set<string>();
+      const policyKey = JSON.stringify([...disallowedIntegrations].sort());
+      const cacheKey = `cache:photos:v3:${lat.toFixed(4)}:${lng.toFixed(4)}:${limit}${nameKey}${placeKey}:${policyKey}`;
       const photos = await ctx.cache.withCache(cacheKey, 3600, async (signal) => {
         // If placeId is provided, resolve OSM tags for tag-based photo lookups
         let osmTags: Record<string, string> | undefined;
         if (placeId) {
           osmTags = await resolveOsmTags(placeId, name, lat, lng);
         }
-        const providers = getPhotoProviders(ctx.getIntegrationsByDomain("photos"));
+        const providers = getPhotoProviders(ctx, disallowedIntegrations);
         return searchPhotos({ lat, lng, name, limit, osmTags, signal }, providers);
       });
 

@@ -12,7 +12,7 @@ import {
   type PlacePhoto,
 } from "@openmapx/core";
 import { contributorsForRecords } from "@openmapx/mobility-core/contributors";
-import { getAllIntegrations } from "../../integration-host.js";
+import { getIntegrationsByDomain, getProviderOrder } from "../../integration-host.js";
 import { isStaticImageHost } from "../../routes/image-hosts.js";
 import { BoundedWorkQueue } from "../../utils/bounded-work-queue.js";
 import { cacheGet, hashKey, TTL, withCache } from "../../utils/cache.js";
@@ -318,7 +318,7 @@ async function cardPhoto(
       let completedHeroes: PlacePhoto[] = [];
       let completedKnowledge: PlacePhoto[] = [];
       const work = Promise.allSettled([
-        searchHeroPhotos(tags, getPhotoProviders(getAllIntegrations()), {
+        searchHeroPhotos(tags, getPhotoProviders({ getProviderOrder, getIntegrationsByDomain }), {
           strict: true,
           signal: controller.signal,
           onError: (error) => failures.push(error),
@@ -430,10 +430,14 @@ async function cardRating(
       const controller = new AbortController();
       abandoned.addEventListener("abort", () => controller.abort(abandoned.reason), { once: true });
       let timer: ReturnType<typeof setTimeout> | undefined;
-      const work = fetchAggregate(subject, getReviewProviders(getAllIntegrations()), {
-        signal: controller.signal,
-        strict: true,
-      });
+      const work = fetchAggregate(
+        subject,
+        getReviewProviders({ getProviderOrder, getIntegrationsByDomain }),
+        {
+          signal: controller.signal,
+          strict: true,
+        },
+      );
       pendingCardRating.set(key, work);
       markAbandoned(abandoned, work);
       void work.then(

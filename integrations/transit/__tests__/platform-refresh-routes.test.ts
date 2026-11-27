@@ -75,6 +75,17 @@ it("enriches after a baseline cache hit so disabling a source takes effect", asy
 });
 it("retains a bound handle after 503, then replays its exact successor", async () => {
   const f = fixture();
+  const planner = {
+    id: "transit-motis-local",
+    prefix: "ms:",
+    capabilities: { planningFeatures: { refresh: true } },
+  };
+  f.ctx.getIntegrationsByDomain = (domain) =>
+    domain === "transit"
+      ? ([
+          { id: "transit-motis", manifest: {}, providers: new Map([["transit", [planner]]]) },
+        ] as never)
+      : [];
   const id = "verified-state";
   f.values.set(`transit-refresh:${id}`, {
     providerId: "local",

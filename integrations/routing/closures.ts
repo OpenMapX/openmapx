@@ -7,7 +7,11 @@ import type {
   TravelMode,
 } from "@openmapx/core";
 import { closesRoadForCars, isLocalAccessClosure } from "@openmapx/core";
-import type { IntegrationContext, RoadConditionsProvider } from "@openmapx/integration-framework";
+import {
+  collectOrderedProviders,
+  type IntegrationContext,
+  type RoadConditionsProvider,
+} from "@openmapx/integration-framework";
 import { assessRoadConditionForRoute } from "./road-condition-routing.js";
 import { rightsPolicyOf } from "./traffic-application.js";
 
@@ -113,11 +117,9 @@ export async function activeClosuresForBbox(
       reasons: [reason],
     },
   });
-  const integrations = ctx.getIntegrationsByDomain("road-conditions");
-  if (integrations.length === 0) return unavailable("no_road_condition_provider");
-
-  const providers = integrations.flatMap(
-    (i) => (i.providers.get("road-conditions") ?? []) as RoadConditionsProvider[],
+  // In the operator's order, the order the road-conditions merge uses.
+  const providers = collectOrderedProviders<RoadConditionsProvider>(ctx, "road-conditions").map(
+    ({ provider }) => provider,
   );
   if (providers.length === 0) return unavailable("no_road_condition_provider");
 

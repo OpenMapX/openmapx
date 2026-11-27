@@ -71,6 +71,7 @@ function makeCtx(
           ownsHalfOpenProbe: false,
         }),
     } as ProviderHealthHandle,
+    getProviderOrder: () => [],
     getIntegrationsByDomain: (domain: string) => {
       if (domain !== "transit") return [];
       return [{ providers: new Map([["transit", providers]]) }];
@@ -421,6 +422,7 @@ it.each(["absent", "unsupported", "disabled"])(
     if (reason === "disabled")
       Object.assign(ctx, {
         getDisallowedSourceIds: async () => new Set(["test"]),
+        getProviderOrder: () => [],
         getIntegrationsByDomain: () => [
           {
             manifest: { dataSources: [{ sourceId: "test" }] },
@@ -452,6 +454,7 @@ it("discards ordinary refresh data if the source becomes disallowed during acqui
   const ctx = makeCtx([provider], { isHealthy: async () => true });
   Object.assign(ctx, {
     getDisallowedSourceIds: async () => new Set(disabled ? ["test"] : []),
+    getProviderOrder: () => [],
     getIntegrationsByDomain: () => [
       {
         manifest: { dataSources: [{ sourceId: "test" }] },

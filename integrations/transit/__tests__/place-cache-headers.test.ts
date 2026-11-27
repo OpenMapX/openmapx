@@ -77,6 +77,7 @@ function routes(
       recordFailure: async () => {},
     },
     getDisallowedSourceIds: async () => new Set<string>(),
+    getProviderOrder: () => [],
     getIntegrationsByDomain: (domain: string) =>
       domain === "transit"
         ? [{ manifest: { dataSources: [] }, providers: new Map([["transit", providers]]) }]

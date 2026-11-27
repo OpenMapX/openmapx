@@ -16,6 +16,7 @@ function makeRoadConditionsCtx(
   disallowedSourceIds?: Set<string>,
 ): IntegrationContext {
   return {
+    getProviderOrder: () => [],
     getIntegrationsByDomain: (d: string) => {
       if (d !== domain) return [];
       return providers.map((p) => ({
@@ -67,6 +68,23 @@ async function run(
 }
 
 describe("activeClosuresForBbox", () => {
+  it("asks road-conditions providers in the operator's order", async () => {
+    const asked: string[] = [];
+    const providers = ["a", "b", "c"].map((id) => ({
+      id,
+      getEvents: vi.fn(async () => {
+        asked.push(id);
+        return [];
+      }),
+    }));
+    const ctx = makeRoadConditionsCtx(providers);
+    Object.assign(ctx, {
+      getProviderOrder: (domain: string) => (domain === "road-conditions" ? ["c"] : []),
+    });
+    await activeClosuresForBbox(ctx, TEST_BBOX);
+    expect(asked).toEqual(["c", "a", "b"]);
+  });
+
   it("reports no provider as unavailable, with nothing to exclude", async () => {
     const ctx = makeRoadConditionsCtx([]);
     const result = await activeClosuresForBbox(ctx, TEST_BBOX);

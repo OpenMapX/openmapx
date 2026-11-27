@@ -127,6 +127,7 @@ function fixture() {
       recordFailure: async () => {},
     },
     getDisallowedSourceIds: async () => new Set<string>(),
+    getProviderOrder: () => [],
     getIntegrationsByDomain: () => [
       {
         manifest: { dataSources: [{ sourceId: "test-source" }] },

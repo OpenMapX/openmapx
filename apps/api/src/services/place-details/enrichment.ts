@@ -12,7 +12,7 @@ import {
   type ReviewProvider,
 } from "@openmapx/core";
 import { contributorsForField, contributorsForRecords } from "@openmapx/mobility-core/contributors";
-import { getAllIntegrations } from "../../integration-host.js";
+import { getIntegrationsByDomain, getProviderOrder } from "../../integration-host.js";
 import { BoundedWorkQueue } from "../../utils/bounded-work-queue.js";
 import { getPlaceKnowledge } from "../knowledge/index";
 import { buildReviewLinks } from "../review-links";
@@ -89,9 +89,9 @@ export async function enrichPlace(
   lang: string | undefined,
   signal: AbortSignal,
 ): Promise<Place> {
-  const allIntegrations = getAllIntegrations();
-  const photoProviders = getPhotoProviders(allIntegrations);
-  const reviewProviders = getReviewProviders(allIntegrations);
+  const host = { getProviderOrder, getIntegrationsByDomain };
+  const photoProviders = getPhotoProviders(host);
+  const reviewProviders = getReviewProviders(host);
   const [plng, plat] = place.coordinates;
   // One scope per full enrichment: knowledge and hero photos share identical
   // Wikimedia JSON, and it is released with this call. Never wired into card

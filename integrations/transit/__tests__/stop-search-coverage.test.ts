@@ -86,6 +86,7 @@ function orchestrator(
       recordFailure,
     },
     getDisallowedSourceIds: async () => new Set(options.disallowedSources ?? []),
+    getProviderOrder: () => [],
     getIntegrationsByDomain: (domain: string) =>
       domain === "transit"
         ? entries.map(({ provider, sourceId }) => ({

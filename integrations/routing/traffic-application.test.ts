@@ -98,6 +98,7 @@ function trafficContext(applied: TrafficApplicationSnapshot): IntegrationContext
   return {
     http: { get: vi.fn().mockResolvedValue(applied) },
     getRequiredService: () => ({ url: "http://localhost:4000" }),
+    getProviderOrder: () => [],
     getIntegrationsByDomain: () => [
       {
         providers: new Map([
@@ -239,6 +240,7 @@ describe("engine application reconciliation", () => {
     const ctx = {
       http: { get },
       getRequiredService: () => ({ url: "http://localhost:4000" }),
+      getProviderOrder: () => [],
       getIntegrationsByDomain: () => [
         { providers: new Map([["road-conditions", [{ getEvents, getRoutingEvents }]]]) },
       ],

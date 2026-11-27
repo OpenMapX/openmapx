@@ -38,6 +38,7 @@ describe("applyClosureExclusions near a road closed to all but local access", ()
   });
   const contextWith = (...events: RoadConditionEvent[]) =>
     ({
+      getProviderOrder: () => [],
       getIntegrationsByDomain: (domain: string) =>
         domain === "road-conditions"
           ? [

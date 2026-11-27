@@ -8,18 +8,14 @@ import {
   type RequestJsonScope,
 } from "@openmapx/core";
 import { parseRetryAfterMs } from "@openmapx/core/retry-after";
-import {
-  comparePhotoProviders,
-  type IntegrationContext,
-  type LoadedIntegration,
-} from "@openmapx/integration-framework";
+import { collectOrderedProviders, type IntegrationContext } from "@openmapx/integration-framework";
 import {
   lookupByNameAndCoords,
   lookupByOsmRef,
 } from "@openmapx/integration-geocoding/place-lookup";
 import type { PhotoProvider, PhotoQuery } from "@openmapx/provider-kit/photos";
 
-// Providers in this list are ordered last (street-level imagery — shown after editorial photos)
+// The photos integration's own provider: OSM image tags, put first in every gallery.
 const OSM_IMAGES_PROVIDER_ID = "osm-images";
 interface ImageTagOptions {
   strict?: boolean;
@@ -66,18 +62,17 @@ export function createOsmImagePhotoProvider(
 }
 
 /**
- * Collect photo providers from integrations registered under the "photos" domain.
- * Street-level imagery providers (mapillary, panoramax) are sorted to the end.
+ * Photo providers in the operator's order. Unlisted ones follow in
+ * registration order, street-level imagery (mapillary, panoramax) last. The
+ * providers of an integration the data-use policy disallows are left out.
  */
-export function getPhotoProviders(integrations: LoadedIntegration[]): PhotoProvider[] {
-  const providers: PhotoProvider[] = [];
-  for (const integration of integrations) {
-    if (!integration.enabled || !integration.manifest.domains.includes("photos")) continue;
-    for (const p of (integration.providers.get("photos") ?? []) as PhotoProvider[]) {
-      providers.push(p);
-    }
-  }
-  return providers.sort(comparePhotoProviders);
+export function getPhotoProviders(
+  source: Pick<IntegrationContext, "getProviderOrder" | "getIntegrationsByDomain">,
+  disallowedIntegrationIds: ReadonlySet<string> = new Set(),
+): PhotoProvider[] {
+  return collectOrderedProviders<PhotoProvider>(source, "photos")
+    .filter(({ integrationId }) => !disallowedIntegrationIds.has(integrationId))
+    .map(({ provider }) => provider);
 }
 
 /**

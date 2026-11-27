@@ -53,6 +53,7 @@ function transitWithTransitland(health: ProviderHealth) {
     providerHealth: health,
     metricsRecorder: { recordProviderCall: vi.fn() },
     getDisallowedSourceIds: async () => new Set<string>(),
+    getProviderOrder: () => [],
     getIntegrationsByDomain: (domain: string) =>
       domain === "transit" ? [{ manifest, providers: new Map([["transit", [provider]]]) }] : [],
   } as unknown as IntegrationContext);

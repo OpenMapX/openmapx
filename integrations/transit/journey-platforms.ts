@@ -1,4 +1,4 @@
-import type { RealtimeProvider } from "@openmapx/integration-framework";
+import { collectOrderedProviders, type RealtimeProvider } from "@openmapx/integration-framework";
 import { snapshotContributors } from "@openmapx/mobility-core/contributors";
 import { selectStopPlatform } from "@openmapx/mobility-core/platform";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
@@ -12,18 +12,19 @@ export async function enrichJourneyPlatforms(
 ): Promise<MobilityResult<VehicleJourney | null>> {
   const baseline = base.data;
   if (!baseline) return base;
-  const candidates = deps.ctx
-    .getIntegrationsByDomain("live-transit")
-    .flatMap((integration) =>
-      ((integration.providers.get("live-transit") ?? []) as RealtimeProvider[]).map((provider) => ({
-        provider,
-        sources: integration.manifest.dataSources ?? [],
-      })),
-    )
+  const integrations = new Map(
+    deps.ctx
+      .getIntegrationsByDomain("live-transit")
+      .map((integration) => [integration.id, integration]),
+  );
+  const candidates = collectOrderedProviders<RealtimeProvider>(deps.ctx, "live-transit")
+    .map(({ integrationId, provider }) => ({
+      provider,
+      sources: integrations.get(integrationId)?.manifest.dataSources ?? [],
+    }))
     .filter(
       ({ provider }) => provider.capabilities.journeyPlatforms && provider.getJourneyPlatforms,
-    )
-    .sort((a, b) => a.provider.priority - b.provider.priority);
+    );
   const allowed = async (sources: readonly { sourceId: string }[]) => {
     const banned = await deps.ctx.getDisallowedSourceIds?.();
     return !sources.some((s) => banned?.has(s.sourceId));

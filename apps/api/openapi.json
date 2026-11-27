@@ -179012,11 +179012,9 @@
                           },
                           "source": {
                             "type": "string",
-                            "enum": [
-                              "transitous",
-                              "mobilitydb",
-                              "manual"
-                            ]
+                            "minLength": 1,
+                            "maxLength": 64,
+                            "description": "Catalogue the feed comes from: `transitous`, `mobilitydb` or `manual` for the built-in catalogues, otherwise the source an installed catalogue names"
                           },
                           "countryCode": {
                             "type": "string"

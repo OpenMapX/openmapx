@@ -64,6 +64,7 @@ describe("transit contributor receipts", () => {
       }),
     } as unknown as RealtimeProvider;
     const ctx = {
+      getProviderOrder: () => [],
       getIntegrationsByDomain: () => [{ providers: new Map([["live-transit", [rt]]]) }],
     } as unknown as IntegrationContext;
     const out = await enrichDeparturesWithRealtime(
@@ -93,6 +94,7 @@ it("drops duplicate stop B receipts after real provider fan-out and capping", as
     }),
   }));
   const ctx = {
+    getProviderOrder: () => [],
     getIntegrationsByDomain: () => [{ providers: new Map([["transit", providers]]) }],
   } as unknown as IntegrationContext;
   const out = await createTransitOrchestrator(ctx).searchByName("Central", 1);

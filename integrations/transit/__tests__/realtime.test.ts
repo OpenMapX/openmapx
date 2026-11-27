@@ -52,6 +52,7 @@ function makeProvider(overrides: Partial<RealtimeProvider> = {}): RealtimeProvid
 
 function makeCtx(providers: RealtimeProvider[]): IntegrationContext {
   return {
+    getProviderOrder: () => [],
     getIntegrationsByDomain: (domain: string) => {
       if (domain !== "live-transit") return [];
       return [

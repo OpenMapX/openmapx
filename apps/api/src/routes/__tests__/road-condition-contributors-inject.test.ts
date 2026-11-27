@@ -48,6 +48,7 @@ it("retains full and empty receipts through the actual events HTTP serializer an
         return JSON.parse(value);
       },
     },
+    getProviderOrder: () => [],
     getIntegrationsByDomain: () => [
       {
         id: "provider",

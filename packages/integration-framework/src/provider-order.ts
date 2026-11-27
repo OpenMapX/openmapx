@@ -209,6 +209,17 @@ const FALLBACK_BY_DOMAIN: Partial<Record<ProviderDomain, ProviderComparator>> = 
   photos: byProvider(comparePhotoProviders),
 };
 
+/**
+ * Domains whose providers are served group by group, whatever the operator
+ * lists: transit keeps its roles (baseline, regional, fallback, enrichment)
+ * and applies the operator's order inside each role. Within a group, listed
+ * integrations come first in list order; ties, and the unlisted ones, follow
+ * the domain's fallback.
+ */
+const GROUP_BY_DOMAIN: Partial<Record<ProviderDomain, (provider: unknown) => number>> = {
+  transit: transitRoleRank,
+};
+
 /** First position of each listed integration id; later repeats do not move it. */
 function rankOf(order: readonly string[]): Map<string, number> {
   const rank = new Map<string, number>();
@@ -226,9 +237,10 @@ interface ServedProvider<T> extends OrderedProvider<T> {
  * Every provider of `domain` in the order it is served: those of listed
  * integrations first, in list order, keeping one integration's registration
  * order; then the others by the domain's fallback, a stable sort, so registry
- * order breaks ties. A listed integration that is not loaded is skipped.
- * Serving, the fingerprint and the admin's effective list all derive from
- * this one ordering.
+ * order breaks ties. A grouped domain (`GROUP_BY_DOMAIN`) applies that order
+ * inside each group instead. A listed integration that is not loaded is
+ * skipped. Serving, the fingerprint and the admin's effective list all derive
+ * from this one ordering.
  */
 function servedProviders<T>(
   order: readonly string[],
@@ -247,13 +259,26 @@ function servedProviders<T>(
       };
     }),
   );
+  const fallback = Object.hasOwn(FALLBACK_BY_DOMAIN, domain)
+    ? FALLBACK_BY_DOMAIN[domain as ProviderDomain]
+    : undefined;
+  const group = Object.hasOwn(GROUP_BY_DOMAIN, domain)
+    ? GROUP_BY_DOMAIN[domain as ProviderDomain]
+    : undefined;
+  if (group) {
+    const position = (entry: ServedProvider<T>) =>
+      rank.get(entry.integrationId) ?? Number.POSITIVE_INFINITY;
+    return entries.sort(
+      (a, b) =>
+        ascending(group(a.provider), group(b.provider)) ||
+        ascending(position(a), position(b)) ||
+        (fallback?.(a, b) ?? 0),
+    );
+  }
   const listed = entries
     .filter((entry) => entry.listed)
     .sort((a, b) => (rank.get(a.integrationId) ?? 0) - (rank.get(b.integrationId) ?? 0));
   const rest = entries.filter((entry) => !entry.listed);
-  const fallback = Object.hasOwn(FALLBACK_BY_DOMAIN, domain)
-    ? FALLBACK_BY_DOMAIN[domain as ProviderDomain]
-    : undefined;
   if (fallback) rest.sort(fallback);
   return [...listed, ...rest];
 }

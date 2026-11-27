@@ -66,6 +66,7 @@ it("preserves selected OC field receipts through real GeoJSON and projected-rout
       del: async () => {},
       withCache: async (_key: string, _ttl: number, load: () => Promise<unknown>) => load(),
     },
+    getProviderOrder: () => [],
     getIntegrationsByDomain: () => [{ providers: new Map([["road-conditions", [provider]]]) }],
     log: { info() {}, warn() {}, error() {}, debug() {} },
   } as unknown as IntegrationContext);

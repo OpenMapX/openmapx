@@ -242,7 +242,7 @@ const healthCheckSchema = z.object({
    * key declared in `configSchema.properties`. `${service:<id>}` is a
    * self-hosted service's URL, and `${endpoint:<id>}` the instance of a
    * platform backend in use (`PLATFORM_ENDPOINT_IDS`): only as the whole
-   * URL prefix, never in headers, and only in built-in manifests.
+   * URL prefix and never in headers.
    */
   urlTemplate: z.string().optional(),
   /** Same substitution rules as `urlTemplate`. */

@@ -18,7 +18,11 @@ import {
 } from "@openmapx/core/data-manager-sdk";
 import { envString } from "@openmapx/core/server-env";
 import { readDataManagerToken } from "@openmapx/core/service-secret-files";
-import type { IntegrationContext, RoadConditionsProvider } from "@openmapx/integration-framework";
+import {
+  collectOrderedProviders,
+  type IntegrationContext,
+  type RoadConditionsProvider,
+} from "@openmapx/integration-framework";
 import { assessRoadConditionForRoute } from "./road-condition-routing.js";
 
 /**
@@ -188,9 +192,10 @@ async function reconcileRouteTraffic(
     bbox[2] = Math.max(bbox[2], lon + 0.05);
     bbox[3] = Math.max(bbox[3], lat + 0.05);
   }
-  const providers = ctx
-    .getIntegrationsByDomain("road-conditions")
-    .flatMap((i) => (i.providers.get("road-conditions") ?? []) as RoadConditionsProvider[]);
+  // In the operator's order, the order the road-conditions merge uses.
+  const providers = collectOrderedProviders<RoadConditionsProvider>(ctx, "road-conditions").map(
+    ({ provider }) => provider,
+  );
   if (!providers.length) return fallback;
   const settled = await Promise.allSettled(
     providers.map(async (p) => {

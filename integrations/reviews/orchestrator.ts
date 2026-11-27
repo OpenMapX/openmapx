@@ -1,6 +1,7 @@
 import {
   captureReviewProviderContributors,
-  type LoadedIntegration,
+  collectOrderedProviders,
+  type IntegrationContext,
 } from "@openmapx/integration-framework";
 import { normalizeOsmElementRef } from "@openmapx/mangrove-client";
 import type {
@@ -10,15 +11,22 @@ import type {
   ReviewSubject,
 } from "@openmapx/provider-kit/reviews";
 
-export function getReviewProviders(integrations: LoadedIntegration[]): ReviewProvider[] {
-  const providers: ReviewProvider[] = [];
-  for (const integration of integrations) {
-    if (!integration.enabled || !integration.manifest.domains.includes("reviews")) continue;
-    for (const p of (integration.providers.get("reviews") ?? []) as ReviewProvider[]) {
-      providers.push(captureReviewProviderContributors(integration, p));
-    }
-  }
-  return providers;
+/**
+ * Review providers in the operator's order (unlisted ones in registration
+ * order), each wrapped to credit the sources its integration declares.
+ */
+export function getReviewProviders(
+  source: Pick<IntegrationContext, "getProviderOrder" | "getIntegrationsByDomain">,
+): ReviewProvider[] {
+  const integrations = new Map(
+    source.getIntegrationsByDomain("reviews").map((integration) => [integration.id, integration]),
+  );
+  return collectOrderedProviders<ReviewProvider>(source, "reviews").flatMap(
+    ({ integrationId, provider }) => {
+      const integration = integrations.get(integrationId);
+      return integration ? [captureReviewProviderContributors(integration, provider)] : [];
+    },
+  );
 }
 
 /**
@@ -101,26 +109,24 @@ export async function fetchAggregate(
   return zero;
 }
 
-/** Forward a signed JWT to the primary provider. Throws if the provider can't submit. */
+/** Forward a signed JWT to the first provider in order that accepts submissions. */
 export async function submitReview(
   signedJwt: string,
   providers: ReviewProvider[],
 ): Promise<{ id: string }> {
-  const p = providers[0];
-  if (!p) throw new Error("No review providers registered");
-  if (!p.submit) throw new Error(`Provider ${p.id} does not support submissions`);
+  const p = providers.find((provider) => typeof provider.submit === "function");
+  if (!p?.submit) throw new Error("No review provider supports submissions");
   return p.submit(signedJwt);
 }
 
-/** Upload an image via the primary provider. */
+/** Upload an image through the first provider in order that accepts uploads. */
 export async function uploadReviewImage(
   file: Blob,
   filename: string,
   providers: ReviewProvider[],
 ): Promise<{ src: string }> {
-  const p = providers[0];
-  if (!p) throw new Error("No review providers registered");
-  if (!p.uploadImage) throw new Error(`Provider ${p.id} does not support image uploads`);
+  const p = providers.find((provider) => typeof provider.uploadImage === "function");
+  if (!p?.uploadImage) throw new Error("No review provider supports image uploads");
   return p.uploadImage(file, filename);
 }
 

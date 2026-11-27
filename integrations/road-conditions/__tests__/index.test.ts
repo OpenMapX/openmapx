@@ -55,6 +55,7 @@ function eventsHarness(opts?: {
         return opts?.withCache ? opts.withCache(key, ttl, fn) : fn();
       },
     },
+    getProviderOrder: () => [],
     getIntegrationsByDomain: () => integrations,
     log: { warn() {}, error() {}, info() {}, debug() {} },
   } as unknown as IntegrationContext;
@@ -155,6 +156,7 @@ function flowRouteHarness(opts?: {
       withCache:
         opts?.withCache ?? (async <T>(_key: string, _ttl: number, fn: () => Promise<T>) => fn()),
     },
+    getProviderOrder: () => [],
     getIntegrationsByDomain: () => integrations,
     log: { warn() {}, error() {}, info() {}, debug() {} },
   } as unknown as IntegrationContext;
@@ -622,6 +624,7 @@ describe("GET /bindings", () => {
           return value;
         },
       },
+      getProviderOrder: () => [],
       getIntegrationsByDomain: () =>
         providers.map((p) => ({
           id: p.id,

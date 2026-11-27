@@ -224,6 +224,37 @@ it.each([
     expect((await getTransitCatalog()).map((row) => row.id)).toEqual(["catalog:de:Demo"]);
   },
 );
+it("keeps the feeds of an installed GTFS catalogue", async () => {
+  discovery.integrations = [
+    {
+      providers: new Map([
+        [
+          "gtfs-catalog",
+          [
+            {
+              id: "acme",
+              listFeeds: async () => [
+                {
+                  id: "acme:1",
+                  source: "acme-catalogue",
+                  name: "Acme feed",
+                  countryCode: "de",
+                  url: "https://example.test/acme.zip",
+                },
+              ],
+            },
+          ],
+        ],
+      ]),
+    },
+  ];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => Response.json({ sources: [] })),
+  );
+  const { searchTransitCatalog } = await import("./index.js");
+  expect((await searchTransitCatalog()).map((feed) => feed.source)).toContain("acme-catalogue");
+});
 it("keeps source601 searchable after building the full installed catalog", async () => {
   const sources = Array.from({ length: 601 }, (_, n) => ({
     id: `catalog:de:${String(n).padStart(4, "0")}`,

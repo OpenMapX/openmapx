@@ -80,6 +80,7 @@ function fixture() {
       getSnapshot: vi.fn(),
     },
     getDisallowedSourceIds: async () => new Set<string>(),
+    getProviderOrder: () => [],
     getIntegrationsByDomain: (domain: string) =>
       domain === "transit"
         ? [
