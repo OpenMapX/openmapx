@@ -5,6 +5,7 @@ import HealthAndSafetyIcon from "@mui/icons-material/HealthAndSafety";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import TuneIcon from "@mui/icons-material/Tune";
 import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -37,6 +38,8 @@ import { TableEmptyState } from "../shared/TableEmptyState";
 import { TableSearchField, TableToolbar } from "../shared/TableToolbar";
 import { DomainChip } from "./DomainChip";
 import { IntegrationStatusDot, isSwitchedOn, isUnhealthyStatus } from "./IntegrationStatusDot";
+import { LoadStateChip } from "./LoadStateChip";
+import { SafeModeNotice } from "./SafeModeNotice";
 import { StatusBadge } from "./StatusBadge";
 
 export type IntegrationSummary = import("@openmapx/core/api-contracts").AdminIntegrationSummary;
@@ -276,6 +279,7 @@ export function IntegrationList() {
           </Stack>
         }
       />
+      <SafeModeNotice />
       <AdminTableSurface
         toolbar={
           <TableToolbar>
@@ -476,23 +480,9 @@ export function IntegrationList() {
                         {integration.id}
                       </Typography>
                       {/* Beside the name, so it stays in view where the table scrolls sideways. */}
-                      {integration.status === "failed" ? (
-                        <Tooltip
-                          title={
-                            integration.loadError
-                              ? t("failedToLoadDetail", { error: integration.loadError })
-                              : t("loadFailedTitle")
-                          }
-                        >
-                          <Chip
-                            label={t("failedToLoad")}
-                            size="small"
-                            color="error"
-                            variant="outlined"
-                            sx={{ alignSelf: "flex-start", mt: 0.5 }}
-                          />
-                        </Tooltip>
-                      ) : null}
+                      <Box sx={{ mt: 0.5, "&:empty": { display: "none" } }}>
+                        <LoadStateChip integration={integration} />
+                      </Box>
                     </Stack>
                   </TableCell>
                   <TableCell>
@@ -525,18 +515,23 @@ export function IntegrationList() {
                     <HealthCell integration={integration} />
                   </TableCell>
                   <TableCell>
+                    {/* Switching the integration on cannot load it while its extension is disabled. */}
                     <Tooltip
                       title={
-                        isSwitchedOn(integration.status)
-                          ? t("disableIntegration")
-                          : t("enableIntegration")
+                        integration.loadState === "disabled"
+                          ? t("extensionDisabledChipDetail")
+                          : isSwitchedOn(integration.status)
+                            ? t("disableIntegration")
+                            : t("enableIntegration")
                       }
                     >
                       <span>
                         <Switch
                           size="small"
                           checked={isSwitchedOn(integration.status)}
-                          disabled={togglingIds.has(integration.id)}
+                          disabled={
+                            togglingIds.has(integration.id) || integration.loadState === "disabled"
+                          }
                           onChange={(e) => toggleIntegration(integration.id, e.target.checked)}
                         />
                       </span>

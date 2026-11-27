@@ -1,6 +1,15 @@
 import { createHash } from "node:crypto";
-import { closeSync, fsyncSync, openSync, readFileSync, writeSync } from "node:fs";
-import { basename, isAbsolute, join } from "node:path";
+import {
+  closeSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeSync,
+} from "node:fs";
+import { basename, dirname, isAbsolute, join } from "node:path";
 import {
   type LeaseRecord,
   leaseStoreDirectory,
@@ -16,6 +25,7 @@ import { applyGeneratedHardlinksBeforeStart } from "../lib/hardlinks";
 import { leasedHostEffect } from "../lib/host-effect";
 import { log } from "../lib/output";
 import { repoPaths } from "../lib/paths";
+import { ensurePlatformPrivateDirectory } from "../lib/platform-secret-files";
 import {
   assertDatabaseAllowsRollback,
   planRollback,
@@ -55,9 +65,31 @@ function store() {
   });
 }
 
+/** Replaces `path` in one rename, so a reader sees the old file or the whole new one. */
+function writeFileAtomically(path: string, text: string): void {
+  const temporary = `${path}.${process.pid}.tmp`;
+  const fd = openSync(temporary, "w", 0o600);
+  try {
+    writeSync(fd, text);
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+  renameSync(temporary, path);
+  const directory = openSync(dirname(path), "r");
+  try {
+    fsyncSync(directory);
+  } finally {
+    closeSync(directory);
+  }
+}
+
 function audit(entry: Record<string, unknown>): void {
   const line = JSON.stringify({ at: new Date().toISOString(), ...entry });
-  const path = join(leaseStoreDirectory(repoPaths().infraDir), "control-audit.jsonl");
+  const directory = leaseStoreDirectory(repoPaths().infraDir);
+  // Safe mode may be the first control command on an installation.
+  mkdirSync(directory, { recursive: true, mode: 0o700 });
+  const path = join(directory, "control-audit.jsonl");
   const fd = openSync(path, "a", 0o600);
   try {
     writeSync(fd, `${line}\n`);
@@ -299,6 +331,80 @@ export function registerControlCommands(program: Command): void {
       });
       audit({ action: "resolve", operationKey: options.op, as: options.as, lease });
       completeCliCommand(0);
+    });
+
+  control
+    .command("safe-mode <state>")
+    .description(
+      "Start the API without installed extensions (on) or with them again (off), and restart it",
+    )
+    .action(async (state: string) => {
+      if (state !== "on" && state !== "off") throw new Error("Pass on or off");
+      const infraDir = repoPaths().infraDir;
+      if (state === "off" && process.env.OPENMAPX_SAFE_MODE === "1") {
+        log.err(
+          "OPENMAPX_SAFE_MODE=1 is set (in infra/docker/.env or this shell), and it keeps the API in safe mode whatever the file says. Remove it, then run `pnpm openmapx compose up` to restart the api service.",
+        );
+        completeCliCommand(1);
+      }
+      services.assertRunningAsDeploymentUser(
+        services.readDeploymentUser(infraDir),
+        "Changing safe mode",
+      );
+      const runtimeDir = join(infraDir, "data", "api-runtime");
+      // The file changes first: whatever happens to the restart, the next
+      // start of the api service honours it.
+      ensurePlatformPrivateDirectory(runtimeDir);
+      if (state === "on")
+        writeFileAtomically(
+          join(runtimeDir, "safe-mode.json"),
+          `${JSON.stringify({ mode: "operator" })}\n`,
+        );
+      else {
+        rmSync(join(runtimeDir, "safe-mode.json"), { force: true });
+        rmSync(join(runtimeDir, "boot-marker.json"), { force: true });
+      }
+      const api = services.CORE_SERVICE_ID.api;
+      const running = await dockerCompose(["ps", "--status=running", "--services", api]);
+      const restarted =
+        running.exitCode === 0 && running.stdout.split("\n").some((line) => line.trim() === api);
+      let code: number | null = null;
+      let failure: string | undefined;
+      try {
+        code = restarted
+          ? await leasedHostEffect("control.safe-mode", [api], async () => {
+              const result = await dockerCompose(["restart", api]);
+              if (result.exitCode !== 0)
+                log.err(`Restarting the api service failed (exit ${result.exitCode})`);
+              return result.exitCode;
+            })
+          : 0;
+      } catch (error) {
+        failure = error instanceof Error ? error.message : String(error);
+        throw error;
+      } finally {
+        audit({
+          action: "safe-mode",
+          state,
+          restarted,
+          exitCode: code,
+          ...(failure ? { error: failure } : {}),
+        });
+      }
+      const mode = state;
+      if (!restarted)
+        log.info(
+          `Safe mode is ${mode}. The api service is not running; it starts ${state === "on" ? "in safe mode, without installed extensions" : "with the installed extensions"} the next time it starts.`,
+        );
+      else if (code === 0)
+        log.ok(
+          `Safe mode is ${mode}. The api service restarted ${state === "on" ? "without installed extensions" : "with the installed extensions"}.`,
+        );
+      else
+        log.warn(
+          `Safe mode is ${mode} for the next start of the api service, which was not restarted. Restart it with \`pnpm openmapx services restart api\` once the problem above is solved.`,
+        );
+      completeCliCommand(code);
     });
 
   control

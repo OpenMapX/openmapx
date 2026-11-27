@@ -35,18 +35,23 @@ import { registerIntegrationAdminRoute } from "./admin-integration-contract";
 /**
  * The status the administration shows for an integration. Its code failing to
  * load outranks every health check result, which may be cached from before the
- * failure or come from a host check that never runs the code. `incompatible`
- * counts as failed too: the code does not run either. The host switches a
- * failed integration off at run time, so the load state is checked before
- * `enabled`.
+ * failure or come from a host check that never runs the code. An integration
+ * held back by its disabled extension, or switched off by the operator, is
+ * `disabled`. Safe mode and an incompatible release are neither a failure of
+ * the integration nor the operator's switch: they have their own status. The
+ * host switches every integration it does not run off at run time, so the
+ * load state is checked before `enabled`.
  */
 function integrationStatus(
-  integration: Pick<LoadedIntegration, "enabled" | "loadState" | "manifest">,
+  integration: Pick<LoadedIntegration, "enabled" | "loadState" | "manifest" | "config">,
   configured: boolean,
   health: { status: "up" | "down" | "unconfigured" } | null,
 ): AdminIntegrationSummary["status"] {
-  if (integration.loadState === "failed" || integration.loadState === "incompatible")
-    return "failed";
+  if (integration.loadState === "failed") return "failed";
+  if (integration.loadState === "disabled" || integration.config?.enabled === false)
+    return "disabled";
+  if (integration.loadState === "safe-mode") return "safe-mode";
+  if (integration.loadState === "incompatible") return "incompatible";
   if (!integration.enabled) return "disabled";
   if (health?.status === "down") return "unhealthy";
   if (health?.status === "unconfigured" || !configured) return "unconfigured";

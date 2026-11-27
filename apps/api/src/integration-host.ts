@@ -26,6 +26,7 @@ import {
   satisfiesPlatformVersion,
   validateDataSource,
   validateManifest,
+  WEB_PLATFORM_VERSION,
 } from "@openmapx/integration-framework";
 import {
   integrationBackendBundlePath,
@@ -86,6 +87,7 @@ import {
 import { runPendingErasures, syncSubjectHandlerTable } from "./privacy/extension-subject-data";
 import { processLogger } from "./process-logger";
 import { redis } from "./redis";
+import { isSafeModeActive, setSafeModeHost } from "./safe-mode";
 import {
   type AdministrativeConfigurationReadContext,
   assertAdministrativeConfigurationRead,
@@ -99,6 +101,7 @@ import {
 } from "./services/attribution";
 import type { ManifestDataSource } from "./services/attribution/types";
 import { loadAllBindingsByIntegration } from "./services/capability-bindings";
+import { disabledExtensionIntegrationIds } from "./services/installed-extension-state";
 import {
   executeAllIntegrationHealthChecks,
   getCachedIntegrationHealthSnapshot,
@@ -680,6 +683,157 @@ function setRuntimeDataSources(
 
 type DiscoveredManifest = Awaited<ReturnType<typeof discoverManifests>>[number];
 
+/** Why this release cannot run an installed manifest, and the version it needs. */
+export interface IntegrationIncompatibility {
+  reason: "platform" | "webPlatform";
+  required: string;
+}
+
+/**
+ * The integration ids whose extension an operator disabled. `null` restores
+ * the default, which reads `installed_extension.enabled`.
+ */
+let disabledExtensionResolver: (() => Promise<ReadonlySet<string>>) | null = null;
+
+export function setDisabledExtensionResolver(
+  fn: (() => Promise<ReadonlySet<string>>) | null,
+): void {
+  disabledExtensionResolver = fn;
+}
+
+/**
+ * Whether this release can run an installed manifest: `null` when it can. It
+ * is called once for each installed manifest of a generation. `null` restores
+ * the default, the manifest's `platform` against `PLATFORM_VERSION`.
+ */
+let compatibilityResolver:
+  | ((manifest: IntegrationManifest) => IntegrationIncompatibility | null)
+  | null = null;
+
+export function setCompatibilityResolver(
+  fn: ((manifest: IntegrationManifest) => IntegrationIncompatibility | null) | null,
+): void {
+  compatibilityResolver = fn;
+}
+
+/** A community manifest always states its protocol; validation requires it. */
+function platformIncompatibility(manifest: IntegrationManifest): IntegrationIncompatibility | null {
+  const required = manifest.platform ?? "";
+  return satisfiesPlatformVersion(required) ? null : { reason: "platform", required };
+}
+
+function incompatibilityMessage({ reason, required }: IntegrationIncompatibility): string {
+  return reason === "webPlatform"
+    ? `requires web platform ${required}, this is ${WEB_PLATFORM_VERSION}`
+    : `requires platform ${required}, this is ${PLATFORM_VERSION}`;
+}
+
+/** Why an installed integration is not loaded in a generation, recorded on its entry. */
+interface InstalledLoadGate {
+  loadState: "safe-mode" | "disabled" | "incompatible" | "failed";
+  loadError?: IntegrationLoadError;
+}
+
+const GATE_RETRY_DELAY_MS = 5_000;
+/** The extension state is read from the database, which may hang rather than fail. */
+const GATE_READ_DEADLINE_MS = 10_000;
+const EXTENSION_STATE_UNREADABLE = "could not read extension state";
+
+function withinGateDeadline<T>(read: () => Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    read(),
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error("Reading the extension state timed out")),
+        GATE_READ_DEADLINE_MS,
+      );
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * Decides, once per generation and before any installed integration is
+ * loaded, which installed integrations must not load, keyed by directory. In
+ * safe mode none loads and the extension state is not read. Otherwise an
+ * integration whose extension is disabled, or that this release cannot run,
+ * is held back. When that state cannot be read (at boot after one retry),
+ * no installed integration loads in the generation: an extension disabled
+ * because it stopped the API must never load because a query failed.
+ */
+async function readInstalledLoadGates(
+  sorted: DiscoveredManifest[],
+  options: { retry: boolean },
+): Promise<ReadonlyMap<string, InstalledLoadGate>> {
+  const installed = sorted.filter(
+    ({ manifest, isBuiltIn }) =>
+      !isBuiltIn && validateManifest(manifest, { firstParty: false }).valid,
+  );
+  const gates = new Map<string, InstalledLoadGate>();
+  if (installed.length === 0) return gates;
+  if (isSafeModeActive()) {
+    for (const { directory } of installed) gates.set(directory, { loadState: "safe-mode" });
+    return gates;
+  }
+  const read = async () => {
+    const disabled = await withinGateDeadline(
+      disabledExtensionResolver ?? (() => disabledExtensionIntegrationIds()),
+    );
+    const incompatibility = compatibilityResolver ?? platformIncompatibility;
+    const result = new Map<string, InstalledLoadGate>();
+    for (const { manifest: raw, directory } of installed) {
+      const manifest = raw as IntegrationManifest;
+      if (disabled.has(manifest.id)) {
+        result.set(directory, { loadState: "disabled" });
+        continue;
+      }
+      const refused = incompatibility(manifest);
+      if (refused)
+        result.set(directory, {
+          loadState: "incompatible",
+          loadError: { phase: "import", message: incompatibilityMessage(refused) },
+        });
+    }
+    return result;
+  };
+  try {
+    return await read();
+  } catch (error) {
+    hostLog.warn("Could not read which installed extensions may load", { err: error });
+  }
+  if (options.retry) {
+    await new Promise((resolve) => setTimeout(resolve, GATE_RETRY_DELAY_MS));
+    try {
+      return await read();
+    } catch (error) {
+      hostLog.warn("Could not read which installed extensions may load", { err: error });
+    }
+  }
+  hostLog.error(
+    "No installed integration is loaded in this generation: the extension state could not be read",
+  );
+  for (const { directory } of installed)
+    gates.set(directory, {
+      loadState: "failed",
+      loadError: { phase: "import", message: EXTENSION_STATE_UNREADABLE },
+    });
+  return gates;
+}
+
+/** Records an installed integration a gate holds back, with its manifest, switched off. */
+function holdBack(integration: LoadedIntegration, gate: InstalledLoadGate, log: Logger): void {
+  integration.enabled = false;
+  integration.loadState = gate.loadState;
+  if (gate.loadError) integration.loadError = gate.loadError;
+  const reason =
+    gate.loadState === "safe-mode"
+      ? "the API runs in safe mode"
+      : gate.loadState === "disabled"
+        ? "its extension is disabled"
+        : (gate.loadError?.message ?? gate.loadState);
+  log.warn(`Installed integration ${integration.id} is not loaded: ${reason}`);
+}
+
 /**
  * Resolves each integration's configuration at most once per generation, and
  * the provider order of every orchestrator before any setup runs: a provider's
@@ -693,6 +847,7 @@ async function prepareGenerationConfig(
     manifest: IntegrationManifest,
     directory: string,
   ) => Promise<Record<string, ConfigValueWithSource>>,
+  gates: ReadonlyMap<string, InstalledLoadGate>,
 ): Promise<{
   configOf: (manifest: IntegrationManifest, directory: string) => Promise<Record<string, unknown>>;
   orders: ReadonlyMap<string, readonly string[]>;
@@ -719,8 +874,9 @@ async function prepareGenerationConfig(
     if (!validateManifest(raw, { firstParty: isBuiltIn }).valid) continue;
     const manifest = raw as IntegrationManifest;
     if (seen.has(manifest.id)) continue;
-    if (!isBuiltIn && !satisfiesPlatformVersion(manifest.platform ?? "")) continue;
     seen.add(manifest.id);
+    // A held-back integration keeps its id in the registry but sets no order.
+    if (!isBuiltIn && gates.has(directory)) continue;
     if (!ORCHESTRATOR_IDS.has(manifest.id)) continue;
     const entry = (await withSourcesOf(manifest, directory)).providerOrder;
     orders.set(
@@ -1370,9 +1526,12 @@ async function loadIntegrationBackend(args: {
 }
 
 /**
- * The integrations of the live generation whose load failed, limited to `ids`
- * when given. Install and update jobs use it to fail a change whose
- * integration the reload left out.
+ * The integrations of the live generation whose code did not load, limited to
+ * `ids` when given: those whose load failed, those this release cannot run,
+ * and each of `ids` the generation does not hold at all. Install and update
+ * jobs use it to fail a change whose integration the reload left out. One an
+ * operator's decision holds back (its extension disabled, or safe mode) is
+ * not a failure; `heldBackIntegrationLoads` names those.
  */
 export function failedIntegrationLoads(
   ids?: readonly string[],
@@ -1380,14 +1539,45 @@ export function failedIntegrationLoads(
   const wanted = ids ? new Set(ids) : null;
   const failed: Array<{ id: string; phase: IntegrationLoadError["phase"]; message: string }> = [];
   for (const integration of integrations.values()) {
-    if (integration.loadState !== "failed" || (wanted && !wanted.has(integration.id))) continue;
+    if (wanted && !wanted.has(integration.id)) continue;
+    if (integration.loadState !== "failed" && integration.loadState !== "incompatible") continue;
     failed.push({
       id: integration.id,
       phase: integration.loadError?.phase ?? "setup",
       message: integration.loadError?.message ?? "",
     });
   }
+  for (const id of wanted ?? [])
+    if (!integrations.has(id))
+      failed.push({ id, phase: "import", message: "the reload did not find it" });
   return failed;
+}
+
+/**
+ * Of `ids`, the integrations the live generation holds back by an operator's
+ * decision (their extension is disabled, or the API runs in safe mode), with
+ * the line a job reports for each.
+ */
+export function heldBackIntegrationLoads(
+  ids: readonly string[],
+): Array<{ id: string; loadState: "disabled" | "safe-mode"; message: string }> {
+  const held: Array<{ id: string; loadState: "disabled" | "safe-mode"; message: string }> = [];
+  for (const id of ids) {
+    const loadState = integrations.get(id)?.loadState;
+    if (loadState === "safe-mode")
+      held.push({
+        id,
+        loadState,
+        message: `Integration ${id} is installed but not loaded: the API runs in safe mode. It loads when safe mode is left.`,
+      });
+    else if (loadState === "disabled")
+      held.push({
+        id,
+        loadState,
+        message: `Integration ${id} is installed but not loaded: its extension is disabled.`,
+      });
+  }
+  return held;
 }
 
 export async function initIntegrations(
@@ -1410,16 +1600,20 @@ export async function initIntegrations(
 
   const discovered = await discoverManifests(_integrationDirs);
   const sorted = topologicalSort(discovered);
+  const gates = await readInstalledLoadGates(sorted, { retry: true });
 
   // Hard-fail at startup when any selected integration declares vault-backed
   // secret fields but the secrets key is unusable. The lazy fallback in
   // secrets.ts already throws on first decrypt, but lazy failure means the
   // operator only finds out via a 500 from a user-facing route; bailing here
-  // surfaces it as a boot error with a clear remediation hint.
+  // surfaces it as a boot error with a clear remediation hint. An installed
+  // integration that is held back does not count: safe mode must start.
   const keyProblem = secretsKeyProblem();
   if (keyProblem) {
-    const requiringSecrets = sorted.filter((d) =>
-      manifestDeclaresSecretFields(d.manifest as IntegrationManifest),
+    const requiringSecrets = sorted.filter(
+      (d) =>
+        (d.isBuiltIn || !gates.has(d.directory)) &&
+        manifestDeclaresSecretFields(d.manifest as IntegrationManifest),
     );
     if (requiringSecrets.length > 0) {
       const names = requiringSecrets.map((d) => d.manifest.id).join(", ");
@@ -1494,7 +1688,11 @@ export async function initIntegrations(
     fastify.log.warn(err, "AttributionIndex initialization failed (continuing without it)");
   }
 
-  const { configOf, orders } = await prepareGenerationConfig(sorted, resolveConfigWithSources);
+  const { configOf, orders } = await prepareGenerationConfig(
+    sorted,
+    resolveConfigWithSources,
+    gates,
+  );
   providerOrders = orders;
 
   for (const { manifest: raw, directory, isBuiltIn } of sorted) {
@@ -1512,14 +1710,6 @@ export async function initIntegrations(
 
     if (integrations.has(id)) {
       fastify.log.warn(`Skipping duplicate integration: ${id}`);
-      continue;
-    }
-
-    // A community manifest always states its protocol; validation requires it.
-    if (!isBuiltIn && !satisfiesPlatformVersion(manifest.platform ?? "")) {
-      fastify.log.warn(
-        `Skipping community integration ${id}: requires platform >=${manifest.platform}, current is ${PLATFORM_VERSION}`,
-      );
       continue;
     }
 
@@ -1545,6 +1735,13 @@ export async function initIntegrations(
       loadState: "loaded",
       shutdownHandlers,
     };
+
+    const gate = isBuiltIn ? undefined : gates.get(directory);
+    if (gate) {
+      holdBack(integration, gate, log);
+      integrations.set(id, integration);
+      continue;
+    }
 
     if (!integration.enabled) {
       integrations.set(id, integration);
@@ -1749,6 +1946,11 @@ export function isIntegrationHostInitialized(): boolean {
   return _fastify !== null;
 }
 
+/**
+ * The live generation's entry for `id`, whatever its load state. An installed
+ * integration that was not loaded (disabled, incompatible, in safe mode or
+ * failed) keeps its manifest here and has `enabled: false`.
+ */
 export function getIntegration(id: string): LoadedIntegration | undefined {
   return integrations.get(id);
 }
@@ -1911,12 +2113,14 @@ async function doReloadIntegrations(
       _fastify.log.debug("Service registry unavailable during reload");
     }
 
+    const gates = await readInstalledLoadGates(sorted, { retry: false });
     const { configOf, orders: stagedProviderOrders } = await prepareGenerationConfig(
       sorted,
       context
         ? (manifest, directory) =>
             resolveIntegrationConfigWithSourcesStrict(manifest, directory, context)
         : resolveConfigWithSources,
+      gates,
     );
 
     for (const { manifest: raw, directory, isBuiltIn } of sorted) {
@@ -1945,13 +2149,6 @@ async function doReloadIntegrations(
         continue;
       }
 
-      if (!isBuiltIn && !satisfiesPlatformVersion(manifest.platform ?? "")) {
-        _fastify.log.warn(
-          `Skipping community integration ${id}: requires platform >=${manifest.platform}, current is ${PLATFORM_VERSION}`,
-        );
-        continue;
-      }
-
       const config = await configOf(manifest, directory);
       const log = createLogger(id, _fastify);
       const http = createHttpClient(log);
@@ -1974,6 +2171,13 @@ async function doReloadIntegrations(
         loadState: "loaded",
         shutdownHandlers,
       };
+
+      const gate = isBuiltIn ? undefined : gates.get(directory);
+      if (gate) {
+        holdBack(integration, gate, log);
+        next.set(id, integration);
+        continue;
+      }
 
       if (!integration.enabled) {
         next.set(id, integration);
@@ -2175,3 +2379,10 @@ export async function shutdownIntegrations(): Promise<void> {
     setProviderHealth(null);
   }
 }
+
+// Leaving safe mode reloads through this host, and the attention item names
+// the integration automatic safe mode blames.
+setSafeModeHost({
+  reload: () => reloadIntegrations(),
+  integrationName: (integrationId) => integrations.get(integrationId)?.manifest.name,
+});

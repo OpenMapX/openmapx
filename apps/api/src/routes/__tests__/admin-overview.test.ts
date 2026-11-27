@@ -35,9 +35,13 @@ vi.mock("../../services/integration-health.js", () => ({
   getCachedHealthStatus: (id: string) => (id === "down" ? { status: "down", error: "500" } : null),
 }));
 
-const integration = (id: string, fields: { enabled: boolean; loadState: string }) => ({
+const integration = (
+  id: string,
+  fields: { enabled: boolean; loadState: string; config?: Record<string, unknown> },
+) => ({
   id,
   manifest: { id, name: id, healthCheck: { kind: "http" } },
+  config: {},
   ...fields,
 });
 
@@ -47,8 +51,12 @@ vi.mock("../../integration-host.js", () => ({
     integration("down", { enabled: true, loadState: "loaded" }),
     // The host clears `enabled` when the code fails to load; the operator's switch stays on.
     integration("broken", { enabled: false, loadState: "failed" }),
+    // Neither safe mode nor a release that cannot run it is the operator's switch or a failure.
     integration("stale", { enabled: false, loadState: "incompatible" }),
-    integration("off", { enabled: false, loadState: "loaded" }),
+    integration("safe", { enabled: false, loadState: "safe-mode" }),
+    integration("safe-off", { enabled: false, loadState: "safe-mode", config: { enabled: false } }),
+    integration("held", { enabled: false, loadState: "disabled" }),
+    integration("off", { enabled: false, loadState: "loaded", config: { enabled: false } }),
   ],
 }));
 
@@ -66,8 +74,7 @@ describe("admin overview integration counts", () => {
     const response = await app.inject({ method: "GET", url: "/api/admin/overview" });
     expect(response.statusCode).toBe(200);
     const body = response.json();
-    expect(body.integrations).toEqual({ total: 5, enabled: 4, unhealthy: 3, unconfigured: 0 });
-    // Three of the four switched-on integrations are not working.
-    expect(body.systemHealth).toEqual({ status: "down", unhealthyCount: 3 });
+    expect(body.integrations).toEqual({ total: 8, enabled: 5, unhealthy: 2, unconfigured: 0 });
+    expect(body.systemHealth).toEqual({ status: "degraded", unhealthyCount: 2 });
   });
 });

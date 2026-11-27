@@ -182,6 +182,7 @@ describe("renderComposeForRepo", () => {
     const owner = statSync(tmp);
     await renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["alpha"] });
     expect(statSync(join(tmp, "infra/docker/catalog-pins")).mode & 0o777).toBe(0o700);
+    expect(statSync(join(tmp, "infra/docker/data/api-runtime")).mode & 0o777).toBe(0o700);
     expect(readFileSync(env, "utf8")).toContain(`\nUID=${owner.uid}\nGID=${owner.gid}\n`);
     expect(permissions(env)).toBe(0o600);
 

@@ -39,6 +39,7 @@ vi.mock("../extension-store", () => ({
 vi.mock("../../integration-host", () => ({
   reloadIntegrations: vi.fn().mockResolvedValue({ message: "ok", reloaded: 1, enabled: 1 }),
   failedIntegrationLoads: vi.fn().mockReturnValue([]),
+  heldBackIntegrationLoads: vi.fn().mockReturnValue([]),
 }));
 
 vi.mock("../../utils/docker-compose", () => ({
@@ -91,7 +92,11 @@ vi.mock("../extension-recovery", () => ({
   recoverInterruptedExtensionChanges: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { failedIntegrationLoads, reloadIntegrations } from "../../integration-host";
+import {
+  failedIntegrationLoads,
+  heldBackIntegrationLoads,
+  reloadIntegrations,
+} from "../../integration-host";
 import { dockerComposeAction } from "../../utils/docker-compose";
 import { getServiceSelectionSummary } from "../admin-cli";
 import { renderAndPersistCompose, serviceStart } from "../admin-ops";
@@ -1138,6 +1143,23 @@ describe("installExtension", () => {
     );
     expect(dbMock.db.transaction).not.toHaveBeenCalled();
     expect(dbMock.db.insert).not.toHaveBeenCalled();
+  });
+
+  it("installs an integration the operator holds back and says it is not loaded", async () => {
+    const heldBackMock = vi.mocked(heldBackIntegrationLoads);
+    const message =
+      "Integration intg-one is installed but not loaded: the API runs in safe mode. It loads when safe mode is left.";
+    heldBackMock.mockReturnValueOnce([{ id: "intg-one", loadState: "safe-mode", message }]);
+    const ctx = makeCtx();
+
+    await installExtension(ctx, { manifest: INTEGRATION_ONLY, sourceTrust: "community" });
+
+    expect(heldBackMock).toHaveBeenCalledWith(["intg-one"]);
+    expect(ctx.log).toHaveBeenCalledWith(message);
+    expect(settleIntegrationMock.mock.calls.map(([request]) => request.outcome)).toEqual([
+      "commit",
+    ]);
+    expect(dbMock.db.transaction).toHaveBeenCalled();
   });
 
   it("rolls back an integration the agent reports under a different id", async () => {

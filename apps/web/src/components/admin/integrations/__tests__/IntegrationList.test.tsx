@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import type { AdminSafeModeState } from "@openmapx/core/api-contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createQueryWrapper, render, screen, userEvent } from "@/test";
 import type { IntegrationSummary } from "../IntegrationList";
@@ -43,6 +44,8 @@ afterEach(() => {
 describe("IntegrationList pagination", () => {
   beforeEach(() => {
     fetchMock.mockImplementation((input: unknown) => {
+      if (input === "http://test.local/api/admin/safe-mode")
+        return Response.json({ active: false, reason: null, integrationId: null });
       expect(input).toBe("http://test.local/api/admin/integrations");
       return Response.json(makeIntegrations(60));
     });
@@ -145,22 +148,109 @@ describe("IntegrationList load state", () => {
     expect(screen.queryByText("Provider 000")).toBeNull();
   });
 
-  it("marks an integration whose code cannot run on this platform as failed to load", async () => {
-    const [failed] = makeIntegrations(1);
-    fetchMock.mockImplementation(() =>
-      Response.json([
+  function serveList(
+    integrations: IntegrationSummary[],
+    safeMode: AdminSafeModeState = inactiveSafeMode,
+  ) {
+    fetchMock.mockImplementation((input: unknown) =>
+      input === "http://test.local/api/admin/safe-mode"
+        ? Response.json(safeMode)
+        : Response.json(integrations),
+    );
+  }
+
+  it("marks an integration this release cannot run as incompatible, not failed", async () => {
+    const [loaded, old] = makeIntegrations(2);
+    serveList([
+      loaded as IntegrationSummary,
+      {
+        ...(old as IntegrationSummary),
+        name: "Old extension",
+        isBuiltIn: false,
+        quality: "community",
+        enabled: false,
+        status: "incompatible",
+        loadState: "incompatible",
+        loadError: "requires platform 2.0, this is 1.0",
+        loadErrorPhase: "import",
+      },
+    ]);
+    const user = userEvent.setup();
+    render(<IntegrationList />, { wrapper: createQueryWrapper() });
+
+    const chip = await screen.findByText("Not compatible");
+    expect(screen.queryByText("Failed to load")).toBeNull();
+    expect(screen.getByRole("img", { name: "Not compatible with this release" })).toBeTruthy();
+    expect(screen.queryByText(/unhealthy/)).toBeNull();
+    expect(screen.getByText("2 enabled")).toBeInTheDocument();
+    await user.hover(chip);
+    expect(
+      await screen.findByText(
+        "This release of OpenMapX cannot run it: requires platform 2.0, this is 1.0",
+      ),
+    ).toBeTruthy();
+
+    await user.click(screen.getByText("All statuses"));
+    await user.click(await screen.findByRole("option", { name: "Unhealthy" }));
+    expect(await screen.findByText("No integrations match your filters")).toBeTruthy();
+  });
+
+  it("shows the safe mode notice and marks installed integrations it holds back", async () => {
+    const [loaded, held] = makeIntegrations(2);
+    serveList(
+      [
+        loaded as IntegrationSummary,
         {
-          ...failed,
+          ...(held as IntegrationSummary),
+          name: "Held extension",
+          isBuiltIn: false,
+          quality: "community",
           enabled: false,
-          status: "failed",
-          loadState: "incompatible",
-          loadError: null,
-          loadErrorPhase: null,
+          status: "safe-mode",
+          loadState: "safe-mode",
         },
-      ]),
+      ],
+      { active: true, reason: "operator", integrationId: null },
     );
     render(<IntegrationList />, { wrapper: createQueryWrapper() });
 
-    expect(await screen.findAllByText("Failed to load")).toHaveLength(1);
+    expect(await screen.findByRole("region", { name: "Safe mode is on" })).toBeInTheDocument();
+    expect(await screen.findByText("Safe mode")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Not loaded: safe mode" })).toBeTruthy();
+    expect(screen.getByText("2 enabled")).toBeInTheDocument();
+    expect(screen.queryByText(/unhealthy/)).toBeNull();
+    const switches = screen.getAllByRole("switch") as HTMLInputElement[];
+    expect(switches.map((control) => [control.checked, control.disabled])).toEqual([
+      [true, false],
+      [true, false],
+    ]);
+  });
+
+  it("marks an integration whose extension is disabled and offers no switch that would not help", async () => {
+    const [loaded, off] = makeIntegrations(2);
+    serveList([
+      loaded as IntegrationSummary,
+      {
+        ...(off as IntegrationSummary),
+        name: "Disabled extension",
+        isBuiltIn: false,
+        quality: "community",
+        enabled: false,
+        status: "disabled",
+        loadState: "disabled",
+      },
+    ]);
+    render(<IntegrationList />, { wrapper: createQueryWrapper() });
+
+    expect(await screen.findByText("Extension disabled")).toBeInTheDocument();
+    expect(screen.getByText("1 disabled")).toBeInTheDocument();
+    const switches = screen.getAllByRole("switch") as HTMLInputElement[];
+    expect(switches.map((control) => [control.checked, control.disabled])).toEqual([
+      [true, false],
+      [false, true],
+    ]);
+    expect(screen.queryByRole("region", { name: "Safe mode is on" })).toBeNull();
   });
 });
+
+const inactiveSafeMode: AdminSafeModeState = { active: false, reason: null, integrationId: null };

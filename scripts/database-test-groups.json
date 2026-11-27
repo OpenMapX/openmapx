@@ -43,6 +43,7 @@
     "apps/api/src/services/service-config-writer-postgres.test.ts",
     "apps/api/src/services/secret-settings-postgres.test.ts",
     "apps/api/src/services/attention-postgres.test.ts",
+    "apps/api/src/services/installed-extension-state-postgres.test.ts",
     "apps/api/src/account/auth-policy-postgres.test.ts",
     "apps/api/src/account/admin-invariant-postgres.test.ts",
     "apps/api/src/account/admin-reauthentication-postgres.test.ts",

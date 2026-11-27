@@ -20,7 +20,11 @@ import {
   installedExtensionComponent,
   installedIntegration,
 } from "../../db/schema";
-import { failedIntegrationLoads, reloadIntegrations } from "../../integration-host";
+import {
+  failedIntegrationLoads,
+  heldBackIntegrationLoads,
+  reloadIntegrations,
+} from "../../integration-host";
 import { actorUserIdOrNull } from "../../utils/actor";
 import { AdminJobFailure, JobObservationPending } from "../admin-job-failure";
 import { executeAdminJobOperation } from "../admin-job-ops";
@@ -354,16 +358,21 @@ export function handleStandaloneInstall(ctx: JobContext): Promise<Record<string,
         state.phase = "reload_attempted";
         await save(ctx, state);
         let loadFailure: string | undefined;
+        let held: ReturnType<typeof heldBackIntegrationLoads> = [];
         try {
           await reloadIntegrations();
-          // The reload leaves out an installed integration whose code fails
-          // instead of failing; this job installed it, so the job restores.
+          // The reload leaves out an installed integration whose code fails,
+          // or that this release cannot run, instead of failing; this job
+          // installed it, so the job restores. Safe mode holds it back as the
+          // operator asked, and the job says so.
           const [failed] = failedIntegrationLoads([state.inspection.integrationId]);
           if (failed) loadFailure = `Integration ${failed.id} failed to load: ${failed.message}`;
+          else held = heldBackIntegrationLoads([state.inspection.integrationId]);
         } catch {
           state.phase = "restore";
           await save(ctx, state);
         }
+        for (const { message } of held) await ctx.log(message);
         if (loadFailure !== undefined) {
           state.phase = "restore";
           state.loadFailure = loadFailure.slice(0, LOAD_FAILURE_MAX_LENGTH);

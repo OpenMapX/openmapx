@@ -51,6 +51,7 @@ import {
   setGatedImageSourceResolver,
 } from "./routes/image-hosts";
 import { registerCoreRoutes } from "./routes/index";
+import { initSafeMode, syncSafeModeAttention } from "./safe-mode";
 import {
   controlledRequestLoggingOptions,
   corsOptions,
@@ -422,10 +423,20 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
   } catch (err) {
     server.log.error(err, "Could not close the scheduled task runs of the previous process");
   }
+  // Read once, before any integration loads; it holds until it is left or the
+  // API restarts without it.
+  const safeMode = initSafeMode();
+  if (safeMode.active)
+    server.log.warn(
+      { reason: safeMode.reason, integrationId: safeMode.integrationId },
+      "Safe mode is on: no installed extension is loaded",
+    );
   await initIntegrations(server, [
     { directory: integrationsDir, isBuiltIn: true },
     { directory: customIntegrationsDir, isBuiltIn: false },
   ]);
+  // After the load, so the item can name the integration automatic safe mode blames.
+  await syncSafeModeAttention();
   // Runtime integrations supplied their first sources during setup, before
   // they were live, so the sources-changed hook has not run for them yet.
   setCameraMediaSources(cameraMediaSourcesOf(getAllIntegrations()));

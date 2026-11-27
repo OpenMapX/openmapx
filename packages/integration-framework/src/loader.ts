@@ -33,7 +33,10 @@ export interface LoadedIntegration {
    * admin UI so an integration left out is visible rather than a log line.
    */
   loadState: IntegrationLoadState;
-  /** Why the load failed; present only when `loadState` is `"failed"`. */
+  /**
+   * Why the code did not load; present only when `loadState` is `"failed"`,
+   * or `"incompatible"` with the version the integration needs.
+   */
   loadError?: IntegrationLoadError;
   disclosures?: Disclosure[];
   shutdownHandlers: Array<() => Promise<void>>;

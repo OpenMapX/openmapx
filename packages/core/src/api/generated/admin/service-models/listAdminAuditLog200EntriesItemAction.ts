@@ -45,6 +45,7 @@ export const ListAdminAuditLog200EntriesItemAction = {
   platformconfigurationsave: "platform.configuration.save",
   providerreset: "provider.reset",
   releaseclear: "release.clear",
+  safe_modeleave: "safe_mode.leave",
   serviceapply: "service.apply",
   servicebuild: "service.build",
   serviceconfigupdate: "service.config.update",

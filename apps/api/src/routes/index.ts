@@ -19,6 +19,7 @@ import { adminProviderHealthRoute } from "./admin-provider-health";
 import { adminProviderOrderRoute } from "./admin-provider-order";
 import { adminReauthenticationRoute } from "./admin-reauthentication";
 import { adminReleaseControlsRoute } from "./admin-release-controls";
+import { adminSafeModeRoute } from "./admin-safe-mode";
 import { adminServicesRoute } from "./admin-services";
 import { adminSettingsRoute } from "./admin-settings";
 import { adminStandaloneIntegrationsRoute } from "./admin-standalone-integrations";
@@ -144,6 +145,7 @@ export async function registerCoreRoutes(
   await server.register(adminCacheRoute, { prefix: "/api" });
   await server.register(adminProviderHealthRoute, { prefix: "/api" });
   await server.register(adminProviderOrderRoute, { prefix: "/api" });
+  await server.register(adminSafeModeRoute, { prefix: "/api" });
   await server.register(adminReleaseControlsRoute, { prefix: "/api" });
   await server.register(adminBackupMaintenanceRoute, { prefix: "/api" });
   await server.register(adminSystemRoute, { prefix: "/api" });

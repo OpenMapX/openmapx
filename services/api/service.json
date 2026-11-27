@@ -37,6 +37,8 @@
       "TRUST_PROXY_RANGES": "${TRUST_PROXY_RANGES:-uniquelocal}",
       "DOMAIN": "${DOMAIN:-localhost}",
       "OPENMAPX_CUSTOM_INTEGRATIONS_DIR": "${OPENMAPX_CUSTOM_INTEGRATIONS_DIR:-/app/custom_integrations}",
+      "OPENMAPX_SAFE_MODE": "${OPENMAPX_SAFE_MODE:-}",
+      "OPENMAPX_API_RUNTIME_DIR": "/var/lib/openmapx/runtime",
       "DATABASE_URL": "postgresql://openmapx_api@openmapx-postgis:5432/openmapx",
       "DATABASE_PASSWORD_FILE": "/run/secrets/postgres-api-password",
       "POSTGRES_PASSWORD": "",
@@ -199,6 +201,11 @@
     {
       "source": "@infra:data/erasure",
       "target": "/var/lib/openmapx/erasure",
+      "readOnly": false
+    },
+    {
+      "source": "@infra:data/api-runtime",
+      "target": "/var/lib/openmapx/runtime",
       "readOnly": false
     },
     {

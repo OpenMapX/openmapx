@@ -150,6 +150,20 @@ function whyNotErasing(integration: LoadedIntegration | undefined): string {
   return "it registered no subject-data handler";
 }
 
+/** What an operator can do so an integration that cannot erase now erases, as a sentence. */
+function erasureNextStep(integration: LoadedIntegration | undefined): string {
+  if (!integration) return "Reinstall the extension, or remove its data.";
+  if (integration.loadState === "failed")
+    return "Repair or update the extension, or remove its data.";
+  if (integration.loadState === "incompatible")
+    return "Update OpenMapX or install a version of the extension made for it, or remove its data.";
+  if (integration.loadState === "safe-mode")
+    return "Leave safe mode once the extension that stopped the API is disabled or repaired, or remove its data.";
+  if (integration.loadState === "disabled" || !integration.enabled)
+    return "Enable it, or remove its data.";
+  return "Update the extension, or remove its data.";
+}
+
 /** The outcome of one `erase` call, as the store records it. */
 export type ErasureAttempt = { ok: true } | { ok: false; error: string; timedOut: boolean };
 
@@ -457,7 +471,7 @@ export function createExtensionSubjectData(dependencies: ExtensionSubjectDataDep
       if (failure !== undefined)
         detail = `${accountsWaiting(pending.count)} for this extension to erase its data; erasing has failed up to ${pending.attempts} ${pending.attempts === 1 ? "time" : "times"} per account.${failure ? ` Last error: ${failure}.` : ""} Repair or update the extension, or remove its data.`;
       else if (!canErase)
-        detail = `${name} cannot erase data now: ${whyNotErasing(integration)}. ${accountsWaiting(pending.count)} for it to erase their data. Enable or repair the extension, reinstall it, or remove its data.`;
+        detail = `${name} cannot erase data now: ${whyNotErasing(integration)}. ${accountsWaiting(pending.count)} for it to erase their data. ${erasureNextStep(integration)}`;
       // An integration that can erase and failed nothing this run keeps its item as it is.
       if (detail === undefined) continue;
       await updateItem(key, () =>

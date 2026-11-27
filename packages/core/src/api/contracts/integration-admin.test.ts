@@ -61,6 +61,8 @@ const inventory = [
   ["setAdminIntegrationCredential", "PUT", "/api/admin/credentials/:integrationId/:key"],
   ["deleteAdminIntegrationCredential", "DELETE", "/api/admin/credentials/:integrationId/:key"],
   ["getAdminProviderOrder", "GET", "/api/admin/provider-order"],
+  ["getAdminSafeMode", "GET", "/api/admin/safe-mode"],
+  ["leaveAdminSafeMode", "POST", "/api/admin/safe-mode/leave"],
   ["getAdminOverview", "GET", "/api/admin/overview"],
   ["listAdminAttention", "GET", "/api/admin/attention"],
   ["acknowledgeAdminAttention", "POST", "/api/admin/attention/:key/acknowledge"],
@@ -356,6 +358,8 @@ describe("integration administration canonical producer contracts", () => {
           },
         ],
       },
+      getAdminSafeMode: { active: true, reason: "automatic", integrationId: "sample" },
+      leaveAdminSafeMode: { active: false, reason: null, integrationId: null },
       getAdminOverview: overview,
       listAdminAttention: {
         items: [

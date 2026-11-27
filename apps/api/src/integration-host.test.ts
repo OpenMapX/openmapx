@@ -23,6 +23,7 @@ import type { FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   getAttentionMocks,
+  getDisabledExtensionMocks,
   getExtensionMigrationMocks,
   getIntegrationHealthMocks,
   getSubjectDataMocks,
@@ -56,8 +57,11 @@ import {
   getIntegrationProviders,
   getIntegrationsByDomain,
   getProviderOrder,
+  heldBackIntegrationLoads,
   initIntegrations,
   reloadIntegrations,
+  setCompatibilityResolver,
+  setDisabledExtensionResolver,
   shutdownIntegrations,
   startIntegrationHealthRefresh,
   stopIntegrationHealthRefresh,
@@ -66,6 +70,7 @@ import { registerIntegrationRoute, setIntegrationRouteRateLimits } from "./integ
 import { currentIntegrationScope } from "./integration-scope.js";
 import { createExtensionSubjectData } from "./privacy/extension-subject-data.js";
 import { processLogger } from "./process-logger";
+import { initSafeMode } from "./safe-mode.js";
 import { makeRateLimitTierHook, type RateLimitTiers } from "./server-wiring.js";
 import { getAttributionIndex } from "./services/attribution/index.js";
 import { secretsKeyProblem } from "./services/secrets.js";
@@ -2266,6 +2271,378 @@ describe("initIntegrations — loader", () => {
 
       expect(g.__omxInstalledUndeclared).toBeUndefined();
       expect(getIntegration("demo")?.loadState).toBe("loaded");
+    });
+
+    describe("safe mode and the loader gates", () => {
+      let runtimeDir: string;
+
+      beforeEach(() => {
+        runtimeDir = join(parent, "runtime");
+        mkdirSync(runtimeDir);
+        initSafeMode({}, runtimeDir);
+      });
+
+      afterEach(() => {
+        vi.useRealTimers();
+        initSafeMode({}, runtimeDir);
+        setDisabledExtensionResolver(null);
+        setCompatibilityResolver(null);
+        getDisabledExtensionMocks().disabledExtensionIntegrationIds.mockClear();
+      });
+
+      const recording = (comment: string, extra: string[] = []) =>
+        [
+          `// ${comment}`,
+          "globalThis.__omxInstalledEvaluated = true;",
+          "export function setup(ctx) {",
+          "  globalThis.__omxInstalledLoaded = true;",
+          ...extra,
+          "}",
+        ].join("\n");
+
+      function writeGatedFixtures(comment: string, extra: string[] = []) {
+        writeInstalled("installed-demo", recording(comment, extra), {
+          manifest: { name: "Installed Demo", database: { migrations: true } },
+        });
+        writeBuiltIn(
+          "built-in-demo",
+          'export function setup(ctx) { ctx.registerRoute("GET", "/ok", (_q, reply) => reply.send({ ok: true })); }\n',
+        );
+      }
+
+      it("loads no installed code in safe mode and keeps built-ins", async () => {
+        writeGatedFixtures("loads no installed code in safe mode and keeps built-ins");
+        initSafeMode({ OPENMAPX_SAFE_MODE: "1" }, runtimeDir);
+        const app = makeApp();
+
+        await initIntegrations(app, [installed(), builtIn()]);
+
+        expect(getIntegration("installed-demo")).toMatchObject({
+          enabled: false,
+          loadState: "safe-mode",
+          manifest: { id: "installed-demo", name: "Installed Demo" },
+        });
+        expect(getIntegration("installed-demo")?.loadError).toBeUndefined();
+        expect(g.__omxInstalledEvaluated).toBeUndefined();
+        expect(g.__omxInstalledLoaded).toBeUndefined();
+        expect(getExtensionMigrationMocks().applyExtensionMigrations).not.toHaveBeenCalled();
+        expect(getDisabledExtensionMocks().disabledExtensionIntegrationIds).not.toHaveBeenCalled();
+        expect(getIntegration("built-in-demo")?.loadState).toBe("loaded");
+        expect((await app.inject("/api/integrations/built-in-demo/ok")).statusCode).toBe(200);
+        expect(failedIntegrationLoads(["installed-demo"])).toEqual([]);
+      });
+
+      it("stays in safe mode across a reload", async () => {
+        writeGatedFixtures("stays in safe mode across a reload");
+        writeFileSync(join(runtimeDir, "safe-mode.json"), '{"mode":"operator"}');
+        initSafeMode({}, runtimeDir);
+        await initIntegrations(makeApp(), [installed(), builtIn()]);
+
+        rmSync(join(runtimeDir, "safe-mode.json"));
+        await reloadIntegrations();
+
+        expect(getIntegration("installed-demo")?.loadState).toBe("safe-mode");
+        expect(g.__omxInstalledEvaluated).toBeUndefined();
+        expect(getIntegration("built-in-demo")?.loadState).toBe("loaded");
+      });
+
+      it("starts no task and runs no subject-data handler in safe mode", async () => {
+        writeGatedFixtures("starts no task and runs no subject-data handler in safe mode", [
+          '  ctx.schedule("refresh", { everyMs: 1000, deadlineMs: 5000 }, async () => {',
+          "    globalThis.__omxInstalledRan = true;",
+          "  });",
+          "  ctx.registerSubjectDataHandler({",
+          "    async erase() { globalThis.__omxInstalledErased = true; },",
+          "    async export() { return null; },",
+          "  });",
+        ]);
+        initSafeMode({ OPENMAPX_SAFE_MODE: "1" }, runtimeDir);
+        vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+
+        await initIntegrations(makeApp(), [installed(), builtIn()]);
+        vi.advanceTimersByTime(5_000);
+
+        expect(g.__omxInstalledRan).toBeUndefined();
+        expect(getTaskRunMocks().store.start).not.toHaveBeenCalled();
+        const synced: Array<{ handling: readonly string[]; stopped: readonly string[] }> = [];
+        const subjectData = createExtensionSubjectData({
+          store: {
+            syncHandlers: async (input) => {
+              synced.push(input);
+              return new Map();
+            },
+            pendingSubjects: async () => ["u1"],
+            eraseLocked: async (_id, _subject, erase) => erase(),
+            recordStalled: async () => {},
+            pendingSummary: async () => new Map([["installed-demo", { count: 1, attempts: 0 }]]),
+            count: async () => 1,
+          },
+          integrations: getAllIntegrations,
+          attention: {
+            raise: vi.fn(async () => {}),
+            resolve: vi.fn(async () => {}),
+            openKeys: vi.fn(async () => []),
+          },
+          log: { warn: vi.fn() },
+        });
+        await subjectData.syncSubjectHandlerTable();
+        // Its handler row stays, so deletions keep being recorded for it.
+        expect(synced).toEqual([{ handling: [], stopped: ["built-in-demo"] }]);
+        expect(await subjectData.runPendingErasures()).toEqual({ erased: 0, failed: 0 });
+        expect(g.__omxInstalledErased).toBeUndefined();
+      });
+
+      it("lists no installed integration publicly in safe mode", async () => {
+        writeGatedFixtures("lists no installed integration publicly in safe mode");
+        initSafeMode({ OPENMAPX_SAFE_MODE: "1" }, runtimeDir);
+        const app = makeApp();
+        await initIntegrations(app, [installed(), builtIn()]);
+
+        const listed = (await app.inject("/api/integrations")).json() as {
+          integrations: Array<{ id: string }>;
+        };
+
+        expect(listed.integrations.map(({ id }) => id)).toEqual(["built-in-demo"]);
+        expect(getIntegrationsByDomain("knowledge").map(({ id }) => id)).toEqual(["built-in-demo"]);
+      });
+
+      it("does not load an integration whose extension is disabled", async () => {
+        writeGatedFixtures("does not load an integration whose extension is disabled");
+        getDisabledExtensionMocks().disabledExtensionIntegrationIds.mockResolvedValueOnce(
+          new Set(["installed-demo"]),
+        );
+
+        await initIntegrations(makeApp(), [installed(), builtIn()]);
+
+        expect(getIntegration("installed-demo")).toMatchObject({
+          enabled: false,
+          loadState: "disabled",
+          manifest: { id: "installed-demo" },
+        });
+        expect(g.__omxInstalledEvaluated).toBeUndefined();
+        expect(getExtensionMigrationMocks().applyExtensionMigrations).not.toHaveBeenCalled();
+        expect(getIntegration("built-in-demo")?.loadState).toBe("loaded");
+      });
+
+      it("keeps the manifest of a disabled integration", async () => {
+        writeInstalled("off", recording("keeps the manifest of a disabled integration"), {
+          manifest: { name: "Off" },
+        });
+        setDisabledExtensionResolver(async () => new Set(["off"]));
+
+        await initIntegrations(makeApp(), [installed()]);
+
+        expect(getIntegration("off")).toMatchObject({
+          loadState: "disabled",
+          manifest: { id: "off", name: "Off", platform: "1.0" },
+        });
+        expect(getDisabledExtensionMocks().disabledExtensionIntegrationIds).not.toHaveBeenCalled();
+      });
+
+      it("loads an integration again once its extension is enabled and the host reloads", async () => {
+        writeInstalled(
+          "demo",
+          recording("loads an integration again once its extension is enabled"),
+        );
+        let disabled = new Set(["demo"]);
+        setDisabledExtensionResolver(async () => disabled);
+        await initIntegrations(makeApp(), [installed()]);
+        expect(getIntegration("demo")?.loadState).toBe("disabled");
+
+        disabled = new Set();
+        await reloadIntegrations();
+
+        expect(getIntegration("demo")?.loadState).toBe("loaded");
+        expect(g.__omxInstalledLoaded).toBe(true);
+      });
+
+      it("records an incompatible integration instead of skipping it", async () => {
+        writeInstalled("demo", recording("records an incompatible integration"));
+        setCompatibilityResolver((manifest) =>
+          manifest.id === "demo" ? { reason: "platform", required: "2.0" } : null,
+        );
+
+        await initIntegrations(makeApp(), [installed()]);
+
+        expect(getIntegration("demo")).toMatchObject({
+          enabled: false,
+          loadState: "incompatible",
+          manifest: { id: "demo" },
+          loadError: { phase: "import", message: "requires platform 2.0, this is 1.0" },
+        });
+        expect(g.__omxInstalledEvaluated).toBeUndefined();
+      });
+
+      it("names the web platform when that is what is missing", async () => {
+        writeInstalled("demo", recording("names the web platform"));
+        setCompatibilityResolver(() => ({ reason: "webPlatform", required: "2.0" }));
+
+        await initIntegrations(makeApp(), [installed()]);
+
+        expect(getIntegration("demo")).toMatchObject({
+          loadState: "incompatible",
+          loadError: { message: "requires web platform 2.0, this is 1.0" },
+        });
+      });
+
+      it("refuses an installed manifest that needs a newer platform by default", async () => {
+        writeInstalled("demo", recording("refuses a newer platform by default"), {
+          manifest: { platform: "1.9" },
+        });
+        writeBuiltIn("built-in-demo", "export function setup() {}\n");
+
+        await initIntegrations(makeApp(), [installed(), builtIn()]);
+
+        expect(getIntegration("demo")).toMatchObject({
+          loadState: "incompatible",
+          loadError: { phase: "import", message: "requires platform 1.9, this is 1.0" },
+        });
+        expect(getIntegration("built-in-demo")?.loadState).toBe("loaded");
+      });
+
+      it("asks the compatibility resolver once for each installed manifest", async () => {
+        writeInstalled("a", recording("asks the compatibility resolver once: a"));
+        writeInstalled("b", recording("asks the compatibility resolver once: b"));
+        writeBuiltIn("built-in-demo", "export function setup() {}\n");
+        const resolver = vi.fn((_manifest: { id: string }) => null);
+        setCompatibilityResolver(resolver);
+
+        await initIntegrations(makeApp(), [installed(), builtIn()]);
+
+        expect(resolver.mock.calls.map(([manifest]) => manifest.id).sort()).toEqual(["a", "b"]);
+      });
+
+      it("loads no installed integration when the disabled set cannot be read", async () => {
+        writeGatedFixtures("loads no installed integration when the disabled set cannot be read");
+        setDisabledExtensionResolver(async () => {
+          throw new Error("db down");
+        });
+        vi.useFakeTimers({ toFake: ["setTimeout"] });
+
+        const booting = initIntegrations(makeApp(), [installed(), builtIn()]);
+        await vi.advanceTimersByTimeAsync(5_000);
+        await booting;
+
+        expect(getIntegration("installed-demo")).toMatchObject({
+          enabled: false,
+          loadState: "failed",
+          loadError: { phase: "import", message: "could not read extension state" },
+        });
+        expect(g.__omxInstalledEvaluated).toBeUndefined();
+        expect(getIntegration("built-in-demo")?.loadState).toBe("loaded");
+        expect(failedIntegrationLoads(["installed-demo"])).toEqual([
+          { id: "installed-demo", phase: "import", message: "could not read extension state" },
+        ]);
+      });
+
+      it("loads no installed integration when the compatibility rule throws", async () => {
+        writeGatedFixtures("loads no installed integration when the compatibility rule throws");
+        setCompatibilityResolver(() => {
+          throw new Error("broken rule");
+        });
+        vi.useFakeTimers({ toFake: ["setTimeout"] });
+
+        const booting = initIntegrations(makeApp(), [installed(), builtIn()]);
+        await vi.advanceTimersByTimeAsync(5_000);
+        await booting;
+
+        expect(getIntegration("installed-demo")).toMatchObject({
+          loadState: "failed",
+          loadError: { phase: "import", message: "could not read extension state" },
+        });
+        expect(getIntegration("built-in-demo")?.loadState).toBe("loaded");
+      });
+
+      it("retries the gates once at boot", async () => {
+        writeGatedFixtures("retries the gates once at boot");
+        const resolver = vi
+          .fn<() => Promise<ReadonlySet<string>>>()
+          .mockRejectedValueOnce(new Error("db starting"))
+          .mockResolvedValueOnce(new Set());
+        setDisabledExtensionResolver(resolver);
+        vi.useFakeTimers({ toFake: ["setTimeout"] });
+
+        let settled = false;
+        const booting = initIntegrations(makeApp(), [installed(), builtIn()]).then(() => {
+          settled = true;
+        });
+        await vi.advanceTimersByTimeAsync(4_999);
+        expect(settled).toBe(false);
+        expect(resolver).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1);
+        await booting;
+
+        expect(resolver).toHaveBeenCalledTimes(2);
+        expect(getIntegration("installed-demo")?.loadState).toBe("loaded");
+        expect(g.__omxInstalledLoaded).toBe(true);
+      });
+
+      it("does not retry the gates on a reload", async () => {
+        writeGatedFixtures("does not retry the gates on a reload");
+        await initIntegrations(makeApp(), [installed(), builtIn()]);
+        const resolver = vi.fn(async (): Promise<ReadonlySet<string>> => {
+          throw new Error("db down");
+        });
+        setDisabledExtensionResolver(resolver);
+
+        await reloadIntegrations();
+
+        expect(resolver).toHaveBeenCalledTimes(1);
+        expect(getIntegration("installed-demo")).toMatchObject({
+          loadState: "failed",
+          loadError: { phase: "import", message: "could not read extension state" },
+        });
+        expect(getIntegration("built-in-demo")?.loadState).toBe("loaded");
+      });
+
+      it("tells an install job which integrations did not load and which are held back", async () => {
+        writeInstalled("off", recording("tells an install job: off"));
+        writeInstalled("old", recording("tells an install job: old"));
+        writeInstalled("fine", recording("tells an install job: fine"));
+        setDisabledExtensionResolver(async () => new Set(["off"]));
+        setCompatibilityResolver((manifest) =>
+          manifest.id === "old" ? { reason: "platform", required: "2.0" } : null,
+        );
+        await initIntegrations(makeApp(), [installed()]);
+
+        const ids = ["off", "old", "fine", "gone"];
+        expect(failedIntegrationLoads(ids)).toEqual([
+          { id: "old", phase: "import", message: "requires platform 2.0, this is 1.0" },
+          { id: "gone", phase: "import", message: "the reload did not find it" },
+        ]);
+        expect(heldBackIntegrationLoads(ids)).toEqual([
+          {
+            id: "off",
+            loadState: "disabled",
+            message: "Integration off is installed but not loaded: its extension is disabled.",
+          },
+        ]);
+
+        initSafeMode({ OPENMAPX_SAFE_MODE: "1" }, runtimeDir);
+        await reloadIntegrations();
+
+        expect(failedIntegrationLoads(ids)).toEqual([
+          { id: "gone", phase: "import", message: "the reload did not find it" },
+        ]);
+        expect(heldBackIntegrationLoads(["fine"])).toEqual([
+          {
+            id: "fine",
+            loadState: "safe-mode",
+            message:
+              "Integration fine is installed but not loaded: the API runs in safe mode. It loads when safe mode is left.",
+          },
+        ]);
+      });
+
+      it("reads no extension state without installed integrations", async () => {
+        writeBuiltIn("built-in-demo", "export function setup() {}\n");
+        const resolver = vi.fn(async () => new Set<string>());
+        setDisabledExtensionResolver(resolver);
+
+        await initIntegrations(makeApp(), [installed(), builtIn()]);
+
+        expect(resolver).not.toHaveBeenCalled();
+      });
     });
   });
 

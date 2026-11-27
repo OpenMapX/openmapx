@@ -75,6 +75,7 @@ export const AUDIT_ACTIONS = {
   "platform.configuration.save": target("platform"),
   "provider.reset": target("provider"),
   "release.clear": target("release"),
+  "safe_mode.leave": target("system"),
   "service.apply": target("service"),
   "service.build": target("service"),
   "service.config.update": target("service"),

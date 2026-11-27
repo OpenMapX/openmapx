@@ -46,6 +46,13 @@ const attentionMocks = vi.hoisted(() => ({
 
 vi.mock("../../services/attention.js", () => attentionMocks);
 
+const disabledExtensionMocks = vi.hoisted(() => ({
+  disabledExtensionIntegrationIds: vi.fn(async (): Promise<ReadonlySet<string>> => new Set()),
+}));
+
+// The default loader gate reads `installed_extension.enabled`: no extension is disabled.
+vi.mock("../../services/installed-extension-state.js", () => disabledExtensionMocks);
+
 const subjectDataMocks = vi.hoisted(() => ({
   syncSubjectHandlerTable: vi.fn(async () => {}),
   runPendingErasures: vi.fn(async () => ({ erased: 0, failed: 0 })),
@@ -178,6 +185,11 @@ export function getTaskRunMocks() {
 /** The attention list the host raises the schema-ahead item on. */
 export function getAttentionMocks() {
   return attentionMocks;
+}
+
+/** The default disabled-extension gate the host reads before loading installed integrations. */
+export function getDisabledExtensionMocks() {
+  return disabledExtensionMocks;
 }
 
 /** The handler-table sync and the erasure run the host starts after each activation. */

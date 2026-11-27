@@ -493,25 +493,35 @@ describe("pending erasures", () => {
       "failed to load",
       integration("c", { loadState: "failed", name: "Trips" }),
       "Trips cannot erase data now: it failed to load.",
+      "Repair or update the extension, or remove its data.",
     ],
     [
       "is disabled by the operator",
       integration("c", { enabled: false, name: "Trips" }),
       "Trips cannot erase data now: it is disabled.",
+      "Enable it, or remove its data.",
+    ],
+    [
+      "belongs to a disabled extension",
+      integration("c", { enabled: false, loadState: "disabled", name: "Trips" }),
+      "Trips cannot erase data now: it is disabled.",
+      "Enable it, or remove its data.",
     ],
     [
       "is incompatible",
       integration("c", { loadState: "incompatible", name: "Trips" }),
       "Trips cannot erase data now: it is not compatible with this version of OpenMapX.",
+      "Update OpenMapX or install a version of the extension made for it, or remove its data.",
     ],
     [
       "is held back by safe mode",
       integration("c", { loadState: "safe-mode", name: "Trips" }),
       "Trips cannot erase data now: the API runs in safe mode.",
+      "Leave safe mode once the extension that stopped the API is disabled or repaired, or remove its data.",
     ],
   ])(
     "shows owed erasures of an integration that %s, and clears the item once nothing is owed",
-    async (_label, waiting, reason) => {
+    async (_label, waiting, reason, next) => {
       const store = memoryStore({
         handlers: ["c"],
         pending: [
@@ -525,7 +535,7 @@ describe("pending erasures", () => {
 
       expect(items.get("subject-erasure-pending:c")).toEqual({
         title: "Erasure pending in Trips",
-        detail: `${reason} 2 deleted accounts wait for it to erase their data. Enable or repair the extension, reinstall it, or remove its data.`,
+        detail: `${reason} 2 deleted accounts wait for it to erase their data. ${next}`,
       });
 
       store.removeAll("c");
@@ -543,7 +553,7 @@ describe("pending erasures", () => {
     expect(items.get("subject-erasure-pending:gone")).toEqual({
       title: "Erasure pending in gone",
       detail:
-        "gone cannot erase data now: it is not installed, or its installation could not be loaded. 1 deleted account waits for it to erase their data. Enable or repair the extension, reinstall it, or remove its data.",
+        "gone cannot erase data now: it is not installed, or its installation could not be loaded. 1 deleted account waits for it to erase their data. Reinstall the extension, or remove its data.",
     });
   });
 

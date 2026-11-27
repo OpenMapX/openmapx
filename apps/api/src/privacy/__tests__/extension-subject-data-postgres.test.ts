@@ -189,7 +189,7 @@ describe.skipIf(skipDatabase)("extension subject data in PostgreSQL", () => {
         source: "privacy",
         title: "Erasure pending in Tracker",
         detail:
-          "Tracker cannot erase data now: it failed to load. 1 deleted account waits for it to erase their data. Enable or repair the extension, reinstall it, or remove its data.",
+          "Tracker cannot erase data now: it failed to load. 1 deleted account waits for it to erase their data. Repair or update the extension, or remove its data.",
       },
     ]);
 

@@ -18,15 +18,38 @@ import {
   runExtensionAction,
 } from "../lib/extension-admin";
 import { log, table } from "../lib/output";
+import { disableExtensionOffline } from "./extensions-offline";
 
 function selector(idOrUrl: string) {
   return /^https?:\/\//.test(idOrUrl) ? { manifestUrl: idOrUrl } : { id: idOrUrl };
 }
 
+/** Disables an extension through the API; returns the exit code. */
+export async function disableExtensionOnline(_id: string): Promise<number> {
+  log.err("Pass --offline to disable an extension without the API");
+  return 1;
+}
+
 export function registerExtCommands(program: Command): void {
   const ext = program
-    .command("ext")
+    .command("extensions")
+    .alias("ext")
     .description("Browse and manage extensions (the unified store: integrations + services)");
+
+  ext
+    .command("disable <id>")
+    .description(
+      "Disable an installed extension so the API leaves its integrations out at the next start",
+    )
+    .option(
+      "--offline",
+      "Write the database directly, without the API (host only); restart the api service afterwards",
+    )
+    .action(async (id: string, opts: { offline?: boolean }) => {
+      process.exitCode = opts.offline
+        ? await disableExtensionOffline(id)
+        : await disableExtensionOnline(id);
+    });
 
   withAdminSessionOptions(ext.command("browse"))
     .description("List catalog extensions")

@@ -442,6 +442,13 @@ export async function getAdminProviderOrderRequest<T>(
 ): Promise<T> {
   return getAdminProviderOrderBound<T>(url, options);
 }
+const getAdminSafeModeBound = bindAdminOperation("getAdminSafeMode");
+export async function getAdminSafeModeRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return getAdminSafeModeBound<T>(url, options);
+}
 const getAdminServiceBound = bindAdminOperation("getAdminService");
 export async function getAdminServiceRequest<T>(
   url: string,
@@ -654,6 +661,13 @@ export async function inviteAdminAccountRequest<T>(
   options?: AdminSdkRequestOptions,
 ): Promise<T> {
   return inviteAdminAccountBound<T>(url, options);
+}
+const leaveAdminSafeModeBound = bindAdminOperation("leaveAdminSafeMode");
+export async function leaveAdminSafeModeRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return leaveAdminSafeModeBound<T>(url, options);
 }
 const listAdminActivityJobsBound = bindAdminOperation("listAdminActivityJobs");
 export async function listAdminActivityJobsRequest<T>(

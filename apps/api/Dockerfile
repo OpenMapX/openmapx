@@ -255,7 +255,7 @@ COPY packages/core/tsconfig.json ./packages/core/
 # its own 0700 directory inside (see private-volume-directory.ts). Only the
 # API mounts it.
 RUN mkdir -p /app/custom_integrations \
-      /var/lib/openmapx/erasure /app/infra/docker/.runtime-recovery && \
+      /var/lib/openmapx/erasure /var/lib/openmapx/runtime /app/infra/docker/.runtime-recovery && \
     chmod 1777 /app/infra/docker/.runtime-recovery
 USER node
 
