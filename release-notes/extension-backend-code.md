@@ -35,64 +35,6 @@ out, late calls it makes to its context are ignored with one warning per method.
 Removing, disabling or updating an installed integration stops what it registered
 at once; its code stays loaded in the API process until the next restart.
 
-An integration that requires PostGIS or declares `database.migrations: true` gets
-`ctx.db` with `transaction(fn, { timeoutMs })` besides `execute`. Transactions run
-on a new API pool, `openmapx-api-extensions`, of at most 2 connections; each ends
-with `ProviderTimeoutError` and rolls back when the wait for a connection, the
-transaction, one of its statements or a pause between them outlasts its timeout
-(default 30 seconds, at most 15 minutes), unless its callback has finished and the
-COMMIT is already running. An integration runs one transaction at a time and
-cannot nest them. For an integration that ships migrations, the search path is its
-schema `ext_<id>` (hyphens as underscores), then `extensions`, where PostGIS lives;
-`public` is not on it, so platform tables are named with their schema. Its
-`ctx.db` refuses to run while that schema is missing and once the integration's
-data was removed. Database calls an unloaded integration still makes run with one
-warning per method. When a reload retires an installed integration or it is left
-out, the API waits at most 10 seconds for each of its shutdown handlers; when the
-API stops, the shutdown handlers of all installed integrations share 5 seconds in
-total.
-
-The API applies an integration's migrations at every start and reload, before it
-imports the integration's code and outside the 60-second load budget, with the
-API's database role, which can read and change every platform table; install
-only integrations you trust. The files apply in order into the schema `ext_<id>`,
-each once, all files of one start in one transaction, and each is recorded with
-its SHA-256. A file may not change after it was applied, a new file may not be
-numbered below an applied one, and a file may not contain transaction control
-(`COMMIT`, `ROLLBACK`, `BEGIN`, `SAVEPOINT`) or statements that cannot run inside
-a transaction, such as `CREATE INDEX CONCURRENTLY` or `VACUUM`, nor
-`COPY ... FROM STDIN`. Each file runs with the search path set to the schema,
-then `extensions`, and the settings it changes end with it; deferred constraints
-are checked at the end of each file. After each file the API refuses the
-migration unless every foreign key from the schema to a table outside it, and
-every key to a table of the schema that such a cascade deletes rows from, is
-`ON DELETE CASCADE`; `SET NULL`, `SET DEFAULT`, `NO ACTION` and `RESTRICT` are
-refused there. An integration that needs another behaviour stores the id
-without a foreign key and erases the rows through its subject-data handler.
-Keys on or to a partitioned table are judged for each partition. So, while the
-schema's keys change only through the integration's own migration files, no
-foreign key of the schema can make deleting a row outside it, for example an
-account, fail. The check judges foreign keys only: a trigger, rule or check
-constraint of the integration can still make a deletion fail, and a file must
-not create objects outside its schema, because such objects escape the check
-and are not removed with the integration's data. A key that another
-integration's migration adds to this schema's tables, or one created through
-`ctx.db` at run time, is not judged either. Migrations wait at most 2
-minutes for a lock and run at most 30 minutes in all; both limits are also set
-on the database session, so PostgreSQL ends a migration whose API process went
-away, unless a file turned the session's time limit off itself. A stop request,
-during start-up or while a reload is migrating, cancels running migrations, and
-no further integration's migrations start. While
-migrations run at start-up the API does not yet
-serve requests, and a long migration can make the container unhealthy; restarting
-it then starts the migration over. When a file fails or a limit is reached,
-everything is rolled back and the integration is left out with the step
-**migrate**; fix the file and install it again. When an integration was rolled
-back to a version that ships fewer migrations than were applied, it still loads,
-and the admin attention list warns that it "runs against a newer database schema"
-(`integration-schema-ahead:<id>`). Removing an integration's data drops its schema
-and its bookkeeping rows, after waiting for a migration of it that is running.
-
 The admin integration API drops `blockedCode` and gains `loadState`, `loadError`,
 `loadErrorPhase` and a required `status` (`healthy`, `unhealthy`, `unconfigured`,
 `disabled`, `failed`); `GET /api/admin/provider-order` is new. Older API clients
@@ -175,6 +117,4 @@ the hosted Stadia Valhalla, set `INTEGRATION_ROUTING_VALHALLA_API_KEY` (keep
 geocoding `provider` or overlay `apiKey` keys refuses later configuration changes and
 must be recreated; there is no migration, and no released version precedes this
 change, so new installations need no action. Review the backend code of any
-community integration before installing it. Each API replica now opens up to 16
-database connections instead of 14; make sure PostgreSQL's `max_connections`
-covers every replica plus the data manager and other clients.
+community integration before installing it.
