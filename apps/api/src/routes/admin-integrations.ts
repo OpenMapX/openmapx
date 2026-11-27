@@ -36,16 +36,18 @@ import { registerIntegrationAdminRoute } from "./admin-integration-contract";
  * The status the administration shows for an integration. Its code failing to
  * load outranks every health check result, which may be cached from before the
  * failure or come from a host check that never runs the code. `incompatible`
- * counts as failed too: the code does not run either.
+ * counts as failed too: the code does not run either. The host switches a
+ * failed integration off at run time, so the load state is checked before
+ * `enabled`.
  */
 function integrationStatus(
   integration: Pick<LoadedIntegration, "enabled" | "loadState" | "manifest">,
   configured: boolean,
   health: { status: "up" | "down" | "unconfigured" } | null,
 ): AdminIntegrationSummary["status"] {
-  if (!integration.enabled) return "disabled";
   if (integration.loadState === "failed" || integration.loadState === "incompatible")
     return "failed";
+  if (!integration.enabled) return "disabled";
   if (health?.status === "down") return "unhealthy";
   if (health?.status === "unconfigured" || !configured) return "unconfigured";
   if (integration.manifest.healthCheck && !health) return "unconfigured";

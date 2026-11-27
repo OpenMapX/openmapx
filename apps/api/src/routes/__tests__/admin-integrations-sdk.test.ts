@@ -691,8 +691,10 @@ describe("actual integration producers through generated SDK", () => {
   it("reports an integration whose code failed to load as failed, with the load phase", async () => {
     const sdk = await import("@openmapx/core/api-admin-sdk");
     const { app, client } = await wire();
+    // The host switches every integration whose load failed off at run time.
     const failed = {
       ...MOCK_INTEGRATION,
+      enabled: false,
       loadState: "failed",
       loadError: { phase: "import", message: "SyntaxError: Unexpected token 'export'" },
     };
@@ -717,7 +719,16 @@ describe("actual integration producers through generated SDK", () => {
       mockGetIntegration.mockReturnValueOnce(failed);
       const detail = await sdk.getAdminIntegration(failed.id, { client });
       expect(detail.data).toMatchObject({ status: "failed", loadErrorPhase: "import" });
-      mockGetIntegration.mockReturnValueOnce({ ...failed, enabled: false });
+      mockGetIntegration.mockReturnValueOnce({ ...failed, loadState: "incompatible" });
+      expect((await sdk.getAdminIntegration(failed.id, { client })).data).toMatchObject({
+        status: "failed",
+      });
+      // Switched off by the operator: it never tried to load.
+      mockGetIntegration.mockReturnValueOnce({
+        ...MOCK_INTEGRATION,
+        enabled: false,
+        loadState: "loaded",
+      });
       expect((await sdk.getAdminIntegration(failed.id, { client })).data).toMatchObject({
         status: "disabled",
       });

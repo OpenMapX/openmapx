@@ -5561,7 +5561,7 @@
     "loadFailedPhaseMigrate": "Ihre Datenbankmigrationen sind fehlgeschlagen.",
     "loadFailedPhaseSetup": "Ihre Einrichtung ist fehlgeschlagen.",
     "loadFailedPhaseDeadline": "Sie wurde nicht rechtzeitig fertig geladen.",
-    "loadFailedFix": "Beheben oder aktualisieren Sie die Integration und laden Sie sie dann neu.",
+    "loadFailedFix": "Beheben oder aktualisieren Sie die Integration und wählen Sie dann „Neu laden“, um sie erneut zu laden, oder deaktivieren Sie sie.",
     "bindingAutomatic": "automatisch",
     "bindingUnresolved": "nicht aufgelöst",
     "window24h": "24 Std.",

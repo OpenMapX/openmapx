@@ -59,7 +59,7 @@ import { ConfigSchemaForm } from "./ConfigSchemaForm";
 import { CredentialSetupGuide } from "./CredentialSetupGuide";
 import { DomainChip } from "./DomainChip";
 import { HealthHistoryChart } from "./HealthHistoryChart";
-import { IntegrationStatusDot } from "./IntegrationStatusDot";
+import { IntegrationStatusDot, isSwitchedOn } from "./IntegrationStatusDot";
 import { declaresProviderOrder, ProviderOrderEditor } from "./ProviderOrderEditor";
 import { RequiredServicesPanel } from "./RequiredServicesPanel";
 import { SetCredentialDialog } from "./SetCredentialDialog";
@@ -863,8 +863,8 @@ function HealthTab({
                   {/* The latest check's own result, beside its label. */}
                   <IntegrationStatusDot
                     status={
-                      !data.enabled
-                        ? "disabled"
+                      data.status === "disabled" || data.status === "failed"
+                        ? data.status
                         : health.status === "up"
                           ? "healthy"
                           : health.status === "down"
@@ -1175,6 +1175,7 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
   }
 
   const isBusy = toggleMutation.isPending || reloadMutation.isPending;
+  const switchedOn = isSwitchedOn(data.status);
 
   return (
     <Stack
@@ -1228,15 +1229,16 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
               flexShrink: 0,
             }}
           >
+            {/* A failed integration is still switched on: Reload retries it, Disable stops it. */}
             <Button
               size="small"
-              variant={data.enabled ? "outlined" : "contained"}
-              color={data.enabled ? "error" : "success"}
+              variant={switchedOn ? "outlined" : "contained"}
+              color={switchedOn ? "error" : "success"}
               startIcon={isBusy ? <CircularProgress size={14} /> : <PowerSettingsNewIcon />}
-              onClick={() => toggleMutation.mutate(!data.enabled)}
+              onClick={() => toggleMutation.mutate(!switchedOn)}
               disabled={isBusy}
             >
-              {data.enabled ? t("disable") : t("enable")}
+              {switchedOn ? t("disable") : t("enable")}
             </Button>
             <Button
               size="small"

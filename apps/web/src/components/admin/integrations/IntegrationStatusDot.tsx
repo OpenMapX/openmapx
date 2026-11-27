@@ -20,6 +20,15 @@ export function isUnhealthyStatus(status: IntegrationStatus): boolean {
   return status === "unhealthy" || status === "failed";
 }
 
+/**
+ * Whether the operator has the integration switched on. The API's `enabled`
+ * is the run-time flag, which the host also clears when the code fails to
+ * load; only `disabled` means the operator switched it off.
+ */
+export function isSwitchedOn(status: IntegrationStatus): boolean {
+  return status !== "disabled";
+}
+
 /** The status the API derives for an integration, as a coloured dot with a label. */
 export function IntegrationStatusDot({
   status,

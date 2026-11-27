@@ -5561,7 +5561,7 @@
     "loadFailedPhaseMigrate": "Its database migrations failed.",
     "loadFailedPhaseSetup": "Its setup failed.",
     "loadFailedPhaseDeadline": "It did not finish loading in time.",
-    "loadFailedFix": "Fix or update the integration, then reload it.",
+    "loadFailedFix": "Fix or update the integration, then select Reload to load it again, or disable it.",
     "bindingAutomatic": "automatic",
     "bindingUnresolved": "unresolved",
     "window24h": "24h",

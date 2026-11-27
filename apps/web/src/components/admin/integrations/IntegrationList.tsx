@@ -36,7 +36,7 @@ import { useAdminToast } from "../shared/AdminToast";
 import { TableEmptyState } from "../shared/TableEmptyState";
 import { TableSearchField, TableToolbar } from "../shared/TableToolbar";
 import { DomainChip } from "./DomainChip";
-import { IntegrationStatusDot, isUnhealthyStatus } from "./IntegrationStatusDot";
+import { IntegrationStatusDot, isSwitchedOn, isUnhealthyStatus } from "./IntegrationStatusDot";
 import { StatusBadge } from "./StatusBadge";
 
 export type IntegrationSummary = import("@openmapx/core/api-contracts").AdminIntegrationSummary;
@@ -172,8 +172,8 @@ export function IntegrationList() {
         if (qualityFilter === "community" && i.isBuiltIn) return false;
       }
       if (statusFilter !== "all") {
-        if (statusFilter === "enabled" && !i.enabled) return false;
-        if (statusFilter === "disabled" && i.enabled) return false;
+        if (statusFilter === "enabled" && !isSwitchedOn(i.status)) return false;
+        if (statusFilter === "disabled" && isSwitchedOn(i.status)) return false;
         if (statusFilter === "unhealthy" && !isUnhealthyStatus(i.status)) return false;
         if (statusFilter === "unconfigured" && i.status !== "unconfigured") return false;
       }
@@ -187,7 +187,7 @@ export function IntegrationList() {
   );
 
   const counts = useMemo(() => {
-    const enabled = integrations.filter((i) => i.enabled).length;
+    const enabled = integrations.filter((i) => isSwitchedOn(i.status)).length;
     const disabled = integrations.length - enabled;
     const unhealthy = integrations.filter((i) => isUnhealthyStatus(i.status)).length;
     const unconfigured = integrations.filter((i) => i.status === "unconfigured").length;
@@ -476,9 +476,13 @@ export function IntegrationList() {
                         {integration.id}
                       </Typography>
                       {/* Beside the name, so it stays in view where the table scrolls sideways. */}
-                      {integration.loadState === "failed" ? (
+                      {integration.status === "failed" ? (
                         <Tooltip
-                          title={t("failedToLoadDetail", { error: integration.loadError ?? "" })}
+                          title={
+                            integration.loadError
+                              ? t("failedToLoadDetail", { error: integration.loadError })
+                              : t("loadFailedTitle")
+                          }
                         >
                           <Chip
                             label={t("failedToLoad")}
@@ -522,12 +526,16 @@ export function IntegrationList() {
                   </TableCell>
                   <TableCell>
                     <Tooltip
-                      title={integration.enabled ? t("disableIntegration") : t("enableIntegration")}
+                      title={
+                        isSwitchedOn(integration.status)
+                          ? t("disableIntegration")
+                          : t("enableIntegration")
+                      }
                     >
                       <span>
                         <Switch
                           size="small"
-                          checked={integration.enabled}
+                          checked={isSwitchedOn(integration.status)}
                           disabled={togglingIds.has(integration.id)}
                           onChange={(e) => toggleIntegration(integration.id, e.target.checked)}
                         />
