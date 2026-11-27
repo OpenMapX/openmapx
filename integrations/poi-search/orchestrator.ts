@@ -11,7 +11,11 @@ import {
   currentOvertureSnapshot,
   OVERTURE_PLACES_SCHEMA_VERSION,
 } from "@openmapx/core/published-data";
-import { httpError, type IntegrationContext } from "@openmapx/integration-framework";
+import {
+  collectOrderedProviders,
+  httpError,
+  type IntegrationContext,
+} from "@openmapx/integration-framework";
 import { getPresetById } from "@openmapx/presets";
 import type {
   PoiSearchProvider,
@@ -41,9 +45,6 @@ const MAX_SHRINK_RETRIES = 3;
 const SHRINK_FACTOR = 0.6;
 const PRESET_PREFIX = "preset:";
 const PRESET_SENTINEL = "__preset__";
-// Id of the authoritative base POI provider (OSM via Overpass); all other
-// matching providers are treated as augments to its result set.
-const BASE_PROVIDER_ID = "overpass";
 
 interface ConflationLinkRow {
   osm_type: string;
@@ -175,14 +176,11 @@ function finalize(run: ProviderRun, bbox: BoundingBox): PoiSearchResponse {
 }
 
 export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
+  /** Every POI provider, in the operator's order. */
   function getProviders(): PoiSearchProvider[] {
-    const integrations = ctx.getIntegrationsByDomain("poi-search");
-    const providers: PoiSearchProvider[] = [];
-    for (const integration of integrations) {
-      const registered = (integration.providers.get("poi-search") ?? []) as PoiSearchProvider[];
-      providers.push(...registered);
-    }
-    return providers;
+    return collectOrderedProviders<PoiSearchProvider>(ctx, "poi-search").map(
+      ({ provider }) => provider,
+    );
   }
 
   async function search(
@@ -225,11 +223,12 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
       return finalize(run, bbox);
     }
 
-    // The OSM/Overpass provider is the authoritative base set; every other
-    // matching provider augments it (Overture gap-fill today). The split keys
-    // off the base provider's id.
-    const baseProvider = matching.find((p) => p.id === BASE_PROVIDER_ID);
-    const augmentProviders = matching.filter((p) => p.id !== BASE_PROVIDER_ID);
+    // The first matching provider in order that declares itself the base (OSM
+    // via Overpass, built in) supplies the authoritative set; every other one
+    // augments it (Overture gap-fill, built in). Without a declared base the
+    // first matching provider takes that place.
+    const baseProvider = matching.find((p) => p.fusionRole === "base") ?? matching[0];
+    const augmentProviders = matching.filter((p) => p !== baseProvider);
 
     const basePromise = baseProvider
       ? runWithShrink(

@@ -103,3 +103,25 @@ it("reports traffic-aware routing for any engine that declares proofs", () => {
     ["routing-valhalla", false],
   ]);
 });
+
+it("reports enrichment for an installed provider that offers details", () => {
+  const pois = (id: string, provider: Record<string, unknown>) => {
+    const fixture = integration([]);
+    fixture.id = id;
+    fixture.isBuiltIn = false;
+    fixture.providers.set("poi-search", [
+      { categories: ["cafes"], search: async () => [], ...provider },
+    ]);
+    return fixture;
+  };
+  const catalog = buildCoverageCatalog([
+    pois("poi-acme", { id: "acme-pois", getDetail: async () => null }),
+    pois("poi-plain", { id: "plain-pois" }),
+  ]);
+  expect(
+    catalog.providers.map((p) => [p.integrationId, p.supports["pois.overture-enrichment"]]),
+  ).toEqual([
+    ["poi-acme", true],
+    ["poi-plain", false],
+  ]);
+});

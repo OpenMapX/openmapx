@@ -13,6 +13,13 @@ export type { PoiSearchOutcome, PoiSearchResult, PoiSearchReturn } from "@openma
 export interface PoiSearchProvider {
   readonly id: string;
   readonly categories: string[];
+  /**
+   * How a category search fuses this provider's results when several cover
+   * the category: the first provider in the operator's order that declares
+   * `"base"` supplies the authoritative set (OSM, say), and every other one
+   * augments it. Without a declared base, the first provider is the base.
+   */
+  readonly fusionRole?: "base" | "augment";
   search(
     category: string,
     bbox: BoundingBox,

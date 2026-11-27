@@ -9,6 +9,7 @@ const BBOX = { south: 48.85, west: 2.33, north: 48.87, east: 2.37 };
 function makeCtx(provider: PoiSearchProvider) {
   return {
     getIntegrationsByDomain: () => [{ providers: new Map([["poi-search", [provider]]]) }],
+    getProviderOrder: () => [],
   } as unknown as Parameters<typeof createPoiSearchOrchestrator>[0];
 }
 

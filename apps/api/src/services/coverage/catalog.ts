@@ -245,9 +245,7 @@ function makeProviders(integration: LoadedIntegration): CoverageProviderDescript
         poiIds,
         (operationId) =>
           operationId === "pois.overture-enrichment"
-            ? integration.id === "poi-overture" &&
-              id === "overture" &&
-              typeof provider.getDetail === "function"
+            ? typeof provider.getDetail === "function"
             : typeof provider.search === "function",
         provider,
         "poi-search",

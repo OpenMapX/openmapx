@@ -21,6 +21,7 @@ const PRESET_SENTINEL = "__preset__";
 export const overpassProvider: PoiSearchProvider = {
   id: "overpass",
   categories: [...Object.keys(CATEGORY_FILTERS), PRESET_SENTINEL],
+  fusionRole: "base",
   async search(
     category: string,
     bbox: BoundingBox,

@@ -14,6 +14,7 @@ const validFilter: OverpassFilter = {
 function makeCtx(provider: PoiSearchProvider) {
   return {
     getIntegrationsByDomain: () => [{ providers: new Map([["poi-search", [provider]]]) }],
+    getProviderOrder: () => [],
   } as unknown as Parameters<typeof createPoiSearchOrchestrator>[0];
 }
 
@@ -152,6 +153,7 @@ describe("orchestrator truncation reporting", () => {
   function providerReturning(value: unknown): PoiSearchProvider {
     return {
       id: "overpass",
+      fusionRole: "base",
       categories: ["cafes"],
       search: vi.fn(async () => value),
       searchText: vi.fn(async () => value),
@@ -198,6 +200,7 @@ describe("orchestrator truncation reporting", () => {
     let calls = 0;
     const provider = {
       id: "overpass",
+      fusionRole: "base",
       categories: ["cafes"],
       search: vi.fn(async () => {
         calls += 1;
