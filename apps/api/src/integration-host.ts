@@ -87,7 +87,12 @@ import {
 import { runPendingErasures, syncSubjectHandlerTable } from "./privacy/extension-subject-data";
 import { processLogger } from "./process-logger";
 import { redis } from "./redis";
-import { isSafeModeActive, setSafeModeHost } from "./safe-mode";
+import {
+  isSafeModeActive,
+  markIntegrationLoaded,
+  markIntegrationLoading,
+  setSafeModeHost,
+} from "./safe-mode";
 import {
   type AdministrativeConfigurationReadContext,
   assertAdministrativeConfigurationRead,
@@ -1482,16 +1487,22 @@ async function loadIntegrationBackend(args: {
     phase = "import";
     if (specifier) {
       const deadline = startLoadDeadline(scope);
+      // Only the import and `setup` run the integration's code in this
+      // process. A migration runs in PostgreSQL and may take half an hour, so
+      // a process stopped while it waits is not an exit its code caused.
+      markIntegrationLoading(integration.id, "import");
       try {
         const mod = (await deadline.within(() =>
           runInIntegrationScope(scope, () => import(specifier)),
         )) as { setup?: SetupFunction };
         phase = "setup";
+        markIntegrationLoading(integration.id, "setup");
         const { setup } = mod;
         if (typeof setup === "function")
           await deadline.within(() => runSetup(integration, scope, () => setup(ctx)));
       } finally {
         deadline.clear();
+        markIntegrationLoaded();
       }
     }
     phase = "setup";

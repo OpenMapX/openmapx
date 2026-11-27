@@ -2,6 +2,7 @@
   "api-privacy": [
     "apps/api/src/app-postgres.test.ts",
     "apps/api/src/app-safe-mode-postgres.test.ts",
+    "apps/api/src/app-automatic-safe-mode-postgres.test.ts",
     "apps/api/src/__tests__/integration-db-postgres.test.ts",
     "apps/api/src/__tests__/extension-migrations-postgres.test.ts",
     "apps/api/src/__tests__/integration-scheduler-postgres.test.ts",

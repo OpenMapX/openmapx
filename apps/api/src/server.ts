@@ -3,8 +3,10 @@ import { createApp } from "./app";
 import { extensionSql, integrationSql, sql } from "./db/index";
 import type { MigrationRun } from "./db/migration-runner";
 import { cancelRunningExtensionMigrations } from "./extension-migrations";
+import { currentIntegrationScope } from "./integration-scope";
 import { processLogger } from "./process-logger";
 import { redis } from "./redis";
+import { markCleanStop, recordFatal } from "./safe-mode";
 import { cancelStartupMigrations } from "./server-wiring";
 
 const logger = processLogger;
@@ -14,10 +16,17 @@ const logger = processLogger;
 // parser fix, and structural route tests cover the former double-send cause.
 // Terminate uniformly and let the container restart through mandatory startup
 // migration/reconciliation rather than continuing with unknown shared state.
-const onFatal = createFatalProcessHandler({
+const exitFatally = createFatalProcessHandler({
   fatal: (fields, message) => logger.fatal(fields, message),
   exit: (code) => process.exit(code),
 });
+// What reaches here from an integration is work the host could not wrap, such
+// as an un-awaited promise or a timer callback, which still runs in the
+// integration's async context. The next start counts the exit against it.
+const onFatal = (error: unknown) => {
+  recordFatal(currentIntegrationScope()?.integrationId ?? null);
+  exitFatally(error);
+};
 process.on("uncaughtException", onFatal);
 process.on("unhandledRejection", onFatal);
 
@@ -27,6 +36,7 @@ process.on("unhandledRejection", onFatal);
 let migrationRun: MigrationRun | undefined;
 let stoppingDuringStartup = false;
 const stopDuringStartup = (signal: NodeJS.Signals) => {
+  markCleanStop();
   if (stoppingDuringStartup) return;
   stoppingDuringStartup = true;
   logger.warn({ signal }, "Stopping before startup finished");

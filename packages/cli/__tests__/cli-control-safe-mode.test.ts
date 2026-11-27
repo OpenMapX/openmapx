@@ -143,21 +143,49 @@ describe("openmapx control safe-mode", () => {
     expect(printed.join("\n")).toContain("starts in safe mode");
   });
 
-  it("removes the safe-mode file and the boot marker on off", async () => {
+  it("removes the safe-mode file and forgets the unclean exits on off", async () => {
     mkdirSync(runtimeDir, { recursive: true });
     writeFileSync(join(runtimeDir, "safe-mode.json"), '{"mode":"automatic","integrationId":"a"}');
-    writeFileSync(join(runtimeDir, "boot-marker.json"), '{"uncleanExits":3}');
+    const marker = {
+      version: 1,
+      running: true,
+      installedCodeStarted: true,
+      current: null,
+      lastFatal: null,
+      uncleanExits: [
+        { at: "2026-11-27T09:58:00.000Z", integrationId: "a" },
+        { at: "2026-11-27T09:59:00.000Z", integrationId: null },
+      ],
+    };
+    writeFileSync(join(runtimeDir, "boot-marker.json"), JSON.stringify(marker));
 
     await run(0, "off");
 
     expect(existsSync(join(runtimeDir, "safe-mode.json"))).toBe(false);
-    expect(existsSync(join(runtimeDir, "boot-marker.json"))).toBe(false);
+    // The api service may be running and keeps writing its own part of it.
+    expect(JSON.parse(readFileSync(join(runtimeDir, "boot-marker.json"), "utf8"))).toEqual({
+      ...marker,
+      uncleanExits: [],
+    });
     expect(dockerCalls()).toContainEqual(["restart", "api"]);
     expect(auditLog()).toEqual([
       expect.objectContaining({ action: "safe-mode", state: "off", restarted: true, exitCode: 0 }),
     ]);
     expect(printed.join("\n")).toContain("Safe mode is off");
   });
+
+  it.each([["not json"], ['{"uncleanExits":3}'], ["[]"]])(
+    "removes a malformed boot marker on off (%s)",
+    async (text) => {
+      mkdirSync(runtimeDir, { recursive: true });
+      writeFileSync(join(runtimeDir, "safe-mode.json"), '{"mode":"operator"}');
+      writeFileSync(join(runtimeDir, "boot-marker.json"), text);
+
+      await run(0, "off");
+
+      expect(existsSync(join(runtimeDir, "boot-marker.json"))).toBe(false);
+    },
+  );
 
   it("refuses off while the environment forces safe mode", async () => {
     vi.stubEnv("OPENMAPX_SAFE_MODE", "1");

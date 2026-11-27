@@ -25,10 +25,12 @@ vi.mock("../services/attention.js", () => attention);
 
 import {
   apiRuntimeDirectory,
+  beginBoot,
   getSafeMode,
   initSafeMode,
   isSafeModeActive,
   leaveSafeMode,
+  markIntegrationLoading,
   readSafeMode,
   SafeModeForcedError,
   setSafeModeHost,
@@ -173,9 +175,20 @@ describe("the process's safe mode", () => {
 });
 
 describe("leaveSafeMode", () => {
-  it("removes the file and the boot marker, resolves the item and reloads", async () => {
+  it("removes the file, forgets the unclean exits, resolves the item and reloads", async () => {
     writeFileSync(join(runtimeDir, "safe-mode.json"), '{"mode":"automatic","integrationId":"a"}');
-    writeFileSync(join(runtimeDir, "boot-marker.json"), '{"uncleanExits":3}');
+    const marker = {
+      version: 1,
+      running: true,
+      installedCodeStarted: true,
+      current: null,
+      lastFatal: { integrationId: "a", at: "2026-11-27T10:00:00.000Z" },
+      uncleanExits: [
+        { at: "2026-11-27T09:58:00.000Z", integrationId: "a" },
+        { at: "2026-11-27T09:59:00.000Z", integrationId: "a" },
+      ],
+    };
+    writeFileSync(join(runtimeDir, "boot-marker.json"), JSON.stringify(marker));
     initSafeMode({}, runtimeDir);
     host.reloadIntegrations.mockImplementationOnce(async () => {
       expect(isSafeModeActive()).toBe(false);
@@ -189,7 +202,10 @@ describe("leaveSafeMode", () => {
     });
 
     expect(existsSync(join(runtimeDir, "safe-mode.json"))).toBe(false);
-    expect(existsSync(join(runtimeDir, "boot-marker.json"))).toBe(false);
+    expect(JSON.parse(readFileSync(join(runtimeDir, "boot-marker.json"), "utf8"))).toEqual({
+      ...marker,
+      uncleanExits: [],
+    });
     expect(attention.resolveAttention).toHaveBeenCalledWith("safe-mode");
     expect(host.reloadIntegrations).toHaveBeenCalledTimes(1);
     expect(isSafeModeActive()).toBe(false);
@@ -248,6 +264,23 @@ describe("leaveSafeMode", () => {
     });
     expect(host.reloadIntegrations).not.toHaveBeenCalled();
   });
+
+  it("keeps this process's own part of the boot marker", async () => {
+    const now = Date.now();
+    beginBoot(runtimeDir, new Date(now - 120_000));
+    markIntegrationLoading("acme", "setup");
+    beginBoot(runtimeDir, new Date(now - 60_000));
+    markIntegrationLoading("acme", "setup");
+    beginBoot(runtimeDir, new Date(now));
+    writeFileSync(join(runtimeDir, "safe-mode.json"), '{"mode":"operator"}');
+    initSafeMode({}, runtimeDir);
+    const marker = () => JSON.parse(readFileSync(join(runtimeDir, "boot-marker.json"), "utf8"));
+    expect(marker().uncleanExits).toHaveLength(2);
+
+    await leaveSafeMode();
+
+    expect(marker()).toMatchObject({ running: true, uncleanExits: [] });
+  });
 });
 
 describe("syncSafeModeAttention", () => {
@@ -272,21 +305,23 @@ describe("syncSafeModeAttention", () => {
 
     expect(attention.raiseAttention).toHaveBeenCalledWith({
       ...item,
+      title: "Safe mode after repeated crashes",
       detail: expect.stringContaining("Acme Places"),
     });
     expect(attention.resolveAttention).not.toHaveBeenCalled();
   });
 
   it.each([
-    [{ OPENMAPX_SAFE_MODE: "1" }, null, "OPENMAPX_SAFE_MODE"],
-    [{ OPENMAPX_SAFE_MODE: "1" }, null, "then run pnpm openmapx compose up"],
-    [{}, '{"mode":"operator"}', "openmapx control safe-mode off"],
+    [{ OPENMAPX_SAFE_MODE: "1" }, null, "Safe mode is on", "OPENMAPX_SAFE_MODE"],
+    [{ OPENMAPX_SAFE_MODE: "1" }, null, "Safe mode is on", "then run pnpm openmapx compose up"],
+    [{}, '{"mode":"operator"}', "Safe mode is on", "openmapx control safe-mode off"],
     [
       {},
       '{"mode":"automatic","integrationId":null}',
-      "OpenMapX stopped repeatedly while starting, so installed extensions were not loaded.",
+      "Safe mode after repeated crashes",
+      "OpenMapX stopped three times within ten minutes while installed extensions were loading or running",
     ],
-  ])("names the reason for %j with file %j", async (env, file, text) => {
+  ])("names the reason for %j with file %j", async (env, file, title, text) => {
     if (file) writeFileSync(join(runtimeDir, "safe-mode.json"), file);
     initSafeMode(env, runtimeDir);
 
@@ -294,8 +329,37 @@ describe("syncSafeModeAttention", () => {
 
     expect(attention.raiseAttention).toHaveBeenCalledWith({
       ...item,
+      title,
       detail: expect.stringContaining(text),
     });
+  });
+
+  it("raises a fresh item at the boot that entered automatic safe mode", async () => {
+    for (const seconds of [0, 60, 120]) {
+      beginBoot(runtimeDir, new Date(Date.UTC(2026, 10, 27, 10, 0, seconds)));
+      markIntegrationLoading("acme", "setup");
+    }
+    expect(beginBoot(runtimeDir, new Date(Date.UTC(2026, 10, 27, 10, 3, 0)))).toEqual({
+      enterSafeMode: true,
+      integrationId: "acme",
+    });
+    initSafeMode({}, runtimeDir);
+    const order: string[] = [];
+    attention.resolveAttention.mockImplementationOnce(async () => {
+      order.push("resolve");
+    });
+    attention.raiseAttention.mockImplementationOnce(async () => {
+      order.push("raise");
+      return "inserted";
+    });
+
+    await syncSafeModeAttention();
+
+    // An acknowledged item would otherwise keep its earlier texts.
+    expect(order).toEqual(["resolve", "raise"]);
+    expect(attention.raiseAttention).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Safe mode after repeated crashes" }),
+    );
   });
 
   it("raises the same texts at every boot", async () => {

@@ -180,7 +180,8 @@ export const adminIntegrationEmptyMutationSchema = z.strictObject({}).optional()
 /**
  * Whether the API keeps installed integrations out, and why: `env` when
  * `OPENMAPX_SAFE_MODE=1` forces it, `operator` when an operator turned it on,
- * `automatic` when the API stopped repeatedly while loading `integrationId`.
+ * `automatic` when the API stopped repeatedly while installed code ran,
+ * naming the integration it blames in `integrationId` when one is known.
  */
 export const adminSafeModeStateSchema = z.strictObject({
   active: z.boolean(),

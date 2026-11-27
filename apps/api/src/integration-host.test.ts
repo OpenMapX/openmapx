@@ -72,7 +72,7 @@ import { registerIntegrationRoute, setIntegrationRouteRateLimits } from "./integ
 import { currentIntegrationScope } from "./integration-scope.js";
 import { createExtensionSubjectData } from "./privacy/extension-subject-data.js";
 import { processLogger } from "./process-logger";
-import { initSafeMode } from "./safe-mode.js";
+import { beginBoot, initSafeMode } from "./safe-mode.js";
 import { makeRateLimitTierHook, type RateLimitTiers } from "./server-wiring.js";
 import { getAttributionIndex } from "./services/attribution/index.js";
 import { secretsKeyProblem } from "./services/secrets.js";
@@ -2333,6 +2333,58 @@ describe("initIntegrations — loader", () => {
         expect(getIntegration("built-in-demo")?.loadState).toBe("loaded");
         expect((await app.inject("/api/integrations/built-in-demo/ok")).statusCode).toBe(200);
         expect(failedIntegrationLoads(["installed-demo"])).toEqual([]);
+      });
+
+      it("marks only the import and setup of installed code in the boot marker", async () => {
+        const markerPath = join(runtimeDir, "boot-marker.json");
+        const readMarker = () => JSON.parse(fs.readFileSync(markerPath, "utf8") as string);
+        g.__omxInstalledMarkerPath = markerPath;
+        const recordMarker = (key: string) =>
+          `globalThis.${key} = JSON.parse(readFileSync(globalThis.__omxInstalledMarkerPath, "utf8"));`;
+        writeInstalled(
+          "installed-demo",
+          [
+            "// marks only the import and setup of installed code in the boot marker",
+            'import { readFileSync } from "node:fs";',
+            recordMarker("__omxInstalledAtImport"),
+            "export function setup() {",
+            `  ${recordMarker("__omxInstalledAtSetup")}`,
+            "}",
+          ].join("\n"),
+          { manifest: { database: { migrations: true } } },
+        );
+        writeBuiltIn("built-in-demo", "export function setup() {}\n");
+        const { applyExtensionMigrations } = getExtensionMigrationMocks();
+        const atMigration: unknown[] = [];
+        applyExtensionMigrations.mockImplementationOnce(async () => {
+          atMigration.push(readMarker());
+          return { applied: [], schemaAhead: false };
+        });
+        beginBoot(runtimeDir, new Date());
+
+        await initIntegrations(makeApp(), [builtIn()]);
+        expect(readMarker()).toMatchObject({ installedCodeStarted: false, current: null });
+
+        await initIntegrations(makeApp(), [installed(), builtIn()]);
+        expect(getIntegration("installed-demo")?.loadError).toBeUndefined();
+
+        // A migration may wait for half an hour; a stop meanwhile is not the code's fault.
+        expect(atMigration).toEqual([
+          expect.objectContaining({ installedCodeStarted: false, current: null }),
+        ]);
+        expect(g.__omxInstalledAtImport).toMatchObject({
+          installedCodeStarted: true,
+          current: { integrationId: "installed-demo", phase: "import" },
+        });
+        expect(g.__omxInstalledAtSetup).toMatchObject({
+          current: { integrationId: "installed-demo", phase: "setup" },
+        });
+        expect(readMarker()).toMatchObject({
+          running: true,
+          installedCodeStarted: true,
+          current: null,
+        });
+        expect(getIntegration("installed-demo")?.loadState).toBe("loaded");
       });
 
       it("stays in safe mode across a reload", async () => {

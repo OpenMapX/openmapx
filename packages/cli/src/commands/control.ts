@@ -84,6 +84,33 @@ function writeFileAtomically(path: string, text: string): void {
   }
 }
 
+/**
+ * Forgets the unclean exits the API counted towards automatic safe mode, so
+ * leaving safe mode does not turn it on again at the next start. The rest of
+ * the marker stays: a running API writes its own part of it, and how the last
+ * process ended still counts. A malformed marker counts as empty to the API
+ * and is removed.
+ */
+function forgetUncleanExits(path: string): void {
+  let marker: unknown;
+  try {
+    marker = JSON.parse(readFileSync(path, "utf8"));
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException)?.code !== "ENOENT") rmSync(path, { force: true });
+    return;
+  }
+  if (
+    marker === null ||
+    typeof marker !== "object" ||
+    Array.isArray(marker) ||
+    (marker as { version?: unknown }).version !== 1
+  ) {
+    rmSync(path, { force: true });
+    return;
+  }
+  writeFileAtomically(path, `${JSON.stringify({ ...marker, uncleanExits: [] }, null, 2)}\n`);
+}
+
 function audit(entry: Record<string, unknown>): void {
   const line = JSON.stringify({ at: new Date().toISOString(), ...entry });
   const directory = leaseStoreDirectory(repoPaths().infraDir);
@@ -362,7 +389,7 @@ export function registerControlCommands(program: Command): void {
         );
       else {
         rmSync(join(runtimeDir, "safe-mode.json"), { force: true });
-        rmSync(join(runtimeDir, "boot-marker.json"), { force: true });
+        forgetUncleanExits(join(runtimeDir, "boot-marker.json"));
       }
       const api = services.CORE_SERVICE_ID.api;
       const running = await dockerCompose(["ps", "--status=running", "--services", api]);

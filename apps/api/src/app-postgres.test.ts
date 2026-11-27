@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -34,6 +34,14 @@ vi.mock("./safe-mode", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./safe-mode")>();
   return {
     ...actual,
+    beginBoot: (...args: Parameters<typeof actual.beginBoot>) => {
+      lifecycle.push("begin boot");
+      return actual.beginBoot(...args);
+    },
+    markCleanStop: () => {
+      lifecycle.push("mark clean stop");
+      actual.markCleanStop();
+    },
     initSafeMode: (...args: Parameters<typeof actual.initSafeMode>) => {
       lifecycle.push("read safe mode");
       return actual.initSafeMode(...args);
@@ -303,6 +311,9 @@ describeDatabase("the real application from createApp()", () => {
     expect(lifecycle.indexOf("read safe mode")).toBeLessThan(
       lifecycle.indexOf("load integrations"),
     );
+    // How the previous processes ended can turn safe mode on, so it is judged first.
+    expect(lifecycle.indexOf("begin boot")).toBeGreaterThanOrEqual(0);
+    expect(lifecycle.indexOf("begin boot")).toBeLessThan(lifecycle.indexOf("read safe mode"));
     expect(getSafeMode()).toEqual({ active: true, reason: "operator", integrationId: null });
     expect(getIntegration("app-installed-demo")).toMatchObject({
       enabled: false,
@@ -476,10 +487,23 @@ describeDatabase("the real application from createApp()", () => {
     );
     expect(lifecycle).not.toContain("cancel extension migrations");
     expect(lifecycle).not.toContain("stop tasks");
-    await app.stop();
+    expect(JSON.parse(await readFile(join(runtimeDir, "boot-marker.json"), "utf8"))).toMatchObject({
+      running: true,
+    });
+    const stopped = app.stop();
+    // Recorded before anything is torn down, so a stop cut short by a kill is clean.
+    expect(lifecycle.indexOf("mark clean stop")).toBeGreaterThanOrEqual(0);
+    expect(lifecycle.indexOf("mark clean stop")).toBeLessThan(
+      lifecycle.indexOf("cancel extension migrations"),
+    );
+    expect(JSON.parse(await readFile(join(runtimeDir, "boot-marker.json"), "utf8"))).toMatchObject({
+      running: false,
+    });
+    await stopped;
     // A reload may be migrating an integration while the API serves.
     expect(lifecycle).toContain("cancel extension migrations");
     expect(lifecycle).toContain("stop tasks");
+    expect(lifecycle.indexOf("mark clean stop")).toBeLessThan(lifecycle.indexOf("stop tasks"));
     await expect(app.stop()).resolves.toBeUndefined();
 
     const healthRefreshes = [...timers.values()].filter(

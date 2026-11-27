@@ -125,7 +125,7 @@ it("names the integration automatic safe mode blames", async () => {
   const notice = await screen.findByRole("region", { name: "Safe mode is on" });
   await waitFor(() =>
     expect(notice).toHaveTextContent(
-      "The API stopped repeatedly while Acme Places was loading, so it started in safe mode.",
+      "The API stopped three times within ten minutes while Acme Places was loading or running, so it started in safe mode.",
     ),
   );
   expect(notice).toHaveTextContent(
@@ -153,7 +153,7 @@ it("explains automatic safe mode that names no integration", async () => {
 
   const notice = await screen.findByRole("region", { name: "Safe mode is on" });
   expect(notice).toHaveTextContent(
-    "OpenMapX stopped repeatedly while starting, so installed extensions were not loaded",
+    "OpenMapX stopped three times within ten minutes while installed extensions were loading or running",
   );
   expect(notice).toHaveTextContent("Find the extension that stops it in the API log");
   expect(notice).not.toHaveTextContent("while  was loading");

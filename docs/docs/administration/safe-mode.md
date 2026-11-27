@@ -29,10 +29,40 @@ and the built-in integrations work while you deal with the extension.
   `OPENMAPX_SAFE_MODE=1`, ends it.
 
 While safe mode is on, **Admin → Integrations** shows a notice that names the
-reason, and the attention list on the overview shows **Safe mode is on**.
-Safe mode that started because the API stopped repeatedly names the extension
-that was loading when that is known; otherwise the notice says that OpenMapX
-stopped repeatedly while starting, and the API log names the extension.
+reason, and the attention list on the overview shows **Safe mode is on**, or
+**Safe mode after repeated crashes** when the API turned it on by itself (see
+[Automatic safe mode](#automatic-safe-mode)).
+
+## Automatic safe mode
+
+The API turns safe mode on by itself when it stopped without being asked to
+three times within ten minutes while installed extension code was loading or
+running. It counts a process that crashed with an error nothing handled and
+one that was killed (for example for running out of memory). It does not
+count:
+
+- a stop that was requested, such as `docker compose stop`, a restart, an
+  update or `Ctrl+C`, even when Docker has to kill a slow shutdown;
+- a stop before any installed extension started loading, such as a database
+  outage, a failed platform migration or a missing setting at startup;
+- a stop while an extension's database migrations run, because they run in
+  PostgreSQL and not in the API process.
+
+The fourth start then runs in safe mode with the reason `automatic`. The
+attention item **Safe mode after repeated crashes** and the notice in
+**Admin → Integrations** name the extension's integration that was loading, or
+whose code was running when the process failed, when the crashes name one most
+often. When the crashes name none, or several equally often, they say that
+OpenMapX stopped repeatedly while installed extensions were loading or running;
+the end of the API log then names the extension in the error the process
+stopped with.
+
+The API keeps its count in `infra/docker/data/api-runtime/boot-marker.json`,
+beside `safe-mode.json`. A marker that cannot be read counts as empty, and one
+that cannot be written is logged once; neither stops the API from starting,
+but automatic safe mode is then unavailable. Leave automatic safe mode like
+any other: it holds until you leave it, and leaving it forgets the crashes
+counted so far.
 
 Place links of an installed extension whose code the API kept out (safe mode,
 a disabled extension, an incompatible release, or extension state that could
@@ -68,12 +98,13 @@ choose one of:
 
 - **Admin → Integrations → Leave safe mode.** After you confirm, the API
   removes the safe-mode file and loads the installed extensions at once,
-  without a restart. The action is recorded in the audit log as **Left safe
-  mode**. If that reload fails, safe mode is still left: the extensions it
+  without a restart, and forgets the crashes counted so far. The action is
+  recorded in the audit log as **Left safe mode**. If that reload fails, safe mode is still left: the extensions it
   held back show **Failed to load** with the reason, and **Reload** on their
   detail page tries again.
 - From the host: `pnpm openmapx control safe-mode off`. It removes the
-  safe-mode file and the boot marker, then restarts the running `api` service.
+  safe-mode file and clears the crashes counted in the boot marker, then
+  restarts the running `api` service.
   It refuses with exit code 1 while `OPENMAPX_SAFE_MODE=1` is set.
 - When `OPENMAPX_SAFE_MODE=1` is set: remove it from `infra/docker/.env` and
   run `pnpm openmapx compose up`.
@@ -115,7 +146,8 @@ its data.
    `Leaving out installed integration <id>` or in the error the process stopped
    with.
 2. Run `pnpm openmapx control safe-mode on`. The API starts without installed
-   extensions.
+   extensions. After three crashes within ten minutes it has usually done so by
+   itself already (see [Automatic safe mode](#automatic-safe-mode)).
 3. Disable the extension from the host:
    `pnpm openmapx extensions disable <extension-id> --offline`.
 4. Leave safe mode from **Admin → Integrations** or with

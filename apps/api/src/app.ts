@@ -51,7 +51,13 @@ import {
   setGatedImageSourceResolver,
 } from "./routes/image-hosts";
 import { registerCoreRoutes } from "./routes/index";
-import { initSafeMode, syncSafeModeAttention } from "./safe-mode";
+import {
+  apiRuntimeDirectory,
+  beginBoot,
+  initSafeMode,
+  markCleanStop,
+  syncSafeModeAttention,
+} from "./safe-mode";
 import {
   controlledRequestLoggingOptions,
   corsOptions,
@@ -423,9 +429,18 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
   } catch (err) {
     server.log.error(err, "Could not close the scheduled task runs of the previous process");
   }
+  // Decides from how the previous processes ended whether this one starts in
+  // automatic safe mode, so it comes before safe mode is read.
+  const runtimeDir = apiRuntimeDirectory();
+  const boot = beginBoot(runtimeDir, new Date());
+  if (boot.enterSafeMode)
+    server.log.error(
+      { integrationId: boot.integrationId },
+      "The API stopped three times within ten minutes while installed code ran; starting in automatic safe mode",
+    );
   // Read once, before any integration loads; it holds until it is left or the
   // API restarts without it.
-  const safeMode = initSafeMode();
+  const safeMode = initSafeMode(process.env, runtimeDir);
   if (safeMode.active)
     server.log.warn(
       { reason: safeMode.reason, integrationId: safeMode.integrationId },
@@ -646,6 +661,9 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
   let stopping: Promise<void> | undefined;
 
   function stop(): Promise<void> {
+    // Before anything else: a stop that Docker cuts short with a kill still
+    // counts as clean, not as a crash of installed code.
+    markCleanStop();
     stopping ??= (async () => {
       privacyOperationsMonitor.stop();
       privacyNotificationWorker.stop();
