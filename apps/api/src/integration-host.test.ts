@@ -801,7 +801,7 @@ describe("initIntegrations — loader", () => {
       return directory;
     }
 
-    function writeBuiltIn(id: string, source: string) {
+    function writeBuiltIn(id: string, source: string, manifest: Record<string, unknown> = {}) {
       const directory = join(builtInRoot, id);
       mkdirSync(directory, { recursive: true });
       writeFileSync(
@@ -812,6 +812,7 @@ describe("initIntegrations — loader", () => {
           license: "MIT",
           domains: ["knowledge"],
           quality: "built-in",
+          ...manifest,
         }),
       );
       writeFileSync(join(directory, "index.js"), source);
@@ -1011,6 +1012,65 @@ describe("initIntegrations — loader", () => {
           message: "Migration 0001_init.sql of demo changed after it was applied",
         },
       ]);
+    });
+
+    it("migrates a built-in that declares migrations before importing it", async () => {
+      const { applyExtensionMigrations } = getExtensionMigrationMocks();
+      const evaluatedWhenMigrated: unknown[] = [];
+      applyExtensionMigrations.mockImplementationOnce(async () => {
+        evaluatedWhenMigrated.push(g.__omxInstalledBuiltInEvaluated);
+        return { applied: ["0001_init.sql"], schemaAhead: false };
+      });
+      writeBuiltIn(
+        "ledger",
+        [
+          "// migrates a built-in that declares migrations before importing it",
+          "globalThis.__omxInstalledBuiltInEvaluated = true;",
+          "export function setup() {}",
+        ].join("\n"),
+        { database: { migrations: true } },
+      );
+
+      await initIntegrations(makeApp(), [builtIn()]);
+
+      expect(applyExtensionMigrations).toHaveBeenCalledWith({
+        integrationId: "ledger",
+        directory: join(builtInRoot, "ledger"),
+      });
+      expect(evaluatedWhenMigrated).toEqual([undefined]);
+      expect(g.__omxInstalledBuiltInEvaluated).toBe(true);
+      expect(getIntegration("ledger")?.loadState).toBe("loaded");
+    });
+
+    it("fails a built-in whose migration fails as phase migrate, without importing it", async () => {
+      const { applyExtensionMigrations } = getExtensionMigrationMocks();
+      const failure = "Migration 0001_init.sql of ledger failed at line 1: boom";
+      applyExtensionMigrations.mockImplementationOnce(async () => {
+        throw new Error(failure);
+      });
+      writeBuiltIn(
+        "ledger",
+        [
+          "// fails a built-in whose migration fails as phase migrate, without importing it",
+          "globalThis.__omxInstalledBuiltInEvaluated = true;",
+          "export function setup() {}",
+        ].join("\n"),
+        { database: { migrations: true } },
+      );
+
+      await initIntegrations(makeApp(), [builtIn()]);
+
+      expect(g.__omxInstalledBuiltInEvaluated).toBeUndefined();
+      expect(getIntegration("ledger")).toMatchObject({
+        enabled: false,
+        loadState: "failed",
+        loadError: { phase: "migrate", message: failure },
+      });
+
+      applyExtensionMigrations.mockImplementationOnce(async () => {
+        throw new Error(failure);
+      });
+      await expect(reloadIntegrations()).rejects.toThrow(failure);
     });
 
     it("migrates only integrations that declare migrations", async () => {

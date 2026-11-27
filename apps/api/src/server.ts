@@ -2,8 +2,10 @@ import { createFatalProcessHandler } from "@openmapx/core/server";
 import { createApp } from "./app";
 import { extensionSql, integrationSql, sql } from "./db/index";
 import type { MigrationRun } from "./db/migration-runner";
+import { cancelRunningExtensionMigrations } from "./extension-migrations";
 import { processLogger } from "./process-logger";
 import { redis } from "./redis";
+import { cancelStartupMigrations } from "./server-wiring";
 
 const logger = processLogger;
 
@@ -28,9 +30,9 @@ const stopDuringStartup = (signal: NodeJS.Signals) => {
   if (stoppingDuringStartup) return;
   stoppingDuringStartup = true;
   logger.warn({ signal }, "Stopping before startup finished");
-  void (migrationRun?.cancel() ?? Promise.resolve())
-    .catch((err) => logger.warn(err, "Could not stop the running database migration"))
-    .finally(() => process.exit(signal === "SIGTERM" ? 143 : 130));
+  void cancelStartupMigrations(migrationRun, cancelRunningExtensionMigrations, logger).finally(() =>
+    process.exit(signal === "SIGTERM" ? 143 : 130),
+  );
 };
 process.on("SIGTERM", stopDuringStartup);
 process.on("SIGINT", stopDuringStartup);

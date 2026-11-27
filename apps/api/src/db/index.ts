@@ -62,12 +62,15 @@ export const db = drizzle(sql, { schema });
 /**
  * One connection for startup migrations, so the migration lock and the
  * migration transaction share a session. Operators find it in
- * `pg_stat_activity` by its application name.
+ * `pg_stat_activity` by its application name. `settings` are further
+ * server parameters for the whole session; set at connection time, they are
+ * what `RESET ALL` returns to.
  */
-export function openMigrationSession() {
+export function openMigrationSession(settings: Record<string, string> = {}) {
   return postgres(connectionString, {
     max: 1,
     connection: {
+      ...settings,
       application_name: "openmapx-api-migrations",
       TimeZone: DATABASE_SESSION_TIME_ZONE,
     },

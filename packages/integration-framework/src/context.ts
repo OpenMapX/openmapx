@@ -141,8 +141,9 @@ export interface DatabaseTransaction {
 /**
  * `ctx.db`: present when the manifest requires the `postgis` service or
  * declares `database.migrations: true`. An integration that ships migrations
- * owns the schema named in `schema`, and unqualified names in both methods
- * resolve there first.
+ * owns the schema named in `schema`; in both methods its search path is
+ * that schema, then `extensions`, where PostGIS lives. `public` is not on
+ * it: name platform tables with their schema.
  */
 export interface DatabaseClient {
   /** One statement on the request-path pool, which ends it after five seconds. */

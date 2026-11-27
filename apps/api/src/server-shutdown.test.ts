@@ -2,7 +2,7 @@ import { request as httpRequest, type IncomingMessage } from "node:http";
 import type { AddressInfo } from "node:net";
 import Fastify, { type FastifyInstance } from "fastify";
 import { describe, expect, it, vi } from "vitest";
-import { shutdownServer } from "./server-wiring.js";
+import { cancelStartupMigrations, shutdownServer } from "./server-wiring.js";
 
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -215,5 +215,45 @@ describe("shutdownServer", () => {
 
     expect(afterClose).toHaveBeenCalledTimes(1);
     expect(log.error).toHaveBeenCalledWith(expect.anything(), "Closing the server failed");
+  });
+});
+
+describe("cancelStartupMigrations", () => {
+  it("cancels the platform's and the extensions' migrations and settles once both have ended", async () => {
+    let endExtensions!: () => void;
+    const platform = vi.fn(async () => {
+      throw new Error("cancel request failed");
+    });
+    const extensions = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          endExtensions = resolve;
+        }),
+    );
+    const log = spyLog();
+    let settled = false;
+
+    const cancelling = cancelStartupMigrations({ cancel: platform }, extensions, log).then(() => {
+      settled = true;
+    });
+    await pause(20);
+
+    expect(platform).toHaveBeenCalledOnce();
+    expect(extensions).toHaveBeenCalledOnce();
+    expect(settled).toBe(false);
+    endExtensions();
+    await cancelling;
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "cancel request failed" }),
+      "Could not stop the running database migration",
+    );
+  });
+
+  it("cancels the extensions' migrations before the platform's migration has started", async () => {
+    const extensions = vi.fn(async () => {});
+
+    await cancelStartupMigrations(undefined, extensions, spyLog());
+
+    expect(extensions).toHaveBeenCalledOnce();
   });
 });

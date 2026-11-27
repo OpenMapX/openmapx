@@ -74,7 +74,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         current_setting('idle_in_transaction_session_timeout') as idle,
         current_setting('search_path') as path`;
       expect(await db.transaction((tx) => tx.execute(settings), { timeoutMs: 2_000 })).toEqual([
-        { statement: "2s", idle: "2s", path: '"ext_demo", public' },
+        { statement: "2s", idle: "2s", path: '"ext_demo", extensions' },
       ]);
       const pooled = await Promise.all([
         pools.extensionSql.unsafe(settings),

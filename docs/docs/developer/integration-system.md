@@ -762,12 +762,72 @@ interface IntegrationContext {
   integration cannot hold both connections; `execute` calls do not wait for
   them. A `transaction` called inside another one's `fn` is refused at once:
   use the `tx` passed to `fn`. An integration that ships migrations owns the
-  schema in `db.schema` (`ext_` and its id with `-` as `_`), and unqualified
-  names in both methods resolve there first. Calls made after the integration
+  schema in `db.schema` (`ext_` and its id with `-` as `_`). In both methods
+  its search path is that schema, then `extensions`, where PostGIS lives, so
+  `geometry` and `ST_*` work without a prefix; `public` is not on it, and
+  platform tables are named with their schema, as in `public."user"`. Such a
+  client refuses to run while the schema is missing, and refuses every call
+  once the integration's data was removed. Calls made after the integration
   was unloaded, for example from a shutdown handler, still run, with one
   warning per method.
 - **`log`** is a structured logger tagged with the integration id.
 - **`secrets`** retrieves a decrypted credential from the vault.
+
+#### Database migrations
+
+An integration that declares `database.migrations: true` ships SQL files as
+`migrations/NNNN_name.sql`: four digits, then lower-case words joined by `_`.
+The API applies them at every start and reload, before it imports the
+integration's code and outside the 60-second load budget, with the API's
+database role:
+
+- The files apply in the order of their numbers, each once. All files a start
+  applies run in one transaction: if one fails, none of them is applied. Each
+  applied file is recorded with its SHA-256 in `public.extension_migration`.
+- An applied file never changes ("Migration `<name>` of `<id>` changed after it
+  was applied"), and a new file is numbered above every applied one
+  ("... is older than a migration that was already applied"). Fix a mistake
+  with a new file.
+- The first run creates the schema `ext_<id>`. Before each file, the session's
+  settings are reset and the search path is set to that schema, then
+  `extensions`, so unqualified names are created and found in the schema
+  whatever the file before changed. `public` is not on the path; name
+  platform tables with their schema.
+- A file runs as one string through PL/pgSQL `EXECUTE` inside the migration
+  transaction. Comments, `$$`-quoted function bodies and `DO` blocks work as
+  usual. The error of a failing statement names the file and, where
+  PostgreSQL reports a position, its line. The file's text is one value sent
+  to the server, so it must stay below PostgreSQL's 1 GB limit for a value;
+  split a bulk load into several files. A file may not contain `COMMIT`, `ROLLBACK`, `BEGIN`, `SAVEPOINT` or other
+  transaction control, also not inside a `DO` block, nor a statement that
+  cannot run inside a transaction or function, such as
+  `CREATE INDEX CONCURRENTLY`, `REINDEX CONCURRENTLY`, `VACUUM` or
+  `CREATE DATABASE`. Use a plain `CREATE INDEX`. A file may not change the
+  role, create extensions or create schemas other than its own, and it must
+  not change `lock_timeout` or `transaction_timeout`.
+- A foreign key from the schema to a table outside it, such as
+  `public."user"(id)`, must be `ON DELETE CASCADE` or `ON DELETE SET NULL`.
+  Any other key would make deleting the referenced row fail, which would
+  block account deletion; the file is refused with a message that names the
+  key.
+- A migration waits at most 120 seconds for each lock, including the lock
+  that keeps two runs of the same integration apart, and all files of a start
+  run at most 30 minutes in all. Both limits are set on the database session as well, so the server
+  ends a migration whose API process went away and releases its lock. A stop
+  request during start-up cancels running migrations.
+- When a file fails or a limit is reached, everything is rolled back. An
+  installed integration is then left out with phase `migrate`, and a built-in
+  fails as well; fix the file and install the integration again.
+- When a version that applied more files is rolled back to an older one, the
+  older one still loads, and the admin attention list shows
+  `integration-schema-ahead:<id>` ("... runs against a newer database schema")
+  until a version that ships all applied files loads.
+- Removing an integration with its data drops `ext_<id>` with everything in it
+  and its rows in the platform's bookkeeping tables. A removal waits for a
+  migration of the same integration that is running.
+
+Migrations run with the API role's rights: a file can read and change every
+platform table it names explicitly. Install only extensions you trust.
 
 #### Shared and local caches
 

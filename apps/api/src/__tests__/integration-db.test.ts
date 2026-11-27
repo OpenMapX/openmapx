@@ -189,10 +189,14 @@ describe("integration ctx.db", () => {
       {
         pool: "transactions",
         query: SET_SEARCH_PATH,
-        params: ['"ext_demo", public', "ext_demo"],
+        params: ['"ext_demo", extensions', "ext_demo"],
       },
       { pool: "transactions", query: "insert into t values ($1)", params: [1] },
-      { pool: "requests", query: SET_SEARCH_PATH, params: ['"ext_demo", public', "ext_demo"] },
+      {
+        pool: "requests",
+        query: SET_SEARCH_PATH,
+        params: ['"ext_demo", extensions', "ext_demo"],
+      },
       { pool: "requests", query: "select count(*) from t" },
     ]);
     expect(outcomes).toEqual(["commit", "commit"]);

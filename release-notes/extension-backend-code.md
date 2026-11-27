@@ -6,8 +6,8 @@ impacts: [breaking, operator-action]
 
 Installed integrations can ship backend code. An integration artifact may carry a
 prebuilt `dist/backend/index.mjs` (declared as `backend.entry`), numbered
-`migrations/NNNN_name.sql` files (declared with `database.migrations: true`; they
-are stored with the integration and applied by a later release) and `assets/`. Frontend code, undeclared bundles or migrations, native add-ons and a
+`migrations/NNNN_name.sql` files (declared with `database.migrations: true`) and
+`assets/`. Frontend code, undeclared bundles or migrations, native add-ons and a
 `node_modules/` directory are refused. The API verifies the bundle against the
 SHA-256 the operations agent recorded, copies it into a cache keyed by that hash
 (`OPENMAPX_INTEGRATION_CODE_CACHE_DIR`, default `<tmp>/openmapx-integration-code`,
@@ -22,7 +22,7 @@ the host checks its pinned bytes.
 An installed integration whose import or `setup` fails, or whose import and
 `setup` together take longer than 60 seconds, is left out: what it registered is
 undone, the rest keep loading, and the admin integrations list shows **Failed to
-load** with the step (import, setup or deadline) and the error. A
+load** with the step (migrate, import, setup or deadline) and the error. A
 failing built-in still aborts a reload. An install or update job whose
 integration fails to load ends failed with "Integration <id> failed to load:
 <message>" and rolls back. Every provider is checked when it is registered
@@ -42,10 +42,40 @@ with `ProviderTimeoutError` and rolls back when the wait for a connection, the
 transaction, one of its statements or a pause between them outlasts its timeout
 (default 30 seconds, at most 15 minutes), unless its callback has finished and the
 COMMIT is already running. An integration runs one transaction at a time and
-cannot nest them. For an integration that ships migrations, unqualified names
-resolve in its schema `ext_<id>` (hyphens as underscores) first. Database calls an
-unloaded integration still makes run with one warning per method. The API waits
-at most 10 seconds for each shutdown handler of an installed integration.
+cannot nest them. For an integration that ships migrations, the search path is its
+schema `ext_<id>` (hyphens as underscores), then `extensions`, where PostGIS lives;
+`public` is not on it, so platform tables are named with their schema. Its
+`ctx.db` refuses to run while that schema is missing and once the integration's
+data was removed. Database calls an unloaded integration still makes run with one
+warning per method. When a reload retires an installed integration or it is left
+out, the API waits at most 10 seconds for each of its shutdown handlers; when the
+API stops, the shutdown handlers of all installed integrations share 5 seconds in
+total.
+
+The API applies an integration's migrations at every start and reload, before it
+imports the integration's code and outside the 60-second load budget, with the
+API's database role, which can read and change every platform table; install
+only integrations you trust. The files apply in order into the schema `ext_<id>`,
+each once, all files of one start in one transaction, and each is recorded with
+its SHA-256. A file may not change after it was applied, a new file may not be
+numbered below an applied one, and a file may not contain transaction control
+(`COMMIT`, `ROLLBACK`, `BEGIN`, `SAVEPOINT`) or statements that cannot run inside
+a transaction, such as `CREATE INDEX CONCURRENTLY` or `VACUUM`. Each file starts
+with the session's settings reset and the search path set to the schema, then
+`extensions`. A foreign key from the schema to a platform table must be
+`ON DELETE CASCADE` or `ON DELETE SET NULL`, so an integration can never block
+account deletion. Migrations wait at most 2 minutes for a lock and run at most 30
+minutes in all; both limits are also set on the database session, so PostgreSQL
+ends a migration whose API process went away, and a stop request during start-up
+cancels running migrations. While migrations run at start-up the API does not yet
+serve requests, and a long migration can make the container unhealthy; restarting
+it then starts the migration over. When a file fails or a limit is reached,
+everything is rolled back and the integration is left out with the step
+**migrate**; fix the file and install it again. When an integration was rolled
+back to a version that ships fewer migrations than were applied, it still loads,
+and the admin attention list warns that it "runs against a newer database schema"
+(`integration-schema-ahead:<id>`). Removing an integration's data drops its schema
+and its bookkeeping rows, after waiting for a migration of it that is running.
 
 The admin integration API drops `blockedCode` and gains `loadState`, `loadError`,
 `loadErrorPhase` and a required `status` (`healthy`, `unhealthy`, `unconfigured`,

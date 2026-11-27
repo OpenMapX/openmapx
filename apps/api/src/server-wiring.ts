@@ -279,6 +279,25 @@ export async function shutdownServer(
   await options.afterClose();
 }
 
+/**
+ * Cancels the database migrations start-up is running, the platform's and
+ * the extensions', and settles once each has ended or failed to. A killed
+ * process would leave their statements running in PostgreSQL.
+ */
+export async function cancelStartupMigrations(
+  platform: { cancel(): Promise<void> } | undefined,
+  cancelExtensionMigrations: () => Promise<void>,
+  log: Pick<FastifyBaseLogger, "warn">,
+): Promise<void> {
+  await Promise.all(
+    [() => platform?.cancel(), cancelExtensionMigrations].map((cancel) =>
+      Promise.resolve()
+        .then(cancel)
+        .catch((err) => log.warn(err, "Could not stop the running database migration")),
+    ),
+  );
+}
+
 const TRUST_PROXY_ALIASES = new Set(["loopback", "linklocal", "uniquelocal"]);
 
 function validateProxyRange(value: string): void {

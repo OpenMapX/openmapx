@@ -46,6 +46,17 @@ export function stopIntegrationDatabase(integrationId: string): void {
   dataRemovals.set(integrationId, (dataRemovals.get(integrationId) ?? 0) + 1);
 }
 
+/**
+ * The search path of an integration that owns `schema`: its schema, where
+ * unqualified names are created and found, then `extensions`, where PostGIS
+ * and the other database extensions live. `public` is left out, so an
+ * unqualified name can never reach a platform table; platform tables are
+ * named with their schema, as in `public."user"`.
+ */
+export function integrationSearchPath(schema: string): string {
+  return `"${schema}", extensions`;
+}
+
 /** The pools `ctx.db` runs on. */
 export interface IntegrationDbPools {
   /** The request-path pool with its short statement timeout; `execute` runs here. */
@@ -147,7 +158,7 @@ export function createIntegrationDb(
   options: IntegrationDbOptions = {},
 ): DatabaseClient {
   const { schema, revocation, integrationId } = options;
-  const searchPath = schema === undefined ? undefined : `"${schema}", public`;
+  const searchPath = schema === undefined ? undefined : integrationSearchPath(schema);
   const warnLate = (method: string) => {
     if (revocation) warnAfterUnload(revocation.scope, method, revocation.log);
   };

@@ -11,6 +11,7 @@ import { openMigrationSession } from "./db";
 import {
   cancelQuietly,
   hasCode,
+  integrationSearchPath,
   type Statement,
   send,
   stopIntegrationDatabase,
@@ -37,6 +38,39 @@ export const MIGRATION_DEADLINE_MS = 30 * 60_000;
 
 /** PostgreSQL's `lock_not_available`: a lock wait passed `lock_timeout`. */
 const LOCK_NOT_AVAILABLE = "55P03";
+/** PostgreSQL's `feature_not_supported`, which `EXECUTE` of COMMIT, ROLLBACK, BEGIN or SAVEPOINT raises. */
+const FEATURE_NOT_SUPPORTED = "0A000";
+/** PostgreSQL's `invalid_transaction_termination`: a COMMIT or ROLLBACK in a DO block or procedure. */
+const INVALID_TRANSACTION_TERMINATION = "2D000";
+/** PostgreSQL's `active_sql_transaction`: a statement that refuses to run inside a transaction or function. */
+const ACTIVE_SQL_TRANSACTION = "25001";
+
+/**
+ * Runs one migration file. A multi-statement string through PL/pgSQL
+ * `EXECUTE` runs inside the caller's transaction, and the server refuses any
+ * statement in it that would end or start one, so a file can neither commit
+ * part of the run nor carry on outside it.
+ */
+const CREATE_RUN_MIGRATION =
+  "create function pg_temp.openmapx_run_migration(migration text) returns void language plpgsql as $run$ begin execute migration; end $run$";
+const RUN_MIGRATION = "select pg_temp.openmapx_run_migration($1)";
+
+/**
+ * A foreign key from the integration's schema to a table outside it that
+ * would block deleting the row it references. Account deletion and the
+ * platform's other cleanups delete rows in many tables, and the set grows
+ * with the platform, so every table outside the schema counts.
+ */
+const BLOCKING_FOREIGN_KEY = `select c.conname as name, format('%I.%I', target_ns.nspname, target.relname) as target
+  from pg_constraint c
+  join pg_class target on target.oid = c.confrelid
+  join pg_namespace target_ns on target_ns.oid = target.relnamespace
+  where c.contype = 'f'
+    and c.connamespace = to_regnamespace($1)
+    and target.relnamespace <> c.connamespace
+    and c.confdeltype not in ('c', 'n')
+  order by c.conname
+  limit 1`;
 
 /** The tables that hold an integration's rows outside its own schema. */
 const INTEGRATION_BOOKKEEPING_TABLES = [
@@ -45,6 +79,9 @@ const INTEGRATION_BOOKKEEPING_TABLES = [
   "subject_erasure_pending",
   "integration_subject_handler",
 ] as const;
+
+/** Cancels each migration run in progress and resolves once its session is ended. */
+const runningMigrations = new Set<() => Promise<void>>();
 
 function migrationLockName(integrationId: string): string {
   return `openmapx-ext-migrations:${integrationId}`;
@@ -92,6 +129,18 @@ interface ShippedMigration {
   readonly text: string;
 }
 
+type Run = <T>(client: Pick<Sql, "unsafe">, query: string, params?: unknown[]) => Promise<T>;
+
+/**
+ * Cancels the extension migrations in progress: each running statement is
+ * cancelled, the transaction rolls back and the session ends, which releases
+ * the migration lock. Resolves once every session is ended. For a process
+ * that stops before start-up has finished.
+ */
+export async function cancelRunningExtensionMigrations(): Promise<void> {
+  await Promise.all([...runningMigrations].map((cancel) => cancel()));
+}
+
 /**
  * Applies the integration's pending migrations in its own `ext_` schema, all
  * in one transaction on a session of their own, and records each in
@@ -99,6 +148,10 @@ interface ShippedMigration {
  * what runs is what the operations agent installed. `schemaAhead` reports a
  * recorded migration this version does not ship: a newer version ran it and
  * was rolled back, which the older code may well survive.
+ *
+ * Both bounds hold on the server as well: the session's `lock_timeout` and
+ * `transaction_timeout` end a migration whose API process went away, and the
+ * server then releases the migration lock with the session.
  */
 export async function applyExtensionMigrations(args: {
   integrationId: string;
@@ -125,42 +178,68 @@ export async function applyExtensionMigrations(args: {
     };
   });
 
-  const session = openMigrationSession();
-  const deadlineError = new Error(
-    `Migrations of ${integrationId} did not finish within ${deadlineMs / 1000} seconds`,
-  );
-  let expired = false;
+  // The transaction starts after the lock wait, so the server's bound on it
+  // ends no later than the client's deadline, which reports the outcome.
+  const session = openMigrationSession({
+    lock_timeout: String(lockTimeoutMs),
+    transaction_timeout: String(deadlineMs),
+  });
+  let stopped: Error | undefined;
   let current: Statement | undefined;
-  const run = async <T>(client: Pick<Sql, "unsafe">, query: string, params?: unknown[]) => {
-    if (expired) throw deadlineError;
+  let rejectStopped!: (reason: Error) => void;
+  const stopping = new Promise<never>((_resolve, reject) => {
+    rejectStopped = reject;
+  });
+  stopping.catch(() => {});
+  // The cancelled statement fails the transaction, which postgres.js then rolls back.
+  const stop = (reason: Error) => {
+    if (stopped) return;
+    stopped = reason;
+    cancelQuietly(current);
+    rejectStopped(reason);
+  };
+  const run: Run = async <T>(client: Pick<Sql, "unsafe">, query: string, params?: unknown[]) => {
+    if (stopped) throw stopped;
     current = send(client, query, params);
     return (await current) as T;
   };
 
+  let markEnded!: () => void;
+  const ended = new Promise<void>((resolve) => {
+    markEnded = resolve;
+  });
+  const cancel = () => {
+    stop(new Error(`Migrations of ${integrationId} were cancelled`));
+    return ended;
+  };
+  runningMigrations.add(cancel);
+
   const work = (async () => {
-    await run(session, "select set_config('lock_timeout', $1, false)", [String(lockTimeoutMs)]);
     // Released when the session ends.
     await run(session, "select pg_advisory_lock(hashtextextended($1, 0))", [
       migrationLockName(integrationId),
     ]);
     return session.begin((tx) => migrateInTransaction(tx, integrationId, schema, files, run));
   })();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const deadline = new Promise<never>((_resolve, reject) => {
-    timer = setTimeout(() => {
-      expired = true;
-      // The cancelled statement fails the transaction, which postgres.js then rolls back.
-      cancelQuietly(current);
-      reject(deadlineError);
-    }, deadlineMs);
-    timer.unref?.();
-  });
   work.catch(() => {});
-  deadline.catch(() => {});
+  const timer = setTimeout(
+    () =>
+      stop(
+        new Error(
+          `Migrations of ${integrationId} did not finish within ${deadlineMs / 1000} seconds`,
+        ),
+      ),
+    deadlineMs,
+  );
+  timer.unref?.();
   try {
-    return await Promise.race([work, deadline]);
+    return await Promise.race([work, stopping]);
   } catch (error) {
-    if (!expired && hasCode(error, LOCK_NOT_AVAILABLE))
+    if (
+      !stopped &&
+      (hasCode(error, LOCK_NOT_AVAILABLE) ||
+        hasCode((error as { cause?: unknown } | null)?.cause, LOCK_NOT_AVAILABLE))
+    )
       throw new Error(
         `Migrations of ${integrationId} waited longer than ${lockTimeoutMs / 1000} seconds for a database lock`,
         { cause: error },
@@ -168,7 +247,12 @@ export async function applyExtensionMigrations(args: {
     throw error;
   } finally {
     clearTimeout(timer);
-    await session.end({ timeout: 5 });
+    try {
+      await session.end({ timeout: 5 });
+    } finally {
+      runningMigrations.delete(cancel);
+      markEnded();
+    }
   }
 }
 
@@ -177,7 +261,7 @@ async function migrateInTransaction(
   integrationId: string,
   schema: string,
   files: readonly ShippedMigration[],
-  run: <T>(client: Pick<Sql, "unsafe">, query: string, params?: unknown[]) => Promise<T>,
+  run: Run,
 ): Promise<{ applied: string[]; schemaAhead: boolean }> {
   const [namespace] = await run<Array<{ present: boolean; owned: boolean | null }>>(
     tx,
@@ -189,7 +273,6 @@ async function migrateInTransaction(
   if (!namespace?.present) await run(tx, `create schema "${schema}"`);
   else if (namespace.owned !== true)
     throw new Error(`Schema ${schema} of ${integrationId} is not owned by the API role`);
-  await run(tx, "select set_config('search_path', $1, true)", [`"${schema}", public`]);
 
   const recorded = await run<Array<{ name: string; sha256: string }>>(
     tx,
@@ -198,7 +281,7 @@ async function migrateInTransaction(
   );
   const recordedSha256 = new Map(recorded.map((row) => [row.name, row.sha256]));
   const highestRecorded = Math.max(0, ...recorded.map((row) => sequenceNumber(row.name)));
-  const applied: string[] = [];
+  const pending: ShippedMigration[] = [];
   for (const file of files) {
     const sha256 = recordedSha256.get(file.name);
     if (sha256 !== undefined) {
@@ -210,22 +293,78 @@ async function migrateInTransaction(
       throw new Error(
         `Migration ${file.name} of ${integrationId} is older than a migration that was already applied`,
       );
-    const [before] = await run<Array<{ id: string }>>(tx, "select txid_current()::text as id");
-    await run(tx, file.text);
-    // A COMMIT or ROLLBACK in the file would leave the rest of the work
-    // outside the transaction that is meant to undo it on failure.
-    const [after] = await run<Array<{ id: string }>>(tx, "select txid_current()::text as id");
-    if (before?.id !== after?.id)
-      throw new Error(`Migration ${file.name} of ${integrationId} ended the migration transaction`);
+    pending.push(file);
+  }
+
+  if (pending.length > 0) await run(tx, CREATE_RUN_MIGRATION);
+  for (const file of pending) {
+    // Whatever the file before changed, each file starts from the session's
+    // own settings, with the timeouts it was opened with, in the schema.
+    await run(tx, "reset all");
+    await run(tx, "select set_config('search_path', $1, true)", [integrationSearchPath(schema)]);
+    try {
+      await run(tx, RUN_MIGRATION, [file.text]);
+    } catch (error) {
+      throw migrationFailure(integrationId, file, error);
+    }
+    const [blocking] = await run<Array<{ name: string; target: string }>>(
+      tx,
+      BLOCKING_FOREIGN_KEY,
+      [schema],
+    );
+    if (blocking)
+      throw new Error(
+        `Migration ${file.name} of ${integrationId} adds foreign key ${blocking.name} to ${blocking.target} without ON DELETE CASCADE or ON DELETE SET NULL; declare one of them so the platform can still delete the rows it references, for example an account`,
+      );
     await run(
       tx,
       "insert into public.extension_migration (integration_id, name, sha256) values ($1, $2, $3)",
       [integrationId, file.name, file.sha256],
     );
-    applied.push(file.name);
   }
   const shipped = new Set(files.map((file) => file.name));
-  return { applied, schemaAhead: recorded.some((row) => !shipped.has(row.name)) };
+  return {
+    applied: pending.map((file) => file.name),
+    schemaAhead: recorded.some((row) => !shipped.has(row.name)),
+  };
+}
+
+/** The 1-based line of the 1-based character `position` in `text`. */
+function lineAt(text: string, position: number): number {
+  const before = Array.from(text)
+    .slice(0, position - 1)
+    .join("");
+  return before.split("\n").length;
+}
+
+/** The error of a file that failed, naming the file and, where known, its line. */
+function migrationFailure(integrationId: string, file: ShippedMigration, error: unknown): Error {
+  const failed = error as {
+    message?: unknown;
+    internal_position?: unknown;
+    internal_query?: unknown;
+  } | null;
+  const message = String(failed?.message ?? error);
+  const prefix = `Migration ${file.name} of ${integrationId}`;
+  if (
+    hasCode(error, INVALID_TRANSACTION_TERMINATION) ||
+    (hasCode(error, FEATURE_NOT_SUPPORTED) && message.includes("transaction commands"))
+  )
+    return new Error(
+      `${prefix} may not end or start a transaction (COMMIT, ROLLBACK, BEGIN, SAVEPOINT); all migrations of a start run in one transaction`,
+      { cause: error },
+    );
+  if (hasCode(error, ACTIVE_SQL_TRANSACTION))
+    return new Error(
+      `${prefix} contains a statement that cannot run inside a transaction, such as CREATE INDEX CONCURRENTLY or VACUUM: ${message}`,
+      { cause: error },
+    );
+  const position = Number(failed?.internal_position);
+  const line =
+    failed?.internal_query === file.text && Number.isInteger(position) && position > 0
+      ? ` at line ${lineAt(file.text, position)}`
+      : "";
+  return new Error(`${prefix} failed${line}: ${message}`, { cause: error });
 }
 
 /**
