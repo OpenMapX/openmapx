@@ -26,6 +26,8 @@ function makeIntegrations(count: number): IntegrationSummary[] {
     loadError: null,
     requires: [],
     enabled: i % 2 === 0,
+    status: i % 2 === 0 ? ("healthy" as const) : ("disabled" as const),
+    loadErrorPhase: null,
     configured: true,
     hasHealthCheck: false,
     health: null,
@@ -84,7 +86,14 @@ describe("IntegrationList load state", () => {
     fetchMock.mockImplementation(() =>
       Response.json([
         loaded,
-        { ...failed, enabled: false, loadState: "failed", loadError: "bad setup" },
+        {
+          ...failed,
+          enabled: false,
+          status: "disabled",
+          loadState: "failed",
+          loadError: "bad setup",
+          loadErrorPhase: "setup",
+        },
       ]),
     );
     const user = userEvent.setup();
@@ -98,5 +107,35 @@ describe("IntegrationList load state", () => {
         "This integration was left out because its code failed to load: bad setup",
       ),
     ).toBeTruthy();
+  });
+
+  it("counts and filters an enabled integration that failed to load as unhealthy", async () => {
+    const [loaded, failed] = makeIntegrations(2);
+    fetchMock.mockImplementation(() =>
+      Response.json([
+        loaded,
+        {
+          ...failed,
+          name: "Acme transit",
+          enabled: true,
+          status: "failed",
+          loadState: "failed",
+          loadError: "SyntaxError",
+          loadErrorPhase: "import",
+        },
+      ]),
+    );
+    const user = userEvent.setup();
+    render(<IntegrationList />, { wrapper: createQueryWrapper() });
+
+    await screen.findByText("Acme transit");
+    expect(screen.getByRole("img", { name: "Failed to load" })).toBeInTheDocument();
+    expect(screen.getAllByRole("img", { name: "Healthy" })).toHaveLength(1);
+    expect(screen.getByText("1 unhealthy")).toBeInTheDocument();
+
+    await user.click(screen.getByText("All statuses"));
+    await user.click(await screen.findByRole("option", { name: "Unhealthy" }));
+    expect(await screen.findByText("Acme transit")).toBeInTheDocument();
+    expect(screen.queryByText("Provider 000")).toBeNull();
   });
 });

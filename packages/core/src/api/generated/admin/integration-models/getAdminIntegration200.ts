@@ -5,6 +5,7 @@ import type { GetAdminIntegration200CredentialStatusItem } from "./getAdminInteg
 import type { GetAdminIntegration200DependencyStatusItem } from "./getAdminIntegration200DependencyStatusItem";
 import type { GetAdminIntegration200Health } from "./getAdminIntegration200Health";
 import type { GetAdminIntegration200Infrastructure } from "./getAdminIntegration200Infrastructure";
+import type { GetAdminIntegration200LoadErrorPhase } from "./getAdminIntegration200LoadErrorPhase";
 import type { GetAdminIntegration200LoadState } from "./getAdminIntegration200LoadState";
 import type { GetAdminIntegration200Manifest } from "./getAdminIntegration200Manifest";
 import type { GetAdminIntegration200Ownership } from "./getAdminIntegration200Ownership";
@@ -12,6 +13,7 @@ import type { GetAdminIntegration200Quality } from "./getAdminIntegration200Qual
 import type { GetAdminIntegration200RequiresItem } from "./getAdminIntegration200RequiresItem";
 import type { GetAdminIntegration200ResolvedConfig } from "./getAdminIntegration200ResolvedConfig";
 import type { GetAdminIntegration200Runtime } from "./getAdminIntegration200Runtime";
+import type { GetAdminIntegration200Status } from "./getAdminIntegration200Status";
 
 export type GetAdminIntegration200 = {
   id: string;
@@ -24,6 +26,8 @@ export type GetAdminIntegration200 = {
   loadState: GetAdminIntegration200LoadState;
   /** @nullable */
   loadError: string | null;
+  loadErrorPhase: GetAdminIntegration200LoadErrorPhase;
+  status: GetAdminIntegration200Status;
   enabled: boolean;
   configured: boolean;
   hasHealthCheck: boolean;

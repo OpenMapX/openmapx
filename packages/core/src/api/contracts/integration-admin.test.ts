@@ -83,6 +83,8 @@ const summary = {
   isBuiltIn: true,
   loadState: "loaded",
   loadError: null,
+  loadErrorPhase: null,
+  status: "healthy",
   enabled: true,
   configured: true,
   hasHealthCheck: true,
@@ -226,7 +228,15 @@ describe("integration administration canonical producer contracts", () => {
     const fixtures = {
       listAdminIntegrations: [
         summary,
-        { ...summary, id: "broken", enabled: false, loadState: "failed", loadError: "bad setup" },
+        {
+          ...summary,
+          id: "broken",
+          enabled: false,
+          status: "disabled",
+          loadState: "failed",
+          loadError: "bad setup",
+          loadErrorPhase: "setup",
+        },
       ],
       getAdminIntegration: detail,
       listAdminIntegrationEnvVars: {

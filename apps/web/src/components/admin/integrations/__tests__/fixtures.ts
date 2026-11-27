@@ -8,6 +8,8 @@ export const summary: AdminIntegrationSummary = {
   isBuiltIn: true,
   loadState: "loaded",
   loadError: null,
+  loadErrorPhase: null,
+  status: "healthy",
   enabled: true,
   configured: true,
   hasHealthCheck: false,

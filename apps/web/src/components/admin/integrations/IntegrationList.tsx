@@ -36,7 +36,7 @@ import { useAdminToast } from "../shared/AdminToast";
 import { TableEmptyState } from "../shared/TableEmptyState";
 import { TableSearchField, TableToolbar } from "../shared/TableToolbar";
 import { DomainChip } from "./DomainChip";
-import { computeStatusVariant, IntegrationStatusDot } from "./IntegrationStatusDot";
+import { IntegrationStatusDot, isUnhealthyStatus } from "./IntegrationStatusDot";
 import { StatusBadge } from "./StatusBadge";
 
 export type IntegrationSummary = import("@openmapx/core/api-contracts").AdminIntegrationSummary;
@@ -172,11 +172,10 @@ export function IntegrationList() {
         if (qualityFilter === "community" && i.isBuiltIn) return false;
       }
       if (statusFilter !== "all") {
-        const variant = computeStatusVariant(i.enabled, i.configured, i.health, i.hasHealthCheck);
         if (statusFilter === "enabled" && !i.enabled) return false;
         if (statusFilter === "disabled" && i.enabled) return false;
-        if (statusFilter === "unhealthy" && variant !== "unhealthy") return false;
-        if (statusFilter === "unconfigured" && variant !== "unconfigured") return false;
+        if (statusFilter === "unhealthy" && !isUnhealthyStatus(i.status)) return false;
+        if (statusFilter === "unconfigured" && i.status !== "unconfigured") return false;
       }
       return true;
     });
@@ -190,15 +189,8 @@ export function IntegrationList() {
   const counts = useMemo(() => {
     const enabled = integrations.filter((i) => i.enabled).length;
     const disabled = integrations.length - enabled;
-    const unhealthy = integrations.filter(
-      (i) =>
-        computeStatusVariant(i.enabled, i.configured, i.health, i.hasHealthCheck) === "unhealthy",
-    ).length;
-    const unconfigured = integrations.filter(
-      (i) =>
-        computeStatusVariant(i.enabled, i.configured, i.health, i.hasHealthCheck) ===
-        "unconfigured",
-    ).length;
+    const unhealthy = integrations.filter((i) => isUnhealthyStatus(i.status)).length;
+    const unconfigured = integrations.filter((i) => i.status === "unconfigured").length;
     return { enabled, disabled, unhealthy, unconfigured };
   }, [integrations]);
 
@@ -454,12 +446,7 @@ export function IntegrationList() {
               {paged.map((integration) => (
                 <TableRow key={integration.id} hover>
                   <TableCell>
-                    <IntegrationStatusDot
-                      enabled={integration.enabled}
-                      configured={integration.configured}
-                      health={integration.health}
-                      hasHealthCheck={integration.hasHealthCheck}
-                    />
+                    <IntegrationStatusDot status={integration.status} />
                   </TableCell>
                   <TableCell>
                     <Stack
@@ -488,6 +475,20 @@ export function IntegrationList() {
                       >
                         {integration.id}
                       </Typography>
+                      {/* Beside the name, so it stays in view where the table scrolls sideways. */}
+                      {integration.loadState === "failed" ? (
+                        <Tooltip
+                          title={t("failedToLoadDetail", { error: integration.loadError ?? "" })}
+                        >
+                          <Chip
+                            label={t("failedToLoad")}
+                            size="small"
+                            color="error"
+                            variant="outlined"
+                            sx={{ alignSelf: "flex-start", mt: 0.5 }}
+                          />
+                        </Tooltip>
+                      ) : null}
                     </Stack>
                   </TableCell>
                   <TableCell>
@@ -514,21 +515,7 @@ export function IntegrationList() {
                     </Typography>
                   </TableCell>
                   <TableCell>
-                    <Stack direction="row" sx={{ gap: 0.5, flexWrap: "wrap" }}>
-                      <StatusBadge quality={integration.quality} />
-                      {integration.loadState === "failed" ? (
-                        <Tooltip
-                          title={t("failedToLoadDetail", { error: integration.loadError ?? "" })}
-                        >
-                          <Chip
-                            label={t("failedToLoad")}
-                            size="small"
-                            color="error"
-                            variant="outlined"
-                          />
-                        </Tooltip>
-                      ) : null}
-                    </Stack>
+                    <StatusBadge quality={integration.quality} />
                   </TableCell>
                   <TableCell>
                     <HealthCell integration={integration} />

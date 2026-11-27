@@ -142,6 +142,8 @@ describe("integration query boundaries and reload observation", () => {
         isBuiltIn: true,
         loadState: "loaded",
         loadError: null,
+        loadErrorPhase: null,
+        status: "healthy",
         enabled: true,
         configured: true,
         hasHealthCheck: false,

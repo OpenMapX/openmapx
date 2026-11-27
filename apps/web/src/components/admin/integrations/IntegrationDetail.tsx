@@ -13,6 +13,7 @@ import Accordion from "@mui/material/Accordion";
 import AccordionDetails from "@mui/material/AccordionDetails";
 import AccordionSummary from "@mui/material/AccordionSummary";
 import Alert from "@mui/material/Alert";
+import AlertTitle from "@mui/material/AlertTitle";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
@@ -320,6 +321,38 @@ function OverviewTab({ data }: { data: IntegrationDetailData }) {
         </Card>
       )}
     </Stack>
+  );
+}
+
+const LOAD_PHASE_KEY = {
+  import: "loadFailedPhaseImport",
+  migrate: "loadFailedPhaseMigrate",
+  setup: "loadFailedPhaseSetup",
+  deadline: "loadFailedPhaseDeadline",
+} as const;
+
+/** Why an integration is not running: the step its code failed at, and the error. */
+function LoadFailureNotice({ data }: { data: IntegrationDetailData }) {
+  const t = useTranslations("adminIntegrations");
+  return (
+    <Alert
+      severity="error"
+      variant="outlined"
+      sx={{ "& .MuiAlert-message": { minWidth: 0, overflowWrap: "anywhere" } }}
+    >
+      <AlertTitle>{t("loadFailedTitle")}</AlertTitle>
+      <Stack sx={{ gap: 0.75 }}>
+        {data.loadErrorPhase && (
+          <Typography variant="body2">{t(LOAD_PHASE_KEY[data.loadErrorPhase])}</Typography>
+        )}
+        {data.loadError && (
+          <Typography variant="body2" component="code" sx={{ fontFamily: "monospace" }}>
+            {data.loadError}
+          </Typography>
+        )}
+        <Typography variant="body2">{t("loadFailedFix")}</Typography>
+      </Stack>
+    </Alert>
   );
 }
 
@@ -827,11 +860,17 @@ function HealthTab({
                     gap: 1,
                   }}
                 >
+                  {/* The latest check's own result, beside its label. */}
                   <IntegrationStatusDot
-                    enabled={data.enabled}
-                    configured={data.configured}
-                    health={health}
-                    hasHealthCheck={data.hasHealthCheck}
+                    status={
+                      !data.enabled
+                        ? "disabled"
+                        : health.status === "up"
+                          ? "healthy"
+                          : health.status === "down"
+                            ? "unhealthy"
+                            : "unconfigured"
+                    }
                     size={14}
                   />
                   <Typography
@@ -1163,13 +1202,7 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
               flexGrow: 1,
             }}
           >
-            <IntegrationStatusDot
-              enabled={data.enabled}
-              configured={data.configured}
-              health={data.health}
-              hasHealthCheck={data.hasHealthCheck}
-              size={14}
-            />
+            <IntegrationStatusDot status={data.status} size={14} />
             <Typography
               component="h1"
               variant="h5"
@@ -1238,6 +1271,7 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
           </Typography>
         )}
       </Stack>
+      {data.status === "failed" && <LoadFailureNotice data={data} />}
       {reloadJobId && <AdminJobLink id={reloadJobId} source="application" />}
       <Divider />
       <Box>

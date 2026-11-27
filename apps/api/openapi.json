@@ -90234,6 +90234,32 @@
                           "null"
                         ]
                       },
+                      "loadErrorPhase": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "enum": [
+                              "import",
+                              "migrate",
+                              "setup",
+                              "deadline"
+                            ]
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "status": {
+                        "type": "string",
+                        "enum": [
+                          "healthy",
+                          "unhealthy",
+                          "unconfigured",
+                          "disabled",
+                          "failed"
+                        ]
+                      },
                       "enabled": {
                         "type": "boolean"
                       },
@@ -90329,6 +90355,8 @@
                       "isBuiltIn",
                       "loadState",
                       "loadError",
+                      "loadErrorPhase",
+                      "status",
                       "enabled",
                       "configured",
                       "hasHealthCheck",
@@ -93369,6 +93397,32 @@
                         "null"
                       ]
                     },
+                    "loadErrorPhase": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "import",
+                            "migrate",
+                            "setup",
+                            "deadline"
+                          ]
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "healthy",
+                        "unhealthy",
+                        "unconfigured",
+                        "disabled",
+                        "failed"
+                      ]
+                    },
                     "enabled": {
                       "type": "boolean"
                     },
@@ -95180,6 +95234,8 @@
                     "isBuiltIn",
                     "loadState",
                     "loadError",
+                    "loadErrorPhase",
+                    "status",
                     "enabled",
                     "configured",
                     "hasHealthCheck",

@@ -688,6 +688,44 @@ describe("actual integration producers through generated SDK", () => {
       await app.close();
     }
   });
+  it("reports an integration whose code failed to load as failed, with the load phase", async () => {
+    const sdk = await import("@openmapx/core/api-admin-sdk");
+    const { app, client } = await wire();
+    const failed = {
+      ...MOCK_INTEGRATION,
+      loadState: "failed",
+      loadError: { phase: "import", message: "SyntaxError: Unexpected token 'export'" },
+    };
+    mockResolveConfigWithSources.mockResolvedValue({
+      apiKey: { value: "synthetic-secret", source: "env" },
+    });
+    // A healthy cached check must not hide that the code never loaded.
+    mockGetCachedHealthStatus.mockReturnValue({ status: "up", responseTime: 12 });
+    try {
+      mockGetAllIntegrations.mockReturnValueOnce([failed, MOCK_INTEGRATION]);
+      const list = await sdk.listAdminIntegrations({ client });
+      expect(list.status).toBe(200);
+      expect(list.data).toMatchObject([
+        {
+          id: failed.id,
+          status: "failed",
+          loadErrorPhase: "import",
+          loadError: "SyntaxError: Unexpected token 'export'",
+        },
+        { id: MOCK_INTEGRATION.id, status: "healthy", loadErrorPhase: null, loadError: null },
+      ]);
+      mockGetIntegration.mockReturnValueOnce(failed);
+      const detail = await sdk.getAdminIntegration(failed.id, { client });
+      expect(detail.data).toMatchObject({ status: "failed", loadErrorPhase: "import" });
+      mockGetIntegration.mockReturnValueOnce({ ...failed, enabled: false });
+      expect((await sdk.getAdminIntegration(failed.id, { client })).data).toMatchObject({
+        status: "disabled",
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
   it("preserves 400/401/403/404/413/415/429/500/503 and bounded health inputs", async () => {
     const sdk = await import("@openmapx/core/api-admin-sdk");
     const { app, client } = await wire();
