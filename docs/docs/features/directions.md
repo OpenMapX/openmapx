@@ -123,8 +123,10 @@ comparison is at least five minutes and 10% of the comparison duration.
 Open **About traffic** for the estimate's source, road-update status, and limits.
 The dialog names the routing integration that planned the route, or **Hosted …
 (Stadia Maps)** for the hosted Valhalla service.
-Missing or unusable coverage leaves the normal duration color; **Traffic data
-unavailable** appears in the details and screen-reader description. A positive
+Missing or unusable coverage leaves the normal duration color; **Current traffic
+speeds unavailable** appears in the details and screen-reader description. A
+route can still show that available road updates were used: that verification
+covers road changes such as closures, not live speeds on every road. A positive
 delay estimate does not establish complete fresh congestion coverage for every
 road.
 

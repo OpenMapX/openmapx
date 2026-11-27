@@ -386,7 +386,7 @@ describe("RouteCard compact traffic explanation", () => {
     expect(heading.contains(screen.getByTestId("traffic-delay"))).toBe(true);
     expect(screen.getAllByTestId("traffic-delay")).toHaveLength(1);
     expect(screen.queryByText(/baseline/i)).toBeNull();
-    expect(screen.queryByText("Traffic data unavailable")).toBeNull();
+    expect(screen.queryByText("Current traffic speeds unavailable")).toBeNull();
     const ids = screen.getByRole("radio").getAttribute("aria-describedby")?.split(" ") ?? [];
     expect(ids.map((id) => document.getElementById(id)?.textContent).join(" ")).toContain(
       "+45 min",
@@ -414,7 +414,7 @@ describe("RouteCard compact traffic explanation", () => {
   ])("does not advertise a significant delay for %s / %s seconds", (duration, baselineDuration) => {
     renderCard({ ...baseRoute, duration, baselineDuration });
     expect(screen.queryByTestId("traffic-delay")).toBeNull();
-    expect(screen.getByText("Traffic data unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Current traffic speeds unavailable")).toBeInTheDocument();
     expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
       "rgba(0, 0, 0, 0.87)",
     );
@@ -425,7 +425,7 @@ describe("RouteCard compact traffic explanation", () => {
     (baselineDuration) => {
       renderCard({ ...baseRoute, baselineDuration });
       expect(screen.queryByTestId("traffic-delay")).toBeNull();
-      expect(screen.getByText("Traffic data unavailable")).toBeInTheDocument();
+      expect(screen.getByText("Current traffic speeds unavailable")).toBeInTheDocument();
     },
   );
   it.each(["walking", "cycling"] as const)("does not show traffic delays for %s", (mode) => {
@@ -887,7 +887,7 @@ describe("RouteCard current congestion coverage", () => {
     expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
       "rgba(0, 0, 0, 0.87)",
     );
-    expect(screen.getByText("Traffic data unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Current traffic speeds unavailable")).toBeInTheDocument();
   });
 
   it("expires green and updates both the duration and its accessible note", () => {
@@ -901,9 +901,11 @@ describe("RouteCard current congestion coverage", () => {
     expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
       "rgba(0, 0, 0, 0.87)",
     );
-    expect(screen.getByText("Traffic data unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Current traffic speeds unavailable")).toBeInTheDocument();
     const id = screen.getByRole("radio").getAttribute("aria-describedby");
-    expect(id && document.getElementById(id)).toHaveTextContent("Traffic data unavailable");
+    expect(id && document.getElementById(id)).toHaveTextContent(
+      "Current traffic speeds unavailable",
+    );
   });
 
   it("rearms freshness expiration when the wall clock moves backwards", () => {
@@ -915,9 +917,9 @@ describe("RouteCard current congestion coverage", () => {
     });
     vi.setSystemTime(now - 10000);
     act(() => vi.advanceTimersByTime(30000));
-    expect(screen.queryByText("Traffic data unavailable")).toBeNull();
+    expect(screen.queryByText("Current traffic speeds unavailable")).toBeNull();
     act(() => vi.advanceTimersByTime(10000));
-    expect(screen.getByText("Traffic data unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Current traffic speeds unavailable")).toBeInTheDocument();
   });
 
   it("still requires a usable comparison even with complete fresh coverage", () => {
@@ -925,7 +927,7 @@ describe("RouteCard current congestion coverage", () => {
     expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
       "rgba(0, 0, 0, 0.87)",
     );
-    expect(screen.getByText("Traffic data unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Current traffic speeds unavailable")).toBeInTheDocument();
   });
 });
 
@@ -951,10 +953,10 @@ describe("RouteCard expired congestion estimates", () => {
     expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
       resolvedStyle("color", "var(--omx-traffic-heavy)"),
     );
-    expect(screen.queryByText("Traffic data unavailable")).toBeNull();
+    expect(screen.queryByText("Current traffic speeds unavailable")).toBeNull();
     act(() => vi.advanceTimersByTime(30000));
     expect(screen.queryByTestId("traffic-delay")).toBeNull();
-    expect(screen.getByText("Traffic data unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Current traffic speeds unavailable")).toBeInTheDocument();
     expect(getComputedStyle(screen.getByRole("heading", { level: 6 })).color).toBe(
       "rgba(0, 0, 0, 0.87)",
     );
@@ -983,12 +985,12 @@ it.each(["route", "peek"] as const)(
         : screen.getByRole("button", { name: /via A46/ });
     const id = selection.getAttribute("aria-describedby");
     const description = id ? document.getElementById(id) : null;
-    expect(description).toHaveTextContent("Traffic data unavailable");
+    expect(description).toHaveTextContent("Current traffic speeds unavailable");
     expect(description && getComputedStyle(description).position).toBe("absolute");
     expect(description && getComputedStyle(description).width).toBe("1px");
     fireEvent.click(screen.getByRole("button", { name: "About traffic" }));
     expect(screen.getByRole("dialog", { name: "About traffic" })).toHaveTextContent(
-      "Traffic data unavailable",
+      "Current traffic speeds unavailable",
     );
   },
 );

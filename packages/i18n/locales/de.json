@@ -4778,7 +4778,7 @@
       "slow": "Langsam"
     },
     "about": "Verkehrsinformationen",
-    "summary": "Keine Verkehrsdaten verfügbar",
+    "summary": "Keine aktuellen Verkehrsgeschwindigkeiten verfügbar",
     "provider": "Routenanbieter: {source}",
     "delay": "+{delay}",
     "coverageExplanation": "Die Fahrzeit berücksichtigt den aktuellen Verkehr.",
