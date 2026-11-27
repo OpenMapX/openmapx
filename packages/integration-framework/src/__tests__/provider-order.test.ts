@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { PROVIDER_SHAPES, type ProviderDomain } from "../contracts/provider-shapes";
 import type { LoadedIntegration } from "../loader";
@@ -198,6 +199,19 @@ describe("collectOrderedProviders", () => {
     const before = ctx.getProviderOrderFingerprint("weather");
     w1.priority = 3;
     expect(ctx.getProviderOrderFingerprint("weather")).not.toBe(before);
+  });
+
+  it("computes the same fingerprint as the host for the same served providers", () => {
+    const ctx = fakeCtx({
+      order: [],
+      integrations: [["asker", [{ id: "asker-weather", priority: 1 }]]],
+    });
+    expect(ctx.getProviderOrderFingerprint("weather")).toBe(
+      createHash("sha256")
+        .update(JSON.stringify([["asker", "asker-weather"]]))
+        .digest("hex")
+        .slice(0, 16),
+    );
   });
 
   it("keeps the fingerprint when the served order does not change", () => {

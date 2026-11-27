@@ -163,7 +163,11 @@ async function planDirectionsRequest(ctx: IntegrationContext, request: ParsedDir
     hasExclusions,
     roadConditionImpact,
     localAccessLines: localAccess?.lines ?? [],
-    keyParams: createDirectionsCacheIdentity(request, exclusionsHash),
+    keyParams: createDirectionsCacheIdentity(
+      request,
+      exclusionsHash,
+      ctx.getProviderOrderFingerprint("routing"),
+    ),
     routingOptions: {
       ...baseRoutingOptions,
       ...(closureRefTime ? { useLiveTraffic: false } : {}),
@@ -1033,7 +1037,11 @@ export function setup(ctx: IntegrationContext): void {
           ctx,
           hashKey(
             "cache:directions:schedule:contributors-v3",
-            createScheduleCacheIdentity(request, exclusionsHash),
+            createScheduleCacheIdentity(
+              request,
+              exclusionsHash,
+              ctx.getProviderOrderFingerprint("routing"),
+            ),
           ),
           ttl,
           () =>

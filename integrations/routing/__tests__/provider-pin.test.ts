@@ -93,8 +93,8 @@ describe("pinned directions provider", () => {
       { ...query, provider: "routing-first" },
       DIRECTIONS_REQUEST_POLICY,
     );
-    expect(createDirectionsCacheIdentity(a, null)).not.toEqual(
-      createDirectionsCacheIdentity(b, null),
+    expect(createDirectionsCacheIdentity(a, null, "order")).not.toEqual(
+      createDirectionsCacheIdentity(b, null, "order"),
     );
   });
 });

@@ -124,6 +124,7 @@ export function createRoutingHandlerEnvironment(options: RoutingHandlerEnvironme
       return options.additionalIntegrations?.[domain] ?? [];
     },
     getProviderOrder: () => [],
+    getProviderOrderFingerprint: () => "order",
     getDisallowedSourceIds: async () => new Set<string>(),
     registerRoute(_method: string, path: string, handler: RoutingTestHandler) {
       handlers.set(path, handler);

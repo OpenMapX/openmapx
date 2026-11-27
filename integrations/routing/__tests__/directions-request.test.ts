@@ -144,7 +144,7 @@ describe("directions cache identity", () => {
       policy,
     );
 
-    expect(createDirectionsCacheIdentity(request, "excl:abc")).toEqual({
+    expect(createDirectionsCacheIdentity(request, "excl:abc", "order")).toEqual({
       arriveBy: null,
       avoidClosures: false,
       avoidFerries: false,
@@ -154,6 +154,7 @@ describe("directions cache identity", () => {
       exclusionsHash: "excl:abc",
       lang: "en",
       mode: "driving",
+      providerOrder: "order",
       ...(policy.operation === "optimize" ? { optimize: true } : {}),
       units: "metric",
       waypoints: [
@@ -171,11 +172,24 @@ describe("directions cache identity", () => {
       policy,
     );
     const identities = [
-      createDirectionsCacheIdentity(closureOff, null),
-      createDirectionsCacheIdentity(closureOn, null),
-      createDirectionsCacheIdentity(closureOn, "excl:abc"),
+      createDirectionsCacheIdentity(closureOff, null, "order"),
+      createDirectionsCacheIdentity(closureOn, null, "order"),
+      createDirectionsCacheIdentity(closureOn, "excl:abc", "order"),
     ];
 
     expect(new Set(identities.map((identity) => JSON.stringify(identity))).size).toBe(3);
+  });
+
+  it("separates identities by the routing engine order", () => {
+    const request = parseDirectionsRequest(
+      { waypoints: THREE_WAYPOINTS },
+      DIRECTIONS_REQUEST_POLICY,
+    );
+    expect(createDirectionsCacheIdentity(request, null, "order-a")).toEqual(
+      createDirectionsCacheIdentity(request, null, "order-a"),
+    );
+    expect(createDirectionsCacheIdentity(request, null, "order-a")).not.toEqual(
+      createDirectionsCacheIdentity(request, null, "order-b"),
+    );
   });
 });

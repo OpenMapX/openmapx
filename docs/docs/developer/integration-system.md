@@ -1162,8 +1162,8 @@ integration ids in the `providerOrder` setting of the domain's orchestrator
 integration (`ORCHESTRATOR_BY_DOMAIN`), read even while that integration is
 disabled. `collectOrderedProviders(ctx, domain)` applies it: providers of listed
 integrations first, in list order, then all the others in the domain's fallback
-order: provider `priority` ascending for routing, weather and live transit, the
-transit and air-quality orchestrators' own policies for those domains,
+order: provider `priority` ascending for routing, weather and live transit,
+transit's planning policy and the air-quality orchestrator's own policy,
 street-level imagery last for photos, registry order elsewhere. It appends the
 others by default; a caller passes `unlisted: UNLISTED_BY_DOMAIN[domain]` (or
 `"exclude"`) to drop them, as geocoding's list is a selection. A listed

@@ -124,25 +124,27 @@ describe("createScheduleCacheIdentity", () => {
   };
 
   it("changes when a schedule field changes", () => {
-    const a = createScheduleCacheIdentity(parseScheduleRequest(base), null);
+    const a = createScheduleCacheIdentity(parseScheduleRequest(base), null, "order");
     const b = createScheduleCacheIdentity(
       parseScheduleRequest({
         ...base,
         schedules: [null, { arriveBy: "2026-09-01T14:30", timeZone: "Europe/Paris" }],
       }),
       null,
+      "order",
     );
     expect(a).not.toEqual(b);
   });
 
   it("changes when only the resolved time zone changes", () => {
-    const a = createScheduleCacheIdentity(parseScheduleRequest(base), null);
+    const a = createScheduleCacheIdentity(parseScheduleRequest(base), null, "order");
     const b = createScheduleCacheIdentity(
       parseScheduleRequest({
         ...base,
         schedules: [null, { arriveBy: "2026-09-01T14:00", timeZone: "Europe/Lisbon" }],
       }),
       null,
+      "order",
     );
     expect(a).not.toEqual(b);
   });
@@ -151,10 +153,12 @@ describe("createScheduleCacheIdentity", () => {
     const departing = createScheduleCacheIdentity(
       parseScheduleRequest({ ...base, departAt: "2026-09-01T09:00" }),
       null,
+      "order",
     );
     const arriving = createScheduleCacheIdentity(
       parseScheduleRequest({ ...base, arriveBy: "2026-09-01T09:00" }),
       null,
+      "order",
     );
     expect(departing).not.toEqual(arriving);
   });
@@ -165,11 +169,13 @@ describe("createScheduleCacheIdentity", () => {
       const first = createScheduleCacheIdentity(
         parseScheduleRequest({ waypoints: [COLOGNE, PARIS] }),
         null,
+        "order",
       );
       vi.advanceTimersByTime(24 * 60 * 60_000);
       const second = createScheduleCacheIdentity(
         parseScheduleRequest({ waypoints: [COLOGNE, PARIS] }),
         null,
+        "order",
       );
       expect(first).toEqual(second);
     } finally {

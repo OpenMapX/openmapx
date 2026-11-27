@@ -151,11 +151,13 @@ export function parseScheduleRequest(body: unknown): ParsedScheduleRequest {
  *
  * `nowMs: 0` keeps the identity independent of the clock. Only `anchorMs`
  * depends on it, and the identity carries the anchor itself rather than the
- * resolved instant, so nothing is lost.
+ * resolved instant, so nothing is lost. `providerOrder` is the routing
+ * engines' order fingerprint, as for directions.
  */
 export function createScheduleCacheIdentity(
   request: ParsedScheduleRequest,
   exclusionsHash: string | null,
+  providerOrder: string,
 ): Record<string, unknown> {
   const resolved = resolveScheduleConstraints({
     waypoints: request.waypoints.map((coords, index) => ({
@@ -179,6 +181,7 @@ export function createScheduleCacheIdentity(
     lang: request.routingOptions.lang ?? "en",
     mode: request.travelMode,
     optimize: request.optimize,
+    providerOrder,
     stops: resolved.stops.map((stop) => ({
       dwellSeconds: stop.dwellSeconds,
       earliestDepartureMs: stop.earliestDepartureMs,
