@@ -435,6 +435,13 @@ export async function getAdminProviderHealthRequest<T>(
 ): Promise<T> {
   return getAdminProviderHealthBound<T>(url, options);
 }
+const getAdminProviderOrderBound = bindAdminOperation("getAdminProviderOrder");
+export async function getAdminProviderOrderRequest<T>(
+  url: string,
+  options?: AdminSdkRequestOptions,
+): Promise<T> {
+  return getAdminProviderOrderBound<T>(url, options);
+}
 const getAdminServiceBound = bindAdminOperation("getAdminService");
 export async function getAdminServiceRequest<T>(
   url: string,

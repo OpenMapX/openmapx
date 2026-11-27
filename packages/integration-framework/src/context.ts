@@ -709,6 +709,23 @@ export interface IntegrationContext {
   getIntegrationsByDomain(domain: string): LoadedIntegration[];
 
   /**
+   * The operator's provider order for a domain: integration ids from the
+   * `providerOrder` setting of the domain's orchestrator integration, read
+   * whether or not that integration is enabled. An id may name an integration
+   * that is not loaded. Empty for a domain without an orchestrator.
+   * `collectOrderedProviders` applies it.
+   */
+  getProviderOrder(domain: string): readonly string[];
+
+  /**
+   * First 16 hex characters of the SHA-256 of the integration ids that serve a
+   * domain, in effective order. Changes when the order changes or a provider
+   * joins or leaves, so a cache key that includes it stops serving answers
+   * built from another set of providers.
+   */
+  getProviderOrderFingerprint(domain: string): string;
+
+  /**
    * Source IDs (`dataSources[].sourceId`) currently disallowed by the operator's
    * data-use policy (non-commercial / grey-area). Orchestrators should skip
    * providers whose source is in this set and fall back to the next. Empty when

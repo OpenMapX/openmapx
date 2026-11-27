@@ -60,6 +60,7 @@ const inventory = [
   ["testAdminIntegrationCredentials", "POST", "/api/admin/credentials/:integrationId/test"],
   ["setAdminIntegrationCredential", "PUT", "/api/admin/credentials/:integrationId/:key"],
   ["deleteAdminIntegrationCredential", "DELETE", "/api/admin/credentials/:integrationId/:key"],
+  ["getAdminProviderOrder", "GET", "/api/admin/provider-order"],
   ["getAdminOverview", "GET", "/api/admin/overview"],
   ["listAdminAttention", "GET", "/api/admin/attention"],
   ["acknowledgeAdminAttention", "POST", "/api/admin/attention/:key/acknowledge"],
@@ -330,6 +331,20 @@ describe("integration administration canonical producer contracts", () => {
         runtime: "pending",
         runtimeGenerationId: null,
         reason: "integration_disabled",
+      },
+      getAdminProviderOrder: {
+        domains: [
+          {
+            domain: "geocoding",
+            orchestratorId: "geocoding",
+            unlisted: "exclude",
+            stored: ["sample", "removed"],
+            effective: [
+              { integrationId: "sample", name: "Sample", isBuiltIn: true, listed: true },
+              { integrationId: "other", name: "Other", isBuiltIn: false, listed: false },
+            ],
+          },
+        ],
       },
       getAdminOverview: overview,
       listAdminAttention: {

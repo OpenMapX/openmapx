@@ -1628,6 +1628,119 @@ describe("resolved service cache identity", () => {
   });
 });
 
+describe("operator-set provider order", () => {
+  const contexts = new Map<string, IntegrationContext>();
+  const scope = globalThis as typeof globalThis & {
+    __omxOrderContexts?: Map<string, IntegrationContext>;
+    __omxOrderDuringSetup?: readonly string[];
+  };
+  let root: string;
+
+  beforeEach(() => {
+    contexts.clear();
+    scope.__omxOrderContexts = contexts;
+    scope.__omxOrderDuringSetup = undefined;
+    root = mkdtempSync(join(tmpdir(), "omx-provider-order-"));
+  });
+
+  afterEach(() => {
+    scope.__omxOrderContexts = undefined;
+    scope.__omxOrderDuringSetup = undefined;
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  function integration(
+    id: string,
+    domains: string[],
+    options: { config?: Record<string, unknown>; setup?: string } = {},
+  ): void {
+    const directory = writeTestIntegration(root, id, {
+      id,
+      version: "1.0.0",
+      author: "Test",
+      platform: "1.0",
+      domains,
+      quality: "built-in",
+      configSchema: {
+        properties: {
+          providerOrder: { type: "array", items: { type: "string" }, maxItems: 64, default: [] },
+        },
+      },
+    });
+    if (options.config) {
+      writeFileSync(join(directory, "config.json"), JSON.stringify(options.config));
+    }
+    writeFileSync(
+      join(directory, "index.js"),
+      [
+        "export function setup(ctx) {",
+        `  globalThis.__omxOrderContexts.set(${JSON.stringify(id)}, ctx);`,
+        options.setup ?? "",
+        "}",
+      ].join("\n"),
+    );
+  }
+
+  const ctxOf = (id: string): IntegrationContext => {
+    const ctx = contexts.get(id);
+    if (!ctx) throw new Error(`no context captured for ${id}`);
+    return ctx;
+  };
+
+  it("returns the stored order while the owning integration is disabled", async () => {
+    integration("overlay-live-transit", ["live-transit"], {
+      config: { enabled: false, providerOrder: ["live-transit-acme"] },
+    });
+    integration("transit", ["transit"]);
+    await initIntegrations(makeApp(), [{ directory: root, isBuiltIn: true }]);
+
+    expect(getIntegration("overlay-live-transit")?.enabled).toBe(false);
+    expect(ctxOf("transit").getProviderOrder("live-transit")).toEqual(["live-transit-acme"]);
+  });
+
+  it("returns an empty order for a domain without an orchestrator", async () => {
+    integration("transit", ["transit"]);
+    await initIntegrations(makeApp(), [{ directory: root, isBuiltIn: true }]);
+
+    expect(ctxOf("transit").getProviderOrder("hazards")).toEqual([]);
+    expect(ctxOf("transit").getProviderOrder("no-such-domain")).toEqual([]);
+  });
+
+  it("reads the order before the owning integration is set up", async () => {
+    integration("air-quality", ["air-quality"], { config: { providerOrder: ["aq-first"] } });
+    integration("aaa-asker", ["transit"], {
+      setup: '  globalThis.__omxOrderDuringSetup = ctx.getProviderOrder("air-quality");',
+    });
+    await initIntegrations(makeApp(), [{ directory: root, isBuiltIn: true }]);
+    expect(scope.__omxOrderDuringSetup).toEqual(["aq-first"]);
+
+    await reloadIntegrations();
+    expect(scope.__omxOrderDuringSetup).toEqual(["aq-first"]);
+  });
+
+  it("fingerprints the integrations that serve a domain", async () => {
+    integration("transit", ["transit"]);
+    integration("asker", ["weather"], {
+      setup: [
+        "  ctx.registerWeatherProvider({",
+        "    id: 'asker-weather', priority: 1, getCurrentWeather: async () => null,",
+        "  });",
+      ].join("\n"),
+    });
+    await initIntegrations(makeApp(), [{ directory: root, isBuiltIn: true }]);
+
+    const fingerprint = ctxOf("transit").getProviderOrderFingerprint("weather");
+    expect(fingerprint).toMatch(/^[0-9a-f]{16}$/);
+    expect(fingerprint).toBe(
+      createHash("sha256")
+        .update(JSON.stringify(["asker"]))
+        .digest("hex")
+        .slice(0, 16),
+    );
+    expect(ctxOf("transit").getProviderOrderFingerprint("hazards")).not.toBe(fingerprint);
+  });
+});
+
 describe("shutdownIntegrations", () => {
   it("after shutdown getAllIntegrations returns an empty array", async () => {
     const app = makeApp();

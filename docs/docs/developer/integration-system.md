@@ -1135,6 +1135,8 @@ interface IntegrationContext {
   onActivate(activate: () => void, rollback?: () => void): void;
   onShutdown(cleanup: () => Promise<void>): void;
   getIntegrationsByDomain(domain: string): LoadedIntegration[];
+  getProviderOrder(domain: string): readonly string[];
+  getProviderOrderFingerprint(domain: string): string;
 
   getRequiredService(key: string): { serviceId: string; url: string; enabled: boolean } | null;
   resolvePlatformEndpoint(id: PlatformEndpointId): ResolvedPlatformEndpoint | null;
@@ -1155,6 +1157,17 @@ Register cleanup as resources are created. Abort pending requests, cancel timers
 and unsubscribe listeners; prevent retired requests from publishing into new
 state.
 `getIntegrationsByDomain` lets an orchestrator enumerate its peers.
+`getProviderOrder(domain)` returns the operator's order for a domain: the
+integration ids in the `providerOrder` setting of the domain's orchestrator
+integration (`ORCHESTRATOR_BY_DOMAIN`), read even while that integration is
+disabled. `collectOrderedProviders(ctx, domain)` applies it: providers of listed
+integrations first, in list order, then the others (after a domain-specific
+fallback comparator), or none of the others where the domain excludes them, as
+geocoding does. A listed integration that is not loaded is skipped. Operators
+read the result at `GET /api/admin/provider-order` and change it through the
+orchestrator's configuration. `getProviderOrderFingerprint(domain)` changes
+whenever the integrations serving a domain or their order change; include it
+in cache keys whose answers depend on which providers served them.
 `getRequiredService(key)` is how an integration reads a resolved requirement at
 runtime (see below). `resolvePlatformEndpoint(id)` returns the instance of a
 platform backend the integration should query, as its health checks probe it

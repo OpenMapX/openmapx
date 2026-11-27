@@ -33,9 +33,10 @@ function provider(id: string, result: Item[] | Error, over: Partial<Provider> = 
 function ctxWith(providers: Provider[], disallowed?: string[], lines: string[] = []) {
   return {
     getIntegrationsByDomain: (domain: string) =>
-      domain === "test-items"
-        ? providers.map((p) => ({ id: p.id, providers: new Map([["test-items", [p]]]) }))
+      domain === "cameras"
+        ? providers.map((p) => ({ id: p.id, providers: new Map([["cameras", [p]]]) }))
         : [],
+    getProviderOrder: () => [],
     getDisallowedSourceIds: disallowed ? async () => new Set(disallowed) : undefined,
     log: {
       warn: (m: string) => lines.push(`warn ${m}`),
@@ -48,7 +49,7 @@ function ctxWith(providers: Provider[], disallowed?: string[], lines: string[] =
 
 function collection(ctx: IntegrationContext) {
   return createCollectionOrchestrator<Provider, Item, Query>(ctx, {
-    domain: "test-items",
+    domain: "cameras",
     logPrefix: "test",
     name: "list",
     run: (p, bbox, q) => p.list(bbox, q),

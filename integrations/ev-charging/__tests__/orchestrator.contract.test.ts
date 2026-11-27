@@ -77,6 +77,7 @@ function ctxWith(
       opts.lines?.push({ level, message });
     };
   return {
+    getProviderOrder: () => [],
     getIntegrationsByDomain: (domain: string) =>
       domain === "charging-sites"
         ? providers.map((p) => ({

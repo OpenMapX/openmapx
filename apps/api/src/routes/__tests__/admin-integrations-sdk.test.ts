@@ -3,7 +3,7 @@ import { createApiClient } from "@openmapx/core";
 import { auditAdminOperations, integrationAdminOperations } from "@openmapx/core/api-contracts";
 import { licensingFromDeclaration } from "@openmapx/mobility-core/licensing";
 import Fastify from "fastify";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, assert, beforeEach, describe, expect, it, vi } from "vitest";
 import { integrationConfig } from "../../db/integration-config-schema";
 import { makeRateLimitTierHook } from "../../server-wiring";
 import { integrationConfigDbFixture } from "../../services/__tests__/helpers/integration-config-db";
@@ -168,6 +168,9 @@ vi.mock("../../integration-host.js", () => ({
   inspectIntegrationRuntime: () => null,
   getAllIntegrations: (...args: unknown[]) => mockGetAllIntegrations(...args),
   getIntegration: (...args: unknown[]) => mockGetIntegration(...args),
+  getIntegrationsByDomain: (domain: string) =>
+    domain === "geocoding" ? [{ ...MOCK_INTEGRATION, providers: new Map([[domain, [{}]]]) }] : [],
+  getProviderOrder: (domain: string) => (domain === "geocoding" ? ["geocoding-maptiler"] : []),
   reloadIntegrations: (...args: unknown[]) => mockReloadIntegrations(...args),
   resolveConfigWithSources: (...args: unknown[]) => mockResolveConfigWithSources(...args),
 }));
@@ -349,6 +352,7 @@ async function wire() {
     (await import("../admin-standalone-integrations")).adminStandaloneIntegrationsRoute,
     (await import("../admin-configuration-migration")).adminConfigurationMigrationRoute,
     (await import("../admin-credential-transfer")).adminCredentialTransferRoute,
+    (await import("../admin-provider-order")).adminProviderOrderRoute,
   ])
     await app.register(route, { prefix: "/api" });
   await app.ready();
@@ -460,10 +464,27 @@ describe("actual integration producers through generated SDK", () => {
             options,
           ),
         () => sdk.getAdminOverview(options),
+        () => sdk.getAdminProviderOrder(options),
       ];
       for (const call of cases)
         expect(await call(), call.toString()).toMatchObject({ status: 200 });
-      expect(cases).toHaveLength(19);
+      expect(cases).toHaveLength(20);
+      const order = await sdk.getAdminProviderOrder(options);
+      assert(order.status === 200);
+      expect(order.data.domains.find((entry) => entry.domain === "geocoding")).toEqual({
+        domain: "geocoding",
+        orchestratorId: "geocoding",
+        unlisted: "exclude",
+        stored: ["geocoding-maptiler"],
+        effective: [
+          {
+            integrationId: "geocoding-maptiler",
+            name: "MapTiler Geocoding",
+            isBuiltIn: true,
+            listed: true,
+          },
+        ],
+      });
       expect(await sdk.listAdminAttention(options)).toMatchObject({
         status: 200,
         data: { items: [] },

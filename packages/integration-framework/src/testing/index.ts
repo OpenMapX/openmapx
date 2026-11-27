@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { FetchJsonHttpError } from "@openmapx/core/http/fetch-json-error";
@@ -54,6 +55,7 @@ import type { TransitProvider } from "../contracts/transit-provider.js";
 import type { WeatherProvider } from "../contracts/weather-provider.js";
 import { type IntegrationDataSource, validateDataSource } from "../manifest";
 import { resolveIntegrationPlatformEndpoint } from "../platform-endpoints";
+import { effectiveIntegrationIds } from "../provider-order";
 import { storedRouteHandler } from "../route-handler";
 
 export interface FakeMobilityHttpRequest {
@@ -464,6 +466,8 @@ export interface MockContextOverrides {
   manifest?: IntegrationContext["manifest"];
   /** Required services the host has running, by service id, each with its URL. */
   requiredServices?: Record<string, string>;
+  /** The operator's provider order, by domain; empty for a domain not named. */
+  providerOrder?: Record<string, readonly string[]>;
 }
 
 export interface MockIntegrationContext extends IntegrationContext {
@@ -633,6 +637,17 @@ export function createMockIntegrationContext(
     onActivate: runImmediateActivation,
     onShutdown: noop,
     getIntegrationsByDomain: () => [],
+    getProviderOrder: (domain) => {
+      const orders = overrides.providerOrder ?? {};
+      return Object.hasOwn(orders, domain) ? (orders[domain] ?? []) : [];
+    },
+    // Reads the context's own members at call time, so a test that replaces
+    // them sees the fingerprint follow.
+    getProviderOrderFingerprint: (domain) =>
+      createHash("sha256")
+        .update(JSON.stringify(effectiveIntegrationIds(ctx, domain)))
+        .digest("hex")
+        .slice(0, 16),
     getRequiredService: (serviceId) => {
       const services = overrides.requiredServices ?? {};
       const url = Object.hasOwn(services, serviceId) ? services[serviceId] : undefined;

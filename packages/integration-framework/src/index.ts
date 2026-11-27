@@ -405,6 +405,16 @@ export {
   runWithProviderDeadline,
 } from "./provider-execution";
 export {
+  collectOrderedProviders,
+  effectiveIntegrationIds,
+  effectiveProviderOrder,
+  ORCHESTRATOR_BY_DOMAIN,
+  type OrderedProvider,
+  orchestratorOf,
+  readProviderOrder,
+  UNLISTED_BY_DOMAIN,
+} from "./provider-order";
+export {
   listQuery,
   QueryValidationError,
   type RouteQuery,

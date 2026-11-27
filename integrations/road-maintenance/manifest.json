@@ -16,5 +16,16 @@
   "backend": {
     "routes": false
   },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "providerOrder": {
+        "type": "array",
+        "items": { "type": "string" },
+        "maxItems": 64,
+        "default": []
+      }
+    }
+  },
   "quality": "built-in"
 }

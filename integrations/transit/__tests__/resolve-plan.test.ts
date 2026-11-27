@@ -142,8 +142,10 @@ function fixture(healthy = true, cacheResolution = false) {
       recordFailure: async () => {},
     },
     getDisallowedSourceIds: async () => disallowed,
+    getProviderOrder: () => [],
     getIntegrationsByDomain: () => [
       {
+        id: "test-transit",
         manifest: { dataSources: [{ sourceId: "test-source" }] },
         providers: new Map([["transit", [provider]]]),
       },

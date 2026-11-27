@@ -7,6 +7,7 @@ import {
   type CacheClient,
   type CustomHealthCheckFn,
   createActivationTransactionScope,
+  effectiveIntegrationIds,
   type HttpClient,
   type IntegrationContext,
   type IntegrationDataSource,
@@ -16,7 +17,10 @@ import {
   type IntegrationStrings,
   type LoadedIntegration,
   type Logger,
+  ORCHESTRATOR_BY_DOMAIN,
+  orchestratorOf,
   PLATFORM_VERSION,
+  readProviderOrder,
   resolveIntegrationPlatformEndpoint,
   satisfiesPlatformVersion,
   validateDataSource,
@@ -109,6 +113,18 @@ type SetupFunction = (ctx: IntegrationContext) => void | Promise<void>;
 
 let eventBus = new IntegrationEventBus();
 const integrations = new Map<string, LoadedIntegration>();
+/** The live generation's `providerOrder` of each orchestrator integration, by its id. */
+let providerOrders: ReadonlyMap<string, readonly string[]> = new Map();
+
+const ORCHESTRATOR_IDS = new Set(
+  Object.values(ORCHESTRATOR_BY_DOMAIN).filter((id): id is string => id !== null),
+);
+
+/** The live generation's provider order for `domain`; empty for a domain without an orchestrator. */
+export function getProviderOrder(domain: string): readonly string[] {
+  const orchestrator = orchestratorOf(domain);
+  return orchestrator ? (providerOrders.get(orchestrator) ?? []) : [];
+}
 
 export type IntegrationDirectoryInput = string | { directory: string; isBuiltIn: boolean };
 type NormalizedIntegrationDirectory = { directory: string; isBuiltIn: boolean };
@@ -642,6 +658,46 @@ function setRuntimeDataSources(
   return [...accepted];
 }
 
+type DiscoveredManifest = Awaited<ReturnType<typeof discoverManifests>>[number];
+
+/**
+ * Resolves each integration's configuration at most once per generation, and
+ * the provider order of every orchestrator before any setup runs: a provider's
+ * integration may ask for the order of a domain whose orchestrator is set up
+ * after it, or never because it is disabled. Only the manifest a generation
+ * would load for an id supplies an order, by the same tests its load applies.
+ */
+async function prepareGenerationConfig(
+  sorted: DiscoveredManifest[],
+  resolve: (manifest: IntegrationManifest, directory: string) => Promise<Record<string, unknown>>,
+): Promise<{
+  configOf: (manifest: IntegrationManifest, directory: string) => Promise<Record<string, unknown>>;
+  orders: ReadonlyMap<string, readonly string[]>;
+}> {
+  const configs = new Map<string, Promise<Record<string, unknown>>>();
+  const configOf = (manifest: IntegrationManifest, directory: string) => {
+    let pending = configs.get(directory);
+    if (!pending) {
+      pending = resolve(manifest, directory);
+      configs.set(directory, pending);
+    }
+    return pending;
+  };
+  const orders = new Map<string, readonly string[]>();
+  const seen = new Set<string>();
+  for (const { manifest: raw, directory, isBuiltIn } of sorted) {
+    if (!validateManifest(raw, { firstParty: isBuiltIn }).valid) continue;
+    const manifest = raw as IntegrationManifest;
+    if (seen.has(manifest.id)) continue;
+    if (!isBuiltIn && !satisfiesPlatformVersion(manifest.platform ?? "")) continue;
+    seen.add(manifest.id);
+    if (!ORCHESTRATOR_IDS.has(manifest.id)) continue;
+    const config = await configOf(manifest, directory);
+    orders.set(manifest.id, readProviderOrder(config.providerOrder));
+  }
+  return { configOf, orders };
+}
+
 function buildIntegrationContext(args: {
   id: string;
   manifest: IntegrationManifest;
@@ -656,6 +712,8 @@ function buildIntegrationContext(args: {
   integration: LoadedIntegration;
   eventBus: IntegrationEventBus;
   integrationsByDomain: (domain: string) => LoadedIntegration[];
+  /** The generation's provider order of each orchestrator integration, by its id. */
+  providerOrders: ReadonlyMap<string, readonly string[]>;
   activationScope: ActivationTransactionScope;
 }): IntegrationContext {
   const {
@@ -671,6 +729,7 @@ function buildIntegrationContext(args: {
     shutdownHandlers,
     eventBus: contextEventBus,
     integrationsByDomain,
+    providerOrders: generationProviderOrders,
     activationScope,
   } = args;
   const { integration } = args;
@@ -779,6 +838,16 @@ function buildIntegrationContext(args: {
     }),
     getIntegrationsByDomain(domain: string) {
       return integrationsByDomain(domain);
+    },
+    getProviderOrder(domain: string) {
+      const orchestrator = orchestratorOf(domain);
+      return orchestrator ? (generationProviderOrders.get(orchestrator) ?? []) : [];
+    },
+    getProviderOrderFingerprint(domain: string) {
+      return createHash("sha256")
+        .update(JSON.stringify(effectiveIntegrationIds(ctx, domain)))
+        .digest("hex")
+        .slice(0, 16);
     },
     getDisallowedSourceIds() {
       return disallowedSourceResolver
@@ -1144,6 +1213,9 @@ export async function initIntegrations(
     fastify.log.warn(err, "AttributionIndex initialization failed (continuing without it)");
   }
 
+  const { configOf, orders } = await prepareGenerationConfig(sorted, resolveConfig);
+  providerOrders = orders;
+
   for (const { manifest: raw, directory, isBuiltIn } of sorted) {
     const validation = validateManifest(raw, { firstParty: isBuiltIn });
     if (!validation.valid) {
@@ -1170,7 +1242,7 @@ export async function initIntegrations(
       continue;
     }
 
-    const config = await resolveConfig(manifest, directory);
+    const config = await configOf(manifest, directory);
     warnInvalidConfig(manifest, config, id, (msg) => fastify.log.warn(msg));
 
     const log = createLogger(id, fastify);
@@ -1228,6 +1300,7 @@ export async function initIntegrations(
       integration,
       eventBus,
       integrationsByDomain: getIntegrationsByDomain,
+      providerOrders: orders,
       activationScope,
     });
 
@@ -1552,6 +1625,18 @@ async function doReloadIntegrations(
       _fastify.log.debug("Service registry unavailable during reload");
     }
 
+    const { configOf, orders: stagedProviderOrders } = await prepareGenerationConfig(
+      sorted,
+      context
+        ? async (manifest, directory) =>
+            Object.fromEntries(
+              Object.entries(
+                await resolveIntegrationConfigWithSourcesStrict(manifest, directory, context),
+              ).map(([key, entry]) => [key, entry.value]),
+            )
+        : resolveConfig,
+    );
+
     for (const { manifest: raw, directory, isBuiltIn } of sorted) {
       const validation = validateManifest(raw, { firstParty: isBuiltIn });
       if (!validation.valid) {
@@ -1585,13 +1670,7 @@ async function doReloadIntegrations(
         continue;
       }
 
-      const config = context
-        ? Object.fromEntries(
-            Object.entries(
-              await resolveIntegrationConfigWithSourcesStrict(manifest, directory, context),
-            ).map(([key, entry]) => [key, entry.value]),
-          )
-        : await resolveConfig(manifest, directory);
+      const config = await configOf(manifest, directory);
       const log = createLogger(id, _fastify);
       const http = createHttpClient(log);
       const cache = createCacheClient(id);
@@ -1651,6 +1730,7 @@ async function doReloadIntegrations(
           Array.from(next.values()).filter(
             (candidate) => candidate.enabled && candidate.manifest.domains.includes(domain),
           ),
+        providerOrders: stagedProviderOrders,
         activationScope,
       });
 
@@ -1688,6 +1768,7 @@ async function doReloadIntegrations(
     activationScope.activate();
     integrations.clear();
     for (const [id, integration] of next) integrations.set(id, integration);
+    providerOrders = stagedProviderOrders;
     commitIntegrationRouteStaging();
     commitPlaceResolverStaging();
     eventBus = stagedEventBus;
@@ -1763,6 +1844,7 @@ export async function shutdownIntegrations(): Promise<void> {
     }
   }
   integrations.clear();
+  providerOrders = new Map();
   eventBus.removeAll();
   resetIntegrationRoutes();
 

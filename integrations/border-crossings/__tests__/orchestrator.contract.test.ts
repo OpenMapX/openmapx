@@ -49,6 +49,7 @@ function ctxWith(
 ): IntegrationContext {
   const quiet = (): void => {};
   return {
+    getProviderOrder: () => [],
     getIntegrationsByDomain: (domain: string) =>
       domain === "border-crossings"
         ? providers.map((p) => ({

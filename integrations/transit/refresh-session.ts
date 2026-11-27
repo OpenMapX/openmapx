@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
-import type {
-  IntegrationContext,
-  TransitProvider,
-  TripPlanRequest,
+import {
+  collectOrderedProviders,
+  type IntegrationContext,
+  type TransitProvider,
+  type TripPlanRequest,
 } from "@openmapx/integration-framework";
 import type { TransitTripResolveRequest, TripItinerary } from "@openmapx/mobility-core/transit";
 import type { TransitOrchestrator } from "./orchestrator.js";
@@ -105,15 +106,19 @@ export function createRefreshSession(
   }
 
   function sourceIds(providerId: string | undefined, tripIds: readonly string[] = []): string[] {
-    return ctx.getIntegrationsByDomain("transit").flatMap((integration) => {
-      const providers = (integration.providers.get("transit") ?? []) as TransitProvider[];
-      const matches = providers.some((p) =>
-        providerId ? p.id === providerId : tripIds.some((id) => id.startsWith(p.prefix)),
-      );
-      return matches
-        ? (integration.manifest.dataSources ?? []).map((source) => source.sourceId)
-        : [];
-    });
+    const matching = new Set(
+      collectOrderedProviders<TransitProvider>(ctx, "transit")
+        .filter(({ provider: p }) =>
+          providerId ? p.id === providerId : tripIds.some((id) => id.startsWith(p.prefix)),
+        )
+        .map((entry) => entry.integrationId),
+    );
+    const manifests = new Map(
+      ctx.getIntegrationsByDomain("transit").map((integration) => [integration.id, integration]),
+    );
+    return [...matching].flatMap((id) =>
+      (manifests.get(id)?.manifest.dataSources ?? []).map((source) => source.sourceId),
+    );
   }
 
   async function refreshReference(state: ReferenceRefreshState) {

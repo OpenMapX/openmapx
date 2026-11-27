@@ -48,9 +48,10 @@ function provider(id: string, sites: Site[] | Error, over: Partial<Provider> = {
 function ctxWith(providers: Provider[], disallowed?: string[], lines: string[] = []) {
   return {
     getIntegrationsByDomain: (domain: string) =>
-      domain === "test-sites"
-        ? providers.map((p) => ({ id: p.id, providers: new Map([["test-sites", [p]]]) }))
+      domain === "parking-sites"
+        ? providers.map((p) => ({ id: p.id, providers: new Map([["parking-sites", [p]]]) }))
         : [],
+    getProviderOrder: () => [],
     getDisallowedSourceIds: disallowed ? async () => new Set(disallowed) : undefined,
     log: {
       warn: (m: string) => lines.push(`warn ${m}`),
@@ -63,7 +64,7 @@ function ctxWith(providers: Provider[], disallowed?: string[], lines: string[] =
 
 function orchestrator(ctx: IntegrationContext) {
   return createSiteOrchestrator<Provider, Site, Query>(ctx, {
-    domain: "test-sites",
+    domain: "parking-sites",
     logPrefix: "test",
     search: {
       name: "list",
@@ -116,6 +117,15 @@ describe("site orchestrator", () => {
     expect(await sites.find("merged")).toBeNull();
     expect(a.one).toHaveBeenCalledWith("merged", { excludedSourceIds: ["src-x"] });
     expect((await sites.find("ok"))?.id).toBe("ok");
+  });
+
+  test("search and find follow the operator's provider order", async () => {
+    const a = provider("a", [site("dup", ["src-a"])]);
+    const b = provider("b", [site("dup", ["src-b"])]);
+    const ctx = Object.assign(ctxWith([a, b]), { getProviderOrder: () => ["b"] });
+    const sites = orchestrator(ctx);
+    expect((await sites.search(BBOX)).sites.map((s) => s.sources)).toEqual([["src-b"], ["src-a"]]);
+    expect((await sites.find("dup"))?.sources).toEqual(["src-b"]);
   });
 
   test("with no provider the search is empty and find is null", async () => {

@@ -37,6 +37,30 @@ const manifest = preserveManifestJson(
  * Provider configSchema remains data, never an executable route schema.
  */
 export const adminIntegrationManifestSchema = adminJsonWire(manifest);
+/**
+ * The operator's provider order of each domain that has one: the stored
+ * integration ids, and the integrations that serve the domain in effective
+ * order. Where unlisted integrations are excluded they still appear, after the
+ * listed ones and with `listed: false`, so they can be offered.
+ */
+export const adminProviderOrderSchema = z.strictObject({
+  domains: z.array(
+    z.strictObject({
+      domain: z.string(),
+      orchestratorId: z.string(),
+      unlisted: z.enum(["append", "exclude"]),
+      stored: z.array(z.string()),
+      effective: z.array(
+        z.strictObject({
+          integrationId: z.string(),
+          name: z.string(),
+          isBuiltIn: z.boolean(),
+          listed: z.boolean(),
+        }),
+      ),
+    }),
+  ),
+});
 export const adminIntegrationSummarySchema = z.strictObject({
   id: z.string(),
   name: z.string(),

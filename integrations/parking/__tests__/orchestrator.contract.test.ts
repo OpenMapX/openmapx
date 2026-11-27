@@ -57,6 +57,7 @@ function ctxWith(
       opts.lines?.push({ level, message });
     };
   return {
+    getProviderOrder: () => [],
     getIntegrationsByDomain: (domain: string) =>
       domain === "parking-sites"
         ? providers.map((p) => ({
