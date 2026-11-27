@@ -14,6 +14,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const host = {
   reloadIntegrations: vi.fn(async () => ({ message: "", reloaded: 0, enabled: 0 })),
   integrationName: vi.fn((_id: string): string | undefined => undefined),
+  reloadFailed: vi.fn((_message: string) => {}),
 };
 
 const attention = vi.hoisted(() => ({
@@ -41,6 +42,7 @@ beforeEach(() => {
   setSafeModeHost({
     reload: () => host.reloadIntegrations(),
     integrationName: (id) => host.integrationName(id),
+    reloadFailed: (message) => host.reloadFailed(message),
   });
 });
 
@@ -59,6 +61,11 @@ describe("readSafeMode", () => {
       '{"mode":"automatic","integrationId":"acme"}',
       { active: true, reason: "automatic", integrationId: "acme" },
     ],
+    [
+      {},
+      '{"mode":"automatic","integrationId":null}',
+      { active: true, reason: "automatic", integrationId: null },
+    ],
     [{}, "not json", { active: true, reason: "operator", integrationId: null }],
     [{ OPENMAPX_SAFE_MODE: "0" }, null, { active: false, reason: null, integrationId: null }],
   ])("reads %j with file %j", (env, file, expected) => {
@@ -69,6 +76,8 @@ describe("readSafeMode", () => {
   it.each([
     ['{"mode":"automatic"}'],
     ['{"mode":"automatic","integrationId":42}'],
+    ['{"mode":"automatic","integrationId":""}'],
+    ['{"mode":"automatic","integrationId":"Not An Id"}'],
     ['{"mode":"other"}'],
     ["null"],
     ["[]"],
@@ -186,6 +195,18 @@ describe("leaveSafeMode", () => {
     expect(isSafeModeActive()).toBe(false);
   });
 
+  it("marks what safe mode held back as failed when the reload after leaving fails", async () => {
+    writeFileSync(join(runtimeDir, "safe-mode.json"), '{"mode":"operator"}');
+    initSafeMode({}, runtimeDir);
+    host.reloadIntegrations.mockRejectedValueOnce(new Error("disk full"));
+
+    await expect(leaveSafeMode()).rejects.toThrow("disk full");
+
+    expect(isSafeModeActive()).toBe(false);
+    expect(existsSync(join(runtimeDir, "safe-mode.json"))).toBe(false);
+    expect(host.reloadFailed).toHaveBeenCalledWith("disk full");
+  });
+
   it("refuses safe mode the environment forces and changes nothing", async () => {
     writeFileSync(join(runtimeDir, "safe-mode.json"), '{"mode":"operator"}');
     initSafeMode({ OPENMAPX_SAFE_MODE: "1" }, runtimeDir);
@@ -258,8 +279,14 @@ describe("syncSafeModeAttention", () => {
 
   it.each([
     [{ OPENMAPX_SAFE_MODE: "1" }, null, "OPENMAPX_SAFE_MODE"],
+    [{ OPENMAPX_SAFE_MODE: "1" }, null, "then run pnpm openmapx compose up"],
     [{}, '{"mode":"operator"}', "openmapx control safe-mode off"],
-  ])("names the reason for %j", async (env, file, text) => {
+    [
+      {},
+      '{"mode":"automatic","integrationId":null}',
+      "OpenMapX stopped repeatedly while starting, so installed extensions were not loaded.",
+    ],
+  ])("names the reason for %j with file %j", async (env, file, text) => {
     if (file) writeFileSync(join(runtimeDir, "safe-mode.json"), file);
     initSafeMode(env, runtimeDir);
 

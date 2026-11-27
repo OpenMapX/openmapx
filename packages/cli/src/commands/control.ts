@@ -343,7 +343,7 @@ export function registerControlCommands(program: Command): void {
       const infraDir = repoPaths().infraDir;
       if (state === "off" && process.env.OPENMAPX_SAFE_MODE === "1") {
         log.err(
-          "OPENMAPX_SAFE_MODE=1 is set (in infra/docker/.env or this shell), and it keeps the API in safe mode whatever the file says. Remove it, then run `pnpm openmapx compose up` to restart the api service.",
+          "OPENMAPX_SAFE_MODE=1 is set (in infra/docker/.env or this shell), and it keeps the API in safe mode whatever the file says. Remove it, then run `pnpm openmapx compose up`, which recreates the api container with the changed environment.",
         );
         completeCliCommand(1);
       }

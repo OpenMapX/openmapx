@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -26,6 +26,21 @@ vi.mock("./integration-host", async (importOriginal) => {
     stopIntegrationTasks: () => {
       lifecycle.push("stop tasks");
       actual.stopIntegrationTasks();
+    },
+  };
+});
+
+vi.mock("./safe-mode", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./safe-mode")>();
+  return {
+    ...actual,
+    initSafeMode: (...args: Parameters<typeof actual.initSafeMode>) => {
+      lifecycle.push("read safe mode");
+      return actual.initSafeMode(...args);
+    },
+    syncSafeModeAttention: () => {
+      lifecycle.push("sync safe-mode attention");
+      return actual.syncSafeModeAttention();
     },
   };
 });
@@ -100,6 +115,7 @@ describeDatabase("the real application from createApp()", () => {
   const originalStackTraceLimit = Error.stackTraceLimit;
   let fixture: Awaited<ReturnType<typeof createMigratedPostgresFixture>>;
   let customIntegrations: string;
+  let runtimeDir: string;
   let app: App;
   let pendingAfterImport: TrackedTimer[];
   let pendingAfterCreateApp: TrackedTimer[];
@@ -127,6 +143,31 @@ describeDatabase("the real application from createApp()", () => {
     await fixture.sql`insert into subject_erasure_pending (integration_id, subject_user_id)
       values ('not-installed', 'deleted-account')`;
     customIntegrations = await mkdtemp(join(tmpdir(), "openmapx-app-integrations-"));
+    // An installed integration whose code records that it ran, and an
+    // operator's safe-mode file, so the start must keep that code out.
+    const installedDemo = join(customIntegrations, "app-installed-demo");
+    await mkdir(join(installedDemo, "dist", "backend"), { recursive: true });
+    await writeFile(
+      join(installedDemo, "manifest.json"),
+      JSON.stringify({
+        id: "app-installed-demo",
+        name: "App Installed Demo",
+        version: "1.0.0",
+        platform: "1.0",
+        license: "MIT",
+        domains: ["knowledge"],
+        quality: "community",
+        backend: { entry: "dist/backend/index.mjs" },
+      }),
+    );
+    await writeFile(
+      join(installedDemo, "dist", "backend", "index.mjs"),
+      "globalThis.__omxAppInstalledEvaluated = true;\nexport function setup() {}\n",
+    );
+    runtimeDir = await mkdtemp(join(tmpdir(), "openmapx-app-runtime-"));
+    await writeFile(join(runtimeDir, "safe-mode.json"), '{"mode":"operator"}');
+    vi.stubEnv("OPENMAPX_API_RUNTIME_DIR", runtimeDir);
+    vi.stubEnv("OPENMAPX_SAFE_MODE", "");
     vi.stubEnv("NODE_ENV", "test");
     vi.stubEnv("LOG_LEVEL", "silent");
     vi.stubEnv("DATABASE_URL", fixture.connectionUri);
@@ -219,6 +260,7 @@ describeDatabase("the real application from createApp()", () => {
       vi.unstubAllGlobals();
       vi.unstubAllEnvs();
       await rm(customIntegrations, { recursive: true, force: true });
+      await rm(runtimeDir, { recursive: true, force: true });
       await fixture?.stop();
     }
   }, 60_000);
@@ -252,6 +294,29 @@ describeDatabase("the real application from createApp()", () => {
       await fixture.sql`select status, error from integration_task_run
         where integration_id = 'left-behind'`,
     ).toEqual([{ status: "failed", error: "interrupted by restart" }]);
+  });
+
+  it("reads the operator's safe-mode file before any installed integration is considered", async () => {
+    const { getSafeMode } = await import("./safe-mode");
+    const { getIntegration } = await import("./integration-host");
+    expect(lifecycle.indexOf("read safe mode")).toBeGreaterThanOrEqual(0);
+    expect(lifecycle.indexOf("read safe mode")).toBeLessThan(
+      lifecycle.indexOf("load integrations"),
+    );
+    expect(getSafeMode()).toEqual({ active: true, reason: "operator", integrationId: null });
+    expect(getIntegration("app-installed-demo")).toMatchObject({
+      enabled: false,
+      loadState: "safe-mode",
+    });
+    expect(
+      (globalThis as { __omxAppInstalledEvaluated?: boolean }).__omxAppInstalledEvaluated,
+    ).toBeUndefined();
+    expect(lifecycle.indexOf("sync safe-mode attention")).toBeGreaterThan(
+      lifecycle.indexOf("load integrations"),
+    );
+    expect(
+      await fixture.sql`select key, title from attention_item where key = 'safe-mode'`,
+    ).toEqual([{ key: "safe-mode", title: "Safe mode is on" }]);
   });
 
   it("keeps recording erasures for an integration that is no longer loaded and shows what it owes", async () => {

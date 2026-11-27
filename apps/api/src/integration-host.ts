@@ -820,8 +820,12 @@ async function readInstalledLoadGates(
   return gates;
 }
 
+/** The records of installed integrations a gate held back, whose code was never imported. */
+const heldBackRecords = new WeakSet<LoadedIntegration>();
+
 /** Records an installed integration a gate holds back, with its manifest, switched off. */
 function holdBack(integration: LoadedIntegration, gate: InstalledLoadGate, log: Logger): void {
+  heldBackRecords.add(integration);
   integration.enabled = false;
   integration.loadState = gate.loadState;
   if (gate.loadError) integration.loadError = gate.loadError;
@@ -1987,10 +1991,31 @@ export function isIntegrationScheme(scheme: string): boolean {
  * uniquely marks config-disabled. Using the runtime flag would let a broken
  * enabled integration fall through to coord-fallback, re-opening the
  * tag-substitution leak the 404 trap closes.
+ *
+ * An installed integration a gate held back (safe mode, its disabled
+ * extension, an incompatible release, or extension state that could not be
+ * read) counts as switched off: its code never ran, so its links fall back
+ * like those of an integration switched off in its settings.
  */
 export function isEnabledIntegrationScheme(scheme: string): boolean {
   const i = integrations.get(scheme);
-  return i !== undefined && i.config?.enabled !== false;
+  return i !== undefined && i.config?.enabled !== false && !heldBackRecords.has(i);
+}
+
+/**
+ * The reload after leaving safe mode failed, so the registry still holds the
+ * records safe mode held back. Each becomes a failed load that says so, which
+ * the administration shows with the way to reload; safe mode itself is off.
+ */
+export function markSafeModeRecordsFailed(message: string): void {
+  for (const integration of integrations.values()) {
+    if (integration.loadState !== "safe-mode") continue;
+    integration.loadState = "failed";
+    integration.loadError = {
+      phase: "import",
+      message: `not loaded: the reload after leaving safe mode failed (${message})`,
+    };
+  }
 }
 
 export function getIntegrationsByDomain(domain: string): LoadedIntegration[] {
@@ -2385,4 +2410,5 @@ export async function shutdownIntegrations(): Promise<void> {
 setSafeModeHost({
   reload: () => reloadIntegrations(),
   integrationName: (integrationId) => integrations.get(integrationId)?.manifest.name,
+  reloadFailed: markSafeModeRecordsFailed,
 });

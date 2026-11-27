@@ -507,8 +507,8 @@ describe("pending erasures", () => {
     [
       "belongs to a disabled extension",
       integration("c", { enabled: false, loadState: "disabled", name: "Trips" }),
-      "Trips cannot erase data now: it is disabled.",
-      "Enable it, or remove its data.",
+      "Trips cannot erase data now: its extension is disabled.",
+      "An update keeps the extension disabled; remove it and install it again to enable it, which keeps its data, or remove its data.",
     ],
     [
       "is incompatible",

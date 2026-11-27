@@ -30,6 +30,15 @@ and the built-in integrations work while you deal with the extension.
 
 While safe mode is on, **Admin → Integrations** shows a notice that names the
 reason, and the attention list on the overview shows **Safe mode is on**.
+Safe mode that started because the API stopped repeatedly names the extension
+that was loading when that is known; otherwise the notice says that OpenMapX
+stopped repeatedly while starting, and the API log names the extension.
+
+Place links of an installed extension whose code the API kept out (safe mode,
+a disabled extension, an incompatible release, or extension state that could
+not be read) open like links of an integration switched off in its settings:
+the place is looked up by its name and coordinates. An extension whose code
+ran and failed keeps answering such links with "not found".
 
 ## Turn safe mode on
 
@@ -60,7 +69,9 @@ choose one of:
 - **Admin → Integrations → Leave safe mode.** After you confirm, the API
   removes the safe-mode file and loads the installed extensions at once,
   without a restart. The action is recorded in the audit log as **Left safe
-  mode**.
+  mode**. If that reload fails, safe mode is still left: the extensions it
+  held back show **Failed to load** with the reason, and **Reload** on their
+  detail page tries again.
 - From the host: `pnpm openmapx control safe-mode off`. It removes the
   safe-mode file and the boot marker, then restarts the running `api` service.
   It refuses with exit code 1 while `OPENMAPX_SAFE_MODE=1` is set.
@@ -94,7 +105,8 @@ alias of the `extensions` command group. Without `--offline`, the command
 currently prints `Pass --offline to disable an extension without the API`.
 
 Enabling a disabled extension again is not offered yet: an update keeps it
-disabled, while removing it and installing it again starts it enabled.
+disabled, while removing it and installing it again starts it enabled and keeps
+its data.
 
 ## When the API does not start because of an extension
 

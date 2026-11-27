@@ -17,8 +17,8 @@ import { ConfirmDialog } from "../shared/ConfirmDialog";
 
 /**
  * The top of the integration list while the API runs in safe mode: why, the
- * integration automatic safe mode blames, and the way out. Safe mode the
- * environment forces cannot be left here, so it gets no button.
+ * integration automatic safe mode blames when it knows one, and the way out.
+ * Safe mode the environment forces cannot be left here, so it gets no button.
  */
 export function SafeModeNotice() {
   const t = useTranslations("adminIntegrations");
@@ -31,7 +31,7 @@ export function SafeModeNotice() {
   const { data: state } = useQuery(admin.queries.safeMode());
   const { data: integrations } = useQuery({
     ...admin.queries.list(),
-    enabled: state?.reason === "automatic",
+    enabled: state?.reason === "automatic" && state.integrationId !== null,
   });
 
   const leave = useMutation({
@@ -45,6 +45,9 @@ export function SafeModeNotice() {
       showToast(t("leftSafeMode"));
     },
     onError: (error) => {
+      // The API may have left safe mode before its reload failed; read the
+      // state and the list again so neither shows safe mode that is gone.
+      void admin.refresh();
       if (!owner.active) return;
       setConfirming(false);
       showToast(adminErrorText(error, t("leaveSafeModeFailed")), "error");
@@ -53,19 +56,27 @@ export function SafeModeNotice() {
 
   if (!state?.active) return null;
 
-  const blamed = state.integrationId ?? "";
-  const name = integrations?.find((integration) => integration.id === blamed)?.name ?? blamed;
+  const blamed = state.integrationId;
+  const name =
+    blamed === null
+      ? null
+      : (integrations?.find((integration) => integration.id === blamed)?.name ?? blamed);
+  // Automatic safe mode does not always know which integration was loading.
   const reason =
     state.reason === "env"
       ? t("safeModeReasonEnv")
       : state.reason === "automatic"
-        ? t("safeModeReasonAutomatic", { name })
+        ? name === null
+          ? t("safeModeReasonAutomaticUnnamed")
+          : t("safeModeReasonAutomatic", { name })
         : t("safeModeReasonOperator");
   const next =
     state.reason === "env"
       ? t("safeModeEnvFix")
       : state.reason === "automatic"
-        ? t("safeModeAutomaticFix", { name })
+        ? name === null
+          ? t("safeModeAutomaticFixUnnamed")
+          : t("safeModeAutomaticFix", { name })
         : null;
 
   return (

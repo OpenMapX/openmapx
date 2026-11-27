@@ -23,18 +23,27 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-function serve(initial: State, leave?: () => Response) {
+/** The paths the component read since the last `serve`. */
+let reads: string[] = [];
+
+function serve(initial: State, leave?: (setState: (next: State) => void) => Response) {
   let state = initial;
   const posted: string[] = [];
+  reads = [];
+  const read = reads;
   vi.stubGlobal("fetch", async (input: string | Request, init?: RequestInit) => {
     const url = new URL(typeof input === "string" ? input : input.url);
     const method = (typeof input === "string" ? init?.method : input.method) ?? "GET";
     if (url.pathname === "/api/admin/safe-mode/leave" && method === "POST") {
       posted.push(url.pathname);
-      if (leave) return leave();
+      if (leave)
+        return leave((next) => {
+          state = next;
+        });
       state = { active: false, reason: null, integrationId: null };
       return Response.json(state);
     }
+    if (method === "GET") read.push(url.pathname);
     if (url.pathname === "/api/admin/safe-mode") return Response.json(state);
     if (url.pathname === "/api/admin/integrations")
       return Response.json([
@@ -89,7 +98,9 @@ it("names the operator as the reason and leaves safe mode after confirmation", a
 
   await waitFor(() => expect(posted).toEqual(["/api/admin/safe-mode/leave"]));
   expect(
-    await screen.findByText("Left safe mode; the installed extensions are loading."),
+    await screen.findByText(
+      "Left safe mode; the installed extensions are loaded. Check the list for any that failed.",
+    ),
   ).toBeInTheDocument();
   await waitFor(() =>
     expect(screen.queryByRole("region", { name: "Safe mode is on" })).not.toBeInTheDocument(),
@@ -129,8 +140,45 @@ it("explains safe mode the environment forces, without a button", async () => {
 
   const notice = await screen.findByRole("region", { name: "Safe mode is on" });
   expect(notice).toHaveTextContent("OPENMAPX_SAFE_MODE=1 keeps the API in safe mode.");
-  expect(notice).toHaveTextContent("remove the variable from infra/docker/.env");
+  expect(notice).toHaveTextContent(
+    "remove the variable from infra/docker/.env, then run pnpm openmapx compose up on the host",
+  );
+  expect(notice).not.toHaveTextContent("restart the api service");
   expect(within(notice).queryByRole("button")).not.toBeInTheDocument();
+});
+
+it("explains automatic safe mode that names no integration", async () => {
+  serve({ active: true, reason: "automatic", integrationId: null });
+  mount();
+
+  const notice = await screen.findByRole("region", { name: "Safe mode is on" });
+  expect(notice).toHaveTextContent(
+    "OpenMapX stopped repeatedly while starting, so installed extensions were not loaded",
+  );
+  expect(notice).toHaveTextContent("Find the extension that stops it in the API log");
+  expect(notice).not.toHaveTextContent("while  was loading");
+  expect(within(notice).getByRole("button", { name: "Leave safe mode" })).toBeInTheDocument();
+});
+
+it("shows the state after a leave whose reload failed, and the failure", async () => {
+  serve({ active: true, reason: "operator", integrationId: null }, (setState) => {
+    // The API left safe mode, then the reload of the extensions failed.
+    setState({ active: false, reason: null, integrationId: null });
+    return Response.json({ error: "Reloading the integrations failed" }, { status: 500 });
+  });
+  mount();
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("button", { name: "Leave safe mode" }));
+  const dialog = await screen.findByRole("dialog");
+  reads.length = 0;
+  await user.click(within(dialog).getByRole("button", { name: "Leave safe mode" }));
+
+  expect(await screen.findByText("Reloading the integrations failed")).toBeInTheDocument();
+  // The notice is read again, and with it the list it sits on.
+  await waitFor(() => expect(reads).toContain("/api/admin/safe-mode"));
+  await waitFor(() =>
+    expect(screen.queryByRole("region", { name: "Safe mode is on" })).not.toBeInTheDocument(),
+  );
 });
 
 it("says why safe mode could not be left and stays in it", async () => {

@@ -59,6 +59,8 @@ import {
   getProviderOrder,
   heldBackIntegrationLoads,
   initIntegrations,
+  isEnabledIntegrationScheme,
+  markSafeModeRecordsFailed,
   reloadIntegrations,
   setCompatibilityResolver,
   setDisabledExtensionResolver,
@@ -2595,6 +2597,123 @@ describe("initIntegrations — loader", () => {
           loadError: { phase: "import", message: "could not read extension state" },
         });
         expect(getIntegration("built-in-demo")?.loadState).toBe("loaded");
+      });
+
+      it("lets the place links of an integration it holds back fall back like a switched-off one", async () => {
+        writeInstalled("held-safe", recording("held back: safe mode"));
+        initSafeMode({ OPENMAPX_SAFE_MODE: "1" }, runtimeDir);
+        await initIntegrations(makeApp(), [installed()]);
+        expect(getIntegration("held-safe")?.loadState).toBe("safe-mode");
+        expect(isEnabledIntegrationScheme("held-safe")).toBe(false);
+
+        initSafeMode({}, runtimeDir);
+        writeInstalled("held-disabled", recording("held back: disabled"));
+        writeInstalled("held-incompatible", recording("held back: incompatible"));
+        writeInstalled(
+          "loads-and-throws",
+          "export function setup() { throw new Error('boom'); }\n",
+        );
+        setDisabledExtensionResolver(async () => new Set(["held-disabled"]));
+        setCompatibilityResolver((manifest) =>
+          manifest.id === "held-incompatible" ? { reason: "platform", required: "9.0" } : null,
+        );
+        await reloadIntegrations();
+        expect(getIntegration("held-disabled")?.loadState).toBe("disabled");
+        expect(getIntegration("held-incompatible")?.loadState).toBe("incompatible");
+        expect(isEnabledIntegrationScheme("held-disabled")).toBe(false);
+        expect(isEnabledIntegrationScheme("held-incompatible")).toBe(false);
+        // Code that ran and failed keeps refusing a substitute place.
+        expect(getIntegration("loads-and-throws")?.loadState).toBe("failed");
+        expect(isEnabledIntegrationScheme("loads-and-throws")).toBe(true);
+
+        setDisabledExtensionResolver(async () => {
+          throw new Error("db down");
+        });
+        await reloadIntegrations();
+        expect(getIntegration("held-safe")).toMatchObject({
+          loadState: "failed",
+          loadError: { message: "could not read extension state" },
+        });
+        expect(isEnabledIntegrationScheme("held-safe")).toBe(false);
+      });
+
+      it("marks what safe mode held back as failed when the reload after leaving it fails", async () => {
+        writeGatedFixtures("marks what safe mode held back as failed");
+        initSafeMode({ OPENMAPX_SAFE_MODE: "1" }, runtimeDir);
+        await initIntegrations(makeApp(), [installed(), builtIn()]);
+
+        markSafeModeRecordsFailed("disk full");
+
+        expect(getIntegration("installed-demo")).toMatchObject({
+          enabled: false,
+          loadState: "failed",
+          loadError: {
+            phase: "import",
+            message: "not loaded: the reload after leaving safe mode failed (disk full)",
+          },
+        });
+        expect(getIntegration("built-in-demo")?.loadState).toBe("loaded");
+      });
+
+      it("bounds a resolver that never settles", async () => {
+        writeGatedFixtures("bounds a resolver that never settles");
+        setDisabledExtensionResolver(() => new Promise<ReadonlySet<string>>(() => {}));
+        vi.useFakeTimers({ toFake: ["setTimeout"] });
+
+        let settled = false;
+        const booting = initIntegrations(makeApp(), [installed(), builtIn()]).then(() => {
+          settled = true;
+        });
+        // Ten seconds for each read, five between the boot's two attempts.
+        await vi.advanceTimersByTimeAsync(24_999);
+        expect(settled).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        // Without the bound this never settles and the test times out.
+        await booting;
+
+        expect(getIntegration("installed-demo")).toMatchObject({
+          enabled: false,
+          loadState: "failed",
+          loadError: { phase: "import", message: "could not read extension state" },
+        });
+        expect(g.__omxInstalledEvaluated).toBeUndefined();
+        expect(getIntegration("built-in-demo")?.loadState).toBe("loaded");
+
+        setDisabledExtensionResolver(() => new Promise<ReadonlySet<string>>(() => {}));
+        let reloaded = false;
+        const reloading = reloadIntegrations().then(() => {
+          reloaded = true;
+        });
+        await vi.advanceTimersByTimeAsync(9_999);
+        expect(reloaded).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        await reloading;
+        expect(getIntegration("installed-demo")?.loadState).toBe("failed");
+      });
+
+      it("starts in safe mode while the secrets key is unusable", async () => {
+        writeInstalled(
+          "installed-secret",
+          recording("starts in safe mode while the secrets key is unusable"),
+          {
+            manifest: {
+              name: "Installed Secret",
+              configSchema: {
+                properties: { apiKey: { type: "string", "x-openmapx-secret": true } },
+              },
+            },
+          },
+        );
+        vi.mocked(secretsKeyProblem).mockReturnValue("The secrets key is not configured");
+        initSafeMode({ OPENMAPX_SAFE_MODE: "1" }, runtimeDir);
+
+        await expect(initIntegrations(makeApp(), [installed()])).resolves.toBeUndefined();
+
+        expect(getIntegration("installed-secret")).toMatchObject({
+          enabled: false,
+          loadState: "safe-mode",
+        });
+        expect(g.__omxInstalledEvaluated).toBeUndefined();
       });
 
       it("tells an install job which integrations did not load and which are held back", async () => {

@@ -1,15 +1,16 @@
 import { readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loggableThrown } from "@openmapx/integration-framework";
+import { isComponentId } from "@openmapx/core/component-id";
+import { describeThrown, loggableThrown } from "@openmapx/integration-framework";
 import { processLogger } from "./process-logger";
 import { raiseAttention, resolveAttention } from "./services/attention";
 
 /**
  * Whether installed integrations are kept out of this process, and why:
  * `env` when `OPENMAPX_SAFE_MODE=1` forces it, `operator` when an operator
- * turned it on, `automatic` when the API stopped repeatedly while loading
- * the named integration.
+ * turned it on, `automatic` when the API stopped repeatedly while starting,
+ * with the integration it was loading when that is known.
  */
 export interface SafeModeState {
   active: boolean;
@@ -60,18 +61,13 @@ export function readSafeMode(env: NodeJS.ProcessEnv, runtimeDir: string): SafeMo
   } catch {
     return { ...OPERATOR };
   }
-  if (
-    parsed !== null &&
-    typeof parsed === "object" &&
-    (parsed as { mode?: unknown }).mode === "automatic" &&
-    typeof (parsed as { integrationId?: unknown }).integrationId === "string" &&
-    (parsed as { integrationId: string }).integrationId.length > 0
-  )
-    return {
-      active: true,
-      reason: "automatic",
-      integrationId: (parsed as { integrationId: string }).integrationId,
-    };
+  if (parsed === null || typeof parsed !== "object") return { ...OPERATOR };
+  const { mode, integrationId } = parsed as { mode?: unknown; integrationId?: unknown };
+  // Automatic safe mode names the integration it blames when it knows one.
+  if (mode === "automatic" && integrationId === null)
+    return { active: true, reason: "automatic", integrationId: null };
+  if (mode === "automatic" && typeof integrationId === "string" && isComponentId(integrationId))
+    return { active: true, reason: "automatic", integrationId };
   return { ...OPERATOR };
 }
 
@@ -82,6 +78,8 @@ let runtimeDirectory = apiRuntimeDirectory();
 export interface SafeModeHost {
   reload(): Promise<unknown>;
   integrationName(integrationId: string): string | undefined;
+  /** The reload after leaving failed: what safe mode held back is now a failed load. */
+  reloadFailed(message: string): void;
 }
 
 let host: SafeModeHost | null = null;
@@ -120,9 +118,11 @@ function integrationName(integrationId: string): string {
 
 function attentionDetail(current: SafeModeState): string {
   if (current.reason === "env")
-    return "OPENMAPX_SAFE_MODE=1 is set for the API, so no installed extension is loaded. Remove the variable and restart the API to leave safe mode.";
+    return "OPENMAPX_SAFE_MODE=1 is set for the API, so no installed extension is loaded. To leave safe mode, remove the variable from infra/docker/.env, then run pnpm openmapx compose up on the host, which recreates the api container with the changed environment.";
   if (current.reason === "automatic" && current.integrationId)
     return `The API stopped repeatedly while ${integrationName(current.integrationId)} (${current.integrationId}) was loading, so no installed extension is loaded. Disable or update that extension, then leave safe mode.`;
+  if (current.reason === "automatic")
+    return "OpenMapX stopped repeatedly while starting, so installed extensions were not loaded. Find the extension that stops it in the API log, disable or update it, then leave safe mode.";
   return "Safe mode was turned on, so no installed extension is loaded. Leave it in the integration list, or run openmapx control safe-mode off on the host.";
 }
 
@@ -175,6 +175,13 @@ export async function leaveSafeMode(): Promise<SafeModeState> {
       "Could not resolve the safe-mode attention item",
     );
   }
-  await reload();
+  try {
+    await reload();
+  } catch (error) {
+    // The registry still holds the records safe mode held back; without
+    // this they would read as held back by a safe mode that is no longer on.
+    host?.reloadFailed(describeThrown(error));
+    throw error;
+  }
   return getSafeMode();
 }

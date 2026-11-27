@@ -169,6 +169,9 @@ describe("openmapx control safe-mode", () => {
     expect(existsSync(join(runtimeDir, "safe-mode.json"))).toBe(true);
     expect(dockerCalls()).toEqual([]);
     expect(printed.join("\n")).toContain("OPENMAPX_SAFE_MODE=1");
+    expect(printed.join("\n")).toContain(
+      "Remove it, then run `pnpm openmapx compose up`, which recreates the api container with the changed environment",
+    );
   });
 
   it("exits non-zero when the restart fails, with the file already changed", async () => {

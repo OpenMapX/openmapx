@@ -149,7 +149,8 @@ function whyNotErasing(integration: LoadedIntegration | undefined): string {
   if (integration.loadState === "incompatible")
     return "it is not compatible with this version of OpenMapX";
   if (integration.loadState === "safe-mode") return "the API runs in safe mode";
-  if (integration.loadState === "disabled" || !integration.enabled) return "it is disabled";
+  if (integration.loadState === "disabled") return "its extension is disabled";
+  if (!integration.enabled) return "it is disabled";
   return "it registered no subject-data handler";
 }
 
@@ -162,8 +163,10 @@ function erasureNextStep(integration: LoadedIntegration | undefined): string {
     return "Update OpenMapX or install a version of the extension made for it, or remove its data.";
   if (integration.loadState === "safe-mode")
     return "Leave safe mode once the extension that stopped the API is disabled or repaired, or remove its data.";
-  if (integration.loadState === "disabled" || !integration.enabled)
-    return "Enable it, or remove its data.";
+  // No command enables a disabled extension yet; reinstalling it does.
+  if (integration.loadState === "disabled")
+    return "An update keeps the extension disabled; remove it and install it again to enable it, which keeps its data, or remove its data.";
+  if (!integration.enabled) return "Enable it, or remove its data.";
   return "Update the extension, or remove its data.";
 }
 
