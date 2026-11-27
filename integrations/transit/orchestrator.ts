@@ -3,6 +3,7 @@ import type { BBox } from "@openmapx/core";
 import {
   captureTransitContributors,
   classifyProviderFailure,
+  compareTransitProviders,
   type IntegrationContext,
   type MetricsRecorder,
   type ProviderCallContext,
@@ -98,16 +99,6 @@ function providerRole(
   provider: TransitProvider,
 ): "baseline" | "fallback" | "enrichment" | "regional" {
   return provider.role;
-}
-
-const ROLE_RANK = { baseline: 0, regional: 1, fallback: 2, enrichment: 3 } as const;
-
-function compareProviderPolicy(a: TransitProvider, b: TransitProvider): number {
-  return (
-    ROLE_RANK[providerRole(a)] - ROLE_RANK[providerRole(b)] ||
-    a.priority - b.priority ||
-    a.id.localeCompare(b.id)
-  );
 }
 
 export class UnsupportedTransitPlanningCapabilitiesError extends Error {
@@ -451,7 +442,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   function providersOverlapping(bbox: BBox): TransitProvider[] {
     return collectProviders()
       .filter((p) => providerOverlapsBbox(p, bbox))
-      .sort(compareProviderPolicy);
+      .sort(compareTransitProviders);
   }
 
   async function getProvidersForBbox(bbox: BBox): Promise<TransitProvider[]> {
@@ -670,7 +661,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     const required = requiredPlanningCapabilities(params, waypointCount);
     const eligible = matching
       .filter((provider) => supportsPlanningRequest(provider, required))
-      .sort(compareProviderPolicy);
+      .sort(compareTransitProviders);
     if (matching.length > 0 && eligible.length === 0 && required.length > 0) {
       recordDecision("plan", undefined, "unsupported");
       throw new UnsupportedTransitPlanningCapabilitiesError(required);
@@ -1043,7 +1034,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   ): Promise<MobilityResult<TransitRoute[]>> {
     const matching = (await getProvidersForBbox(bbox))
       .filter((p) => p.getRoutesInBbox)
-      .sort(compareProviderPolicy);
+      .sort(compareTransitProviders);
     for (const provider of matching) {
       const fn = provider.getRoutesInBbox;
       if (!fn) continue;
@@ -1293,7 +1284,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   async function reachabilityProvider(): Promise<TransitProvider | null> {
     const candidates = collectProviders()
       .filter((provider) => provider.getReachabilitySurface)
-      .sort(compareProviderPolicy);
+      .sort(compareTransitProviders);
     const healthy = await filterHealthy(candidates);
     return healthy[0] ?? null;
   }

@@ -1,6 +1,7 @@
 import type { DirectionsResult, TravelMode } from "@openmapx/core";
 import {
   captureResultContributors,
+  compareByPriority,
   dataSourceToAttribution,
   type IntegrationContext,
   readCapturedFieldContributors,
@@ -24,15 +25,7 @@ export interface ResolvedProvider {
  * providers.
  */
 function orderByPreference(entries: ResolvedProvider[]): ResolvedProvider[] {
-  const DEFAULT_PRIORITY = Number.POSITIVE_INFINITY;
-  return entries
-    .map((entry, index) => ({ entry, index }))
-    .sort(
-      (a, b) =>
-        (a.entry.provider.priority ?? DEFAULT_PRIORITY) -
-          (b.entry.provider.priority ?? DEFAULT_PRIORITY) || a.index - b.index,
-    )
-    .map(({ entry }) => entry);
+  return [...entries].sort((a, b) => compareByPriority(a.provider, b.provider));
 }
 
 export function createRoutingOrchestrator(ctx: IntegrationContext) {

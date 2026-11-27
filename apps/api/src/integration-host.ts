@@ -7,7 +7,6 @@ import {
   type CacheClient,
   type CustomHealthCheckFn,
   createActivationTransactionScope,
-  effectiveIntegrationIds,
   type HttpClient,
   type IntegrationContext,
   type IntegrationDataSource,
@@ -20,6 +19,7 @@ import {
   ORCHESTRATOR_BY_DOMAIN,
   orchestratorOf,
   PLATFORM_VERSION,
+  providerOrderFingerprintInput,
   readProviderOrder,
   resolveIntegrationPlatformEndpoint,
   satisfiesPlatformVersion,
@@ -47,7 +47,6 @@ import { type IntegrationCodeCache, prepareIntegrationCodeCache } from "./integr
 import {
   type ConfigSource,
   type ConfigValueWithSource,
-  resolveConfig,
   resolveConfigWithSources,
   resolveIntegrationConfigWithSourcesStrict,
   warnInvalidConfig,
@@ -669,13 +668,16 @@ type DiscoveredManifest = Awaited<ReturnType<typeof discoverManifests>>[number];
  */
 async function prepareGenerationConfig(
   sorted: DiscoveredManifest[],
-  resolve: (manifest: IntegrationManifest, directory: string) => Promise<Record<string, unknown>>,
+  resolve: (
+    manifest: IntegrationManifest,
+    directory: string,
+  ) => Promise<Record<string, ConfigValueWithSource>>,
 ): Promise<{
   configOf: (manifest: IntegrationManifest, directory: string) => Promise<Record<string, unknown>>;
   orders: ReadonlyMap<string, readonly string[]>;
 }> {
-  const configs = new Map<string, Promise<Record<string, unknown>>>();
-  const configOf = (manifest: IntegrationManifest, directory: string) => {
+  const configs = new Map<string, Promise<Record<string, ConfigValueWithSource>>>();
+  const withSourcesOf = (manifest: IntegrationManifest, directory: string) => {
     let pending = configs.get(directory);
     if (!pending) {
       pending = resolve(manifest, directory);
@@ -683,6 +685,13 @@ async function prepareGenerationConfig(
     }
     return pending;
   };
+  const configOf = async (manifest: IntegrationManifest, directory: string) =>
+    Object.fromEntries(
+      Object.entries(await withSourcesOf(manifest, directory)).map(([key, entry]) => [
+        key,
+        entry.value,
+      ]),
+    );
   const orders = new Map<string, readonly string[]>();
   const seen = new Set<string>();
   for (const { manifest: raw, directory, isBuiltIn } of sorted) {
@@ -692,8 +701,16 @@ async function prepareGenerationConfig(
     if (!isBuiltIn && !satisfiesPlatformVersion(manifest.platform ?? "")) continue;
     seen.add(manifest.id);
     if (!ORCHESTRATOR_IDS.has(manifest.id)) continue;
-    const config = await configOf(manifest, directory);
-    orders.set(manifest.id, readProviderOrder(config.providerOrder));
+    const entry = (await withSourcesOf(manifest, directory)).providerOrder;
+    orders.set(
+      manifest.id,
+      readProviderOrder(entry?.value, (entries) =>
+        processLogger.warn(
+          { component: "integration-host", integrationId: manifest.id, source: entry?.source },
+          `providerOrder from ${entry?.source} has ${entries} entries; only the first 64 are used`,
+        ),
+      ),
+    );
   }
   return { configOf, orders };
 }
@@ -845,7 +862,7 @@ function buildIntegrationContext(args: {
     },
     getProviderOrderFingerprint(domain: string) {
       return createHash("sha256")
-        .update(JSON.stringify(effectiveIntegrationIds(ctx, domain)))
+        .update(providerOrderFingerprintInput(ctx, domain))
         .digest("hex")
         .slice(0, 16);
     },
@@ -1213,7 +1230,7 @@ export async function initIntegrations(
     fastify.log.warn(err, "AttributionIndex initialization failed (continuing without it)");
   }
 
-  const { configOf, orders } = await prepareGenerationConfig(sorted, resolveConfig);
+  const { configOf, orders } = await prepareGenerationConfig(sorted, resolveConfigWithSources);
   providerOrders = orders;
 
   for (const { manifest: raw, directory, isBuiltIn } of sorted) {
@@ -1628,13 +1645,9 @@ async function doReloadIntegrations(
     const { configOf, orders: stagedProviderOrders } = await prepareGenerationConfig(
       sorted,
       context
-        ? async (manifest, directory) =>
-            Object.fromEntries(
-              Object.entries(
-                await resolveIntegrationConfigWithSourcesStrict(manifest, directory, context),
-              ).map(([key, entry]) => [key, entry.value]),
-            )
-        : resolveConfig,
+        ? (manifest, directory) =>
+            resolveIntegrationConfigWithSourcesStrict(manifest, directory, context)
+        : resolveConfigWithSources,
     );
 
     for (const { manifest: raw, directory, isBuiltIn } of sorted) {

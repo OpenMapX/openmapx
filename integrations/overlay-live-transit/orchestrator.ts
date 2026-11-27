@@ -1,6 +1,6 @@
 import type { BBox } from "@openmapx/core";
 import type { IntegrationContext, RealtimeProvider } from "@openmapx/integration-framework";
-import { captureTransitContributors } from "@openmapx/integration-framework";
+import { captureTransitContributors, compareByPriority } from "@openmapx/integration-framework";
 import type { LiveTransitVehicle, ServiceAlert } from "@openmapx/mobility-core/transit";
 import type { LiveTransitSnapshot } from "./types.js";
 
@@ -48,7 +48,7 @@ export function createLiveTransitOrchestrator(ctx: IntegrationContext) {
         providers.push(provider);
       }
     }
-    return providers.sort((a, b) => a.priority - b.priority);
+    return providers.sort(compareByPriority);
   }
 
   function getMatchingProviders(bbox: BBox): RealtimeProvider[] {

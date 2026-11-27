@@ -55,7 +55,7 @@ import type { TransitProvider } from "../contracts/transit-provider.js";
 import type { WeatherProvider } from "../contracts/weather-provider.js";
 import { type IntegrationDataSource, validateDataSource } from "../manifest";
 import { resolveIntegrationPlatformEndpoint } from "../platform-endpoints";
-import { effectiveIntegrationIds } from "../provider-order";
+import { providerOrderFingerprintInput, readProviderOrder } from "../provider-order";
 import { storedRouteHandler } from "../route-handler";
 
 export interface FakeMobilityHttpRequest {
@@ -639,13 +639,13 @@ export function createMockIntegrationContext(
     getIntegrationsByDomain: () => [],
     getProviderOrder: (domain) => {
       const orders = overrides.providerOrder ?? {};
-      return Object.hasOwn(orders, domain) ? (orders[domain] ?? []) : [];
+      return Object.hasOwn(orders, domain) ? readProviderOrder(orders[domain]) : [];
     },
     // Reads the context's own members at call time, so a test that replaces
     // them sees the fingerprint follow.
     getProviderOrderFingerprint: (domain) =>
       createHash("sha256")
-        .update(JSON.stringify(effectiveIntegrationIds(ctx, domain)))
+        .update(providerOrderFingerprintInput(ctx, domain))
         .digest("hex")
         .slice(0, 16),
     getRequiredService: (serviceId) => {

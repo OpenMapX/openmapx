@@ -11,6 +11,7 @@ import {
   type ContributingRecord,
   captureIntegrationContributorCatalogue,
   captureResultContributors,
+  compareByPriority,
   contributorsForRecords,
   type IntegrationContext,
   resolveCapturedContributors,
@@ -30,7 +31,7 @@ export function createWeatherOrchestrator(ctx: IntegrationContext) {
       }
     }
 
-    result.sort((a, b) => a.provider.priority - b.provider.priority);
+    result.sort((a, b) => compareByPriority(a.provider, b.provider));
     return result;
   }
 

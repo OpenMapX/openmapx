@@ -228,7 +228,7 @@ async function executeSingleHealthCheck(
 
   // Skip the probe when any required config key is unresolved (no value from
   // defaults / DB / vault / env). The cascade is populated at integration
-  // load time via `resolveConfig`.
+  // load time via `resolveConfigWithSources`.
   if (hc.requiredConfigKeys?.some((k: string) => !resolveConfigValue(integration, k))) {
     const missing = hc.requiredConfigKeys?.find((k: string) => !resolveConfigValue(integration, k));
     return {

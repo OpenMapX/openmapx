@@ -8,7 +8,11 @@ import {
   type RequestJsonScope,
 } from "@openmapx/core";
 import { parseRetryAfterMs } from "@openmapx/core/retry-after";
-import type { IntegrationContext, LoadedIntegration } from "@openmapx/integration-framework";
+import {
+  comparePhotoProviders,
+  type IntegrationContext,
+  type LoadedIntegration,
+} from "@openmapx/integration-framework";
 import {
   lookupByNameAndCoords,
   lookupByOsmRef,
@@ -16,8 +20,6 @@ import {
 import type { PhotoProvider, PhotoQuery } from "@openmapx/provider-kit/photos";
 
 // Providers in this list are ordered last (street-level imagery — shown after editorial photos)
-const DEPRIORITIZED_PROVIDER_IDS = new Set(["mapillary", "panoramax"]);
-
 const OSM_IMAGES_PROVIDER_ID = "osm-images";
 interface ImageTagOptions {
   strict?: boolean;
@@ -75,11 +77,7 @@ export function getPhotoProviders(integrations: LoadedIntegration[]): PhotoProvi
       providers.push(p);
     }
   }
-  return providers.sort((a, b) => {
-    const aLast = DEPRIORITIZED_PROVIDER_IDS.has(a.id) ? 1 : 0;
-    const bLast = DEPRIORITIZED_PROVIDER_IDS.has(b.id) ? 1 : 0;
-    return aLast - bLast;
-  });
+  return providers.sort(comparePhotoProviders);
 }
 
 /**

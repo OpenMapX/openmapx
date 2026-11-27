@@ -718,10 +718,15 @@ export interface IntegrationContext {
   getProviderOrder(domain: string): readonly string[];
 
   /**
-   * First 16 hex characters of the SHA-256 of the integration ids that serve a
-   * domain, in effective order. Changes when the order changes or a provider
-   * joins or leaves, so a cache key that includes it stops serving answers
-   * built from another set of providers.
+   * First 16 hex characters of the SHA-256 of the providers that serve a
+   * domain, in the order `collectOrderedProviders` serves them: listed
+   * integrations in list order, then unlisted ones in the domain's fallback
+   * order (provider `priority` and the like), each provider named by its
+   * integration id and its own id. Unlisted providers count only where the
+   * domain appends them. It changes whenever that order changes, whether
+   * through the operator's list, a priority or a provider joining or leaving,
+   * so a cache key that includes it stops serving answers built from another
+   * order of providers.
    */
   getProviderOrderFingerprint(domain: string): string;
 

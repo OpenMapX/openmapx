@@ -47,6 +47,7 @@ import {
   getIntegration,
   getIntegrationProviders,
   getIntegrationsByDomain,
+  getProviderOrder,
   initIntegrations,
   reloadIntegrations,
   shutdownIntegrations,
@@ -1718,6 +1719,60 @@ describe("operator-set provider order", () => {
     expect(scope.__omxOrderDuringSetup).toEqual(["aq-first"]);
   });
 
+  it("picks up a changed stored order on reload, also while the owner is disabled", async () => {
+    integration("fuel", ["data-source"], { config: { providerOrder: ["a", "b"] } });
+    integration("transit", ["transit"]);
+    await initIntegrations(makeApp(), [{ directory: root, isBuiltIn: true }]);
+    expect(ctxOf("transit").getProviderOrder("fuel-stations")).toEqual(["a", "b"]);
+    expect(getProviderOrder("fuel-stations")).toEqual(["a", "b"]);
+
+    writeFileSync(join(root, "fuel", "config.json"), JSON.stringify({ providerOrder: ["b"] }));
+    await reloadIntegrations();
+    expect(ctxOf("transit").getProviderOrder("fuel-stations")).toEqual(["b"]);
+    expect(getProviderOrder("fuel-stations")).toEqual(["b"]);
+
+    writeFileSync(
+      join(root, "fuel", "config.json"),
+      JSON.stringify({ enabled: false, providerOrder: ["c"] }),
+    );
+    await reloadIntegrations();
+    expect(getIntegration("fuel")?.enabled).toBe(false);
+    expect(ctxOf("transit").getProviderOrder("fuel-stations")).toEqual(["c"]);
+    expect(getProviderOrder("fuel-stations")).toEqual(["c"]);
+  });
+
+  it.each([
+    ["config.json", "config"],
+    ["env", "env"],
+  ] as const)(
+    "cuts an over-long order from %s to 64 entries with one warning",
+    async (source, via) => {
+      const long = Array.from({ length: 70 }, (_, index) => `p${index}`);
+      integration("fuel", ["data-source"], {
+        config: via === "config" ? { providerOrder: [...long, 7, "p0"] } : { providerOrder: ["x"] },
+      });
+      integration("transit", ["transit"]);
+      if (via === "env") vi.stubEnv("INTEGRATION_FUEL_PROVIDER_ORDER", long.join(","));
+      const warn = vi.spyOn(processLogger, "warn").mockImplementation(() => undefined);
+      try {
+        await initIntegrations(makeApp(), [{ directory: root, isBuiltIn: true }]);
+        expect(ctxOf("transit").getProviderOrder("fuel-stations")).toEqual(long.slice(0, 64));
+        const cuts = warn.mock.calls.filter(([, message]) =>
+          String(message).includes("providerOrder"),
+        );
+        expect(cuts).toEqual([
+          [
+            expect.objectContaining({ integrationId: "fuel", source }),
+            expect.stringContaining("only the first 64"),
+          ],
+        ]);
+      } finally {
+        warn.mockRestore();
+        vi.unstubAllEnvs();
+      }
+    },
+  );
+
   it("fingerprints the integrations that serve a domain", async () => {
     integration("transit", ["transit"]);
     integration("asker", ["weather"], {
@@ -1733,7 +1788,7 @@ describe("operator-set provider order", () => {
     expect(fingerprint).toMatch(/^[0-9a-f]{16}$/);
     expect(fingerprint).toBe(
       createHash("sha256")
-        .update(JSON.stringify(["asker"]))
+        .update(JSON.stringify([["asker", "asker-weather"]]))
         .digest("hex")
         .slice(0, 16),
     );

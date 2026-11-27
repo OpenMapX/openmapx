@@ -158,21 +158,6 @@ export async function resolveConfigWithSources(
   return result;
 }
 
-export async function resolveConfig(
-  manifest: {
-    id: string;
-    configSchema?: Record<string, unknown>;
-  },
-  directory: string,
-): Promise<Record<string, unknown>> {
-  const withSources = await resolveConfigWithSources(manifest as IntegrationManifest, directory);
-  const config: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(withSources)) {
-    config[key] = entry.value;
-  }
-  return config;
-}
-
 /** Strict administrative cascade. ENOENT alone means an absent config file. */
 export async function resolveIntegrationConfigWithSourcesStrict(
   manifest: IntegrationManifest,

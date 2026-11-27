@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { collectOrderedProviders, type LoadedIntegration } from "@openmapx/integration-framework";
+import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { installAdminRouteMocks } from "./admin-test-helpers.js";
@@ -29,6 +31,10 @@ function loaded(id: string, name: string, domain: string, isBuiltIn = true) {
     providers: new Map([[domain, [{ id: `${id}-provider` }]]]),
     strings: {},
   };
+}
+
+function weatherProviders(id: string, priority: number) {
+  return new Map([["weather", [{ id, priority, getCurrentWeather: async () => null }]]]);
 }
 
 const routingOrchestrator = {
@@ -109,6 +115,35 @@ describe("GET /api/admin/provider-order", () => {
         { integrationId: "routing-valhalla", name: "Valhalla", isBuiltIn: true, listed: false },
       ],
     });
+  });
+
+  it("lists the integrations of a priority-ordered domain in the order they are served", async () => {
+    const weather = [
+      { ...loaded("weather-slow", "Slow", "weather"), providers: weatherProviders("slow", 9) },
+      { ...loaded("weather-mid", "Mid", "weather"), providers: weatherProviders("mid", 5) },
+      { ...loaded("weather-fast", "Fast", "weather"), providers: weatherProviders("fast", 1) },
+    ];
+    hostMock.getProviderOrder.mockImplementation((domain) =>
+      domain === "weather" ? ["weather-mid"] : [],
+    );
+    hostMock.getIntegrationsByDomain.mockImplementation((domain) =>
+      domain === "weather" ? weather : [],
+    );
+    const served = collectOrderedProviders(
+      Object.assign(createMockIntegrationContext(), {
+        getProviderOrder: (domain: string) => hostMock.getProviderOrder(domain),
+        getIntegrationsByDomain: (domain: string) =>
+          hostMock.getIntegrationsByDomain(domain) as LoadedIntegration[],
+      }),
+      "weather",
+    ).map((entry) => entry.integrationId);
+    expect(served).toEqual(["weather-mid", "weather-fast", "weather-slow"]);
+
+    const res = await app.inject({ method: "GET", url: "/api/admin/provider-order" });
+    const entry = res
+      .json<{ domains: Array<{ domain: string; effective: Array<{ integrationId: string }> }> }>()
+      .domains.find((candidate) => candidate.domain === "weather");
+    expect(entry?.effective.map((item) => item.integrationId)).toEqual(served);
   });
 
   it("offers the unlisted integrations of a domain that excludes them", async () => {

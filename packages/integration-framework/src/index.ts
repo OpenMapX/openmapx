@@ -406,11 +406,15 @@ export {
 } from "./provider-execution";
 export {
   collectOrderedProviders,
-  effectiveIntegrationIds,
+  compareAirQualityProviders,
+  compareByPriority,
+  comparePhotoProviders,
+  compareTransitProviders,
   effectiveProviderOrder,
   ORCHESTRATOR_BY_DOMAIN,
   type OrderedProvider,
   orchestratorOf,
+  providerOrderFingerprintInput,
   readProviderOrder,
   UNLISTED_BY_DOMAIN,
 } from "./provider-order";
