@@ -42,7 +42,7 @@ import {
 } from "@openmapx/place-ids";
 import type { FastifyInstance } from "fastify";
 import { extensionSql, integrationSql } from "./db";
-import { applyExtensionMigrations } from "./extension-migrations";
+import { applyExtensionMigrations, schemaAheadAttentionKey } from "./extension-migrations";
 import { assertBundleImports } from "./integration-bundle-imports";
 import { createCacheClient, createHttpClient, createLogger } from "./integration-clients";
 import { type IntegrationCodeCache, prepareIntegrationCodeCache } from "./integration-code-cache";
@@ -1228,7 +1228,7 @@ async function migrateIntegration(integration: LoadedIntegration): Promise<void>
     integrationId: integration.id,
     directory: integration.directory,
   });
-  const key = `integration-schema-ahead:${integration.id}`;
+  const key = schemaAheadAttentionKey(integration.id);
   try {
     if (schemaAhead) {
       await raiseAttention({
@@ -1254,7 +1254,8 @@ async function migrateIntegration(integration: LoadedIntegration): Promise<void>
  * Brings the subject-data handler table in line with the generation that
  * just went live, then starts working through the erasures it allows. A
  * database failure is logged and does not fail the activation; the next
- * activation and the daily retention run try again.
+ * activation and the daily retention run, which syncs before it works
+ * through the pending erasures, try again.
  */
 async function refreshSubjectDataHandlers(): Promise<void> {
   try {

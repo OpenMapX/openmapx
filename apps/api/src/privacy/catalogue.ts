@@ -640,10 +640,11 @@ const registrationDefinitions: SubjectDataRegistration[] = [
   },
   {
     // The erasure trigger records the deleted account's id once for each
-    // integration with a subject-data handler. The row exists only after the
-    // account is gone, so no collector can run for it. It is deleted once the
-    // integration's handler has erased the account's data, or when the
-    // integration stops handling subject data or its data is removed.
+    // integration listed with a subject-data handler. The row exists only
+    // after the account is gone, so no collector can run for it. It is
+    // deleted once the integration's handler has erased the account's data,
+    // or when the integration runs without a handler or its data is removed.
+    // No legal hold applies and no fixed period, hence `until-erased`.
     id: "extension-erasure-pending",
     version: 1,
     category: "account",
@@ -653,7 +654,7 @@ const registrationDefinitions: SubjectDataRegistration[] = [
     purposes: ["account-management", "legal-accountability"],
     legalBases: ["legal-obligation"],
     origin: { kind: "controller", descriptionCode: "service-generated" },
-    retention: { kind: "legal-hold", daysAfterClosure: 0, reasonCode: "extension-erasure" },
+    retention: { kind: "until-erased", reasonCode: "extension-erasure" },
     recipients: [{ id: "openmapx-controller", roleCode: "controller", country: "DE" }],
     article15: "include",
     portability: { decision: "exclude", reasonCode: "erasure-processing" },

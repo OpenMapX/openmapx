@@ -6,6 +6,7 @@ import {
   MIGRATION_FILE_PATTERN,
   MIGRATION_NAME_PATTERN,
 } from "@openmapx/extension-contracts/archive";
+import { loggableThrown } from "@openmapx/integration-framework";
 import type { Sql } from "postgres";
 import { openMigrationSession } from "./db";
 import {
@@ -17,8 +18,16 @@ import {
   stopIntegrationDatabase,
 } from "./integration-db";
 import { readIntegrationFile, verifiedIntegrationPaths } from "./integration-files";
+import { erasurePendingAttentionKey } from "./privacy/extension-subject-data";
+import { processLogger } from "./process-logger";
+import { resolveAttention } from "./services/attention";
 
 const MIGRATIONS_DIRECTORY = "migrations";
+
+/** The attention item that says an integration runs against a newer schema than it ships. */
+export function schemaAheadAttentionKey(integrationId: string): string {
+  return `integration-schema-ahead:${integrationId}`;
+}
 
 /**
  * How long one statement of the migration session waits for a lock,
@@ -459,22 +468,51 @@ function migrationFailure(integrationId: string, file: ShippedMigration, error: 
 
 /**
  * Drops the integration's schema with everything in it and deletes its rows
- * from the platform's bookkeeping tables, on the caller's transaction. Its
- * database client is stopped first, so code of it that is still running can
- * no longer reach the database. Waits for a migration of the same
- * integration that is in progress.
+ * from the platform's bookkeeping tables, on the caller's transaction: its
+ * migrations, task runs, subject-data handler row and the erasures it still
+ * owed, which are moot once its data is gone. Its database client is stopped
+ * first, so code of it that is still running can no longer reach the
+ * database. Waits for a migration of the same integration that is in
+ * progress.
+ *
+ * The caller calls `afterCommit` once its transaction has committed: it logs
+ * how many owed erasures were dropped and resolves the integration's
+ * attention items. It never rejects.
  */
 export async function removeIntegrationData(
   tx: Pick<Sql, "unsafe">,
   integrationId: string,
-): Promise<{ schema: string }> {
+): Promise<{ schema: string; droppedErasures: number; afterCommit: () => Promise<void> }> {
   const schema = extensionSchemaName(integrationId);
   stopIntegrationDatabase(integrationId);
   await tx.unsafe("select pg_advisory_xact_lock(hashtextextended($1, 0))", [
     migrationLockName(integrationId),
   ]);
   await tx.unsafe(`drop schema if exists "${schema}" cascade`);
-  for (const table of INTEGRATION_BOOKKEEPING_TABLES)
-    await tx.unsafe(`delete from public.${table} where integration_id = $1`, [integrationId]);
-  return { schema };
+  let droppedErasures = 0;
+  for (const table of INTEGRATION_BOOKKEEPING_TABLES) {
+    const deleted = await tx.unsafe(
+      `delete from public.${table} where integration_id = $1 returning 1`,
+      [integrationId],
+    );
+    if (table === "subject_erasure_pending") droppedErasures = deleted.length;
+  }
+  const afterCommit = async () => {
+    if (droppedErasures > 0)
+      processLogger.warn(
+        { integrationId, dropped: droppedErasures },
+        `Dropped ${droppedErasures} owed erasure${droppedErasures === 1 ? "" : "s"} of integration ${integrationId}: its data was removed`,
+      );
+    for (const key of [
+      erasurePendingAttentionKey(integrationId),
+      schemaAheadAttentionKey(integrationId),
+    ])
+      await resolveAttention(key).catch((error: unknown) =>
+        processLogger.warn(
+          { err: loggableThrown(error), key },
+          `Could not update the attention item ${key}`,
+        ),
+      );
+  };
+  return { schema, droppedErasures, afterCommit };
 }

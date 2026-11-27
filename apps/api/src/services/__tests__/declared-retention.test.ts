@@ -31,6 +31,8 @@ describe("declared retention periods", () => {
       (period) => period.registrationId === "offline-package-ownership",
     ).map((period) => period.days);
     expect(days.length).toBeGreaterThan(0);
-    for (const value of days) expect(retention?.daysAfterClosure).toBe(value);
+    expect(retention?.kind).toBe("account-lifetime");
+    const afterClosure = retention && "daysAfterClosure" in retention && retention.daysAfterClosure;
+    for (const value of days) expect(afterClosure).toBe(value);
   });
 });

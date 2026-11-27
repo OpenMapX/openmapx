@@ -32,7 +32,7 @@ describe("OpenMapX subject-data catalogue", () => {
       strategy: "operator_task",
       locators: [{ type: "user_id", field: "subject_erasure_pending.subject_user_id" }],
       legalBases: ["legal-obligation"],
-      retention: { kind: "legal-hold", reasonCode: "extension-erasure" },
+      retention: { kind: "until-erased", reasonCode: "extension-erasure" },
     });
     expect(catalogueAvailability(registration("extension-erasure-pending"))).toBe(
       "operator_review",

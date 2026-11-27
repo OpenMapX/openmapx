@@ -34,17 +34,25 @@ pretending that it succeeded.
 
 Extensions that keep data about people register a handler that erases it.
 The trigger records the deleted account once for each such extension, also
-while the extension is disabled, failed or otherwise not running. The API
-then asks each running extension to erase the account's data: right after the
-deletion, after every reload of the integrations and once a day. The
-deletion itself never waits for an extension. A record stays until the
-extension reports success, so an extension that is not running, fails or
-does not answer within 30 seconds is asked again later. While an extension
-fails, the administration's attention list shows "Erasure pending in
-_extension_" with its last error; the item disappears once nothing is pending
-for that extension. The record holds only the deleted account's ID and the
-extension. It is also removed when the extension stops handling personal data
-or its data is removed.
+while the extension is disabled, failed, held back by safe mode, left out by
+the loader or uninstalled with its data kept. The API then asks each running
+extension to erase the account's data: right after the deletion, after every
+reload of the integrations and once a day. The deletion itself never waits
+for an extension. A record stays until the extension reports success, so an
+extension that is not running, fails or does not answer within 30 seconds is
+asked again later; accounts whose erase failed least often go first, so one
+account that keeps failing does not hold up the others.
+
+The administration's attention list shows "Erasure pending in _extension_"
+whenever records are waiting and the extension either failed to erase (with
+how many accounts wait, how often erasing failed and the last error) or
+cannot erase now (with the reason, for example that it is disabled or failed
+to load, and how many accounts wait). The item disappears once nothing is
+pending for that extension. The record holds only the deleted account's ID
+and the extension. It is removed without an erase in two cases only: the
+extension runs without a handler (an update dropped it), or its data is
+removed. The API log then says how many owed erasures were dropped and why,
+and the item is resolved.
 
 Delete accounts in the app. Deleting with plain SQL as `openmapx_api`
 (`DELETE FROM "user" WHERE id = …`) runs the same trigger but not the API's
@@ -164,8 +172,15 @@ OpenMapX.
    off-host lifecycle rules.
 5. Complete any Dawarich/processor action and communicate the external Mangrove
    boundary.
-6. Confirm the attention list shows no "Erasure pending in …" item. If one
-   stays, fix or re-enable the extension it names; the API asks it again.
+6. Check the attention list for "Erasure pending in …" items. Each one means
+   an extension still holds data of deleted accounts. Act on what it says:
+   enable or repair the extension, reinstall it, or remove its data; the API
+   asks a running extension again. The list covers only extensions that
+   registered a handler: data an extension keeps through tables that cascade
+   from the account is deleted with the account, and data in tables a
+   migration created outside its own schema is neither erased nor shown.
+   While the API has not started, or before its first run after a restore,
+   the list is not yet up to date.
 
 For a recovery drill, restore a retained backup in a disposable deployment and
 verify that replay removes the erased account before the API resumes. This is a

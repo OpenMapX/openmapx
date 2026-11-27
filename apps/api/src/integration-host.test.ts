@@ -1345,6 +1345,7 @@ describe("initIntegrations — loader", () => {
           store: {
             syncHandlers: async ({ handling, stopped }) => {
               synced.push({ handling, stopped });
+              return new Map();
             },
             pendingSubjects: async (id) =>
               rows.filter(([integrationId]) => integrationId === id).map(([, subject]) => subject),
@@ -1357,10 +1358,21 @@ describe("initIntegrations — loader", () => {
                 );
               return attempt;
             },
+            recordStalled: async () => {},
+            pendingSummary: async () => {
+              const summary = new Map<string, { count: number; attempts: number }>();
+              for (const [id] of rows)
+                summary.set(id, { count: (summary.get(id)?.count ?? 0) + 1, attempts: 0 });
+              return summary;
+            },
             count: async (ids) => rows.filter(([id]) => ids.includes(id)).length,
           },
           integrations: getAllIntegrations,
-          attention: { raise: vi.fn(async () => {}), resolve: vi.fn(async () => {}) },
+          attention: {
+            raise: vi.fn(async () => {}),
+            resolve: vi.fn(async () => {}),
+            openKeys: vi.fn(async () => []),
+          },
           log: { warn: vi.fn() },
         });
         return { ...subjectData, synced, rows };

@@ -143,18 +143,109 @@ describe.skipIf(skipDatabase)("extension subject data in PostgreSQL", () => {
     expect(await pendingRows("a")).toEqual([]);
   });
 
-  it("syncs the handler table in one statement set against the live registry", async () => {
+  it("unlists only an integration that runs without a handler, and resolves its item", async () => {
     await raw`insert into integration_subject_handler (integration_id) values ('b'), ('gone')`;
     await raw`insert into subject_erasure_pending (integration_id, subject_user_id)
-      values ('b', 'u1'), ('gone', 'u1')`;
+      values ('b', 'u1'), ('b', 'u2'), ('gone', 'u1')`;
+    await raw`insert into attention_item (key, severity, source, title)
+      values ('subject-erasure-pending:b', 'warning', 'privacy', 'Erasure pending in Without handler')`;
     registry = [notes, integration("b", "Without handler")];
 
     await subjectData.syncSubjectHandlerTable();
 
-    expect(await handlerRows()).toEqual(["notes"]);
+    expect(await handlerRows()).toEqual(["gone", "notes"]);
     expect(await pendingRows("b")).toEqual([]);
     expect(await pendingRows("gone")).toHaveLength(1);
+    expect(await raw`select key from attention_item`).toEqual([]);
   });
+
+  it("keeps recording deletions for an installed integration the registry no longer holds", async () => {
+    const first = await createUser();
+    const second = await createUser();
+    await raw`insert into integration_subject_handler (integration_id) values ('skipped')`;
+    await raw`delete from "user" where id = ${first}`;
+
+    // The loader left it out, for example because its manifest failed a check.
+    await subjectData.syncSubjectHandlerTable();
+    await raw`delete from "user" where id = ${second}`;
+
+    expect((await pendingRows("skipped")).map((row) => row.subject_user_id).sort()).toEqual(
+      [first, second].sort(),
+    );
+  });
+
+  it("shows the erasures an integration that cannot run owes, and clears the item once none are left", async () => {
+    const userId = await createUser();
+    await raw`insert into integration_subject_handler (integration_id) values ('tracker')`;
+    await raw`delete from "user" where id = ${userId}`;
+    registry = [notes, { ...integration("tracker", "Tracker"), loadState: "failed" }];
+
+    await subjectData.runPendingErasures();
+
+    expect(await raw`select key, severity, source, title, detail from attention_item`).toEqual([
+      {
+        key: "subject-erasure-pending:tracker",
+        severity: "warning",
+        source: "privacy",
+        title: "Erasure pending in Tracker",
+        detail:
+          "Tracker cannot erase data now: it failed to load. 1 deleted account waits for it to erase their data. Enable or repair the extension, reinstall it, or remove its data.",
+      },
+    ]);
+
+    await raw`delete from subject_erasure_pending where integration_id = 'tracker'`;
+    await subjectData.runPendingErasures();
+    expect(await raw`select key from attention_item`).toEqual([]);
+  });
+
+  it("works off the accounts whose erase failed least often first", async () => {
+    await raw`insert into subject_erasure_pending (integration_id, subject_user_id, attempts, requested_at)
+      values ('notes', 'often-failed', 3, now() - interval '2 days'),
+             ('notes', 'never-tried', 0, now() - interval '1 day')`;
+    const store = subjectData.createSubjectErasureStore(pools.db);
+
+    expect(await store.pendingSubjects("notes")).toEqual(["never-tried", "often-failed"]);
+  });
+
+  it("lets the server end an erase transaction that stays idle past its limit", async () => {
+    const userId = await createUser();
+    await raw`insert into integration_subject_handler (integration_id) values ('stuck')`;
+    await raw`delete from "user" where id = ${userId}`;
+    const store = subjectData.createSubjectErasureStore(pools.db, { idleLimitMs: 1_000 });
+    let release: () => void = () => {};
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    let locked: () => void = () => {};
+    const holding = new Promise<void>((resolve) => {
+      locked = resolve;
+    });
+    const erasing = store.eraseLocked("stuck", userId, async () => {
+      locked();
+      await held;
+      return { ok: true };
+    });
+    erasing.catch(() => {});
+    await holding;
+    try {
+      // While the call still waits, the server has ended the transaction and
+      // freed the row.
+      await vi.waitFor(
+        async () => {
+          await raw.begin(async (tx) => {
+            await tx`set local lock_timeout = '200ms'`;
+            await tx`select 1 from subject_erasure_pending where integration_id = 'stuck' for update`;
+          });
+        },
+        { timeout: 5_000, interval: 250 },
+      );
+    } finally {
+      release();
+    }
+    await expect(erasing).rejects.toThrow();
+    expect(await pendingRows("stuck")).toHaveLength(1);
+  }, 20_000);
 
   it("erases through an extension's ctx.db after the account is deleted and resolves its attention item", async () => {
     const userId = await createUser();
@@ -195,7 +286,8 @@ describe.skipIf(skipDatabase)("extension subject data in PostgreSQL", () => {
         severity: "warning",
         source: "privacy",
         title: "Erasure pending in Notes",
-        detail: "boom",
+        detail:
+          "1 deleted account waits for this extension to erase its data; erasing has failed up to 1 time per account. Last error: boom. Repair or update the extension, or remove its data.",
       },
     ]);
   });
@@ -290,7 +382,7 @@ describe.skipIf(skipDatabase)("extension subject data in PostgreSQL", () => {
     const shortened = createExtensionSubjectData({
       store: createSubjectErasureStore(pools.db),
       integrations: () => [hung],
-      attention: { raise: async () => {}, resolve: async () => {} },
+      attention: { raise: async () => {}, resolve: async () => {}, openKeys: async () => [] },
       log: { warn: () => {} },
       eraseDeadlineMs: 1_000,
     });

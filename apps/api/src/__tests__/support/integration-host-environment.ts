@@ -33,6 +33,7 @@ vi.mock("../../db/index.js", () => ({
 
 const extensionMigrationMocks = vi.hoisted(() => ({
   applyExtensionMigrations: vi.fn(async () => ({ applied: [] as string[], schemaAhead: false })),
+  schemaAheadAttentionKey: (integrationId: string) => `integration-schema-ahead:${integrationId}`,
 }));
 
 vi.mock("../../extension-migrations.js", () => extensionMigrationMocks);
@@ -40,6 +41,7 @@ vi.mock("../../extension-migrations.js", () => extensionMigrationMocks);
 const attentionMocks = vi.hoisted(() => ({
   raiseAttention: vi.fn(async () => "inserted"),
   resolveAttention: vi.fn(async () => {}),
+  listAttentionKeys: vi.fn(async () => []),
 }));
 
 vi.mock("../../services/attention.js", () => attentionMocks);

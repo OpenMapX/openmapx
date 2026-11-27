@@ -3877,6 +3877,7 @@
       "retentionEphemeral": "{hours, plural, one {# Stunde} other {# Stunden}} ab Erstellung oder dem letzten maßgeblichen Sicherheitsereignis und bis zu {afterClosure, plural, one {# Tag} other {# Tage}} nach Kontoschließung; Richtlinienauslöser: {trigger}",
       "retentionAccount": "Für die Kontolaufzeit und bis zu {afterClosure, plural, one {# Tag} other {# Tage}} nach Kontoschließung; Richtlinienauslöser: {trigger}",
       "retentionLegalHold": "Für die Dauer der maßgeblichen rechtlichen Aufbewahrung und bis zu {afterClosure, plural, one {# Tag} other {# Tage}} nach Kontoschließung; Richtlinienauslöser: {trigger}",
+      "retentionUntilErased": "Nur ab der Kontoschließung, bis die vermerkte Löschung erledigt ist, ohne feste Frist und ohne rechtliche Aufbewahrung; Richtlinienauslöser: {trigger}",
       "retentionReasons": {
         "account-content": "Löschung des Inhalts oder Kontoschließung",
         "accountability": "Erstellung des Nachweisdatensatzes",

@@ -254,12 +254,27 @@ describeDatabase("the real application from createApp()", () => {
     ).toEqual([{ status: "failed", error: "interrupted by restart" }]);
   });
 
-  it("unlists a removed integration's subject-data handler once the integrations are loaded", async () => {
-    expect(await fixture.sql`select integration_id from integration_subject_handler`).toEqual([]);
-    // Owed until the integration's data is removed or it returns.
+  it("keeps recording erasures for an integration that is no longer loaded and shows what it owes", async () => {
+    // Its data may still exist, so deletions are still recorded for it.
+    expect(await fixture.sql`select integration_id from integration_subject_handler`).toEqual([
+      { integration_id: "not-installed" },
+    ]);
     expect(
       await fixture.sql`select integration_id, subject_user_id from subject_erasure_pending`,
     ).toEqual([{ integration_id: "not-installed", subject_user_id: "deleted-account" }]);
+    await vi.waitFor(
+      async () =>
+        expect(
+          await fixture.sql`select key, title from attention_item
+            where key = 'subject-erasure-pending:not-installed'`,
+        ).toEqual([
+          {
+            key: "subject-erasure-pending:not-installed",
+            title: "Erasure pending in not-installed",
+          },
+        ]),
+      { timeout: 10_000, interval: 100 },
+    );
   });
 
   it("ends a slow integration statement at the integration pool's timeout", async () => {
@@ -357,6 +372,16 @@ describeDatabase("the real application from createApp()", () => {
         (integration_id, task_name, status, started_at, finished_at)
       values ('pruned', 'old', 'succeeded', now() - interval '31 days', now() - interval '31 days'),
              ('pruned', 'recent', 'succeeded', now() - interval '29 days', now() - interval '29 days')`;
+    // The daily run syncs the handler table before it works through the
+    // pending erasures: a row for a running integration without a handler
+    // goes, and the item of the integration that owes erasures comes back.
+    const { getAllIntegrations } = await import("./integration-host");
+    const running = getAllIntegrations().find(
+      (integration) => integration.loadState === "loaded" && integration.enabled,
+    );
+    if (!running) throw new Error("No integration is running");
+    await fixture.sql`insert into integration_subject_handler (integration_id) values (${running.id})`;
+    await fixture.sql`delete from attention_item where key = 'subject-erasure-pending:not-installed'`;
 
     try {
       await expect(app.start()).rejects.toThrow(/EADDRINUSE/);
@@ -369,6 +394,19 @@ describeDatabase("the real application from createApp()", () => {
           await fixture.sql`select task_name from integration_task_run
             where integration_id = 'pruned'`,
         ).toEqual([{ task_name: "recent" }]),
+      { timeout: 10_000, interval: 100 },
+    );
+    await vi.waitFor(
+      async () => {
+        expect(
+          await fixture.sql`select integration_id from integration_subject_handler
+            where integration_id = ${running.id}`,
+        ).toEqual([]);
+        expect(
+          await fixture.sql`select key from attention_item
+            where key = 'subject-erasure-pending:not-installed'`,
+        ).toEqual([{ key: "subject-erasure-pending:not-installed" }]);
+      },
       { timeout: 10_000, interval: 100 },
     );
     expect(lifecycle).not.toContain("cancel extension migrations");

@@ -241,6 +241,25 @@ describe("localized privacy response report", () => {
     expect(report.text).toContain("730 days from the applicable record event");
   });
 
+  it("states that a pending extension erasure is kept from account closure until it is done", () => {
+    const expected = {
+      en: "Only from account closure until the recorded erasure is done, with no fixed period and no legal hold; policy trigger: erasure by the extension that holds the data, or removal of that extension's data",
+      de: "Nur ab der Kontoschließung, bis die vermerkte Löschung erledigt ist, ohne feste Frist und ohne rechtliche Aufbewahrung; Richtlinienauslöser: Löschung durch die Erweiterung, die die Daten hält, oder Entfernen der Daten dieser Erweiterung",
+    };
+    for (const locale of ["en", "de"] as const) {
+      const report = buildPrivacyResponseReport({ locale, context, sources: [] });
+      const row = report.text
+        .split("\n")
+        .find((line) => line.startsWith("extension-erasure-pending"));
+      expect(row, locale).toContain(expected[locale]);
+      expect(
+        report.processingInformation.sources.find(
+          (source) => source.id === "extension-erasure-pending",
+        )?.retention,
+      ).toEqual({ kind: "until-erased", reasonCode: "extension-erasure" });
+    }
+  });
+
   it("states the backup policy with the configured retention and the request contact", () => {
     for (const locale of ["en", "de"] as const) {
       const report = buildPrivacyResponseReport({ locale, context, sources: [] });

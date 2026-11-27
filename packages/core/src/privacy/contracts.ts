@@ -55,6 +55,9 @@ export const retentionRuleSchema = z.discriminatedUnion("kind", [
   retentionRuleBase
     .extend({ kind: z.literal("ephemeral"), hours: z.number().int().min(1).max(8760) })
     .strict(),
+  // A record that exists only after the account is closed and is kept until
+  // the work it records is done, for no fixed time.
+  z.object({ kind: z.literal("until-erased"), reasonCode: stableCode.optional() }).strict(),
 ]);
 export type RetentionRule = z.infer<typeof retentionRuleSchema>;
 

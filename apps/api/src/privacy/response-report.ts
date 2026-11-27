@@ -185,6 +185,7 @@ function retentionText(t: ReportTranslator, rule: RetentionRule): string {
     });
   if (rule.kind === "account-lifetime")
     return t("retentionAccount", { afterClosure: rule.daysAfterClosure, trigger });
+  if (rule.kind === "until-erased") return t("retentionUntilErased", { trigger });
   return t("retentionLegalHold", { afterClosure: rule.daysAfterClosure, trigger });
 }
 

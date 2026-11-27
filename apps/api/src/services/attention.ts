@@ -56,6 +56,18 @@ export async function resolveAttention(key: string, database?: typeof db): Promi
 }
 
 /**
+ * The keys of the stored items that start with `prefix`, acknowledged or
+ * not, for a source that resolves its own items once their condition is gone.
+ */
+export async function listAttentionKeys(prefix: string, database?: typeof db): Promise<string[]> {
+  const rows = await (database ?? db)
+    .select({ key: attentionItem.key })
+    .from(attentionItem)
+    .where(sql`starts_with(${attentionItem.key}, ${prefix})`);
+  return rows.map((row) => row.key);
+}
+
+/**
  * Marks an item acknowledged and cancels its notifications that have not been
  * sent yet. Returns `false`, changing nothing, for an unknown key.
  */

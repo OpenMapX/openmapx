@@ -1193,13 +1193,16 @@ ctx.registerSubjectDataHandler({
   the load. A call after `setup()` has returned is ignored with one warning,
   and so is a call from work of an integration that was left out or replaced
   by a reload.
-- After each generation goes live, the host lists every loaded integration
-  with a handler in `integration_subject_handler`. A loaded integration
-  without one is unlisted, and its pending erasures are dropped: it no longer
-  handles subject data. An integration that cannot run (disabled, failed,
-  incompatible or in safe mode) stays listed, so deletions keep being recorded
-  for it. An integration that is no longer installed is unlisted; erasures
-  already recorded for it stay until its data is removed.
+- After each generation goes live, and again in the daily run, the host lists
+  every running integration with a handler in `integration_subject_handler`.
+  An integration's row is deleted in two cases only: it runs (loaded and
+  enabled) without a handler, which drops its pending erasures because it no
+  longer erases anything, or its data is removed, which drops them because the
+  data is gone. Either way the API logs how many owed erasures were dropped and
+  resolves the attention item. In every other state (disabled, failed,
+  incompatible, in safe mode, left out of the registry by the loader, or
+  uninstalled with its data kept) the row and the pending erasures stay, so
+  deletions keep being recorded for as long as its data exists.
 - Deleting an account, on every path (the app, the restore replay, plain SQL),
   records one row in `subject_erasure_pending` for each listed integration, in
   the deleting transaction. The deletion never waits for a handler.
@@ -1208,12 +1211,17 @@ ctx.registerSubjectDataHandler({
   the API, after every activation and once a day. A call that resolves deletes
   the row. A call that rejects or throws, with any value, or runs past its 30
   seconds, keeps the row, counts the attempt and records the error (at most
-  2 000 characters). An integration's remaining rows wait for a later run while
-  a call of its handler is still unsettled after its deadline. Rows of an
-  integration that is not loaded wait until it is.
-- While erasures fail, the administration's attention list shows "Erasure
-  pending in _name_" with the last error. The item disappears once the
-  integration has no pending erasures left.
+  2 000 characters). Rows whose erase failed least often go first, then the
+  oldest, so one person whose erase keeps overrunning does not hold up the
+  others. While a call of `erase` is still unsettled after its deadline, the
+  host does not call `erase` of that integration again; each run counts one
+  more failed attempt on that row instead. A hung `export` does not hold up
+  erasures. Rows of an integration that is not running wait until it runs.
+- The administration's attention list shows "Erasure pending in _name_" while
+  erasures are pending and either an erase failed (with the number of people
+  waiting, the most failed attempts and the last error) or the integration
+  cannot erase now (with the reason and the number of people waiting). The item
+  disappears once the integration has no pending erasures left.
 - `erase` may run more than once for the same person, for example after a call
   that outlasted its deadline finished on its own, or after a restore replays a
   deletion. It must then succeed without finding anything. Erase everything the

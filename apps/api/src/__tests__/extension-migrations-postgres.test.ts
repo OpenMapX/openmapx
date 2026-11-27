@@ -34,6 +34,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
     let pools: typeof import("../db/index");
     let migrations: typeof import("../extension-migrations");
     let integrationDb: typeof import("../integration-db");
+    let processLogger: typeof import("../process-logger")["processLogger"];
     let root: string;
 
     /** An integration directory holding `files` under `migrations/`. */
@@ -126,6 +127,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       pools = await import("../db/index");
       migrations = await import("../extension-migrations");
       integrationDb = await import("../integration-db");
+      ({ processLogger } = await import("../process-logger"));
     }, 240_000);
 
     beforeEach(async () => {
@@ -780,12 +782,31 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       await migrations.applyExtensionMigrations(args());
       await raw`insert into integration_task_run (integration_id, task_name, status, finished_at)
         values ('demo', 'sync', 'succeeded', now()), ('other', 'sync', 'succeeded', now())`;
-      await raw`insert into subject_erasure_pending (integration_id, subject_user_id) values ('demo', 'u1')`;
+      await raw`insert into subject_erasure_pending (integration_id, subject_user_id)
+        values ('demo', 'u1'), ('demo', 'u2'), ('other', 'u1')`;
       await raw`insert into integration_subject_handler (integration_id) values ('demo')`;
+      await raw`insert into attention_item (key, severity, source, title) values
+        ('subject-erasure-pending:demo', 'warning', 'privacy', 'Erasure pending in Demo'),
+        ('integration-schema-ahead:demo', 'warning', 'integrations', 'Demo runs against a newer database schema'),
+        ('subject-erasure-pending:other', 'warning', 'privacy', 'Erasure pending in Other')`;
+      const warn = vi.spyOn(processLogger, "warn");
 
-      expect(await api.begin((tx) => migrations.removeIntegrationData(tx, "demo"))).toEqual({
-        schema: "ext_demo",
-      });
+      const removed = await api.begin((tx) => migrations.removeIntegrationData(tx, "demo"));
+      expect(removed).toMatchObject({ schema: "ext_demo", droppedErasures: 2 });
+      // Nothing is resolved before the caller's transaction has committed.
+      expect(await raw`select key from attention_item order by key`).toHaveLength(3);
+      await removed.afterCommit();
+
+      expect(await raw`select key from attention_item order by key`).toEqual([
+        { key: "subject-erasure-pending:other" },
+      ]);
+      expect(warn).toHaveBeenCalledWith(
+        { integrationId: "demo", dropped: 2 },
+        "Dropped 2 owed erasures of integration demo: its data was removed",
+      );
+      warn.mockRestore();
+      await raw`delete from attention_item`;
+      await raw`delete from subject_erasure_pending`;
 
       expect(await raw`select to_regnamespace('ext_demo') is null as gone`).toEqual([
         { gone: true },

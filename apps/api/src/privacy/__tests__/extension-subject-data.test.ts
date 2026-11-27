@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { currentIntegrationScope, type IntegrationScope } from "../../integration-scope";
 import { forgetSubjectDataHandler, registerSubjectDataHandlerFor } from "../extension-handlers";
 import {
+  collectExtensionParts,
   createExtensionSubjectData,
   ERASE_DEADLINE_MS,
   type SubjectErasureStore,
@@ -28,23 +29,55 @@ function memoryStore(seed: { handlers?: string[]; pending?: Array<[string, strin
     handlerRows(): string[];
     pendingRows(integrationId: string): PendingRow[];
     add(integrationId: string, subjectId: string): void;
+    removeAll(integrationId: string): void;
   } = {
     handlerRows: () => [...handlers].sort(),
     pendingRows: (integrationId) => pending.filter((row) => row.integration_id === integrationId),
     add(integration_id, subject_user_id) {
       pending.push({ integration_id, subject_user_id, attempts: 0, last_error: null });
     },
-    async syncHandlers({ handling, stopped, known }) {
+    removeAll(integrationId) {
+      for (let index = pending.length - 1; index >= 0; index -= 1)
+        if (pending[index]?.integration_id === integrationId) pending.splice(index, 1);
+    },
+    async syncHandlers({ handling, stopped }) {
       for (const id of handling) handlers.add(id);
-      for (const id of [...handlers]) {
-        if (stopped.includes(id) || !known.includes(id)) handlers.delete(id);
-      }
+      for (const id of stopped) handlers.delete(id);
+      const dropped = new Map<string, number>();
       for (let index = pending.length - 1; index >= 0; index -= 1) {
-        if (stopped.includes(pending[index]?.integration_id ?? "")) pending.splice(index, 1);
+        const id = pending[index]?.integration_id ?? "";
+        if (!stopped.includes(id)) continue;
+        pending.splice(index, 1);
+        dropped.set(id, (dropped.get(id) ?? 0) + 1);
       }
+      return dropped;
     },
     async pendingSubjects(integrationId) {
-      return store.pendingRows(integrationId).map((row) => row.subject_user_id);
+      // Fewest attempts first; the array keeps the order of recording.
+      return store
+        .pendingRows(integrationId)
+        .map((row, index) => ({ row, index }))
+        .sort((a, b) => a.row.attempts - b.row.attempts || a.index - b.index)
+        .map(({ row }) => row.subject_user_id);
+    },
+    async pendingSummary() {
+      const summary = new Map<string, { count: number; attempts: number }>();
+      for (const row of pending) {
+        const entry = summary.get(row.integration_id) ?? { count: 0, attempts: 0 };
+        entry.count += 1;
+        entry.attempts = Math.max(entry.attempts, row.attempts);
+        summary.set(row.integration_id, entry);
+      }
+      return summary;
+    },
+    async recordStalled(integrationId, subjectId, error) {
+      const row = pending.find(
+        (candidate) =>
+          candidate.integration_id === integrationId && candidate.subject_user_id === subjectId,
+      );
+      if (!row) return;
+      row.attempts += 1;
+      row.last_error = error;
     },
     async eraseLocked(integrationId, subjectId, erase) {
       const row = pending.find(
@@ -102,9 +135,22 @@ function withHandler(
 }
 
 function setup(store: ReturnType<typeof memoryStore>, registry: LoadedIntegration[]) {
+  /** The attention items, by key, as the list holds them. */
+  const items = new Map<string, { title: string; detail?: string }>();
   const attention = {
-    raise: vi.fn(async (_input: { key: string; detail?: string }) => "inserted" as const),
-    resolve: vi.fn(async () => {}),
+    raise: vi.fn(async (input: { key: string; title: string; detail?: string }) => {
+      items.set(input.key, {
+        title: input.title,
+        ...(input.detail ? { detail: input.detail } : {}),
+      });
+      return "inserted" as const;
+    }),
+    resolve: vi.fn(async (key: string) => {
+      items.delete(key);
+    }),
+    openKeys: vi.fn(async (prefix: string) =>
+      [...items.keys()].filter((key) => key.startsWith(prefix)),
+    ),
   };
   const log = { warn: vi.fn() };
   const subjectData = createExtensionSubjectData({
@@ -113,7 +159,7 @@ function setup(store: ReturnType<typeof memoryStore>, registry: LoadedIntegratio
     attention,
     log,
   });
-  return { ...subjectData, attention, log };
+  return { ...subjectData, attention, log, items };
 }
 
 afterEach(() => {
@@ -142,16 +188,17 @@ describe("subject-data handler registration", () => {
 });
 
 describe("handler table", () => {
-  it("lists integrations that registered a handler and unlists those that stopped", async () => {
+  it("unlists only an integration that runs without a handler and keeps every other row", async () => {
     const a = integration("a");
     withHandler(a, async () => {});
     const store = memoryStore({
-      handlers: ["b", "c", "d", "gone"],
+      handlers: ["b", "c", "d", "skipped"],
       pending: [
         ["b", "u1"],
+        ["b", "u2"],
         ["c", "u1"],
         ["d", "u1"],
-        ["gone", "u1"],
+        ["skipped", "u1"],
       ],
     });
     const registry = [
@@ -161,16 +208,32 @@ describe("handler table", () => {
       integration("d", { enabled: false }),
       integration("e", { loadState: "safe-mode" }),
     ];
-    const { syncSubjectHandlerTable } = setup(store, registry);
+    const { syncSubjectHandlerTable, attention, log } = setup(store, registry);
 
     await syncSubjectHandlerTable();
 
-    expect(store.handlerRows()).toEqual(["a", "c", "d"]);
+    // "skipped" is installed but the loader left it out of the registry, or
+    // it was uninstalled with its data kept: deletions are still recorded.
+    expect(store.handlerRows()).toEqual(["a", "c", "d", "skipped"]);
     expect(store.pendingRows("b")).toEqual([]);
     expect(store.pendingRows("c")).toHaveLength(1);
     expect(store.pendingRows("d")).toHaveLength(1);
-    // Kept until the integration's data is removed or it returns.
-    expect(store.pendingRows("gone")).toHaveLength(1);
+    expect(store.pendingRows("skipped")).toHaveLength(1);
+    expect(attention.resolve.mock.calls).toEqual([["subject-erasure-pending:b"]]);
+    expect(log.warn).toHaveBeenCalledOnce();
+    expect(log.warn).toHaveBeenCalledWith(
+      { integrationId: "b", dropped: 2 },
+      "Dropped 2 owed erasures of integration b: it runs without a subject-data handler, so it no longer erases data",
+    );
+  });
+
+  it("drops nothing and logs nothing for an integration that runs without a handler and owes nothing", async () => {
+    const store = memoryStore({ handlers: ["b"] });
+    const { syncSubjectHandlerTable, attention, log } = setup(store, [integration("b")]);
+    await syncSubjectHandlerTable();
+    expect(store.handlerRows()).toEqual([]);
+    expect(attention.resolve).not.toHaveBeenCalled();
+    expect(log.warn).not.toHaveBeenCalled();
   });
 
   it("keeps the rows of disabled, incompatible, failed and safe-mode integrations", async () => {
@@ -216,15 +279,14 @@ describe("pending erasures", () => {
 
     expect(await runPendingErasures()).toEqual({ erased: 0, failed: 1 });
 
-    expect(attention.raise).toHaveBeenCalledWith(
-      expect.objectContaining({
-        key: "subject-erasure-pending:a",
-        severity: "warning",
-        source: "privacy",
-        title: "Erasure pending in Demo A",
-        detail: "boom",
-      }),
-    );
+    expect(attention.raise).toHaveBeenCalledWith({
+      key: "subject-erasure-pending:a",
+      severity: "warning",
+      source: "privacy",
+      title: "Erasure pending in Demo A",
+      detail:
+        "1 deleted account waits for this extension to erase its data; erasing has failed up to 1 time per account. Last error: boom. Repair or update the extension, or remove its data.",
+    });
     expect(attention.resolve).not.toHaveBeenCalled();
     expect(store.pendingRows("a")[0]).toMatchObject({
       attempts: 1,
@@ -270,7 +332,7 @@ describe("pending erasures", () => {
     expect(store.pendingRows("a")[0]?.last_error).toBe("at once");
   });
 
-  it("shortens the recorded error to 2 000 characters and leaves an empty one out of the item", async () => {
+  it("shortens the recorded error to 2 000 characters and leaves an empty one out of the item's text", async () => {
     const a = integration("a");
     const b = integration("b");
     withHandler(a, async () => {
@@ -294,8 +356,9 @@ describe("pending erasures", () => {
     const raisedForB = attention.raise.mock.calls
       .map(([input]) => input)
       .find((input) => input.key === "subject-erasure-pending:b");
-    expect(raisedForB).toBeDefined();
-    expect(raisedForB).not.toHaveProperty("detail");
+    expect(raisedForB?.detail).toBe(
+      "1 deleted account waits for this extension to erase its data; erasing has failed up to 1 time per account. Repair or update the extension, or remove its data.",
+    );
   });
 
   it("keeps the row when the handler exceeds 30 seconds and leaves the integration until it settles", async () => {
@@ -332,16 +395,70 @@ describe("pending erasures", () => {
     ]);
     expect(store.pendingRows("a")[0]?.last_error).toBe("Erase did not finish within 30 seconds");
     expect(attention.raise).toHaveBeenCalledWith(
-      expect.objectContaining({ detail: "Erase did not finish within 30 seconds" }),
+      expect.objectContaining({
+        detail: expect.stringContaining("Last error: Erase did not finish within 30 seconds."),
+      }),
     );
-    // A second run does not call into a handler that is still busy.
-    expect(await runPendingErasures()).toEqual({ erased: 0, failed: 0 });
+    // A second run does not call into a handler that is still busy; the
+    // erase that hangs counts as failed once more, which the item shows.
+    expect(await runPendingErasures()).toEqual({ erased: 0, failed: 1 });
     expect(eraseA).toHaveBeenCalledTimes(1);
+    expect(store.pendingRows("a").map((row) => [row.subject_user_id, row.attempts])).toEqual([
+      ["u1", 2],
+      ["u2", 0],
+    ]);
+    expect(store.pendingRows("a")[0]?.last_error).toBe(
+      "The erase call that passed its 30-second deadline has still not settled",
+    );
+    expect(attention.raise).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        detail: expect.stringContaining("erasing has failed up to 2 times per account"),
+      }),
+    );
 
     first.settle?.();
     await vi.advanceTimersByTimeAsync(0);
     expect(await runPendingErasures()).toEqual({ erased: 2, failed: 0 });
     expect(store.pendingRows("a")).toEqual([]);
+    expect(attention.resolve).toHaveBeenLastCalledWith("subject-erasure-pending:a");
+  });
+
+  it("does not let one account whose erase keeps overrunning hold up the others", async () => {
+    vi.useFakeTimers();
+    const a = integration("a");
+    const settleLate: Array<() => void> = [];
+    const eraseA = vi.fn(
+      (subjectId: string) =>
+        new Promise<void>((resolve) => {
+          if (subjectId === "u1") settleLate.push(resolve);
+          else resolve();
+        }),
+    );
+    withHandler(a, eraseA);
+    const store = memoryStore({
+      handlers: ["a"],
+      pending: [
+        ["a", "u1"],
+        ["a", "u2"],
+      ],
+    });
+    const { runPendingErasures } = setup(store, [a]);
+
+    const first = runPendingErasures();
+    await vi.advanceTimersByTimeAsync(ERASE_DEADLINE_MS);
+    expect(await first).toEqual({ erased: 0, failed: 1 });
+    // The overrunning call settles later, so the handler is free again.
+    for (const settle of settleLate.splice(0)) settle();
+    await vi.advanceTimersByTimeAsync(0);
+
+    // The account that overran goes last now; the other one is erased first.
+    const second = runPendingErasures();
+    await vi.advanceTimersByTimeAsync(ERASE_DEADLINE_MS);
+    expect(await second).toEqual({ erased: 1, failed: 1 });
+    expect(eraseA.mock.calls.map(([subjectId]) => subjectId)).toEqual(["u1", "u2", "u1"]);
+    expect(store.pendingRows("a").map((row) => [row.subject_user_id, row.attempts])).toEqual([
+      ["u1", 2],
+    ]);
   });
 
   it("leaves rows of an integration that is not loaded and replays them when it loads", async () => {
@@ -369,6 +486,117 @@ describe("pending erasures", () => {
     expect(eraseC.mock.calls).toEqual([["u1"], ["u2"]]);
     expect(store.pendingRows("c")).toEqual([]);
     expect(attention.resolve).toHaveBeenCalledWith("subject-erasure-pending:c");
+  });
+
+  it.each([
+    [
+      "failed to load",
+      integration("c", { loadState: "failed", name: "Trips" }),
+      "Trips cannot erase data now: it failed to load.",
+    ],
+    [
+      "is disabled by the operator",
+      integration("c", { enabled: false, name: "Trips" }),
+      "Trips cannot erase data now: it is disabled.",
+    ],
+    [
+      "is incompatible",
+      integration("c", { loadState: "incompatible", name: "Trips" }),
+      "Trips cannot erase data now: it is not compatible with this version of OpenMapX.",
+    ],
+    [
+      "is held back by safe mode",
+      integration("c", { loadState: "safe-mode", name: "Trips" }),
+      "Trips cannot erase data now: the API runs in safe mode.",
+    ],
+  ])(
+    "shows owed erasures of an integration that %s, and clears the item once nothing is owed",
+    async (_label, waiting, reason) => {
+      const store = memoryStore({
+        handlers: ["c"],
+        pending: [
+          ["c", "u1"],
+          ["c", "u2"],
+        ],
+      });
+      const { runPendingErasures, items } = setup(store, [waiting]);
+
+      await runPendingErasures();
+
+      expect(items.get("subject-erasure-pending:c")).toEqual({
+        title: "Erasure pending in Trips",
+        detail: `${reason} 2 deleted accounts wait for it to erase their data. Enable or repair the extension, reinstall it, or remove its data.`,
+      });
+
+      store.removeAll("c");
+      await runPendingErasures();
+      expect(items.has("subject-erasure-pending:c")).toBe(false);
+    },
+  );
+
+  it("shows owed erasures of an integration that is not in the registry, by its id", async () => {
+    const store = memoryStore({ handlers: ["gone"], pending: [["gone", "u1"]] });
+    const { runPendingErasures, items } = setup(store, []);
+
+    await runPendingErasures();
+
+    expect(items.get("subject-erasure-pending:gone")).toEqual({
+      title: "Erasure pending in gone",
+      detail:
+        "gone cannot erase data now: it is not installed, or its installation could not be loaded. 1 deleted account waits for it to erase their data. Enable or repair the extension, reinstall it, or remove its data.",
+    });
+  });
+
+  it("keeps an export that hangs from holding up erasures, and a late export from freeing a hung erase", async () => {
+    vi.useFakeTimers();
+    const a = integration("a");
+    const hungExports: Array<() => void> = [];
+    const hungErases: Array<() => void> = [];
+    // Only the first erase hangs.
+    const eraseA = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          if (eraseA.mock.calls.length > 1) resolve();
+          else hungErases.push(resolve);
+        }),
+    );
+    registerSubjectDataHandlerFor(a, scopeOf(a), {
+      erase: eraseA,
+      export: () =>
+        new Promise((resolve) => {
+          hungExports.push(() => resolve(null));
+        }),
+    });
+    const store = memoryStore({ handlers: ["a"], pending: [["a", "u1"]] });
+    const { runPendingErasures } = setup(store, [a]);
+    const ask = () =>
+      collectExtensionParts({
+        userId: "subject-1",
+        integrations: [a],
+        listed: async () => ["a"],
+        log: { warn: () => {} },
+        exportDeadlineMs: 1_000,
+      });
+
+    const exporting = ask();
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect((await exporting)[0]?.warningCodes).toEqual(["extension-handler-failed"]);
+
+    // The hung export does not stop the erase.
+    const erasing = runPendingErasures();
+    await vi.advanceTimersByTimeAsync(ERASE_DEADLINE_MS);
+    expect(await erasing).toEqual({ erased: 0, failed: 1 });
+    expect(eraseA).toHaveBeenCalledTimes(1);
+
+    // The export settles late; the erase is still hung and is not called again.
+    for (const settle of hungExports.splice(0)) settle();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await runPendingErasures()).toEqual({ erased: 0, failed: 1 });
+    expect(eraseA).toHaveBeenCalledTimes(1);
+
+    for (const settle of hungErases.splice(0)) settle();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await runPendingErasures()).toEqual({ erased: 1, failed: 0 });
   });
 
   it("works through one integration when it is named", async () => {
@@ -435,6 +663,48 @@ describe("pending erasures", () => {
     expect(await runPendingErasures()).toEqual({ erased: 1, failed: 0 });
     expect(eraseB).toHaveBeenCalledWith("u1");
     expect(log.warn).toHaveBeenCalled();
+  });
+});
+
+describe("daily erasure run", () => {
+  it("brings the handler table in line before it works through the pending erasures", async () => {
+    const a = integration("a");
+    const eraseA = vi.fn(async () => {});
+    withHandler(a, eraseA);
+    const store = memoryStore({ pending: [["a", "u1"]] });
+    const order: string[] = [];
+    const syncHandlers = store.syncHandlers;
+    store.syncHandlers = async (input) => {
+      order.push("sync");
+      return syncHandlers(input);
+    };
+    const eraseLocked = store.eraseLocked;
+    store.eraseLocked = async (...args) => {
+      order.push("erase");
+      return eraseLocked(...args);
+    };
+    const { syncAndRunPendingErasures } = setup(store, [a]);
+
+    expect(await syncAndRunPendingErasures()).toEqual({ erased: 1, failed: 0 });
+
+    expect(order).toEqual(["sync", "erase"]);
+    expect(store.handlerRows()).toEqual(["a"]);
+  });
+
+  it("still works through the pending erasures when the sync fails, and never rejects", async () => {
+    const a = integration("a");
+    withHandler(a, async () => {});
+    const store = memoryStore({ handlers: ["a"], pending: [["a", "u1"]] });
+    store.syncHandlers = async () => {
+      throw new Error("database unavailable");
+    };
+    const { syncAndRunPendingErasures, log } = setup(store, [a]);
+
+    expect(await syncAndRunPendingErasures()).toEqual({ erased: 1, failed: 0 });
+    expect(log.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ err: expect.any(Error) }),
+      "Could not update the list of integrations with a subject-data handler",
+    );
   });
 });
 

@@ -52,9 +52,25 @@ The archive contains the full scope and the Article 15(1) information:
 purposes, categories, recipients, retention, sources, rights and the
 supervisory authority. Sources that only an operator can check
 (`application-logs`, `redis-subject-controls`,
-`data-manager-trigger-attribution`, `backup-retained-copies` and
-`off-host-processor-sources`) do not block the download; the report lists them
-as checked separately by the operator.
+`data-manager-trigger-attribution`, `backup-retained-copies`,
+`off-host-processor-sources` and `extension-erasure-pending`) do not block the
+download; the report lists them as checked separately by the operator.
+
+The `extension-erasure-pending` task concerns the erasures extensions still owe
+a deleted account. For an account that still exists nothing can be pending:
+resolve the task with a reason such as `account-exists`. For a deleted account,
+look up what is still owed:
+
+```sql
+select integration_id, attempts, last_error, requested_at
+from subject_erasure_pending where subject_user_id = $1;
+```
+
+Each row names an extension that still holds data about the person. Include
+that in your answer, have the extension erase it (enable or repair it, or remove
+its data, as the attention list's "Erasure pending in …" item says), and
+resolve the task with a reason such as `extension-erasure-pending` or
+`no-extension-erasure-pending` when the query returns no rows.
 
 ## Working a case in Privacy requests
 

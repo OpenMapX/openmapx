@@ -3877,6 +3877,7 @@
       "retentionEphemeral": "{hours, plural, one {# hour} other {# hours}} from creation or last applicable security event, and up to {afterClosure, plural, one {# day} other {# days}} after account closure; policy trigger: {trigger}",
       "retentionAccount": "For the account lifetime, and up to {afterClosure, plural, one {# day} other {# days}} after account closure; policy trigger: {trigger}",
       "retentionLegalHold": "For the duration of the applicable legal hold, and up to {afterClosure, plural, one {# day} other {# days}} after account closure; policy trigger: {trigger}",
+      "retentionUntilErased": "Only from account closure until the recorded erasure is done, with no fixed period and no legal hold; policy trigger: {trigger}",
       "retentionReasons": {
         "account-content": "content deletion or account closure",
         "accountability": "creation of the accountability record",
