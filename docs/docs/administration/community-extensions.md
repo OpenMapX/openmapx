@@ -323,7 +323,8 @@ only regular files and directories, so it refuses path escapes (zip-slip),
 absolute paths and every symbolic or hard link; and an artifact shipping a
 `node_modules/` directory is rejected. Frontend runtime entry points are also
 rejected. A backend bundle is accepted only at `dist/backend/index.mjs`, together
-with `migrations/*.sql` and `assets/**`, within the archive limits, and runs in
+with `migrations/*.sql` (stored with the integration; a later release applies
+them) and `assets/**`, within the archive limits, and runs in
 the API process with full access. These reduce the blast radius of a malformed
 archive. They cannot establish that the author's code is safe.
 

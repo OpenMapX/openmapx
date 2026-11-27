@@ -201,9 +201,9 @@ otherwise any up makes it up. Probe history is retained, so the
 state.
 
 An integration whose code failed to load shows **Failed to load** in the list
-and a red status that outranks any health result, and counts as unhealthy. Its
-detail page names the step that failed (import, migration, setup or deadline)
-and the error. It is still switched on, so the page offers **Reload** to try
+and a red status that outranks any health result, and counts as enabled and
+unhealthy, in the list and on the overview. Its detail page names the step that
+failed (import, setup or deadline) and the error. It is still switched on, so the page offers **Reload** to try
 loading it again after a fix, and **Disable** to stop loading it.
 
 :::note[Health checks must target public hosts]
