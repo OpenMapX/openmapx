@@ -1,10 +1,11 @@
 import { Writable } from "node:stream";
 import { inflateRawSync } from "node:zlib";
+import { messages } from "@openmapx/i18n";
 import type { LoadedIntegration, SubjectDataHandler } from "@openmapx/integration-framework";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { currentIntegrationScope } from "../../integration-scope";
 import { archivePathForLogicalId } from "../archive-writer";
-import { catalogueAvailability, SUBJECT_DATA_CATALOGUE, subjectDataCatalogue } from "../catalogue";
+import { SUBJECT_DATA_CATALOGUE, subjectDataCatalogue } from "../catalogue";
 import { getCatalogueCopy } from "../catalogue-copy";
 import type { CollectorSourcePart } from "../collectors";
 import {
@@ -100,6 +101,7 @@ function integration(
     loadState?: LoadedIntegration["loadState"];
     registrations?: unknown[];
     isBuiltIn?: boolean;
+    storesPersonalData?: boolean;
   } = {},
 ): LoadedIntegration {
   return {
@@ -117,7 +119,16 @@ function integration(
               operatorInstructions: null,
             },
           }
-        : {}),
+        : options.storesPersonalData
+          ? {
+              subjectData: {
+                storesPersonalData: true,
+                strategy: "operator_task",
+                registrationIds: [],
+                operatorInstructions: "Look in the extension's tables.",
+              },
+            }
+          : {}),
     } as unknown as LoadedIntegration["manifest"],
     config: {},
     directory: `/integrations/${id}`,
@@ -155,29 +166,39 @@ function zipMembers(zip: Buffer): Map<string, Buffer> {
   return members;
 }
 
-/** A database whose only statement is the handler-table read. */
-function databaseListing(listed: string[]) {
-  const client = vi.fn(async () => listed.map((integration_id) => ({ integration_id })));
+/** A database whose only statements are the handler-table and schema reads. */
+function databaseListing(listed: string[], schemas: string[] = []) {
+  const client = vi.fn(async (strings: TemplateStringsArray) =>
+    strings.join("").includes("pg_namespace")
+      ? schemas.map((nspname) => ({ nspname }))
+      : listed.map((integration_id) => ({ integration_id })),
+  );
   return { $client: client } as unknown as NonNullable<
     Parameters<typeof prepareSubjectExport>[0]["database"]
   >;
 }
 
-async function exportArchive(listed: string[] = []) {
+async function exportArchive(
+  listed: string[] = [],
+  options: { schemas?: string[]; locale?: string; recordLeftOut?: (leftOut: unknown) => void } = {},
+) {
   const prepared = await prepareSubjectExport({
     request: {
       id: "00000000-0000-7000-8000-000000000001",
       kind: "access_and_portability",
-      locale: "en",
+      locale: options.locale ?? "en",
       receivedAt: new Date("2026-01-01T00:00:00.000Z"),
       registeredAt: new Date("2026-01-01T00:01:00.000Z"),
       preservationAt: null,
       snapshotAt: new Date("2026-01-01T00:03:00.000Z"),
     },
     subjectUserId: "subject-1",
-    database: databaseListing(listed),
+    database: databaseListing(listed, options.schemas),
     now: () => new Date("2026-01-02T00:00:00.000Z"),
     openmapx: {},
+    ...(options.recordLeftOut
+      ? { recordExtensionsLeftOut: async (leftOut) => options.recordLeftOut?.(leftOut) }
+      : {}),
   });
   const chunks: Buffer[] = [];
   await prepared.write(
@@ -194,6 +215,7 @@ async function exportArchive(listed: string[] = []) {
   return {
     members,
     read,
+    prepared,
     manifest: JSON.parse(read("manifest.json") ?? "null"),
     processing: JSON.parse(read("article-15/processing-information.json") ?? "null"),
   };
@@ -215,14 +237,20 @@ describe("extension export parts", () => {
   async function partsFor(
     registry: LoadedIntegration[] | null,
     listed: string[] = [],
+    schemas: string[] = [],
   ): Promise<CollectorSourcePart[]> {
     return collectExtensionParts({
+      requestId: "case-1",
       userId: "subject-1",
       integrations: registry,
       listed: async () => listed,
+      schemas: async () => schemas,
       log,
     });
   }
+
+  const outcomes = (parts: CollectorSourcePart[]) =>
+    parts.map((part) => [part.extension?.integrationId, part.outcome, part.warningCodes]);
 
   it("includes what a loaded extension returns, asked in its scope", async () => {
     let scope: string | undefined;
@@ -235,7 +263,7 @@ describe("extension export parts", () => {
 
     expect(scope).toBe("acme-overlay");
     expect(part).toMatchObject({
-      registrationId: "extension-acme-overlay",
+      registrationId: "extension:acme-overlay",
       outcome: "included",
       warningCodes: [],
       blocking: false,
@@ -245,19 +273,113 @@ describe("extension export parts", () => {
       subjectId: "subject-1",
       notes: [{ body: "x" }],
     });
-    expect(part?.entries?.[0]?.logicalId).toBe("extension-acme-overlay");
+    expect(part?.entries?.[0]?.logicalId).toBe("extension:acme-overlay");
   });
 
-  it("includes nothing it was not asked for", async () => {
+  it("names nothing for an extension that holds no data about people", async () => {
     const parts = await partsFor(
       [
         integration("plain", "Plain"),
-        integration("listed-loaded", "Listed but no handler"),
+        integration("listed-loaded", "Listed, running, no handler"),
         integration("unlisted", "Not loaded, not listed", { loadState: "failed" }),
+        integration("weather", "Built-in", { isBuiltIn: true, storesPersonalData: true }),
       ],
-      ["listed-loaded", "uninstalled"],
+      ["listed-loaded"],
     );
     expect(parts).toEqual([]);
+  });
+
+  it("names a running extension that keeps personal data but registered no handler", async () => {
+    const parts = await partsFor([
+      integration("acme-cascade", "Acme cascade", { storesPersonalData: true }),
+    ]);
+    expect(outcomes(parts)).toEqual([
+      ["acme-cascade", "unavailable", ["extension-no-export-handler"]],
+    ]);
+    expect(parts[0]).toMatchObject({ registrationId: "extension:acme-cascade", blocking: false });
+  });
+
+  it("names an extension that keeps personal data and cannot run, though it was never listed", async () => {
+    const parts = await partsFor([
+      integration("acme-trips", "Acme trips", { loadState: "failed", storesPersonalData: true }),
+    ]);
+    expect(outcomes(parts)).toEqual([["acme-trips", "unavailable", ["extension-not-loaded"]]]);
+  });
+
+  it("names a listed extension the registry does not hold, such as one uninstalled with its data kept", async () => {
+    const parts = await partsFor([], ["gone-ext"]);
+    expect(parts).toMatchObject([
+      {
+        registrationId: "extension:gone-ext",
+        outcome: "unavailable",
+        warningCodes: ["extension-not-installed"],
+        blocking: false,
+        extension: { integrationId: "gone-ext", name: "gone-ext" },
+      },
+    ]);
+  });
+
+  it("names every extension whose schema exists while it is not running, by the host's schema name", async () => {
+    const asked = withHandler(integration("acme-notes", "Acme notes"), async () => ({}));
+    const parts = await partsFor(
+      [
+        asked,
+        integration("acme-off", "Acme off", { loadState: "disabled" }),
+        integration("acme-plain", "Acme plain"),
+      ],
+      [],
+      [
+        "ext_acme_notes",
+        "ext_acme_off",
+        "ext_acme_plain",
+        "ext_kept_data",
+        "ext_trailing_",
+        "ext__double",
+        "ext_a__b",
+        "ext_Upper",
+      ],
+    );
+    expect(outcomes(parts)).toEqual([
+      ["acme-notes", "included", []],
+      ["acme-off", "unavailable", ["extension-not-loaded"]],
+      ["kept-data", "unavailable", ["extension-not-installed"]],
+    ]);
+  });
+
+  it("logs every part it leaves out with the case, the extension and the reason", async () => {
+    await partsFor(
+      [
+        integration("acme-cascade", "Acme cascade", { storesPersonalData: true }),
+        integration("acme-off", "Acme off", { loadState: "failed" }),
+      ],
+      ["acme-off", "gone-ext"],
+    );
+    expect(log.warn.mock.calls.map(([fields]) => fields)).toEqual([
+      expect.objectContaining({
+        requestId: "case-1",
+        integrationId: "acme-cascade",
+        warningCode: "extension-no-export-handler",
+      }),
+      expect.objectContaining({
+        requestId: "case-1",
+        integrationId: "acme-off",
+        warningCode: "extension-not-loaded",
+      }),
+      expect.objectContaining({
+        requestId: "case-1",
+        integrationId: "gone-ext",
+        warningCode: "extension-not-installed",
+      }),
+    ]);
+  });
+
+  it("writes an extension's name as one line of plain text", async () => {
+    const [part] = await partsFor([
+      integration("acme-cascade", "Acme\nFAKE LINE\r \u0007cascade", {
+        storesPersonalData: true,
+      }),
+    ]);
+    expect(part?.extension?.name).toBe("Acme FAKE LINE cascade");
   });
 
   it("lists an installed extension that is not loaded but handles subject data", async () => {
@@ -277,16 +399,28 @@ describe("extension export parts", () => {
     expect(parts.every((part) => part.blocking === false && !part.entries)).toBe(true);
   });
 
-  it("lists every listed extension as not loaded where no registry runs", async () => {
-    const parts = await partsFor(null, ["acme-tracker"]);
+  it("lists every listed extension and every extension schema as not loaded where no registry runs", async () => {
+    const parts = await partsFor(null, ["acme-tracker"], ["ext_acme_tracker", "ext_acme_kept"]);
     expect(parts).toMatchObject([
       {
-        registrationId: "extension-acme-tracker",
+        registrationId: "extension:acme-kept",
+        outcome: "unavailable",
+        warningCodes: ["extension-not-loaded"],
+        extension: { integrationId: "acme-kept", name: "acme-kept" },
+      },
+      {
+        registrationId: "extension:acme-tracker",
         outcome: "unavailable",
         warningCodes: ["extension-not-loaded"],
         extension: { integrationId: "acme-tracker", name: "acme-tracker" },
       },
     ]);
+  });
+
+  it("does not collide with a catalogue entry for an extension whose id matches its name", async () => {
+    const [part] = await partsFor([], ["erasure-pending"]);
+    expect(part?.registrationId).toBe("extension:erasure-pending");
+    expect(part?.registrationId).not.toBe("extension-erasure-pending");
   });
 
   const cyclic: Record<string, unknown> = {};
@@ -338,12 +472,81 @@ describe("extension export parts", () => {
 
     const parts = await partsFor([large, exact]);
 
-    expect(
-      parts.map((part) => [part.extension?.integrationId, part.outcome, part.warningCodes]),
-    ).toEqual([
+    expect(outcomes(parts)).toEqual([
       ["acme-large", "unavailable", ["extension-export-too-large"]],
       ["acme-exact", "included", []],
     ]);
+  });
+
+  it("measures the JSON's bytes, not array indices or keys JSON leaves out", async () => {
+    const zeros = withHandler(integration("acme-zeros", "Acme zeros"), async () =>
+      new Array(1_200_000).fill(0),
+    );
+    const manyZeros = withHandler(integration("acme-many-zeros", "Acme many zeros"), async () =>
+      new Array(4_500_000).fill(0),
+    );
+    const dropped: Record<string, unknown> = { pad: "x".repeat(MAX_EXTENSION_EXPORT_BYTES - 20) };
+    for (let index = 0; index < 20_000; index += 1) dropped[`gone${index}`] = undefined;
+    const sparse = withHandler(integration("acme-sparse", "Acme sparse"), async () => dropped);
+    // Two bytes per character in UTF-8.
+    const wide = withHandler(integration("acme-wide", "Acme wide"), async () =>
+      "é".repeat(MAX_EXTENSION_EXPORT_BYTES / 2),
+    );
+    const narrow = withHandler(integration("acme-narrow", "Acme narrow"), async () =>
+      "é".repeat(MAX_EXTENSION_EXPORT_BYTES / 2 - 1),
+    );
+
+    const parts = await partsFor([zeros, manyZeros, sparse, wide, narrow]);
+
+    expect(outcomes(parts)).toEqual([
+      ["acme-zeros", "included", []],
+      ["acme-many-zeros", "unavailable", ["extension-export-too-large"]],
+      ["acme-sparse", "included", []],
+      ["acme-wide", "unavailable", ["extension-export-too-large"]],
+      ["acme-narrow", "included", []],
+    ]);
+    expect(String(parts[0]?.entries?.[0]?.source)).toHaveLength(2_400_001);
+  });
+
+  it("stops writing a value once it is surely too large", async () => {
+    let written = 0;
+    const chunk = () => ({
+      toJSON() {
+        written += 1;
+        return "x".repeat(4 * 1024 * 1024);
+      },
+    });
+    const large = withHandler(integration("acme-large", "Acme large"), async () => [
+      chunk(),
+      chunk(),
+      chunk(),
+      chunk(),
+    ]);
+
+    const [part] = await partsFor([large]);
+
+    expect(part?.warningCodes).toEqual(["extension-export-too-large"]);
+    // Two chunks already pass 8 MiB; the other two are never written.
+    expect(written).toBe(2);
+  });
+
+  it("writes an export that returns undefined as null", async () => {
+    const nothing = withHandler(integration("acme-nothing", "Acme nothing"), async () => undefined);
+    const [part] = await partsFor([nothing]);
+    expect(part?.outcome).toBe("included");
+    expect(String(part?.entries?.[0]?.source)).toBe("null");
+  });
+
+  it("runs an answer's toJSON in the extension's scope", async () => {
+    let scope: string | undefined;
+    const scoped = withHandler(integration("acme-scoped", "Acme scoped"), async () => ({
+      toJSON() {
+        scope = currentIntegrationScope()?.integrationId;
+        return {};
+      },
+    }));
+    await partsFor([scoped]);
+    expect(scope).toBe("acme-scoped");
   });
 
   it("stops waiting at the deadline and asks every extension at once", async () => {
@@ -375,11 +578,12 @@ describe("subject export with extensions", () => {
     }));
     setSubjectDataIntegrationSource(() => [overlay]);
 
-    const { read, manifest } = await exportArchive();
+    const { read, manifest, prepared } = await exportArchive();
 
-    expect(archivePathForLogicalId("extension-acme-overlay")).toBe(
+    expect(archivePathForLogicalId("extension:acme-overlay")).toBe(
       "openmapx-data-export/extensions/acme-overlay.json",
     );
+    expect(archivePathForLogicalId("extension-acme-overlay")).toBeNull();
     expect(JSON.parse(read("extensions/acme-overlay.json") ?? "null")).toEqual({
       notes: [{ body: "x" }],
     });
@@ -390,6 +594,92 @@ describe("subject export with extensions", () => {
       warningCode: null,
     });
     expect(read("README.txt")).not.toContain("Extensions that could not be asked");
+    expect(prepared.extensionsLeftOut).toEqual([]);
+  });
+
+  it.each(["en", "de"] as const)(
+    "names the extensions it asked and the folder their answers are in (%s)",
+    async (locale) => {
+      const overlay = withHandler(integration("acme-overlay", "Acme overlay"), async () => ({}));
+      setSubjectDataIntegrationSource(() => [overlay]);
+      const t = messages[locale].privacyExport.report;
+
+      const { read } = await exportArchive([], { locale });
+
+      for (const readme of [read("README.txt") ?? "", read("README.html") ?? ""]) {
+        expect(readme).toContain(t.extensionsIncludedHeading);
+        expect(readme).toContain("Acme overlay (acme-overlay): extensions/acme-overlay.json");
+      }
+      expect(read("README.txt")).toContain(t.extensionsIncludedIntro);
+    },
+  );
+
+  it.each(["en", "de"] as const)(
+    "names every extension that may hold data the archive lacks, says the operator was asked, and has a task opened (%s)",
+    async (locale) => {
+      const cascade = integration("acme-cascade", "Acme cascade", { storesPersonalData: true });
+      const tracker = integration("acme-tracker", "Acme tracker", { loadState: "safe-mode" });
+      const broken = withHandler(integration("acme-broken", "Acme broken"), async () => {
+        throw new Error("boom");
+      });
+      setSubjectDataIntegrationSource(() => [cascade, tracker, broken]);
+      const recorded: unknown[] = [];
+      const t = messages[locale].privacyExport.report;
+
+      const { read, manifest, prepared } = await exportArchive(["acme-tracker", "gone-ext"], {
+        locale,
+        schemas: ["ext_kept_data"],
+        recordLeftOut: (leftOut) => recorded.push(leftOut),
+      });
+
+      const leftOut = [
+        { integrationId: "acme-cascade", warningCode: "extension-no-export-handler" },
+        { integrationId: "acme-tracker", warningCode: "extension-not-loaded" },
+        { integrationId: "acme-broken", warningCode: "extension-handler-failed" },
+        { integrationId: "gone-ext", warningCode: "extension-not-installed" },
+        { integrationId: "kept-data", warningCode: "extension-not-installed" },
+      ];
+      expect(prepared.extensionsLeftOut).toEqual(leftOut);
+      expect(recorded).toEqual([leftOut]);
+      for (const { integrationId, warningCode } of leftOut)
+        expect(manifest.extensions).toContainEqual(
+          expect.objectContaining({ integrationId, outcome: "unavailable", warningCode }),
+        );
+      for (const readme of [read("README.txt") ?? "", read("README.html") ?? ""]) {
+        expect(readme).toContain(t.extensionsUnavailableHeading);
+        expect(readme).toContain(t.extensionsUnavailableIntro);
+        expect(readme).toContain(
+          `Acme cascade (acme-cascade): ${t.warnings["extension-no-export-handler"]}`,
+        );
+        expect(readme).toContain(`gone-ext (gone-ext): ${t.warnings["extension-not-installed"]}`);
+        expect(readme).toContain(`kept-data (kept-data): ${t.warnings["extension-not-installed"]}`);
+      }
+    },
+  );
+
+  it("refuses the export when the operator tasks for left-out extensions cannot be recorded", async () => {
+    setSubjectDataIntegrationSource(() => [
+      integration("acme-cascade", "Acme cascade", { storesPersonalData: true }),
+    ]);
+    await expect(
+      exportArchive([], {
+        recordLeftOut: () => {
+          throw new Error("database unavailable");
+        },
+      }),
+    ).rejects.toThrow("database unavailable");
+  });
+
+  it("keeps an extension named like a catalogue entry from answering for that entry", async () => {
+    setSubjectDataIntegrationSource(() => [
+      withHandler(integration("erasure-pending", "Erasure pending"), async () => ({})),
+    ]);
+    const { processing } = await exportArchive();
+    expect(
+      processing.sources.find(
+        (source: { id: string }) => source.id === "extension-erasure-pending",
+      ),
+    ).toMatchObject({ outcome: "operator_check", recordCount: 0 });
   });
 
   it("lists an extension it could not ask and still delivers the export", async () => {
@@ -521,26 +811,59 @@ describe("extension-declared catalogue entries", () => {
     expect(subjectDataCatalogue()).toEqual(SUBJECT_DATA_CATALOGUE);
   });
 
-  it("reports an extension's catalogue entry as available only while its handler is loaded", () => {
-    const overlay = withHandler(
-      integration("acme-overlay", "Acme overlay", { registrations: [NOTES_ENTRY] }),
-      async () => null,
+  it("leaves out a declared entry that claims the data is not personal", () => {
+    const warn = vi.fn();
+    setSubjectDataIntegrationSource(
+      () => [
+        integration("acme-overlay", "Acme overlay", {
+          registrations: [
+            {
+              ...NOTES_ENTRY,
+              id: "acme-overlay-public",
+              strategy: "not_personal",
+              article15: "not_personal",
+            },
+          ],
+        }),
+      ],
+      { warn },
     );
-    const tracker = integration("acme-tracker", "Acme tracker", {
-      loadState: "safe-mode",
-      registrations: [{ ...NOTES_ENTRY, id: "acme-tracker-trips" }],
-    });
-    setSubjectDataIntegrationSource(() => [overlay, tracker]);
-    const entryOf = (integrationId: string) => {
-      const entry = subjectDataCatalogue().find(
-        (candidate) => candidate.collectorId === `extension:${integrationId}`,
-      );
-      if (!entry) throw new Error(`No catalogue entry for ${integrationId}`);
-      return entry;
-    };
+    expect(subjectDataCatalogue()).toEqual(SUBJECT_DATA_CATALOGUE);
+    expect(warn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        integrationId: "acme-overlay",
+        index: 0,
+        problem: "an extension declares only personal data",
+      }),
+      expect.any(String),
+    );
+  });
 
-    expect(catalogueAvailability(entryOf("acme-overlay"))).toBe("available");
-    expect(catalogueAvailability(entryOf("acme-tracker"))).toBe("unavailable");
+  it("gives an operator-held entry no collector, so the report shows it as checked by the operator", async () => {
+    const overlay = withHandler(
+      integration("acme-overlay", "Acme overlay", {
+        registrations: [
+          {
+            ...NOTES_ENTRY,
+            id: "acme-overlay-backups",
+            strategy: "operator_task",
+            portability: { decision: "exclude", reasonCode: "operator-held" },
+          },
+        ],
+      }),
+      async () => ({ notes: [] }),
+    );
+    setSubjectDataIntegrationSource(() => [overlay]);
+
+    const entry = subjectDataCatalogue().find(
+      (candidate) => candidate.id === "acme-overlay-backups",
+    );
+    expect(entry).toMatchObject({ source: "extension", strategy: "operator_task" });
+    expect(entry).not.toHaveProperty("collectorId");
+    const { processing } = await exportArchive();
+    expect(
+      processing.sources.find((source: { id: string }) => source.id === "acme-overlay-backups"),
+    ).toMatchObject({ outcome: "operator_check" });
   });
 
   it("names the extensions that could not be asked in the report", () => {
@@ -596,9 +919,13 @@ describe("extension-declared catalogue entries", () => {
         },
       ],
     });
+    const unasked = report.text.slice(
+      report.text.indexOf("Erweiterungen, die nicht gefragt werden konnten"),
+    );
     expect(report.text).toContain("Erweiterungen, die nicht gefragt werden konnten");
-    expect(report.text).toContain("Acme tracker (acme-tracker)");
-    expect(report.text).not.toContain("Acme overlay (acme-overlay)");
+    expect(unasked).toContain("Acme tracker (acme-tracker)");
+    expect(unasked).not.toContain("Acme overlay (acme-overlay)");
+    expect(report.text).toContain("Acme overlay (acme-overlay): extensions/acme-overlay.json");
     expect(report.translationFallbacks).toEqual([]);
   });
 });

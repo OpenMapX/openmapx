@@ -1229,31 +1229,50 @@ ctx.registerSubjectDataHandler({
   copied data.
 - The host cannot stop JavaScript that ignores the deadline. Keep each call well
   within 30 seconds; a person with much data is erased in the same call.
-- For a person's data export, the host calls `export` of every loaded
+- For a person's data export, the host calls `export` of every running
   integration with a handler at the same time, in its scope, with 30 seconds
-  each. What it returns is written as JSON to `extensions/<id>.json` in the
-  archive, exactly as returned; `undefined` becomes `null`, and functions and
-  `undefined` inside objects are dropped as JSON drops them. Return plain data
-  of at most 8 MiB as JSON.
+  each. Return only the given person's data, as plain JSON-serialisable values,
+  at most 8 MiB once written as JSON (measured in UTF-8 bytes). What it returns
+  is written to `extensions/<id>.json` in the archive, exactly as returned;
+  `undefined` becomes `null`, and functions and `undefined` inside objects are
+  dropped as JSON drops them. A `Map` or `Set` is written as `{}`, so convert
+  them yourself. The `toJSON` methods and getters of the returned value run
+  synchronously in the API process while the host writes it, in the
+  integration's scope, and nothing can interrupt them there: a loop in one
+  stops the whole API.
 - An export that rejects or throws, runs past 30 seconds, cannot be written as
   JSON (a cycle, a BigInt, a `toJSON` that throws, a function as the whole
-  value) or is larger than 8 MiB is left out. So is an integration that is
-  listed in `integration_subject_handler` but cannot run. The export is still
-  delivered: its manifest lists every extension with `outcome: "included"` or
-  `"unavailable"` and a `warningCode` (`extension-handler-failed`,
-  `extension-export-too-large` or `extension-not-loaded`), and its README
-  names each one left out under "Extensions that could not be asked" with the
-  reason. The API log records why for the administrator.
+  value) or is larger than 8 MiB is left out. While an earlier `export` call of
+  the integration is still unsettled after its deadline, the next export
+  leaves it out without calling it again.
+- The export also names every integration that may hold data about the
+  person and was not asked: an installed integration whose manifest declares
+  `subjectData.storesPersonalData` but that registered no handler
+  (`extension-no-export-handler`); one that cannot run and is listed with a
+  handler, declares personal data or has its `ext_<id>` schema
+  (`extension-not-loaded`); and one the registry does not hold although it is
+  listed or its schema exists, for example after an uninstall that kept its
+  data (`extension-not-installed`). The export is still delivered: its
+  manifest and processing information list every extension with
+  `outcome: "included"` or `"unavailable"` and the `warningCode`, its README
+  names the extensions it asked and the file of each, and names each one left
+  out under "Extensions that could not be asked" with the reason and that the
+  operator has been asked to provide the data. Each one left out opens an
+  operator task `extension:<id>` on the case, with the code as its public code,
+  and is logged with the case id; the case cannot be completed until the
+  administrator resolves it.
 - An installed integration may describe its data for the processing
   information in `subjectData.registrations` (at most 64). Each entry is a
-  catalogue registration without `source` and `collectorId`, which the host
-  sets to `"extension"` and `"extension:<id>"`, plus an optional `title` (at
-  most 200 characters) and `description` (at most 2 000), which the report
-  shows as the entry's category and purpose. An entry that fails the
-  catalogue's schema, takes an id that is already in the catalogue, declares
-  `not_personal` or sets `source` or `collectorId` is left out with one warning
-  naming the integration and the entry's index. The entry counts as available
-  while the integration is loaded with a handler.
+  catalogue registration without `source` and `collectorId`; the host sets
+  `source` to `"extension"` and, for a `collector` entry, `collectorId` to
+  `"extension:<id>"`, so the entry shows the outcome of the integration's
+  export. An `operator_task` entry has no collector and is shown as checked by
+  the operator. An entry may add a `title` (at most 200 characters) and
+  `description` (at most 2 000), which the report shows as its category and
+  purpose. An entry that fails the catalogue's schema, takes an id that is
+  already in the catalogue, declares `not_personal` or sets `source` or
+  `collectorId` is left out with one warning naming the integration and the
+  entry's index.
 
 In tests, `createMockIntegrationContext()` keeps the registered handler in
 `registered.subjectDataHandler`, and `eraseSubject(id)` and `exportSubject(id)`

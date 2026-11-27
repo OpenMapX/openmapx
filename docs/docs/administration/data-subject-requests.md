@@ -91,7 +91,14 @@ requires another explicit confirmation.
 - **Operator-held sources:** each request has one task per source that only an
   operator can check. Check it outside OpenMapX and resolve it with one action
   and a reason code. A self-service request stays `in_progress` after the
-  download until every task is resolved.
+  download until every task is resolved. An export that could not include an
+  extension's data adds a task `extension:<id>` whose code says why
+  (`extension-not-loaded`, `extension-not-installed`,
+  `extension-no-export-handler`, `extension-handler-failed` or
+  `extension-export-too-large`); see
+  [User erasure operations](./user-erasure.md#access-and-portability-requests)
+  for what to do. A later export that leaves the extension out again opens the
+  task again.
 - **Deadlines and decisions:** inspect the original deadline and controller
   time zone. Record the actual notification time before extending a deadline;
   extensions cannot exceed two calendar months after the original deadline.

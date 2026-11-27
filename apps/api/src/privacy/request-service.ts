@@ -35,6 +35,7 @@ import { actorUserIdOrNull } from "../utils/actor.js";
 import { subjectDataCatalogue } from "./catalogue.js";
 import { addCalendarMonths, calculateSubjectRequestDueAt } from "./deadline.js";
 import { PrivacyRequestError } from "./errors.js";
+import { EXTENSION_LOGICAL_ID_PREFIX } from "./extension-handlers.js";
 import {
   findIdempotentCreate,
   findIdempotentEvent,
@@ -960,6 +961,44 @@ export class PrivacyRequestService {
       .where(eq(dataSubjectRequest.id, request.id))
       .returning();
     return updated ?? request;
+  }
+
+  /**
+   * Opens one operator task per extension an export left out, named
+   * `extension:<integration id>` with the reason as its public code. A task
+   * an earlier export opened is opened again with the new reason, also when
+   * an administrator had resolved it, so every export that leaves an
+   * extension out is seen to before the case can be completed.
+   */
+  async recordExtensionsLeftOut(
+    requestId: string,
+    leftOut: ReadonlyArray<{ integrationId: string; warningCode: string }>,
+  ): Promise<void> {
+    if (leftOut.length === 0) return;
+    const now = this.now();
+    await this.database
+      .insert(dataSubjectRequestTask)
+      .values(
+        leftOut.map(({ integrationId, warningCode }) => ({
+          requestId,
+          registrationId: `${EXTENSION_LOGICAL_ID_PREFIX}${integrationId}`,
+          source: "extension" as const,
+          status: "open" as const,
+          publicCode: warningCode,
+          createdAt: now,
+          updatedAt: now,
+        })),
+      )
+      .onConflictDoUpdate({
+        target: [dataSubjectRequestTask.requestId, dataSubjectRequestTask.registrationId],
+        set: {
+          status: "open",
+          publicCode: sql`excluded.public_code`,
+          resolutionCode: null,
+          resolvedAt: null,
+          updatedAt: now,
+        },
+      });
   }
 
   /** Record an export failure without identifiers in the payload. */

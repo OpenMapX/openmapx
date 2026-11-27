@@ -71,8 +71,9 @@ export interface PrivacyReportExtension {
 }
 
 /**
- * The source that answered for a registration: an extension's registration
- * is answered by the part of the extension that declared it.
+ * The source that answered for a registration: an extension's collector
+ * registration is answered by the part of the extension that declared it,
+ * whose id is the registration's collector id.
  */
 function observedSource(
   registration: Registration,
@@ -80,8 +81,8 @@ function observedSource(
 ): PrivacyReportSource | undefined {
   const { collectorId } = registration;
   const registrationId =
-    registration.source === "extension" && collectorId?.startsWith("extension:")
-      ? `${EXTENSION_LOGICAL_ID_PREFIX}${collectorId.slice("extension:".length)}`
+    registration.source === "extension" && collectorId?.startsWith(EXTENSION_LOGICAL_ID_PREFIX)
+      ? collectorId
       : registration.id;
   return sources.find((source) => source.registrationId === registrationId);
 }
@@ -366,6 +367,18 @@ export function buildPrivacyResponseReport(input: {
               }),
             )
             .join("; "),
+        }),
+      );
+  }
+  const included = extensions.filter((extension) => extension.outcome === "included");
+  if (included.length) {
+    lines.push("", t("extensionsIncludedHeading"), t("extensionsIncludedIntro"));
+    for (const extension of included)
+      lines.push(
+        t("extensionIncludedRow", {
+          name: extension.name,
+          id: extension.integrationId,
+          file: `extensions/${extension.integrationId}.json`,
         }),
       );
   }

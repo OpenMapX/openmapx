@@ -3925,10 +3925,15 @@
         "storage-missing": "The retained source material was no longer available.",
         "extension-not-loaded": "The extension is installed but was not running when this export was made, so it could not be asked for your data.",
         "extension-handler-failed": "The extension did not answer within 30 seconds or its answer could not be used.",
-        "extension-export-too-large": "The extension's answer was larger than 8 MiB, the most an export takes from one extension."
+        "extension-export-too-large": "The extension's answer was larger than 8 MiB written as JSON, the most an export takes from one extension.",
+        "extension-no-export-handler": "The extension keeps data about people but offers no way to export it, so it could not be asked for your data.",
+        "extension-not-installed": "The extension is no longer installed, or its installation could not be read, but data it stored is still kept on this server; it could not be asked for your data."
       },
+      "extensionsIncludedHeading": "Extensions asked for your data",
+      "extensionsIncludedIntro": "Each extension below was asked for the data it holds about you while this export was made, not at the snapshot cutoff above. Its answer is in the extensions folder of this archive, as JSON.",
+      "extensionIncludedRow": "- {name} ({id}): {file}",
       "extensionsUnavailableHeading": "Extensions that could not be asked",
-      "extensionsUnavailableIntro": "These extensions may hold data about you that this archive does not contain. You can request a new export later or ask the contact below.",
+      "extensionsUnavailableIntro": "These extensions may hold data about you that this archive does not contain. The operator of this service has been asked to provide it. You can also request a new export later or ask the contact below.",
       "extensionUnavailableRow": "- {name} ({id}): {reason}",
       "deploymentSourcesHeading": "Deployment and operator sources",
       "noDeploymentSources": "No additional deployment sources were configured.",

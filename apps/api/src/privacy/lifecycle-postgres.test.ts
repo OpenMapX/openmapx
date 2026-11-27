@@ -291,6 +291,89 @@ suite("privacy request lifecycle on PostgreSQL", () => {
     expect(event?.payload).toMatchObject({ from: "in_progress", reasonCode: "export-delivered" });
   });
 
+  it("keeps a request open until an administrator resolves each extension its export left out", async () => {
+    const userId = await subject();
+    const request = await service().create({
+      userId,
+      kind: "portability",
+      channel: "self_service",
+      locale: "en",
+      timeZone: "UTC",
+    });
+    await resolveAll(request.id);
+
+    await service().recordExtensionsLeftOut(request.id, [
+      { integrationId: "acme-tracker", warningCode: "extension-not-loaded" },
+      { integrationId: "kept-data", warningCode: "extension-not-installed" },
+    ]);
+    const downloaded = await service().finishExport(request.id, { kind: "subject", id: userId });
+
+    expect(downloaded.status).toBe("in_progress");
+    const open = (await tasks(request.id)).filter((task) => task.status === "open");
+    expect(
+      open.map(({ registrationId, source, publicCode }) => ({
+        registrationId,
+        source,
+        publicCode,
+      })),
+    ).toEqual([
+      {
+        registrationId: "extension:acme-tracker",
+        source: "extension",
+        publicCode: "extension-not-loaded",
+      },
+      {
+        registrationId: "extension:kept-data",
+        source: "extension",
+        publicCode: "extension-not-installed",
+      },
+    ]);
+    await expect(
+      service().recordDecision({
+        requestId: request.id,
+        version: downloaded.version,
+        decision: "completed",
+        reasonCode: "export-delivered",
+        actorId: ADMINS[0],
+        idempotencyKey: `complete-early-${request.id}`,
+      }),
+    ).rejects.toMatchObject({ code: "TASKS_UNRESOLVED", statusCode: 409 });
+
+    for (const task of open) {
+      const current = await service().getById(request.id);
+      await service().resolveTask({
+        requestId: request.id,
+        taskId: task.id,
+        version: current.version,
+        reasonCode: "extension-data-provided",
+        actorId: ADMINS[0],
+        idempotencyKey: `resolve-extension-${task.id}`,
+      });
+    }
+    expect((await tasks(request.id)).filter((task) => task.status === "open")).toEqual([]);
+    // A later export that leaves the extension out again opens its task again.
+    await service().recordExtensionsLeftOut(request.id, [
+      { integrationId: "acme-tracker", warningCode: "extension-handler-failed" },
+    ]);
+    expect(
+      (await tasks(request.id))
+        .filter((task) => task.status === "open")
+        .map(({ registrationId, publicCode, resolutionCode, resolvedAt }) => ({
+          registrationId,
+          publicCode,
+          resolutionCode,
+          resolvedAt,
+        })),
+    ).toEqual([
+      {
+        registrationId: "extension:acme-tracker",
+        publicCode: "extension-handler-failed",
+        resolutionCode: null,
+        resolvedAt: null,
+      },
+    ]);
+  });
+
   it("records a withdrawal as completed with reason withdrawn and sends no completion email", async () => {
     const userId = await subject();
     const request = await service().create({

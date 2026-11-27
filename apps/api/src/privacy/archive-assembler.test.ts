@@ -75,14 +75,15 @@ describe("subject archive assembler", () => {
   });
 
   it("files an extension's export under extensions/ by its integration id only", () => {
-    expect(archivePathForLogicalId("extension-acme-overlay")).toBe(
+    expect(archivePathForLogicalId("extension:acme-overlay")).toBe(
       "openmapx-data-export/extensions/acme-overlay.json",
     );
     for (const logicalId of [
-      "extension-",
-      "extension-../manifest",
-      "extension-Acme",
-      "extension-a/b",
+      "extension:",
+      "extension:../manifest",
+      "extension:Acme",
+      "extension:a/b",
+      "extension-acme-overlay",
     ])
       expect(archivePathForLogicalId(logicalId)).toBeNull();
   });
@@ -94,7 +95,7 @@ describe("subject archive assembler", () => {
       responseContext,
       parts: [
         {
-          registrationId: "extension-acme-overlay",
+          registrationId: "extension:acme-overlay",
           category: "extension",
           outcome: "included",
           warningCodes: [],
@@ -105,14 +106,14 @@ describe("subject archive assembler", () => {
           extension: { integrationId: "acme-overlay", name: "Acme overlay" },
           entries: [
             {
-              logicalId: "extension-acme-overlay",
+              logicalId: "extension:acme-overlay",
               source: Buffer.from('{"notes":[]}'),
               mediaType: "application/json",
             },
           ],
         },
         {
-          registrationId: "extension-acme-tracker",
+          registrationId: "extension:acme-tracker",
           category: "extension",
           outcome: "unavailable",
           warningCodes: ["extension-not-loaded"],
@@ -143,11 +144,11 @@ describe("subject archive assembler", () => {
     ]);
     expect(manifest.members).toContainEqual(
       expect.objectContaining({
-        logicalId: "extension-acme-overlay",
+        logicalId: "extension:acme-overlay",
         path: "openmapx-data-export/extensions/acme-overlay.json",
       }),
     );
-    expect(written.map((entry) => entry.logicalId)).not.toContain("extension-acme-tracker");
+    expect(written.map((entry) => entry.logicalId)).not.toContain("extension:acme-tracker");
   });
 
   it("rejects an invalid generation timestamp before any byte is written", () => {

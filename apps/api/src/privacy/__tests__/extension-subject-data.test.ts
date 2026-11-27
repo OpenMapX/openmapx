@@ -571,9 +571,11 @@ describe("pending erasures", () => {
     const { runPendingErasures } = setup(store, [a]);
     const ask = () =>
       collectExtensionParts({
+        requestId: "case-1",
         userId: "subject-1",
         integrations: [a],
         listed: async () => ["a"],
+        schemas: async () => [],
         log: { warn: () => {} },
         exportDeadlineMs: 1_000,
       });

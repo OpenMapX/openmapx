@@ -7,8 +7,8 @@ import { integrationSubjectDataSchema } from "@openmapx/extension-contracts/inte
 import type { LoadedIntegration } from "@openmapx/integration-framework";
 import z from "zod/v4";
 import {
+  EXTENSION_LOGICAL_ID_PREFIX,
   installedIntegrations,
-  runningSubjectDataHandler,
   subjectDataLog,
 } from "./extension-handlers";
 
@@ -898,25 +898,6 @@ export function assertSubjectDataRegistration(value: unknown): SubjectDataRegist
   return subjectDataRegistrationSchema.parse(value);
 }
 
-/** IDs with a code path in the current release. Other collector registrations
- * remain visible but stay unavailable until their source plan is enabled. */
-export const AVAILABLE_SUBJECT_COLLECTORS = new Set([
-  "openmapx-account",
-  "openmapx-authentication",
-  "openmapx-content",
-  "openmapx-vehicles",
-  "openmapx-sharing",
-  "openmapx-timeline",
-  "openmapx-mangrove",
-  "openmapx-administration",
-  "openmapx-offline",
-  "openmapx-privacy-case",
-  "openmapx-disclosures",
-  "managed-dawarich-v1",
-]);
-
-const EXTENSION_COLLECTOR_PREFIX = "extension:";
-
 /** A registration an installed integration declared in its manifest. */
 interface ExtensionCatalogueEntry {
   integrationId: string;
@@ -1001,14 +982,17 @@ function declaredBy(integration: LoadedIntegration): {
       refuse(checked.error.issues.map((issue) => issue.path.join(".") || "entry").join(", "));
       continue;
     }
+    // Only a collector entry is answered by the extension's export part; an
+    // operator-held entry stays with the operator and has no collector.
+    const { collectorId: _placeholder, ...registration } = checked.data;
     result.entries.push({
       index,
       entry: {
         integrationId: integration.id,
-        registration: {
-          ...checked.data,
-          collectorId: `${EXTENSION_COLLECTOR_PREFIX}${integration.id}`,
-        },
+        registration:
+          fields.strategy === "collector"
+            ? { ...registration, collectorId: `${EXTENSION_LOGICAL_ID_PREFIX}${integration.id}` }
+            : registration,
         ...(text.data.title === undefined ? {} : { title: text.data.title }),
         ...(text.data.description === undefined ? {} : { description: text.data.description }),
       },
@@ -1044,7 +1028,8 @@ function extensionCatalogueEntries(): ExtensionCatalogueEntry[] {
 
 /**
  * The static catalogue followed by the registrations installed integrations
- * declare, with `source: "extension"` and `collectorId: "extension:<id>"`.
+ * declare, with `source: "extension"`, and for a collector entry
+ * `collectorId: "extension:<id>"`.
  * `SUBJECT_DATA_CATALOGUE` stays the static part, which the repository's
  * checks validate.
  */
@@ -1061,20 +1046,4 @@ export function extensionRegistrationText(
 ): { title?: string; description?: string } | undefined {
   const entry = extensionCatalogueEntries().find(({ registration }) => registration.id === id);
   return entry && { title: entry.title, description: entry.description };
-}
-
-export function catalogueAvailability(
-  registration: SubjectDataRegistration,
-): "available" | "unavailable" | "operator_review" | "not_applicable" {
-  // Only the host sets this prefix; the schema's grammar refuses it elsewhere.
-  if (registration.collectorId?.startsWith(EXTENSION_COLLECTOR_PREFIX)) {
-    const integrationId = registration.collectorId.slice(EXTENSION_COLLECTOR_PREFIX.length);
-    const integration = installedIntegrations()?.find(({ id }) => id === integrationId);
-    return integration && runningSubjectDataHandler(integration) ? "available" : "unavailable";
-  }
-  if (registration.strategy === "not_personal") return "not_applicable";
-  if (registration.strategy === "operator_task") return "operator_review";
-  return registration.collectorId && AVAILABLE_SUBJECT_COLLECTORS.has(registration.collectorId)
-    ? "available"
-    : "unavailable";
 }

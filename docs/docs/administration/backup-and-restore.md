@@ -347,9 +347,10 @@ macOS or Windows cannot connect through such a socket.
    missing from both. The report inside the archive lists sources the scratch
    database could not answer, such as the managed timeline, for you to review.
    No extension runs against the snapshot: every extension the snapshot
-   records as handling personal data is listed under "Extensions that could
-   not be asked", and its tables are in the restored `ext_<id>` schema for you
-   to review.
+   records as handling personal data, and every extension whose `ext_<id>`
+   schema the snapshot holds, is listed under "Extensions that could not be
+   asked"; review its tables in the restored `ext_<id>` schema and add what
+   they hold about the person to your answer.
 
 6. **Remove the container, its volume and the scratch files** once the
    archive is delivered through the agreed channel:

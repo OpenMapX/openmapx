@@ -9,10 +9,12 @@ import type { IntegrationScope } from "../integration-scope";
  */
 
 /**
- * The archive member, and the export part, of an extension's export:
- * `extension-<integration id>`.
+ * The archive member, the export part, the operator task and the collector
+ * id of an extension's export: `extension:<integration id>`. No catalogue
+ * id, archive member or integration id can contain `:`, so these never
+ * collide with a catalogue entry, whatever the integration is called.
  */
-export const EXTENSION_LOGICAL_ID_PREFIX = "extension-";
+export const EXTENSION_LOGICAL_ID_PREFIX = "extension:";
 
 export interface RegisteredSubjectDataHandler {
   readonly scope: IntegrationScope;

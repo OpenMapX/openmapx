@@ -33,6 +33,20 @@ describe("operator task actions", () => {
     expect(writes[0]?.body).toEqual({ version: 3, reasonCode: "logs-checked" });
   });
 
+  it("shows why an open task was opened, such as the reason an export left an extension out", () => {
+    const detail = privacyDetail();
+    const task = nth(detail.tasks, 0);
+    task.registrationId = "extension:acme-tracker";
+    task.source = "extension";
+    task.publicCode = "extension-not-loaded";
+    renderPrivacyComponent(detail, (client) => (
+      <PrivacyTaskActions detail={detail} client={client} />
+    ));
+    expect(screen.getByText(/extension:acme-tracker/)).toHaveTextContent(
+      "extension:acme-tracker · extension-not-loaded · privacyAdmin.workflows.taskStates.open",
+    );
+  });
+
   it("offers no action for a resolved task", () => {
     const detail = privacyDetail();
     const task = nth(detail.tasks, 0);

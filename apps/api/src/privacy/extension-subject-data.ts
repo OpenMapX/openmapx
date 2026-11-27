@@ -1,3 +1,4 @@
+import { extensionSchemaName, isComponentId } from "@openmapx/core/component-id";
 import {
   describeThrown,
   type LoadedIntegration,
@@ -595,26 +596,41 @@ export const MAX_EXTENSION_EXPORT_BYTES = 8 * 1024 * 1024;
 
 class ExportTooLarge extends Error {}
 
+/** JSON's own text for each value that is not a string, an object or an array. */
+const JSON_DROPS = new Set(["undefined", "function", "symbol"]);
+
 /**
  * The JSON text of what an export returned, or `null` when it is larger than
- * `MAX_EXTENSION_EXPORT_BYTES`. A large value is abandoned while it is being
- * written, before all of it is in memory. Throws when the value cannot be
- * written as JSON: a cycle, a BigInt, a `toJSON` that throws, or a top-level
- * value JSON has no text for, such as a function. `undefined` is written as
- * `null`.
+ * `MAX_EXTENSION_EXPORT_BYTES` in UTF-8. The decision rests on the real byte
+ * length of the finished text. While the value is written, the bytes it will
+ * take at least are counted, so a value that is surely too large is
+ * abandoned before all of it is in memory, and a value that fits is never
+ * abandoned: a character takes at least one byte, a key costs its quotes and
+ * colon only when JSON writes it, and an array index costs nothing. Throws
+ * when the value cannot be written as JSON: a cycle, a BigInt, a `toJSON`
+ * that throws, or a top-level value JSON has no text for, such as a
+ * function. `undefined` is written as `null`.
  */
 function serialiseExport(value: unknown): string | null {
-  let remaining = MAX_EXTENSION_EXPORT_BYTES;
+  let atLeast = 0;
+  let first = true;
   const tooLarge = new ExportTooLarge();
   let json: string | undefined;
   try {
-    // A character takes at least one byte, so counting characters never
-    // stops a value that would fit.
-    json = JSON.stringify(value === undefined ? null : value, (key, item: unknown) => {
-      remaining -= key.length + (typeof item === "string" ? item.length : 1);
-      if (remaining < 0) throw tooLarge;
-      return item;
-    });
+    json = JSON.stringify(
+      value === undefined ? null : value,
+      function (this: unknown, key: string, item: unknown) {
+        const root = first;
+        first = false;
+        const dropped = JSON_DROPS.has(typeof item);
+        // A member of an object is written as `"key":value`; an array writes no index.
+        if (!root && !Array.isArray(this) && !dropped) atLeast += key.length + 3;
+        if (typeof item === "string") atLeast += item.length + 2;
+        else if (!dropped || Array.isArray(this)) atLeast += 1;
+        if (atLeast > MAX_EXTENSION_EXPORT_BYTES) throw tooLarge;
+        return item;
+      },
+    );
   } catch (error) {
     if (error === tooLarge) return null;
     throw error;
@@ -623,29 +639,76 @@ function serialiseExport(value: unknown): string | null {
   return Buffer.byteLength(json, "utf8") > MAX_EXTENSION_EXPORT_BYTES ? null : json;
 }
 
-type ExtensionWarningCode =
+/** Why an extension's part of a person's export is missing. */
+export type ExtensionWarningCode =
   | "extension-not-loaded"
+  | "extension-not-installed"
+  | "extension-no-export-handler"
   | "extension-handler-failed"
   | "extension-export-too-large";
 
+/** An extension a person's export could not include, and why. */
+export interface ExtensionLeftOut {
+  integrationId: string;
+  warningCode: ExtensionWarningCode;
+}
+
+/** Whether an installed integration's manifest says it keeps data about people. */
+function declaresPersonalData(integration: LoadedIntegration): boolean {
+  const declaration = (integration.manifest as { subjectData?: { storesPersonalData?: unknown } })
+    .subjectData;
+  return !integration.isBuiltIn && declaration?.storesPersonalData === true;
+}
+
 /**
- * One part per integration that registered a handler and per integration
- * that is listed in `integration_subject_handler` but cannot run. Every
- * handler is asked at once, each with `exportDeadlineMs`. Nothing an
- * extension returns or throws fails the collection: what cannot be included
- * becomes an unavailable part that does not block the export, and the reason
- * is logged for the administrator. Without a registry (outside the API),
- * every listed integration is reported as not loaded.
+ * The integration ids whose schema is among `schemas`, mapped back with the
+ * host's own schema name: a name is an integration's schema only when the id
+ * it stands for gives exactly that name again.
+ */
+function integrationsWithSchema(schemas: readonly string[]): Set<string> {
+  const ids = new Set<string>();
+  for (const schema of schemas) {
+    if (!schema.startsWith("ext_")) continue;
+    const id = schema.slice("ext_".length).replaceAll("_", "-");
+    if (isComponentId(id) && extensionSchemaName(id) === schema) ids.add(id);
+  }
+  return ids;
+}
+
+/**
+ * The extension parts of a person's export, one per integration that may
+ * hold data about the person:
+ *
+ * - a running integration with a handler is asked, every one at once, each
+ *   with `exportDeadlineMs`; what it cannot give (a failure, an overrun, an
+ *   answer too large or not JSON) becomes `extension-handler-failed` or
+ *   `extension-export-too-large`;
+ * - a running installed integration whose manifest says it keeps personal
+ *   data but that registered no handler is `extension-no-export-handler`;
+ * - an integration of the registry that cannot run is `extension-not-loaded`
+ *   when it is listed with a handler, keeps personal data or has its schema;
+ * - a listed integration or an `ext_` schema the registry does not hold, for
+ *   example after an uninstall that kept the data, is
+ *   `extension-not-installed`.
+ *
+ * Nothing an extension returns or throws fails the collection: every part
+ * that is left out does not block the export and is logged once with the
+ * case, the integration and the reason. Without a registry (the manual
+ * backup export) every listed integration and every extension schema is
+ * reported as not loaded.
  */
 export async function collectExtensionParts(input: {
+  requestId: string;
   userId: string;
   integrations: readonly LoadedIntegration[] | null;
   listed: () => Promise<readonly string[]>;
+  schemas: () => Promise<readonly string[]>;
   log: SubjectDataLog;
   exportDeadlineMs?: number;
 }): Promise<CollectorSourcePart[]> {
-  const { userId, log } = input;
+  const { requestId, userId, log } = input;
   const listed = new Set(await input.listed());
+  const withSchema = integrationsWithSchema(await input.schemas());
   const capturedAt = new Date().toISOString();
   const part = (
     integrationId: string,
@@ -673,29 +736,56 @@ export async function collectExtensionParts(input: {
         }
       : {}),
   });
-  if (!input.integrations)
-    return [...listed]
-      .sort()
-      .map((integrationId) => part(integrationId, integrationId, { code: "extension-not-loaded" }));
+  const leftOut = (
+    integrationId: string,
+    name: string,
+    code: ExtensionWarningCode,
+    detail: { error?: string; message?: string } = {},
+  ) => {
+    log.warn(
+      {
+        requestId,
+        integrationId,
+        warningCode: code,
+        ...(detail.error === undefined ? {} : { error: detail.error }),
+      },
+      detail.message ??
+        `The export of case ${requestId} leaves out the data of integration ${integrationId} (${code})`,
+    );
+    return part(integrationId, name, { code });
+  };
+  const unregistered = [...new Set([...listed, ...withSchema])].sort();
 
+  if (!input.integrations)
+    return unregistered.map((integrationId) =>
+      leftOut(integrationId, integrationId, "extension-not-loaded"),
+    );
+
+  const known = new Set(input.integrations.map(({ id }) => id));
   const asked = input.integrations.map(async (integration) => {
     const { id } = integration;
-    const name = integration.manifest.name || id;
+    const name = plainExtensionName(integration, id);
     const registered = runningSubjectDataHandler(integration);
-    if (!registered)
-      return !integrationRuns(integration) && listed.has(id)
-        ? part(id, name, { code: "extension-not-loaded" })
+    if (!registered) {
+      if (integrationRuns(integration))
+        return declaresPersonalData(integration)
+          ? leftOut(id, name, "extension-no-export-handler")
+          : null;
+      return listed.has(id) || withSchema.has(id) || declaresPersonalData(integration)
+        ? leftOut(id, name, "extension-not-loaded")
         : null;
-    const failed = (code: ExtensionWarningCode, error: string, message: string) => {
-      log.warn({ integrationId: id, error }, message);
-      return part(id, name, { code });
-    };
+    }
+    const failed = (code: ExtensionWarningCode, error: string, what: string) =>
+      leftOut(id, name, code, {
+        error,
+        message: `The subject-data export of integration ${id} ${what}; case ${requestId} leaves its data out`,
+      });
     // A call that is still running would only pile up behind the hung one.
     if (hungExports.has(integration))
       return failed(
         "extension-handler-failed",
         "an earlier export call has not settled",
-        `The subject-data export of integration ${id} failed`,
+        "is still running from an earlier export",
       );
     const call = await callHandler<unknown>(
       integration,
@@ -708,51 +798,69 @@ export async function collectExtensionParts(input: {
         subjectId: userId,
       },
     );
-    if (!call.ok)
-      return failed(
-        "extension-handler-failed",
-        call.error,
-        `The subject-data export of integration ${id} failed`,
-      );
+    if (!call.ok) return failed("extension-handler-failed", call.error, "failed");
     let json: string | null;
     try {
       // `toJSON` and getters are the integration's code too.
       json = runInIntegrationScope(registered.scope, () => serialiseExport(call.value));
     } catch (error) {
-      return failed(
-        "extension-handler-failed",
-        describeThrown(error),
-        `The subject-data export of integration ${id} cannot be written as JSON`,
-      );
+      return failed("extension-handler-failed", describeThrown(error), "cannot be written as JSON");
     }
     if (json === null)
       return failed(
         "extension-export-too-large",
-        `larger than ${MAX_EXTENSION_EXPORT_BYTES} bytes`,
-        `The subject-data export of integration ${id} is too large to include`,
+        `larger than ${MAX_EXTENSION_EXPORT_BYTES} bytes as JSON`,
+        "is too large to include",
       );
     return part(id, name, { source: Buffer.from(json, "utf8") });
   });
-  return (await Promise.all(asked)).filter((candidate) => candidate !== null);
+  const parts = (await Promise.all(asked)).filter((candidate) => candidate !== null);
+  for (const integrationId of unregistered)
+    if (!known.has(integrationId))
+      parts.push(leftOut(integrationId, integrationId, "extension-not-installed"));
+  return parts;
+}
+
+/** The extensions a person's export left out, in the order of its parts. */
+export function extensionsLeftOut(parts: readonly CollectorSourcePart[]): ExtensionLeftOut[] {
+  return parts.flatMap((part) =>
+    part.extension && part.outcome !== "included"
+      ? [
+          {
+            integrationId: part.extension.integrationId,
+            warningCode: (part.warningCodes[0] ??
+              "extension-handler-failed") as ExtensionWarningCode,
+          },
+        ]
+      : [],
+  );
 }
 
 /**
- * The extension parts of a person's export, from the live registry and the
- * handler table in `database` (the platform's, unless the manual backup
- * export reads a restored copy).
+ * The extension parts of a person's export, from the live registry, and the
+ * handler table and schemas in `database` (the platform's, unless the manual
+ * backup export reads a restored copy).
  */
 export function collectExtensionSubjectData(args: {
+  requestId: string;
   userId: string;
   database?: typeof db;
 }): Promise<CollectorSourcePart[]> {
   const client = (args.database ?? db).$client;
   return collectExtensionParts({
+    requestId: args.requestId,
     userId: args.userId,
     integrations: installedIntegrations(),
     listed: async () => {
       const rows = await client<Array<{ integration_id: string }>>`
         select integration_id from integration_subject_handler order by integration_id`;
       return rows.map((row) => row.integration_id);
+    },
+    schemas: async () => {
+      const rows = await client<Array<{ nspname: string }>>`
+        select nspname::text from pg_catalog.pg_namespace
+        where starts_with(nspname::text, 'ext_') order by nspname`;
+      return rows.map((row) => row.nspname);
     },
     log: processLogger,
   });

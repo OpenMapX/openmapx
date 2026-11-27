@@ -1,6 +1,6 @@
 import { locales } from "@openmapx/i18n";
 import { describe, expect, it } from "vitest";
-import { catalogueAvailability, SUBJECT_DATA_CATALOGUE, subjectDataCatalogue } from "./catalogue";
+import { SUBJECT_DATA_CATALOGUE, subjectDataCatalogue } from "./catalogue";
 import { catalogueCopy } from "./catalogue-copy";
 
 describe("OpenMapX subject-data catalogue", () => {
@@ -20,12 +20,6 @@ describe("OpenMapX subject-data catalogue", () => {
     }
   });
 
-  it("distinguishes collector readiness from declaration", () => {
-    expect(catalogueAvailability(registration("managed-dawarich"))).toBe("available");
-    expect(catalogueAvailability(registration("backup-retained-copies"))).toBe("operator_review");
-    expect(catalogueAvailability(registration("global-public-data"))).toBe("not_applicable");
-  });
-
   it("registers the account id kept until an extension has erased the account's data", () => {
     expect(registration("extension-erasure-pending")).toMatchObject({
       source: "openmapx-db",
@@ -34,9 +28,6 @@ describe("OpenMapX subject-data catalogue", () => {
       legalBases: ["legal-obligation"],
       retention: { kind: "until-erased", reasonCode: "extension-erasure" },
     });
-    expect(catalogueAvailability(registration("extension-erasure-pending"))).toBe(
-      "operator_review",
-    );
   });
 
   it("is the static catalogue while no integration declares registrations", () => {

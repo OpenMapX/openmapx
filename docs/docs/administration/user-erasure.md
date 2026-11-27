@@ -79,12 +79,20 @@ The archive covers explicit OpenMapX projections and connected managed Dawarich
 data when that processor responds. Other controllers, off-host backups,
 operator logs and unavailable sources appear as reviewed omissions or tasks.
 Each running extension that keeps data about people is asked for it, and its
-answer is filed under `extensions/` in the archive. An extension that is not
-running, fails, does not answer within 30 seconds or answers with more than
-8 MiB does not stop the download: the archive's README lists it under
-"Extensions that could not be asked" with the reason, the manifest records it,
-and the API log tells the administrator why. Fix or re-enable the extension and
-the person can download again.
+answer is filed under `extensions/` in the archive; the README names the
+extensions asked and their files. An extension that may hold data about the
+person but could not be asked does not stop the download: one that is not
+running, offers no export, is no longer installed while its data is still in
+the database, fails, does not answer within 30 seconds or answers with more
+than 8 MiB. The README lists it under "Extensions that could not be asked"
+with the reason and says that the operator has been asked to provide the
+data, and the manifest records it with a reason code. The case gets an
+operator task named `extension:<id>` whose public code is that reason, so it
+cannot be completed until you resolve it: provide the person with the
+extension's data (from its `ext_<id>` schema, or by fixing or re-enabling the
+extension and letting the person download again), then resolve the task. The
+API log has one line per extension left out, with the case id and the
+reason.
 The **Download browser data** action is a separate local JSON supplement: it
 contains only an allowlisted preference snapshot and offline-map metadata, not
 cookies, sessions, credentials, caches or raw map archives.

@@ -3925,10 +3925,15 @@
         "storage-missing": "Das aufbewahrte Quellmaterial war nicht mehr verfügbar.",
         "extension-not-loaded": "Die Erweiterung ist installiert, lief aber nicht, als dieser Export erstellt wurde, und konnte daher nicht nach Ihren Daten gefragt werden.",
         "extension-handler-failed": "Die Erweiterung hat nicht innerhalb von 30 Sekunden geantwortet, oder ihre Antwort war nicht verwendbar.",
-        "extension-export-too-large": "Die Antwort der Erweiterung war größer als 8 MiB, das Höchstmaß, das ein Export von einer Erweiterung aufnimmt."
+        "extension-export-too-large": "Die Antwort der Erweiterung war als JSON geschrieben größer als 8 MiB, das Höchstmaß, das ein Export von einer Erweiterung aufnimmt.",
+        "extension-no-export-handler": "Die Erweiterung hält Daten über Personen, bietet aber keinen Weg, sie zu exportieren, und konnte daher nicht nach Ihren Daten gefragt werden.",
+        "extension-not-installed": "Die Erweiterung ist nicht mehr installiert oder ihre Installation konnte nicht gelesen werden, aber Daten, die sie gespeichert hat, liegen noch auf diesem Server; sie konnte nicht nach Ihren Daten gefragt werden."
       },
+      "extensionsIncludedHeading": "Nach Ihren Daten gefragte Erweiterungen",
+      "extensionsIncludedIntro": "Jede der folgenden Erweiterungen wurde nach den Daten gefragt, die sie über Sie hält, als dieser Export erstellt wurde, nicht zum oben genannten Stichtag. Ihre Antwort liegt als JSON im Ordner extensions dieses Archivs.",
+      "extensionIncludedRow": "- {name} ({id}): {file}",
       "extensionsUnavailableHeading": "Erweiterungen, die nicht gefragt werden konnten",
-      "extensionsUnavailableIntro": "Diese Erweiterungen halten möglicherweise Daten über Sie, die dieses Archiv nicht enthält. Sie können später einen neuen Export anfordern oder sich an den unten genannten Kontakt wenden.",
+      "extensionsUnavailableIntro": "Diese Erweiterungen halten möglicherweise Daten über Sie, die dieses Archiv nicht enthält. Der Betreiber dieses Dienstes wurde gebeten, sie bereitzustellen. Sie können außerdem später einen neuen Export anfordern oder sich an den unten genannten Kontakt wenden.",
       "extensionUnavailableRow": "- {name} ({id}): {reason}",
       "deploymentSourcesHeading": "Bereitstellungs- und Betreiberquellen",
       "noDeploymentSources": "Es wurden keine zusätzlichen Bereitstellungsquellen konfiguriert.",

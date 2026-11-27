@@ -43,7 +43,8 @@ function Task({
   return (
     <Stack spacing={1} sx={{ border: 1, borderColor: "divider", borderRadius: 1, p: 2 }}>
       <Typography>
-        {task.registrationId} · {w(`taskStates.${task.status}`)}
+        {task.registrationId}
+        {task.publicCode ? ` · ${task.publicCode}` : ""} · {w(`taskStates.${task.status}`)}
         {task.resolutionCode ? ` · ${task.resolutionCode}` : ""}
       </Typography>
       {open && (

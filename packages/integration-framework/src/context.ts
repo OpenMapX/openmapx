@@ -190,11 +190,20 @@ export interface ScheduleOptions {
  * by `subjectId`, the platform's account id. `erase` removes everything the
  * integration holds about the person; it runs after the account is deleted,
  * may run again for the same person and must then succeed without finding
- * anything. `export` returns what the integration holds about the person as
- * a JSON-serialisable value for the person's data export. The host gives each
- * call 30 seconds.
+ * anything. The host gives each call 30 seconds.
  */
 export interface SubjectDataHandler {
+  /**
+   * Returns what the integration holds about the person `subjectId`, and
+   * only about that person, for the person's data export: plain
+   * JSON-serialisable values (objects, arrays, strings, numbers, booleans,
+   * `null`), at most 8 MiB once written as JSON. An answer that is larger,
+   * cannot be written as JSON or takes longer than 30 seconds is left out of
+   * the export, which then names the integration. `toJSON` methods and
+   * getters of the returned value run synchronously in the API process while
+   * the host writes it, and nothing can interrupt them there; a loop in one
+   * stops the whole API.
+   */
   export(subjectId: string): Promise<unknown>;
   erase(subjectId: string): Promise<void>;
 }

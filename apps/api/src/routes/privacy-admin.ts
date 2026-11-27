@@ -331,6 +331,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
           request: row,
           subjectUserId: service.subjectUserId(row),
           database,
+          recordExtensionsLeftOut: (leftOut) => service.recordExtensionsLeftOut(row.id, leftOut),
           ...(options.exportSources ?? {}),
         });
         await database.transaction((tx) => new AdminActionReauthentication(tx).consume(proof, tx));

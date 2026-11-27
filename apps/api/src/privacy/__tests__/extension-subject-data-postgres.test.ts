@@ -358,7 +358,11 @@ describe.skipIf(skipDatabase)("extension subject data in PostgreSQL", () => {
     );
     registry = [exported, tracker];
 
-    const parts = await subjectData.collectExtensionSubjectData({ userId, database: pools.db });
+    const parts = await subjectData.collectExtensionSubjectData({
+      requestId: "case-1",
+      userId,
+      database: pools.db,
+    });
 
     expect(
       parts.map((part) => [part.extension?.integrationId, part.outcome, part.warningCodes]),
@@ -369,6 +373,31 @@ describe.skipIf(skipDatabase)("extension subject data in PostgreSQL", () => {
     expect(JSON.parse(String(parts[0]?.entries?.[0]?.source))).toEqual({
       notes: [{ body: "mine" }],
     });
+  });
+
+  it("names an extension whose schema is still in the database though it is not installed", async () => {
+    const userId = await createUser();
+    await raw`create schema if not exists ext_kept_data`;
+    await raw`create schema if not exists "ext_not_an_id_"`;
+    try {
+      registry = [notes];
+
+      const parts = await subjectData.collectExtensionSubjectData({
+        requestId: "case-2",
+        userId,
+        database: pools.db,
+      });
+
+      expect(
+        parts.map((part) => [part.extension?.integrationId, part.outcome, part.warningCodes]),
+      ).toEqual([
+        ["notes", "included", []],
+        ["kept-data", "unavailable", ["extension-not-installed"]],
+      ]);
+    } finally {
+      await raw`drop schema ext_kept_data`;
+      await raw`drop schema "ext_not_an_id_"`;
+    }
   });
 
   it("holds no lock or transaction past the deadline of a handler that never settles", async () => {
