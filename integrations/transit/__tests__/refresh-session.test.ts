@@ -42,6 +42,7 @@ it("never lets a refresh token outlive the state its cache write stored", async 
   const session = createRefreshSession(ctx, {} as TransitOrchestrator, SECRET);
 
   const token = await session.issueForSearch(itinerary, {
+    integrationId: "transit-motis",
     providerId: "motis",
     instance: "primary",
     datasetEpoch: "epoch",
@@ -83,10 +84,12 @@ it("issues a refresh token for any planner that declares refresh", async () => {
         data: { source, datasetEpoch: "epoch", itineraries: [{ ...itinerary, source }] },
         attributions: [],
         freshness: {},
+        planner: { integrationId: source, providerId: source },
       }),
     } as unknown as TransitOrchestrator;
     const session = createRefreshSession(ctx, orchestrator, SECRET);
     const token = await session.issueForSearch(itinerary, {
+      integrationId: source,
       providerId: source,
       instance: source,
       datasetEpoch: "epoch",
@@ -101,9 +104,16 @@ it("issues a refresh token for any planner that declares refresh", async () => {
   expect(await replanned("transit-acme")).toEqual(expect.any(String));
   expect(await replanned("transit-plain")).toBeUndefined();
   const session = createRefreshSession(ctx, {} as TransitOrchestrator, SECRET);
-  expect(session.canRefresh("transit-acme")).toBe(true);
-  expect(session.canRefresh("transit-plain")).toBe(false);
-  expect(session.canRefresh("transit-motis-local")).toBe(false);
+  const named = (integrationId: string, providerId = integrationId) => ({
+    integrationId,
+    providerId,
+  });
+  expect(session.canRefresh(named("transit-acme"))).toBe(true);
+  expect(session.canRefresh(named("transit-plain"))).toBe(false);
+  expect(session.canRefresh(named("transit-motis", "transit-motis-local"))).toBe(false);
+  // The provider id alone, or under another integration, names no planner.
+  expect(session.canRefresh({ providerId: "transit-acme" })).toBe(false);
+  expect(session.canRefresh(named("transit-plain", "transit-acme"))).toBe(false);
   expect(session.canRefresh(undefined)).toBe(false);
 });
 
@@ -136,8 +146,8 @@ it("binds the token of a replanned itinerary to the planner that replanned it", 
   const ctx = twoRefreshingPlanners();
   const refreshCalls: Array<[string, { itineraryId: string; datasetEpoch: string }]> = [];
   const orchestrator = {
-    refreshTrip: vi.fn(async (providerId: string, params) => {
-      refreshCalls.push([providerId, params]);
+    refreshTrip: vi.fn(async (planner: { providerId: string }, params) => {
+      refreshCalls.push([planner.providerId, params]);
       return { status: "gone", result: { data: null } };
     }),
     planTrip: async () => ({
@@ -149,6 +159,7 @@ it("binds the token of a replanned itinerary to the planner that replanned it", 
       },
       attributions: [],
       freshness: {},
+      planner: { integrationId: "transit-other", providerId: "transit-other" },
     }),
   } as unknown as TransitOrchestrator;
   const session = createRefreshSession(ctx, orchestrator, SECRET);
@@ -160,6 +171,7 @@ it("binds the token of a replanned itinerary to the planner that replanned it", 
   };
 
   const issued = await session.issueForSearch(itinerary, {
+    integrationId: "transit-acme",
     providerId: "transit-acme",
     instance: "acme-instance",
     datasetEpoch: "acme-epoch",
@@ -185,10 +197,12 @@ it("issues no token for a replanned itinerary whose planner names no dataset epo
       data: { source: "transit-other", itineraries: [{ ...itinerary, source: "transit-other" }] },
       attributions: [],
       freshness: {},
+      planner: { integrationId: "transit-other", providerId: "transit-other" },
     }),
   } as unknown as TransitOrchestrator;
   const session = createRefreshSession(ctx, orchestrator, SECRET);
   const issued = await session.issueForSearch(itinerary, {
+    integrationId: "transit-acme",
     providerId: "transit-acme",
     instance: "acme-instance",
     datasetEpoch: "acme-epoch",
@@ -208,8 +222,11 @@ it("keeps a refreshed itinerary's next token on the planner that issued the firs
   const ctx = twoRefreshingPlanners();
   const refreshCalls: string[] = [];
   const orchestrator = {
-    refreshTrip: async (providerId: string, params: { itineraryId: string }) => {
-      refreshCalls.push(`${providerId}:${params.itineraryId}`);
+    refreshTrip: async (
+      planner: { integrationId: string; providerId: string },
+      params: { itineraryId: string },
+    ) => {
+      refreshCalls.push(`${planner.integrationId}/${planner.providerId}:${params.itineraryId}`);
       // An answer that names another source must not move the token there.
       return {
         status: "ok",
@@ -224,6 +241,7 @@ it("keeps a refreshed itinerary's next token on the planner that issued the firs
   } as unknown as TransitOrchestrator;
   const session = createRefreshSession(ctx, orchestrator, SECRET);
   let token = await session.issueForSearch(itinerary, {
+    integrationId: "transit-acme",
     providerId: "transit-acme",
     instance: "acme-instance",
     datasetEpoch: "acme-epoch",
@@ -236,5 +254,8 @@ it("keeps a refreshed itinerary's next token on the planner that issued the firs
     const outcome = await session.refresh(verified.id);
     token = (outcome.body as { data: { itinerary: TripItinerary } }).data.itinerary.refreshToken;
   }
-  expect(refreshCalls).toEqual(["transit-acme:itinerary-1", "transit-acme:acme-itin-2"]);
+  expect(refreshCalls).toEqual([
+    "transit-acme/transit-acme:itinerary-1",
+    "transit-acme/transit-acme:acme-itin-2",
+  ]);
 });

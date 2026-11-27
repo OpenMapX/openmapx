@@ -88,6 +88,7 @@ it("retains a bound handle after 503, then replays its exact successor", async (
       : [];
   const id = "verified-state";
   f.values.set(`transit-refresh:${id}`, {
+    integrationId: "transit-motis",
     providerId: "transit-motis-local",
     instance: "local",
     datasetEpoch: "epoch",
@@ -125,12 +126,14 @@ it("gates a cached response by its declared provider sources without exposing th
     getDisallowedSourceIds: async () => new Set(disabled ? ["source"] : []),
     getIntegrationsByDomain: () => [
       {
+        id: "transit-local",
         manifest: { dataSources: [{ sourceId: "source" }] },
         providers: new Map([["transit", [{ id: "local", prefix: "ms:" }]]]),
       },
     ],
   });
   f.values.set("transit-refresh:policy", {
+    integrationId: "transit-local",
     providerId: "local",
     instance: "ms",
     datasetEpoch: "e",
@@ -189,6 +192,7 @@ it.each([
     },
     attributions: [],
     freshness: {},
+    planner: { integrationId: "transit-acme", providerId: "transit-acme" },
   });
   const planned = await f.call("/plan", {
     query: { from_lat: "50.85", from_lng: "4.35", to_lat: "51.22", to_lng: "4.42" },
@@ -211,7 +215,7 @@ it.each([
   });
   expect((await f.call("/plan/refresh", { body: { token } })).status).toBe(200);
   expect(orchestrator.refreshTrip).toHaveBeenCalledWith(
-    "transit-acme",
+    { integrationId: "transit-acme", providerId: "transit-acme" },
     expect.objectContaining({ itineraryId: "acme-itin", datasetEpoch: "acme-epoch" }),
   );
 });

@@ -145,6 +145,8 @@ describe("weather sources in the operator's order", () => {
     ["a string", "acme"],
     ["an array-like object", { length: 1, 0: "elsewhere" }],
     ["an array without string entries", [3, null]],
+    ["null", null],
+    ["a number", 42],
   ])("treats a malformed sourceIds (%s) as absent", async (_name, sourceIds) => {
     const acme = integration(
       "weather-acme",

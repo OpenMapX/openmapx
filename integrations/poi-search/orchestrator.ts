@@ -176,7 +176,6 @@ function finalize(run: ProviderRun, bbox: BoundingBox): PoiSearchResponse {
 }
 
 export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
-  /** Every POI provider, in the operator's order. */
   /**
    * The provider whose results are authoritative in a fused category search:
    * the first in the operator's order that declares `"base"` (OSM via
@@ -189,6 +188,7 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
     );
   }
 
+  /** Every POI provider, in the operator's order. */
   function getProviders(): PoiSearchProvider[] {
     return collectOrderedProviders<PoiSearchProvider>(ctx, "poi-search").map(
       ({ provider }) => provider,

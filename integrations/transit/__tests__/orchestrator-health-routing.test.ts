@@ -74,7 +74,7 @@ function makeCtx(
     getProviderOrder: () => [],
     getIntegrationsByDomain: (domain: string) => {
       if (domain !== "transit") return [];
-      return [{ providers: new Map([["transit", providers]]) }];
+      return [{ id: "transit-test", providers: new Map([["transit", providers]]) }];
     },
   } as unknown as IntegrationContext;
 }
@@ -403,7 +403,10 @@ it("keeps a real SDK HTTP failure unavailable while the provider health cache is
     makeCtx([provider], { isHealthy: async () => true }),
   );
   expect(
-    await orchestrator.refreshTrip(provider.id, { itineraryId: "bound-id", datasetEpoch: "epoch" }),
+    await orchestrator.refreshTrip(
+      { integrationId: "transit-test", providerId: provider.id },
+      { itineraryId: "bound-id", datasetEpoch: "epoch" },
+    ),
   ).toEqual({ status: "unavailable" });
 });
 
@@ -425,16 +428,17 @@ it.each(["absent", "unsupported", "disabled"])(
         getProviderOrder: () => [],
         getIntegrationsByDomain: () => [
           {
+            id: "transit-test",
             manifest: { dataSources: [{ sourceId: "test" }] },
             providers: new Map([["transit", [provider]]]),
           },
         ],
       });
     expect(
-      await createTransitOrchestrator(ctx).refreshTrip(provider.id, {
-        itineraryId: "bound",
-        datasetEpoch: "e",
-      }),
+      await createTransitOrchestrator(ctx).refreshTrip(
+        { integrationId: "transit-test", providerId: provider.id },
+        { itineraryId: "bound", datasetEpoch: "e" },
+      ),
     ).toMatchObject({ status: "gone" });
     expect(refresh).not.toHaveBeenCalled();
   },
@@ -452,7 +456,10 @@ it("never sends a refresh for an unloaded planner to another planner", async () 
   });
   const orchestrator = createTransitOrchestrator(makeCtx([other], { isHealthy: async () => true }));
   expect(
-    await orchestrator.refreshTrip("transit-removed", { itineraryId: "bound", datasetEpoch: "e" }),
+    await orchestrator.refreshTrip(
+      { integrationId: "transit-test", providerId: "transit-removed" },
+      { itineraryId: "bound", datasetEpoch: "e" },
+    ),
   ).toMatchObject({ status: "gone", result: { data: null } });
   expect(refresh).not.toHaveBeenCalled();
 });
@@ -475,15 +482,16 @@ it("discards ordinary refresh data if the source becomes disallowed during acqui
     getProviderOrder: () => [],
     getIntegrationsByDomain: () => [
       {
+        id: "transit-test",
         manifest: { dataSources: [{ sourceId: "test" }] },
         providers: new Map([["transit", [provider]]]),
       },
     ],
   });
   expect(
-    await createTransitOrchestrator(ctx).refreshTrip(provider.id, {
-      itineraryId: "bound",
-      datasetEpoch: "e",
-    }),
+    await createTransitOrchestrator(ctx).refreshTrip(
+      { integrationId: "transit-test", providerId: provider.id },
+      { itineraryId: "bound", datasetEpoch: "e" },
+    ),
   ).toMatchObject({ status: "gone", result: { data: null } });
 });
