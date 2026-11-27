@@ -19,6 +19,20 @@ import {
 } from "@openmapx/integration-framework";
 import type { WeatherProvider } from "@openmapx/provider-kit/weather";
 
+/**
+ * The sources a provider answers from. The member comes from installed code
+ * the registrar does not shape-check, so a malformed value counts as absent
+ * rather than failing every request of the domain. An empty list counts as
+ * absent too: every source of an empty list is disallowed vacuously.
+ */
+function sourcesOf(provider: WeatherProvider): readonly string[] {
+  const declared: unknown = provider.sourceIds;
+  const ids = Array.isArray(declared)
+    ? declared.filter((id): id is string => typeof id === "string")
+    : [];
+  return ids.length > 0 ? ids : [provider.id];
+}
+
 export function createWeatherOrchestrator(ctx: IntegrationContext) {
   /**
    * Providers in the operator's order, minus those the data-use policy
@@ -32,9 +46,6 @@ export function createWeatherOrchestrator(ctx: IntegrationContext) {
       ctx.getDisallowedSourceIds?.() ?? new Set<string>(),
       ctx.getDisallowedIntegrationIds?.() ?? new Set<string>(),
     ]);
-    // An empty `sourceIds` would make every source disallowed vacuously.
-    const sourcesOf = (provider: WeatherProvider) =>
-      provider.sourceIds?.length ? provider.sourceIds : [provider.id];
     return collectOrderedProviders<WeatherProvider>(ctx, "weather").filter(
       ({ provider, integrationId }) =>
         !disallowedIntegrations.has(integrationId) &&
@@ -52,6 +63,9 @@ export function createWeatherOrchestrator(ctx: IntegrationContext) {
         // runtime feed only after awaiting, so retain the exact lookup now.
         const catalogue = captureIntegrationContributorCatalogue(ctx, "weather");
         const response = await provider.getCurrentWeather(coords, options);
+        // An adapter may identify its serving feed only in the response.
+        if (response.source && (await ctx.getDisallowedSourceIds?.())?.has(response.source))
+          continue;
         const resolved = resolveCapturedContributors(catalogue, integrationId, {
           contributors: response.contributors,
           sourceIds: [response.source],

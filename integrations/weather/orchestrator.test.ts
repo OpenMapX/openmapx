@@ -140,6 +140,99 @@ describe("weather sources in the operator's order", () => {
     ctx.getDisallowedSourceIds = async () => new Set(["a"]);
     expect((await createWeatherOrchestrator(ctx).getCurrentWeather([13, 52]))?.source).toBe("acme");
   });
+
+  it.each([
+    ["a string", "acme"],
+    ["an array-like object", { length: 1, 0: "elsewhere" }],
+    ["an array without string entries", [3, null]],
+  ])("treats a malformed sourceIds (%s) as absent", async (_name, sourceIds) => {
+    const acme = integration(
+      "weather-acme",
+      weatherProvider("acme", 1, { sourceIds: sourceIds as unknown as readonly string[] }),
+    );
+    const openMeteo = integration("weather-open-meteo", weatherProvider("open-meteo", 10));
+    const ctx = hostLike([acme, openMeteo]);
+    ctx.getDisallowedSourceIds = async () => new Set(["acme"]);
+    const result = await createWeatherOrchestrator(ctx).getCurrentWeather([13, 52]);
+    expect(result?.source).toBe("open-meteo");
+    expect(providerOf(acme).getCurrentWeather).not.toHaveBeenCalled();
+  });
+
+  it("keeps only the string entries of sourceIds", async () => {
+    const acme = integration(
+      "weather-acme",
+      weatherProvider("acme", 1, { sourceIds: ["a", 7] as unknown as readonly string[] }),
+    );
+    const openMeteo = integration("weather-open-meteo", weatherProvider("open-meteo", 10));
+    const ctx = hostLike([acme, openMeteo]);
+    ctx.getDisallowedSourceIds = async () => new Set(["a"]);
+    expect((await createWeatherOrchestrator(ctx).getCurrentWeather([13, 52]))?.source).toBe(
+      "open-meteo",
+    );
+  });
+
+  it("treats an empty sourceIds as absent, so the provider id is its source", async () => {
+    const acme = integration("weather-acme", weatherProvider("acme", 1, { sourceIds: [] }));
+    const openMeteo = integration("weather-open-meteo", weatherProvider("open-meteo", 10));
+    const ctx = hostLike([acme, openMeteo]);
+    ctx.getDisallowedSourceIds = async () => new Set(["acme"]);
+    expect((await createWeatherOrchestrator(ctx).getCurrentWeather([13, 52]))?.source).toBe(
+      "open-meteo",
+    );
+    expect(providerOf(acme).getCurrentWeather).not.toHaveBeenCalled();
+
+    ctx.getDisallowedSourceIds = async () => new Set(["unrelated"]);
+    expect((await createWeatherOrchestrator(ctx).getCurrentWeather([13, 52]))?.source).toBe("acme");
+  });
+
+  it("skips current weather whose answering source the policy disallows", async () => {
+    const adapter = integration(
+      "weather-adapter",
+      weatherProvider("adapter", 1, {
+        getCurrentWeather: vi.fn(async () => ({
+          source: "gated-feed",
+          current: { temperature: 1 },
+          location: [13, 52],
+        })) as unknown as WeatherProvider["getCurrentWeather"],
+      }),
+    );
+    const openMeteo = integration("weather-open-meteo", weatherProvider("open-meteo", 10));
+    const ctx = hostLike([adapter, openMeteo]);
+    ctx.getDisallowedSourceIds = async () => new Set(["gated-feed"]);
+    const result = await createWeatherOrchestrator(ctx).getCurrentWeather([13, 52]);
+    expect(result?.source).toBe("open-meteo");
+    expect(providerOf(adapter).getCurrentWeather).toHaveBeenCalledOnce();
+  });
+
+  it("does not replay a cached current answer after the data-use policy changed", async () => {
+    const ctx = hostLike([integration("weather-open-meteo", weatherProvider("open-meteo", 10))]);
+    const keys: string[] = [];
+    ctx.cache.withCache = async <T>(
+      key: string,
+      _ttl: number,
+      load: (signal: AbortSignal) => Promise<T>,
+    ) => {
+      keys.push(key);
+      return load(new AbortController().signal);
+    };
+    setup(ctx);
+    const current = ctx.registered.routes.find((route) => route.path === "/current");
+    if (!current) throw new Error("missing the current weather route");
+    const reply = {
+      header: () => reply,
+      status: () => reply,
+      send: () => reply,
+      type: () => reply,
+    };
+    const read = () =>
+      current.handler(routeRequest({ query: { lat: "52", lng: "13" }, body: null }), reply);
+    await read();
+    await read();
+    ctx.getDisallowedSourceIds = async () => new Set(["open-meteo"]);
+    await read();
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[0]);
+  });
 });
 
 describe("served weather order, fingerprint and admin list", () => {
