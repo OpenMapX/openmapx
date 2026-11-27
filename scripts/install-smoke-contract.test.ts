@@ -129,6 +129,20 @@ describe("install smoke script", () => {
       /\bcat\b[^\n]*\.env|docker inspect[^\n]*\.Config\.Env|docker compose[^\n]* config\b/,
     );
   });
+
+  it("checks in the api container that tini is PID 1 and accepts only the whole passing verdict", () => {
+    const check = readFileSync(resolve(root, "scripts/smoke/installed-code-loading.mjs"), "utf8");
+    expect(check).toContain('readFileSync("/proc/1/comm", "utf8")');
+    expect(check).toMatch(/if \(init !== "tini"\)/);
+    expect(check).toContain('reason: "pid 1 is not tini"');
+    const assertion = script.slice(
+      script.indexOf("assert_installed_code_loading() {"),
+      script.indexOf("start_infrastructure() {"),
+    );
+    expect(assertion).toContain("< scripts/smoke/installed-code-loading.mjs | tail -n 1");
+    expect(assertion).toContain(`[[ "$verdict" == '{"ok":true}' ]]`);
+    expect(script).toMatch(/\n {2}assert_installed_code_loading\n/);
+  });
 });
 
 /** Runs `body` in a shell that has sourced the install smoke script. */

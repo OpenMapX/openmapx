@@ -153,9 +153,11 @@ it("explains automatic safe mode that names no integration", async () => {
 
   const notice = await screen.findByRole("region", { name: "Safe mode is on" });
   expect(notice).toHaveTextContent(
-    "OpenMapX stopped three times within ten minutes while installed extensions were loading or running",
+    "OpenMapX stopped three times within ten minutes after installed extensions had started loading",
   );
-  expect(notice).toHaveTextContent("Find the extension that stops it in the API log");
+  // A crash in built-in code is counted too, without a name.
+  expect(notice).toHaveTextContent("The crashes name no extension.");
+  expect(notice).toHaveTextContent("If it names none, the cause may be in OpenMapX itself.");
   expect(notice).not.toHaveTextContent("while  was loading");
   expect(within(notice).getByRole("button", { name: "Leave safe mode" })).toBeInTheDocument();
 });

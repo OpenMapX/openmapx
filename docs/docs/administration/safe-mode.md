@@ -45,24 +45,33 @@ so no other place is shown, and cached, under the extension's place id.
 The API turns safe mode on by itself when it stopped without being asked to
 three times within ten minutes while installed extension code was loading or
 running. It counts a process that crashed with an error nothing handled, one
-that was killed (for example for running out of memory) and one the
-[event-loop watchdog](#event-loop-watchdog) ended. It does not count:
+that was killed (for example for running out of memory or by a power cut) and
+one the [event-loop watchdog](#event-loop-watchdog) ended. Once installed
+extension code started loading in a process, every such stop counts, also one
+long after loading finished, one during a later extension's migrations, and a
+crash in OpenMapX's own code. It does not count:
 
 - a stop that was requested, such as `docker compose stop`, a restart, an
   update or `Ctrl+C`, even when Docker has to kill a slow shutdown;
 - a stop before any installed extension started loading, such as a database
-  outage, a failed platform migration or a missing setting at startup;
-- a stop while an extension's database migrations run, because they run in
-  PostgreSQL and not in the API process.
+  outage, a failed platform migration, a missing setting at startup, or a stop
+  while the first installed extension's migrations run at startup.
 
-The fourth start then runs in safe mode with the reason `automatic`. The
-attention item **Safe mode after repeated crashes** and the notice in
-**Admin → Integrations** name the extension's integration that was loading, or
-whose code was running when the process failed, when the crashes name one most
-often. When the crashes name none, or several equally often, they say that
-OpenMapX stopped repeatedly while installed extensions were loading or running;
-the end of the API log then names the extension in the error the process
-stopped with, or shows `event loop blocked for <n> ms; exiting`.
+So three power cuts or out-of-memory kills whose following starts fall within
+ten minutes also start the API in safe mode, and it stays there until you
+leave it.
+
+The fourth start then runs in safe mode with the reason `automatic`. Each
+counted stop names an extension's integration when that is known: the one in
+whose code the error that ended the process was raised, or else the one that
+was loading at the time. The attention item **Safe mode after repeated
+crashes** and the notice in **Admin → Integrations** name the integration the
+crashes name most often. A crash in a built-in integration's code names none.
+When the crashes name none, or several equally often, they say that OpenMapX
+stopped repeatedly after installed extensions had started loading; the end of
+the API log then shows the error the process stopped with, which may name an
+extension, or `event loop blocked for <n> ms; exiting`. If it names no
+extension, the cause may be in OpenMapX itself.
 
 The API keeps its count in `infra/docker/data/api-runtime/boot-marker.json`,
 beside `safe-mode.json`. A marker that cannot be read counts as empty, and one
@@ -74,21 +83,23 @@ counted so far.
 ### Event-loop watchdog
 
 An extension can also freeze the API without crashing it, for example with an
-endless loop: the process keeps running but answers nothing. Once the API
-serves requests, a watchdog thread checks every second that the API's event
-loop still turns. When it has not turned for 30 seconds, the watchdog records
-in the boot marker the extension that was loading, if one was, writes
+endless loop: the process keeps running but answers nothing. A watchdog
+thread checks every second that the API's event loop still turns. When it has
+not turned for 30 seconds, the watchdog records in the boot marker the
+extension that was loading, if one was, writes
 `event loop blocked for <n> ms; exiting` to the API log and ends the process.
 Docker restarts the container, and the exit counts towards automatic safe
 mode like a crash.
 
+- It watches the start too, from just before the first installed extension's
+  code is loaded until the API listens, and waits 60 seconds there (or the
+  configured value when that is larger), because loading takes longer
+  stretches. An extension that freezes the start is killed and recorded, and
+  the fourth such start runs in safe mode. A start without installed
+  extensions, or in safe mode, is watched only once the API listens.
 - Set `OPENMAPX_EVENT_LOOP_WATCHDOG_MS` in `infra/docker/.env` to change the
   30 seconds (values below 5 seconds are raised to 5 seconds), or to `0` to
-  turn the watchdog off, then run `pnpm openmapx compose up`.
-- It does not watch the start before the API listens, which includes loading
-  the installed extensions and their migrations: an extension that freezes the
-  API while it starts leaves it hanging, and
-  `pnpm openmapx control safe-mode on` starts it without extensions.
+  turn the watchdog off in both phases, then run `pnpm openmapx compose up`.
 - It stops first when the API is asked to stop, so a slow shutdown is never
   counted as a freeze.
 - It stays off while a debugger is attached to the API, and does not mistake

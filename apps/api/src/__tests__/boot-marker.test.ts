@@ -1,4 +1,12 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -137,12 +145,53 @@ describe("the boot marker", () => {
     expect(beginBoot(dir, at(380))).toEqual({ enterSafeMode: true, integrationId: null });
   });
 
-  it("names the integration that was loading over the one a fatal error named", () => {
+  it("names the integration a fatal error named over the one that was loading", () => {
+    // An integration loaded earlier fails from a timer while another loads.
     beginBoot(dir, t0);
     markIntegrationLoading("acme", "import");
     recordFatal("other");
     beginBoot(dir, t1);
+    expect(readMarker(dir).uncleanExits).toEqual([
+      { at: t1.toISOString(), integrationId: "other" },
+    ]);
+  });
+
+  it("names the integration that was loading when the fatal error named none", () => {
+    beginBoot(dir, t0);
+    markIntegrationLoading("acme", "import");
+    recordFatal(null);
+    beginBoot(dir, t1);
     expect(readMarker(dir).uncleanExits).toEqual([{ at: t1.toISOString(), integrationId: "acme" }]);
+  });
+
+  it("drops an exit dated after now, as after the clock went back", () => {
+    writeFileSync(
+      join(dir, "boot-marker.json"),
+      JSON.stringify({
+        version: 1,
+        running: false,
+        installedCodeStarted: true,
+        current: null,
+        lastFatal: null,
+        uncleanExits: [
+          { at: at(60).toISOString(), integrationId: "acme" },
+          { at: at(120).toISOString(), integrationId: "acme" },
+          { at: at(-60).toISOString(), integrationId: "acme" },
+        ],
+      }),
+    );
+    beginBoot(dir, t0);
+    expect(readMarker(dir).uncleanExits).toEqual([
+      { at: at(-60).toISOString(), integrationId: "acme" },
+    ]);
+  });
+
+  it("leaves no temporary file behind when a write fails", () => {
+    // A directory where the marker belongs makes every rename over it fail.
+    mkdirSync(join(dir, "boot-marker.json"));
+    beginBoot(dir, t0);
+    markIntegrationLoading("acme", "import");
+    expect(readdirSync(dir).filter((name) => name.endsWith(".tmp"))).toEqual([]);
   });
 
   it.each([

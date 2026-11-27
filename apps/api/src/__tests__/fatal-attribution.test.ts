@@ -6,6 +6,7 @@ import { apiModule, runChild, startChild } from "./support/child-process.js";
 
 const SCOPE = apiModule("integration-scope.ts");
 const SAFE_MODE = apiModule("safe-mode.ts");
+const PROCESS_LIFECYCLE = apiModule("process-lifecycle.ts");
 const CHILD_TIMEOUT_MS = 30_000;
 const TEST_TIMEOUT_MS = 60_000;
 
@@ -38,17 +39,15 @@ function attributionChild(event: "unhandledRejection" | "uncaughtException", fai
 }
 
 /**
- * A process that boots, loads `acme` and then fails in work `acme` left
- * behind, with the fatal handler the API installs.
+ * A process that boots, loads `acme` and then fails in work that `failing`
+ * left behind, with the fatal handler the API installs.
  */
-function crashingProcess(runtime: string) {
+function crashingProcess(runtime: string, failing = { id: "acme", isBuiltIn: false }) {
   return `
-    import { currentIntegrationScope, runInIntegrationScope } from ${JSON.stringify(SCOPE)};
-    import { beginBoot, markIntegrationLoaded, markIntegrationLoading, recordFatal } from ${JSON.stringify(SAFE_MODE)};
-    const onFatal = () => {
-      recordFatal(currentIntegrationScope()?.integrationId ?? null);
-      process.exit(1);
-    };
+    import { runInIntegrationScope } from ${JSON.stringify(SCOPE)};
+    import { createFatalHandler } from ${JSON.stringify(PROCESS_LIFECYCLE)};
+    import { beginBoot, markIntegrationLoaded, markIntegrationLoading } from ${JSON.stringify(SAFE_MODE)};
+    const onFatal = createFatalHandler(() => process.exit(1));
     process.on("uncaughtException", onFatal);
     process.on("unhandledRejection", onFatal);
     const boot = beginBoot(${JSON.stringify(runtime)}, new Date());
@@ -56,9 +55,12 @@ function crashingProcess(runtime: string) {
     if (!boot.enterSafeMode) {
       markIntegrationLoading("acme", "import");
       markIntegrationLoading("acme", "setup");
-      runInIntegrationScope({ integrationId: "acme", isBuiltIn: false, revoked: false }, () => {
-        setTimeout(() => { void Promise.reject(new Error("left behind")); }, 20);
-      });
+      runInIntegrationScope(
+        { integrationId: ${JSON.stringify(failing.id)}, isBuiltIn: ${failing.isBuiltIn}, revoked: false },
+        () => {
+          setTimeout(() => { void Promise.reject(new Error("left behind")); }, 20);
+        },
+      );
       markIntegrationLoaded();
     }
   `;
@@ -102,6 +104,32 @@ describe("the integration a fatal error is attributed to", () => {
         current: null,
         lastFatal: { integrationId: "acme" },
       });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "records a crash in built-in code without a name and still counts it",
+    async () => {
+      const { code } = await runChild(
+        crashingProcess(runtimeDir, { id: "weather", isBuiltIn: true }),
+        { timeoutMs: CHILD_TIMEOUT_MS },
+      );
+      expect(code).toBe(1);
+      expect(readMarker()).toMatchObject({
+        running: true,
+        installedCodeStarted: true,
+        lastFatal: { integrationId: null },
+      });
+      const next = await runChild(
+        `
+          import { beginBoot } from ${JSON.stringify(SAFE_MODE)};
+          beginBoot(${JSON.stringify(runtimeDir)}, new Date());
+        `,
+        { timeoutMs: CHILD_TIMEOUT_MS },
+      );
+      expect(next.code).toBe(0);
+      expect(readMarker().uncleanExits).toEqual([{ at: expect.any(String), integrationId: null }]);
     },
     TEST_TIMEOUT_MS,
   );
@@ -188,7 +216,8 @@ describe("automatic safe mode across processes", () => {
           markCleanStop();
           recordFatal("other");
         `,
-        { timeoutMs: CHILD_TIMEOUT_MS },
+        // Its own default directory is the test's, so a write there would show.
+        { timeoutMs: CHILD_TIMEOUT_MS, env: { OPENMAPX_API_RUNTIME_DIR: runtimeDir } },
       );
       expect(code).toBe(0);
       expect(readMarker()).toEqual(previous);

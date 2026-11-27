@@ -20,7 +20,12 @@ import { startAccountMailWorker } from "./account/account-mail-outbox";
 import { auth } from "./auth";
 import { db, openMigrationSession, sql } from "./db/index";
 import { type MigrationRun, startMigrations } from "./db/migration-runner";
-import { eventLoopWatchdogThresholdMs, startEventLoopWatchdog } from "./event-loop-watchdog";
+import {
+  type EventLoopWatchdog,
+  eventLoopWatchdogThresholdMs,
+  startEventLoopWatchdog,
+  startupEventLoopWatchdogThresholdMs,
+} from "./event-loop-watchdog";
 import { cancelRunningExtensionMigrations } from "./extension-migrations";
 import {
   getAllIntegrations,
@@ -57,6 +62,7 @@ import {
   beginBoot,
   initSafeMode,
   markCleanStop,
+  onInstalledCodeStart,
   syncSafeModeAttention,
 } from "./safe-mode";
 import {
@@ -447,6 +453,21 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
       { reason: safeMode.reason, integrationId: safeMode.integrationId },
       "Safe mode is on: no installed extension is loaded",
     );
+  // From just before the first installed import until the API listens, an
+  // installed integration that freezes the start is killed, recorded and
+  // counted, with the longer start-up threshold. A start without installed
+  // code, or in safe mode, is not watched before it listens.
+  const watchdogThresholdMs = eventLoopWatchdogThresholdMs();
+  let eventLoopWatchdog: EventLoopWatchdog | null = null;
+  onInstalledCodeStart(() => {
+    const startupMs = startupEventLoopWatchdogThresholdMs(watchdogThresholdMs);
+    if (startupMs !== null)
+      eventLoopWatchdog ??= startEventLoopWatchdog({
+        thresholdMs: startupMs,
+        runtimeDir,
+        log: server.log,
+      });
+  });
   await initIntegrations(server, [
     { directory: integrationsDir, isBuiltIn: true },
     { directory: customIntegrationsDir, isBuiltIn: false },
@@ -651,25 +672,23 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
       server.log.error(err);
       throw err;
     }
+    // The API serves: from here the run-time threshold applies.
+    if (watchdogThresholdMs !== null) {
+      if (eventLoopWatchdog) eventLoopWatchdog.setThreshold(watchdogThresholdMs);
+      else
+        eventLoopWatchdog = startEventLoopWatchdog({
+          thresholdMs: watchdogThresholdMs,
+          runtimeDir,
+          log: server.log,
+        });
+    }
 
     // Only complete a checkpointed self-update after the replacement API is
     // genuinely listening, migrations succeeded, and Docker confirms that this
     // process is running the exact image pulled by the update job.
     await jobRunner.initialize();
     startAdminJobReconciliation();
-
-    // Only once the API serves: start-up work before it, an extension's
-    // migration among it, may legitimately keep the loop busy for long.
-    const watchdogThresholdMs = eventLoopWatchdogThresholdMs();
-    if (watchdogThresholdMs !== null)
-      eventLoopWatchdog = startEventLoopWatchdog({
-        thresholdMs: watchdogThresholdMs,
-        runtimeDir,
-        log: server.log,
-      });
   }
-
-  let eventLoopWatchdog: { stop(): void } | null = null;
 
   let stopping: Promise<void> | undefined;
 
@@ -678,6 +697,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
     // counts as clean, not as a crash of installed code.
     markCleanStop();
     // A shutdown that blocks the loop must not end in a kill counted as a crash.
+    onInstalledCodeStart(null);
     eventLoopWatchdog?.stop();
     eventLoopWatchdog = null;
     stopping ??= (async () => {

@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
@@ -6,6 +6,38 @@ import type { App } from "./app";
 import { createMigratedPostgresFixture } from "./test/postgres-fixture";
 
 const describeDatabase = process.env.OPENMAPX_RUN_DATABASE_TESTS === "1" ? describe : describe.skip;
+
+/** What the start and the stop did to the watchdog, in order, with the installed import. */
+const lifecycle = vi.hoisted(() => {
+  const calls: string[] = [];
+  (globalThis as { __omxAppLifecycle?: string[] }).__omxAppLifecycle = calls;
+  return calls;
+});
+
+vi.mock("./event-loop-watchdog", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./event-loop-watchdog")>();
+  return {
+    ...actual,
+    startEventLoopWatchdog: ({ thresholdMs }: { thresholdMs: number }) => {
+      lifecycle.push(`start watchdog ${thresholdMs}`);
+      return {
+        stop: () => lifecycle.push("stop watchdog"),
+        setThreshold: (ms: number) => lifecycle.push(`set watchdog threshold ${ms}`),
+      };
+    },
+  };
+});
+
+vi.mock("./safe-mode", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./safe-mode")>();
+  return {
+    ...actual,
+    markCleanStop: () => {
+      lifecycle.push("mark clean stop");
+      actual.markCleanStop();
+    },
+  };
+});
 
 const CLOSED_LOCAL_URL = "http://127.0.0.1:9";
 
@@ -22,6 +54,29 @@ describeDatabase("a start of createApp() without the safe-mode file", () => {
       values ('safe-mode', 'warning', 'safe-mode', 'Safe mode is on')`;
     runtimeDir = await mkdtemp(join(tmpdir(), "openmapx-app-runtime-"));
     customIntegrations = await mkdtemp(join(tmpdir(), "openmapx-app-integrations-"));
+    // An installed integration whose code records when it was imported.
+    const installed = join(customIntegrations, "app-watched-demo");
+    await mkdir(join(installed, "dist", "backend"), { recursive: true });
+    await writeFile(
+      join(installed, "manifest.json"),
+      JSON.stringify({
+        id: "app-watched-demo",
+        name: "App Watched Demo",
+        version: "1.0.0",
+        platform: "1.0",
+        license: "MIT",
+        domains: ["knowledge"],
+        quality: "community",
+        backend: { entry: "dist/backend/index.mjs" },
+      }),
+    );
+    await writeFile(
+      join(installed, "dist", "backend", "index.mjs"),
+      'globalThis.__omxAppLifecycle?.push("installed import");\nexport function setup() {}\n',
+    );
+    vi.stubEnv("OPENMAPX_EVENT_LOOP_WATCHDOG_MS", "30000");
+    vi.stubEnv("HOST", "127.0.0.1");
+    vi.stubEnv("PORT", "0");
     vi.stubEnv("NODE_ENV", "test");
     vi.stubEnv("LOG_LEVEL", "silent");
     vi.stubEnv("DATABASE_URL", fixture.connectionUri);
@@ -69,5 +124,22 @@ describeDatabase("a start of createApp() without the safe-mode file", () => {
     const { getSafeMode } = await import("./safe-mode");
     expect(getSafeMode()).toEqual({ active: false, reason: null, integrationId: null });
     expect(await fixture.sql`select key from attention_item where key = 'safe-mode'`).toEqual([]);
+  });
+
+  it("watches the start from the first installed import and switches to the run-time threshold once it listens", async () => {
+    const { getIntegration } = await import("./integration-host");
+    expect(getIntegration("app-watched-demo")?.loadState).toBe("loaded");
+    expect(lifecycle.slice(0, 2)).toEqual(["start watchdog 60000", "installed import"]);
+
+    app.server.addHook("onListen", async () => {
+      lifecycle.push("listening");
+    });
+    await app.start();
+    expect(lifecycle.slice(2)).toEqual(["listening", "set watchdog threshold 30000"]);
+
+    await app.stop();
+    // The stop is recorded before the watchdog goes, so a stop it would
+    // otherwise end with a kill counts as clean.
+    expect(lifecycle.slice(4)).toEqual(["mark clean stop", "stop watchdog"]);
   });
 });

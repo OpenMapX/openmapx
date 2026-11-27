@@ -3,10 +3,9 @@ import { createApp } from "./app";
 import { extensionSql, integrationSql, sql } from "./db/index";
 import type { MigrationRun } from "./db/migration-runner";
 import { cancelRunningExtensionMigrations } from "./extension-migrations";
-import { currentIntegrationScope } from "./integration-scope";
+import { createFatalHandler, createStartupStopHandler } from "./process-lifecycle";
 import { processLogger } from "./process-logger";
 import { redis } from "./redis";
-import { markCleanStop, recordFatal } from "./safe-mode";
 import { cancelStartupMigrations } from "./server-wiring";
 
 const logger = processLogger;
@@ -20,13 +19,9 @@ const exitFatally = createFatalProcessHandler({
   fatal: (fields, message) => logger.fatal(fields, message),
   exit: (code) => process.exit(code),
 });
-// What reaches here from an integration is work the host could not wrap, such
-// as an un-awaited promise or a timer callback, which still runs in the
-// integration's async context. The next start counts the exit against it.
-const onFatal = (error: unknown) => {
-  recordFatal(currentIntegrationScope()?.integrationId ?? null);
-  exitFatally(error);
-};
+// The next start counts the exit, against the installed integration whose
+// work failed when that is known.
+const onFatal = createFatalHandler(exitFatally);
 process.on("uncaughtException", onFatal);
 process.on("unhandledRejection", onFatal);
 
@@ -35,16 +30,12 @@ process.on("unhandledRejection", onFatal);
 // handler would end at once, and a killed migration's statement would keep
 // running in Postgres.
 let migrationRun: MigrationRun | undefined;
-let stoppingDuringStartup = false;
-const stopDuringStartup = (signal: NodeJS.Signals) => {
-  markCleanStop();
-  if (stoppingDuringStartup) return;
-  stoppingDuringStartup = true;
-  logger.warn({ signal }, "Stopping before startup finished");
-  void cancelStartupMigrations(migrationRun, cancelRunningExtensionMigrations, logger).finally(() =>
-    process.exit(signal === "SIGTERM" ? 143 : 130),
-  );
-};
+const startupStop = createStartupStopHandler({
+  cancel: () => cancelStartupMigrations(migrationRun, cancelRunningExtensionMigrations, logger),
+  exit: (code) => process.exit(code),
+  log: logger,
+});
+const stopDuringStartup = startupStop.onSignal;
 process.on("SIGTERM", stopDuringStartup);
 process.on("SIGINT", stopDuringStartup);
 
@@ -54,7 +45,7 @@ const app = await createApp({
     migrationStarted: (run) => {
       migrationRun = run;
     },
-    stopRequested: () => stoppingDuringStartup,
+    stopRequested: startupStop.requested,
   },
 });
 await app.start();

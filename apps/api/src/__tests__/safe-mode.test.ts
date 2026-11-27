@@ -319,7 +319,7 @@ describe("syncSafeModeAttention", () => {
       {},
       '{"mode":"automatic","integrationId":null}',
       "Safe mode after repeated crashes",
-      "OpenMapX stopped three times within ten minutes while installed extensions were loading or running",
+      "OpenMapX stopped three times within ten minutes after installed extensions had started loading, so installed extensions were not loaded. The crashes name no extension: find the error OpenMapX stopped with at the end of the API log, disable or update the extension it names, then leave safe mode. If it names none, the cause may be in OpenMapX itself.",
     ],
   ])("names the reason for %j with file %j", async (env, file, title, text) => {
     if (file) writeFileSync(join(runtimeDir, "safe-mode.json"), file);

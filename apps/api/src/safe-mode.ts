@@ -178,14 +178,19 @@ export function readBootMarker(runtimeDir: string): BootMarker {
  */
 function writeFileDurably(path: string, text: string): void {
   const temporary = `${path}.${process.pid}.tmp`;
-  const fd = openSync(temporary, "w", 0o600);
   try {
-    writeSync(fd, text);
-    fsyncSync(fd);
-  } finally {
-    closeSync(fd);
+    const fd = openSync(temporary, "w", 0o600);
+    try {
+      writeSync(fd, text);
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
+    renameSync(temporary, path);
+  } catch (error) {
+    rmSync(temporary, { force: true });
+    throw error;
   }
-  renameSync(temporary, path);
   try {
     // The rename itself is durable once the directory is flushed.
     const directory = openSync(join(path, ".."), "r");
@@ -292,7 +297,10 @@ export function beginBoot(
       ...exits,
       {
         at: now.toISOString(),
-        integrationId: previous.current?.integrationId ?? previous.lastFatal?.integrationId ?? null,
+        // The fatal error's async context is direct evidence; the integration
+        // that was loading only says what ran at the time, and an integration
+        // loaded earlier may fail from a timer while another one loads.
+        integrationId: previous.lastFatal?.integrationId ?? previous.current?.integrationId ?? null,
       },
     ];
   // An exit timed after now was recorded before the clock went back; it is
@@ -344,9 +352,32 @@ export function beginBoot(
  */
 export function markIntegrationLoading(integrationId: string, phase: "import" | "setup"): void {
   if (!boot) return;
-  boot.installedCodeStarted = true;
+  if (!boot.installedCodeStarted) {
+    boot.installedCodeStarted = true;
+    // Before the first byte of installed code runs, so a start that this
+    // code freezes is watched.
+    try {
+      installedCodeStartListener?.();
+    } catch (error) {
+      try {
+        processLogger.warn(
+          { err: loggableThrown(error) },
+          "Could not start watching the start-up of installed code",
+        );
+      } catch {
+        // Loading goes on unwatched.
+      }
+    }
+  }
   boot.current = { integrationId, phase };
   writeProcessBoot();
+}
+
+let installedCodeStartListener: (() => void) | null = null;
+
+/** Called once per process, as the host is about to import the first installed integration. */
+export function onInstalledCodeStart(listener: (() => void) | null): void {
+  installedCodeStartListener = listener;
 }
 
 export function markIntegrationLoaded(): void {
@@ -444,7 +475,9 @@ function attentionDetail(current: SafeModeState): string {
   if (current.reason === "automatic" && current.integrationId)
     return `The API stopped three times within ten minutes while ${integrationName(current.integrationId)} (${current.integrationId}) was loading or running, so no installed extension is loaded. Disable or update that extension, then leave safe mode.`;
   if (current.reason === "automatic")
-    return "OpenMapX stopped three times within ten minutes while installed extensions were loading or running, so installed extensions were not loaded. Find the extension that stops it in the API log, disable or update it, then leave safe mode.";
+    // A crash in built-in code after installed code started counts too, so
+    // this text does not take an extension's fault for granted.
+    return "OpenMapX stopped three times within ten minutes after installed extensions had started loading, so installed extensions were not loaded. The crashes name no extension: find the error OpenMapX stopped with at the end of the API log, disable or update the extension it names, then leave safe mode. If it names none, the cause may be in OpenMapX itself.";
   return "Safe mode was turned on, so no installed extension is loaded. Leave it in the integration list, or run openmapx control safe-mode off on the host.";
 }
 
