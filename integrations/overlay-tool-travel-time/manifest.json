@@ -32,13 +32,10 @@
       }
     }
   },
-  "healthCheck": [
-    {
-      "name": "Valhalla",
-      "type": "ping",
-      "urlTemplate": "${endpoint:valhalla}/status"
-    }
-  ],
+  "healthCheck": {
+    "name": "Isochrones",
+    "type": "custom"
+  },
   "quality": "built-in",
   "dataSources": [
     {

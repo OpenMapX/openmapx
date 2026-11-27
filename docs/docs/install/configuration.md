@@ -495,6 +495,10 @@ command line overrides the env value for that invocation.
 | `INTEGRATION_GEOCODING_PROVIDER_ORDER` | Comma-separated integration ids of the geocoders to ask, tried left to right, for example `geocoding-photon,geocoding-maptiler`. Only listed geocoders are asked; an id that names no loaded geocoder is skipped. An installed geocoder is listed by its own integration id. | Optional. Default `geocoding-maptiler` |
 | `PHOTON_REGION`                        | Runtime download region for the self-hosted Photon index.                                                                                                                                                                                                                    | Default `planet`                       |
 
+The built-in geocoder ids that `INTEGRATION_GEOCODING_PROVIDER_ORDER` accepts
+are `geocoding-maptiler`, `geocoding-photon`, `geocoding-nominatim`,
+`geocoding-pelias`, `geocoding-motis`, `geocoding-entur` and `geocoding-db-ris`.
+
 Global ambient preparation/publication also forwards `AMBIENT_PLANET_MAX_PLACES`,
 `AMBIENT_PLANET_RESERVE_BYTES`, `OVERTURE_DUCKDB_MEMORY_MB`,
 `OVERTURE_DUCKDB_THREADS`, `OVERTURE_DUCKDB_TEMP_MB` and
