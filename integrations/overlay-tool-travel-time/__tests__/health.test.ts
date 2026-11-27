@@ -27,10 +27,10 @@ describe("travel-time overlay health", () => {
     await expect(check()).resolves.toMatchObject({ status: "up" });
   });
 
-  it("is down when no loaded routing engine offers isochrones", async () => {
+  it("is not configured when no loaded routing engine offers isochrones", async () => {
     const check = healthWith([engine("routing-osrm", false)]);
     await expect(check()).resolves.toEqual({
-      status: "down",
+      status: "unconfigured",
       error: "No loaded routing engine offers isochrones",
     });
   });
@@ -47,7 +47,7 @@ describe("travel-time overlay health", () => {
     ];
     setup(ctx);
     const [check] = ctx.registered.healthChecks;
-    await expect(check?.()).resolves.toMatchObject({ status: "down" });
+    await expect(check?.()).resolves.toMatchObject({ status: "unconfigured" });
     engines.push(engine("routing-valhalla", true));
     await expect(check?.()).resolves.toMatchObject({ status: "up" });
     for (const request of requests) expect(request).not.toHaveBeenCalled();

@@ -9,7 +9,8 @@ import {
  * The overlay makes no request of its own: street isochrones are served by
  * the first routing engine in the operator's order that offers them. So it is
  * healthy exactly when such an engine is loaded; that engine's own checks
- * report whether its upstream answers.
+ * report whether its upstream answers. Without such an engine the operator has
+ * chosen not to load one, which is a configuration state rather than an outage.
  */
 export function setup(ctx: IntegrationContext): void {
   ctx.registerHealthCheck(async (): Promise<HealthCheckResult> => {
@@ -18,6 +19,6 @@ export function setup(ctx: IntegrationContext): void {
     );
     return servesIsochrones
       ? { status: "up" }
-      : { status: "down", error: "No loaded routing engine offers isochrones" };
+      : { status: "unconfigured", error: "No loaded routing engine offers isochrones" };
   });
 }

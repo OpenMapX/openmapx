@@ -103,7 +103,7 @@ describe("layer panels", () => {
   it.each([
     ["desktop", <LayerDetailsPanel key="desktop" onClose={() => undefined} />],
     ["phone", <LayerDetailsPanel key="phone" variant="sheet" onClose={() => undefined} />],
-  ])("keeps travel time usable on %s when its Valhalla health check fails", (_name, panel) => {
+  ])("keeps travel time usable on %s when the overlay is unavailable", (_name, panel) => {
     capabilities.unavailable.add("travel-time");
     capabilities.unavailable.add("traffic-flow");
     render(panel);
