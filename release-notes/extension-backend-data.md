@@ -25,9 +25,11 @@ removed. When a reload retires an installed integration or leaves it out, the AP
 waits at most 10 seconds for each of its shutdown handlers; when the API stops, the
 shutdown handlers of all installed integrations share 5 seconds in total. A stop
 does not wait for extension database work: the database pools close after at most
-2 seconds, and a statement or transaction still running is cut off and rolled
-back. The API container's stop grace period is now 20 seconds instead of Docker's
-default 10, which covers the whole stop sequence.
+2 seconds, and a statement or transaction still running is cut off; PostgreSQL
+rolls back each transaction that had not reached its COMMIT. The API container's
+stop grace period is now 20 seconds instead of Docker's default 10, which covers
+the bounded steps of the stop sequence (at most 19 seconds, plus the time the
+built-in integrations' shutdown handlers take).
 
 **Extension schemas and migrations.** The API applies an integration's
 `migrations/NNNN_name.sql` files at every start and reload, before it imports the
@@ -53,8 +55,10 @@ file creates outside its schema (they are not removed with the extension's data
 either), a key another integration's migration adds to this schema, or a key
 created through `ctx.db`. When such a key refuses an account deletion, through
 the person's own deletion or an administrator's removal, the deletion fails with
-`409 EXTENSION_BLOCKS_ACCOUNT_DELETION` and the account stays unchanged, the API
-logs the key, its table and schema, and the attention list shows "<extension>
+`409 EXTENSION_BLOCKS_ACCOUNT_DELETION` and the account stays unchanged (the
+erasure journal no longer records a request for a deletion the database refused,
+so restoring a backup does not erase the account), the API logs the key, its
+table and schema, and the attention list shows "<extension>
 blocks account deletion"; the item resolves itself at the next daily check once
 the key is dropped or changed to `ON DELETE CASCADE`.
 

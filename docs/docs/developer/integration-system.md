@@ -1158,7 +1158,10 @@ ctx.schedule("refresh", { cron: "30 2 * * *", deadlineMs: 15 * 60_000 }, async (
   disabling the integration stops its ticks.
 - When the API stops, every run's `signal` aborts and the API exits without
   waiting for the handlers; a statement or transaction still running is cut
-  off and rolled back. At the next start, runs still recorded as running
+  off. PostgreSQL rolls back a transaction that had not reached its COMMIT;
+  one whose COMMIT was already running may still commit although the call
+  failed, and a statement already running on the server runs on until it ends
+  or reaches its timeout. At the next start, runs still recorded as running
   are recorded as failed with `interrupted by restart`.
 - When the outcome of a run cannot be written to the database, the host retries
   the write three times over about 20 seconds and then keeps it in memory. The
