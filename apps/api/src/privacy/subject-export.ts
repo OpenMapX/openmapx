@@ -13,6 +13,11 @@ import {
 } from "./collectors/dawarich.js";
 import { PrivacyRequestError } from "./errors.js";
 import {
+  collectExtensionSubjectData,
+  type ExtensionLeftOut,
+  extensionsLeftOut,
+} from "./extension-subject-data.js";
+import {
   collectOpenMapxDataSnapshot,
   type OpenMapxCollectorContext,
 } from "./openmapx-collectors.js";
@@ -43,10 +48,19 @@ export interface PrepareSubjectExportOptions {
   /** Refuse an export with an unavailable source. The manual backup export
    * lists such sources in its report for the operator to review instead. */
   requireAllSources?: boolean;
+  /**
+   * Records, before the archive is built, the extensions that may hold data
+   * about the person and that the export leaves out, so the case cannot be
+   * completed until an administrator has seen to them. Called only when
+   * there are some; a failure refuses the export.
+   */
+  recordExtensionsLeftOut?: (leftOut: readonly ExtensionLeftOut[]) => Promise<void>;
 }
 
 export interface PreparedSubjectExport {
   filename: string;
+  /** The extensions that may hold data about the person and that the archive lacks. */
+  extensionsLeftOut: readonly ExtensionLeftOut[];
   /** Stream the ZIP into the sink. Rejects when the sink or a source fails. */
   write(sink: Writable): Promise<void>;
   /** Remove the short-lived encrypted source spool. Safe to call twice. */
@@ -125,11 +139,25 @@ export async function prepareSubjectExport(
           ...(options.dawarich ?? {}),
         }),
       );
+    // Extensions are asked last; what one cannot give is listed in the
+    // archive instead of refusing the whole export.
+    const extensionParts = await collectExtensionSubjectData({
+      requestId: request.id,
+      userId: subjectUserId,
+      database,
+    });
+    parts.push(...extensionParts);
     for (const part of parts) if (part.disposeSources) disposers.add(part.disposeSources);
-    // A source that should have answered but did not makes the export
-    // incomplete; refuse it rather than deliver a silent gap.
-    if (options.requireAllSources !== false && parts.some((part) => part.outcome === "unavailable"))
+    // A platform source that should have answered but did not makes the
+    // export incomplete; refuse it rather than deliver a silent gap.
+    if (
+      options.requireAllSources !== false &&
+      parts.some((part) => part.outcome === "unavailable" && part.blocking !== false)
+    )
       throw new PrivacyRequestError("COLLECTOR_UNAVAILABLE", 503);
+    const leftOut = extensionsLeftOut(extensionParts);
+    if (leftOut.length > 0 && options.recordExtensionsLeftOut)
+      await options.recordExtensionsLeftOut(leftOut);
     const includesAccess = request.kind === "access" || request.kind === "access_and_portability";
     const disclosurePart = parts.find((part) => part.registrationId === "disclosure-events");
     const recipientRows =
@@ -215,6 +243,7 @@ export async function prepareSubjectExport(
     });
     return {
       filename: `openmapx-data-export-${request.id.slice(0, 8)}.zip`,
+      extensionsLeftOut: leftOut,
       async write(sink) {
         await new PrivacyArchiveWriter().writeArchive({ entries, sink });
       },

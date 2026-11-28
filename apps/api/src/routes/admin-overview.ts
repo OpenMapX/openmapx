@@ -52,13 +52,16 @@ export async function adminOverviewRoute(app: FastifyInstance): Promise<void> {
     const bannedUsers = bannedRow?.total ?? 0;
     const activeSessions24h = activeSessionRow?.total ?? 0;
 
-    // The host clears `enabled` when an integration's code fails to load, but
-    // the operator's switch stays on; count it as the integration list does:
-    // switched on and unhealthy.
-    const codeFailed = (i: (typeof integrations)[number]) =>
-      i.loadState === "failed" || i.loadState === "incompatible";
+    // The host clears `enabled` for every integration it does not run, but the
+    // operator's switch stays on. Count as the integration list does: one
+    // whose code failed is switched on and unhealthy; one held back by safe
+    // mode or an incompatible release is switched on and not unhealthy; one
+    // whose extension is disabled is switched off.
+    const codeFailed = (i: (typeof integrations)[number]) => i.loadState === "failed";
+    const switchedOn = (i: (typeof integrations)[number]) =>
+      i.loadState !== "disabled" && i.config?.enabled !== false;
     const totalIntegrations = integrations.length;
-    const enabledIntegrations = integrations.filter((i) => i.enabled || codeFailed(i)).length;
+    const enabledIntegrations = integrations.filter(switchedOn).length;
     const credentialStatuses = await Promise.all(
       integrations.filter((i) => i.enabled).map((i) => computeCredentialStatus(i)),
     );

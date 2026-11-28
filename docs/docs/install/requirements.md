@@ -11,6 +11,14 @@ with the default application services and add routing, geocoding, transit, and
 tile services as needed. Each engine adds its own data preparation and storage
 requirements.
 
+Each OpenMapX instance runs exactly one API process against its database; the
+generated stack gives every service a fixed container name, so the API cannot be
+scaled to several replicas. Parts of the API rely on this. The administrative
+job runner and the scheduled tasks of integrations each start a task at most
+once at a time, and at start-up they mark the runs the previous process left
+unfinished as failed. A second API process on the same database would break
+both. A CDN in front of the API can serve cacheable responses such as tiles.
+
 ## Software prerequisites
 
 | Software       | Requirement                                                         |

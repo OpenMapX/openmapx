@@ -51,6 +51,7 @@ integration("timestamps on a database whose default time zone is not UTC", () =>
     vi.unstubAllEnvs();
     await api?.sql.end({ timeout: 5 });
     await api?.integrationSql.end({ timeout: 5 });
+    await api?.extensionSql.end({ timeout: 5 });
     await fixture?.end({ timeout: 5 });
     await container?.stop();
   });
@@ -76,7 +77,7 @@ integration("timestamps on a database whose default time zone is not UTC", () =>
   it("every API connection reports TimeZone UTC", async () => {
     const migrations = api.openMigrationSession();
     try {
-      for (const connection of [api.sql, api.integrationSql, migrations])
+      for (const connection of [api.sql, api.integrationSql, api.extensionSql, migrations])
         expect(await connection`SHOW TimeZone`).toEqual([{ TimeZone: "UTC" }]);
     } finally {
       await migrations.end({ timeout: 5 });

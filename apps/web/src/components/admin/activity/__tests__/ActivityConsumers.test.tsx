@@ -1,6 +1,8 @@
+import type { AdminActivityJobDetail } from "@openmapx/core/api-contracts";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@/test";
+import { summary } from "../../integrations/__tests__/fixtures";
 import { JobDetail } from "../JobDetail";
 import { JobList } from "../JobList";
 import { FakeEventSource, job, log, stage, timestamp } from "./fixtures";
@@ -488,4 +490,66 @@ it("clears the previous task return when selecting a different inventory job", a
   mount(<JobList />);
   fireEvent.click(await screen.findByRole("button", { name: "Open job next" }));
   expect(screen.queryByRole("link", { name: "Return to task" })).not.toBeInTheDocument();
+});
+
+describe("integration task runs", () => {
+  const taskRun = (overrides: Partial<AdminActivityJobDetail> = {}) =>
+    job({
+      source: "integration-task",
+      id: "0193e4a0-0000-7000-8001-000000000002",
+      type: "demo:refresh",
+      status: "failed",
+      error: "deadline exceeded",
+      progress: null,
+      actorLabel: "Scheduled",
+      finishedAt: timestamp,
+      cancelable: false,
+      ...overrides,
+    } as Partial<AdminActivityJobDetail>);
+
+  it("names a run after its integration, and by its type once the integration is gone", async () => {
+    const requests: string[] = [];
+    vi.stubGlobal("fetch", async (input: string) => {
+      requests.push(input);
+      if (input.endsWith("/api/admin/integrations")) return Response.json([summary]);
+      const rows = [
+        taskRun(),
+        taskRun({ id: "0193e4a0-0000-7000-8001-000000000003", type: "gone:sync" }),
+      ].map(({ result: _, logs: __, stages: ___, ...row }) => ({ ...row, actor: null }));
+      return Response.json({ jobs: rows, total: 2 });
+    });
+    mount(<JobList />);
+    expect(await screen.findByText("Demo: refresh")).toBeInTheDocument();
+    expect(screen.getByText("gone:sync")).toBeInTheDocument();
+    expect(screen.getAllByText("Scheduled task")).toHaveLength(2);
+    expect(screen.getAllByText("failed")).toHaveLength(2);
+  });
+
+  it("does not read the integrations while no run is listed", async () => {
+    const requests: string[] = [];
+    vi.stubGlobal("fetch", async (input: string) => {
+      requests.push(input);
+      const { result: _, logs: __, stages: ___, ...row } = job();
+      return Response.json({ jobs: [{ ...row, actor: null }], total: 1 });
+    });
+    mount(<JobList />);
+    expect(await screen.findByText("Data operation")).toBeInTheDocument();
+    expect(requests.some((url) => url.includes("/api/admin/integrations"))).toBe(false);
+  });
+
+  it("shows a run's outcome without cancellation or a log pane", async () => {
+    vi.stubGlobal("fetch", async () =>
+      Response.json(taskRun({ status: "succeeded", error: null })),
+    );
+    mount(<JobDetail jobId="0193e4a0-0000-7000-8001-000000000002" source="integration-task" />);
+    expect(await screen.findByText("succeeded")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+    expect(screen.queryByText("No log output")).not.toBeInTheDocument();
+  });
+
+  it("shows why a run failed", async () => {
+    vi.stubGlobal("fetch", async () => Response.json(taskRun()));
+    mount(<JobDetail jobId="0193e4a0-0000-7000-8001-000000000002" source="integration-task" />);
+    expect(await screen.findByText("deadline exceeded")).toBeInTheDocument();
+  });
 });

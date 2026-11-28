@@ -1,5 +1,10 @@
 import { createTranslator, type Locale, locales, resolveLocale } from "@openmapx/i18n";
-import { SUBJECT_DATA_CATALOGUE } from "./catalogue";
+import {
+  extensionRegistrationText,
+  SUBJECT_DATA_CATALOGUE,
+  SUBJECT_DATA_CATALOGUE_BY_ID,
+  subjectDataCatalogue,
+} from "./catalogue";
 
 export type CatalogueLocale = Locale;
 
@@ -51,18 +56,28 @@ export function getCatalogueCopy(locale: string, id: string): CatalogueCopyEntry
   return getCatalogueCopyWithFallbacks(locale, id).copy;
 }
 
+/**
+ * The copy of registration `id` in `locale`. An extension's registration
+ * takes its category from the title and its purpose from the description
+ * the extension declared, in the extension's words; the other fields, and
+ * a missing title or description, use the catalogue's defaults.
+ */
 export function getCatalogueCopyWithFallbacks(locale: string, id: string) {
   const resolved = resolveLocale(locale);
   const t = createTranslator(resolved, "privacyExport.catalogue");
+  const declared = SUBJECT_DATA_CATALOGUE_BY_ID.has(id) ? undefined : extensionRegistrationText(id);
+  const registration = subjectDataCatalogue().find((entry) => entry.id === id);
   const copy = Object.fromEntries(
     fields.map((field) => {
       const key = `entries.${id}.${field}`;
+      if (field === "category" && declared?.title) return [field, declared.title];
+      if (field === "purpose" && declared?.description) return [field, declared.description];
       return [
         field,
-        t.has(key)
+        !declared && t.has(key)
           ? t(key)
           : field === "category"
-            ? (SUBJECT_DATA_CATALOGUE.find((entry) => entry.id === id)?.category ?? id)
+            ? (registration?.category ?? id)
             : t(`defaults.${field}`),
       ];
     }),

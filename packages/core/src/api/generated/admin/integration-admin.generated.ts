@@ -178,6 +178,14 @@ import type {
   GetAdminProviderOrder415,
   GetAdminProviderOrder429,
   GetAdminProviderOrder500,
+  GetAdminSafeMode200,
+  GetAdminSafeMode400,
+  GetAdminSafeMode401,
+  GetAdminSafeMode403,
+  GetAdminSafeMode413,
+  GetAdminSafeMode415,
+  GetAdminSafeMode429,
+  GetAdminSafeMode500,
   InstallAdminStandaloneIntegration202,
   InstallAdminStandaloneIntegration400,
   InstallAdminStandaloneIntegration401,
@@ -190,6 +198,16 @@ import type {
   InstallAdminStandaloneIntegration503,
   InstallAdminStandaloneIntegrationBody,
   InstallAdminStandaloneIntegrationHeaders,
+  LeaveAdminSafeMode200,
+  LeaveAdminSafeMode400,
+  LeaveAdminSafeMode401,
+  LeaveAdminSafeMode403,
+  LeaveAdminSafeMode409,
+  LeaveAdminSafeMode413,
+  LeaveAdminSafeMode415,
+  LeaveAdminSafeMode429,
+  LeaveAdminSafeMode500,
+  LeaveAdminSafeModeBody,
   ListAdminAttention200,
   ListAdminAttention400,
   ListAdminAttention401,
@@ -380,7 +398,9 @@ import {
   getAdminIntegrationRequest,
   getAdminOverviewRequest,
   getAdminProviderOrderRequest,
+  getAdminSafeModeRequest,
   installAdminStandaloneIntegrationRequest,
+  leaveAdminSafeModeRequest,
   listAdminAttentionRequest,
   listAdminCredentialsRequest,
   listAdminIntegrationBindingsRequest,
@@ -3382,6 +3402,178 @@ export const getAdminProviderOrder = async (
       method: "GET",
     },
   );
+};
+
+export type getAdminSafeModeResponse200 = {
+  data: GetAdminSafeMode200;
+  status: 200;
+};
+
+export type getAdminSafeModeResponse400 = {
+  data: GetAdminSafeMode400;
+  status: 400;
+};
+
+export type getAdminSafeModeResponse401 = {
+  data: GetAdminSafeMode401;
+  status: 401;
+};
+
+export type getAdminSafeModeResponse403 = {
+  data: GetAdminSafeMode403;
+  status: 403;
+};
+
+export type getAdminSafeModeResponse413 = {
+  data: GetAdminSafeMode413;
+  status: 413;
+};
+
+export type getAdminSafeModeResponse415 = {
+  data: GetAdminSafeMode415;
+  status: 415;
+};
+
+export type getAdminSafeModeResponse429 = {
+  data: GetAdminSafeMode429;
+  status: 429;
+};
+
+export type getAdminSafeModeResponse500 = {
+  data: GetAdminSafeMode500;
+  status: 500;
+};
+
+export type getAdminSafeModeResponseSuccess = getAdminSafeModeResponse200 & {
+  headers: Headers;
+};
+export type getAdminSafeModeResponseError = (
+  | getAdminSafeModeResponse400
+  | getAdminSafeModeResponse401
+  | getAdminSafeModeResponse403
+  | getAdminSafeModeResponse413
+  | getAdminSafeModeResponse415
+  | getAdminSafeModeResponse429
+  | getAdminSafeModeResponse500
+) & {
+  headers: Headers;
+};
+
+export type getAdminSafeModeResponse =
+  | getAdminSafeModeResponseSuccess
+  | getAdminSafeModeResponseError;
+
+export const getGetAdminSafeModeUrl = () => {
+  return `/api/admin/safe-mode`;
+};
+
+export const getAdminSafeMode = async (
+  options?: Parameters<typeof getAdminSafeModeRequest>[1],
+): Promise<getAdminSafeModeResponse> => {
+  return getAdminSafeModeRequest<getAdminSafeModeResponse>(getGetAdminSafeModeUrl(), {
+    ...options,
+    method: "GET",
+  });
+};
+
+export type leaveAdminSafeModeResponse200 = {
+  data: LeaveAdminSafeMode200;
+  status: 200;
+};
+
+export type leaveAdminSafeModeResponse400 = {
+  data: LeaveAdminSafeMode400;
+  status: 400;
+};
+
+export type leaveAdminSafeModeResponse401 = {
+  data: LeaveAdminSafeMode401;
+  status: 401;
+};
+
+export type leaveAdminSafeModeResponse403 = {
+  data: LeaveAdminSafeMode403;
+  status: 403;
+};
+
+export type leaveAdminSafeModeResponse409 = {
+  data: LeaveAdminSafeMode409;
+  status: 409;
+};
+
+export type leaveAdminSafeModeResponse413 = {
+  data: LeaveAdminSafeMode413;
+  status: 413;
+};
+
+export type leaveAdminSafeModeResponse415 = {
+  data: LeaveAdminSafeMode415;
+  status: 415;
+};
+
+export type leaveAdminSafeModeResponse429 = {
+  data: LeaveAdminSafeMode429;
+  status: 429;
+};
+
+export type leaveAdminSafeModeResponse500 = {
+  data: LeaveAdminSafeMode500;
+  status: 500;
+};
+
+export type leaveAdminSafeModeResponseSuccess = leaveAdminSafeModeResponse200 & {
+  headers: Headers;
+};
+export type leaveAdminSafeModeResponseError = (
+  | leaveAdminSafeModeResponse400
+  | leaveAdminSafeModeResponse401
+  | leaveAdminSafeModeResponse403
+  | leaveAdminSafeModeResponse409
+  | leaveAdminSafeModeResponse413
+  | leaveAdminSafeModeResponse415
+  | leaveAdminSafeModeResponse429
+  | leaveAdminSafeModeResponse500
+) & {
+  headers: Headers;
+};
+
+export type leaveAdminSafeModeResponse =
+  | leaveAdminSafeModeResponseSuccess
+  | leaveAdminSafeModeResponseError;
+
+export const getLeaveAdminSafeModeUrl = () => {
+  return `/api/admin/safe-mode/leave`;
+};
+
+export const leaveAdminSafeMode = async (
+  leaveAdminSafeModeBody?: LeaveAdminSafeModeBody,
+  options?: Parameters<typeof leaveAdminSafeModeRequest>[1],
+): Promise<leaveAdminSafeModeResponse> => {
+  const getHeaders = (
+    h?: NonNullable<RequestInit["headers"]>,
+  ): Record<string, string | readonly string[]> => {
+    if (!h) return {};
+    if (h instanceof Headers) return Object.fromEntries(h.entries());
+    if (Symbol.iterator in h) {
+      return Object.fromEntries(
+        Array.from(
+          h as Iterable<Iterable<string>>,
+          (entry) => Array.from(entry) as [string, string],
+        ),
+      );
+    }
+    const headers: Record<string, string | readonly string[]> = {};
+    for (const [name, value] of Object.entries<string | readonly string[] | undefined>(h)) {
+      if (value !== undefined) headers[name] = value;
+    }
+    return headers;
+  };
+  return leaveAdminSafeModeRequest<leaveAdminSafeModeResponse>(getLeaveAdminSafeModeUrl(), {
+    ...options,
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...getHeaders(options?.headers) },
+    body: JSON.stringify(leaveAdminSafeModeBody),
+  });
 };
 
 export type listAdminStandaloneIntegrationsResponse200 = {

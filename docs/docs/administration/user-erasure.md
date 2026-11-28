@@ -27,10 +27,52 @@ actions and the sessions the account impersonated as an administrator. It
 clears the account from data jobs it started. Audit events and privacy case
 events may remain for accountability, but the deleted actor's ID, IP address,
 user agent, target ID and matching details are cleared. The API also removes the
-account's offline-package records, which name it only by a keyed hash. Before
-that transaction starts, the API durably appends an HMAC-pseudonymised request
-to the erasure journal. If the journal is unavailable, deletion fails without
-pretending that it succeeded.
+account's offline-package records, which name it only by a keyed hash. Once the
+account row is deleted, and before that transaction commits, the API durably
+appends an HMAC-pseudonymised request to the erasure journal. If the journal is
+unavailable, the transaction rolls back and the deletion fails without
+pretending that it succeeded. A deletion the database refuses, for example
+because of an extension's foreign key, leaves no request in the journal; the
+API checks deferred keys and constraints before it writes the request, so this
+holds for them too. A failure after the request is written, such as the server
+stopping or an error between the journal write and the commit, rolls the
+deletion back but leaves the request in the journal. The account then still
+exists, and a later restore of a backup erases it, because the restore
+replays every request in the journal. The deletion had been asked for, so the
+restore errs on the side of erasing.
+
+Extensions that keep data about people register a handler that erases it.
+The trigger records the deleted account once for each such extension, also
+while the extension is disabled, failed, held back by safe mode, left out by
+the loader or uninstalled with its data kept. The API then asks each running
+extension to erase the account's data: right after the deletion, after every
+reload of the integrations and once a day. The deletion itself never waits
+for an extension. A record stays until the extension reports success, so an
+extension that is not running, fails or does not answer within 30 seconds is
+asked again later; accounts whose erase failed least often go first, so one
+account that keeps failing does not hold up the others.
+
+The administration's attention list shows "Erasure pending in _extension_"
+whenever records are waiting and the extension either failed to erase (with
+how many accounts wait, how often erasing failed and the last error) or
+cannot erase now (with the reason, for example that it is disabled or failed
+to load, and how many accounts wait). The item disappears once nothing is
+pending for that extension. The record holds only the deleted account's ID
+and the extension. It is removed without an erase in two cases only: the
+extension runs without a handler (an update dropped it), or its data is
+removed. The API log then says how many owed erasures were dropped and why,
+and the item is resolved.
+
+If an extension's foreign key refuses an account deletion, the deletion is
+rolled back and the account stays unchanged; the person is told that an
+installed extension keeps the account from being deleted. The API log names
+the key, its table and schema, and the attention list shows "_extension_
+blocks account deletion" with the same. The key must be changed to
+`ON DELETE CASCADE` or dropped, by an update of the extension that owns the
+table or of the extension whose migration added the key; removing the
+extension alone keeps its schema and the key. The item resolves itself at
+the next daily check once the key no longer refuses deletions (you can
+acknowledge it before); then ask the person to delete the account again.
 
 Delete accounts in the app. Deleting with plain SQL as `openmapx_api`
 (`DELETE FROM "user" WHERE id = …`) runs the same trigger but not the API's
@@ -56,6 +98,23 @@ email.
 The archive covers explicit OpenMapX projections and connected managed Dawarich
 data when that processor responds. Other controllers, off-host backups,
 operator logs and unavailable sources appear as reviewed omissions or tasks.
+Each running extension that keeps data about people is asked for it, and its
+answer is filed under `extensions/` in the archive; the README names the
+extensions asked and their files. An extension that may hold data about the
+person but could not be asked does not stop the download: one that is not
+running, offers no export, is no longer installed while its data is still in
+the database, fails, does not answer within 30 seconds or answers with more
+than 8 MiB. The README lists it under "Extensions that could not be asked"
+with the reason and says that the operator has been asked to provide the
+data, and the manifest records it with a reason code. The case gets an
+operator task named `extension:<id>` whose public code is that reason, so it
+cannot be completed until you resolve it: provide the person with the
+extension's data (from its `ext_<id>` schema, or by repairing the extension (a
+disabled extension is enabled again by removing it and installing it again,
+which keeps its data) and letting the person download again), then resolve
+the task. The
+API log has one line per extension left out, with the case id and the
+reason.
 The **Download browser data** action is a separate local JSON supplement: it
 contains only an allowlisted preference snapshot and offline-map metadata, not
 cookies, sessions, credentials, caches or raw map archives.
@@ -143,6 +202,15 @@ OpenMapX.
    off-host lifecycle rules.
 5. Complete any Dawarich/processor action and communicate the external Mangrove
    boundary.
+6. Check the attention list for "Erasure pending in …" items. Each one means
+   an extension still holds data of deleted accounts. Act on what it says:
+   repair it, or remove and reinstall a disabled one, or remove its data; the API
+   asks a running extension again. The list covers only extensions that
+   registered a handler: data an extension keeps through tables that cascade
+   from the account is deleted with the account, and data in tables a
+   migration created outside its own schema is neither erased nor shown.
+   While the API has not started, or before its first run after a restore,
+   the list is not yet up to date.
 
 For a recovery drill, restore a retained backup in a disposable deployment and
 verify that replay removes the erased account before the API resumes. This is a

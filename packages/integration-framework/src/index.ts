@@ -25,6 +25,7 @@ export type {
   CacheClient,
   CustomHealthCheckFn,
   DatabaseClient,
+  DatabaseTransaction,
   Disclosure,
   EmailDisclosure,
   EmailProvider,
@@ -47,8 +48,10 @@ export type {
   RouteOptions,
   RouteParams,
   RouteRequest,
+  ScheduleOptions,
   SecretsClient,
   StreamHttpResponse,
+  SubjectDataHandler,
   TransferSafeguard,
   TransitReachabilityMetrics,
 } from "./context";
@@ -430,6 +433,7 @@ export { IntegrationRegistry } from "./registry";
 export { captureReviewProviderContributors } from "./review-attribution";
 export { storedRouteHandler } from "./route-handler";
 export { withRoutingContributors } from "./routing-contributors";
+export { scheduleRegistrationProblem } from "./schedule";
 export {
   createSiteOrchestrator,
   type SiteOrchestrator,
@@ -456,6 +460,7 @@ export {
   type ParsedStreetLevelSearch,
   parseStreetLevelSearchQuery,
 } from "./street-level-search";
+export { describeThrown, loggableThrown, UNPRINTABLE_THROWN_VALUE } from "./thrown";
 export {
   createTidesIntegration,
   type MetObservation,

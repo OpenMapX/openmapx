@@ -51,6 +51,22 @@ describe("classifyProviderFailure", () => {
     return controller.signal;
   }
 
+  it("classifies a failure it cannot read as a connection failure instead of throwing", () => {
+    const hostile = new Proxy(Object.freeze({}), {
+      get() {
+        throw new Error("trap");
+      },
+      has() {
+        throw new Error("trap");
+      },
+      getPrototypeOf() {
+        throw new Error("trap");
+      },
+    });
+    expect(classifyProviderFailure(hostile)).toBe("connection");
+    expect(classifyProviderFailure(Object.create(null))).toBe("connection");
+  });
+
   it("maps a caller abort to caller_cancelled", () => {
     expect(classifyProviderFailure(new ProviderCancelledError())).toBe("caller_cancelled");
     const signal = aborted();

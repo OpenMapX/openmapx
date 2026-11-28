@@ -17,12 +17,21 @@ import { envInt, envString } from "@openmapx/core/server-env";
 import { registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from "fastify";
 import { startAccountMailWorker } from "./account/account-mail-outbox";
+import { resolveClearedDeletionBlocks } from "./account/extension-deletion-block";
 import { auth } from "./auth";
 import { db, openMigrationSession, sql } from "./db/index";
 import { type MigrationRun, startMigrations } from "./db/migration-runner";
 import {
+  type EventLoopWatchdog,
+  eventLoopWatchdogThresholdMs,
+  startEventLoopWatchdog,
+  startupEventLoopWatchdogThresholdMs,
+} from "./event-loop-watchdog";
+import { cancelRunningExtensionMigrations } from "./extension-migrations";
+import {
   getAllIntegrations,
   initIntegrations,
+  recoverInterruptedIntegrationTasks,
   reloadIntegrations,
   setDisallowedIntegrationResolver,
   setDisallowedSourceResolver,
@@ -33,11 +42,13 @@ import {
   startAttributionLicenseWatch,
   startIntegrationHealthRefresh,
   stopIntegrationHealthRefresh,
+  stopIntegrationTasks,
 } from "./integration-host";
 import { setIntegrationRouteRateLimits } from "./integration-routes";
 import { runPrivacyDatabaseCleanup } from "./privacy/cleanup.js";
 import { schedulePrivacyDeadlineReminders } from "./privacy/deadline-reminders.js";
 import { janitorEncryptedSourceSpools } from "./privacy/encrypted-source-spool.js";
+import { syncAndRunPendingErasures } from "./privacy/extension-subject-data.js";
 import { createPrivacyNotificationWorker } from "./privacy/notifications.js";
 import { createPrivacyOperationsMonitor } from "./privacy/operations-monitor.js";
 import { processLogger } from "./process-logger";
@@ -47,6 +58,15 @@ import {
   setGatedImageSourceResolver,
 } from "./routes/image-hosts";
 import { registerCoreRoutes } from "./routes/index";
+import {
+  apiRuntimeDirectory,
+  beginBoot,
+  bootMarkerDirectory,
+  initSafeMode,
+  markCleanStop,
+  onInstalledCodeStart,
+  syncSafeModeAttention,
+} from "./safe-mode";
 import {
   controlledRequestLoggingOptions,
   corsOptions,
@@ -103,6 +123,7 @@ import {
   withExtensionChangeLock,
 } from "./services/extension-recovery";
 import { pruneOldRecords } from "./services/health-history";
+import { pruneIntegrationTaskRuns } from "./services/integration-task-runs";
 import {
   startAdminJobReconciliation,
   stopAdminJobReconciliation,
@@ -139,8 +160,11 @@ export interface AppStartupControl {
 
 /**
  * Open event streams never end on their own, so shutdown cuts the connections
- * still open after this long. Both together stay under the ten seconds a
- * container runtime allows before it kills the process.
+ * still open after this long. With the cancelled migration before them (at
+ * most 5 seconds), the installed integrations' shutdown budget after them
+ * (5 seconds) and the end of the database pools (2 seconds), a stop takes at
+ * most 19 seconds plus whatever built-in shutdown handlers take, inside the
+ * 20-second stop grace period of `services/api/service.json`.
  */
 const SHUTDOWN_GRACE_MS = 5_000;
 const SHUTDOWN_FORCE_MS = 2_000;
@@ -408,10 +432,53 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
   registerBuiltinIdSchemeViews();
 
   await cacheInvalidation.start();
+  // Runs a previous process left behind block their tasks until they are
+  // closed, so this happens before the first generation starts its tasks.
+  try {
+    const interrupted = await recoverInterruptedIntegrationTasks();
+    if (interrupted > 0)
+      server.log.warn({ interrupted }, "Marked scheduled task runs of the previous process failed");
+  } catch (err) {
+    server.log.error(err, "Could not close the scheduled task runs of the previous process");
+  }
+  // Decides from how the previous processes ended whether this one starts in
+  // automatic safe mode, so it comes before safe mode is read.
+  const runtimeDir = apiRuntimeDirectory();
+  const boot = beginBoot(runtimeDir, new Date());
+  if (boot.enterSafeMode)
+    server.log.error(
+      { integrationId: boot.integrationId },
+      "The API stopped three times within ten minutes while installed code ran; starting in automatic safe mode",
+    );
+  // Read once, before any integration loads; it holds until it is left or the
+  // API restarts without it.
+  const safeMode = initSafeMode(process.env, runtimeDir);
+  if (safeMode.active)
+    server.log.warn(
+      { reason: safeMode.reason, integrationId: safeMode.integrationId },
+      "Safe mode is on: no installed extension is loaded",
+    );
+  // From just before the first installed import until the API listens, an
+  // installed integration that freezes the start is killed, recorded and
+  // counted, with the longer start-up threshold. A start without installed
+  // code, or in safe mode, is not watched before it listens.
+  const watchdogThresholdMs = eventLoopWatchdogThresholdMs();
+  let eventLoopWatchdog: EventLoopWatchdog | null = null;
+  onInstalledCodeStart(() => {
+    const startupMs = startupEventLoopWatchdogThresholdMs(watchdogThresholdMs);
+    if (startupMs !== null)
+      eventLoopWatchdog ??= startEventLoopWatchdog({
+        thresholdMs: startupMs,
+        runtimeDir: bootMarkerDirectory(),
+        log: server.log,
+      });
+  });
   await initIntegrations(server, [
     { directory: integrationsDir, isBuiltIn: true },
     { directory: customIntegrationsDir, isBuiltIn: false },
   ]);
+  // After the load, so the item can name the integration automatic safe mode blames.
+  await syncSafeModeAttention();
   // Runtime integrations supplied their first sources during setup, before
   // they were live, so the sources-changed hook has not run for them yet.
   setCameraMediaSources(cameraMediaSourcesOf(getAllIntegrations()));
@@ -440,6 +507,18 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
       .catch((err) => server.log.warn(err, "Admin job prune failed"));
     void pruneDataManagerJobs(DATA_MANAGER_JOB_RETENTION_DAYS).catch((err) =>
       server.log.warn(err, "Data-manager job prune failed"),
+    );
+    void pruneIntegrationTaskRuns().catch((err) =>
+      server.log.warn(err, "Scheduled task run prune failed"),
+    );
+    // Picks up deletions whose own run left work behind, and those made
+    // without the API's delete hook. The sync first makes up for one that
+    // failed when the integrations went live.
+    void syncAndRunPendingErasures().catch((err) =>
+      server.log.warn(err, "Processing pending erasures failed"),
+    );
+    void resolveClearedDeletionBlocks().catch((err) =>
+      server.log.warn(err, "Checking blocked account deletions failed"),
     );
     void retentionDays("serverLog")
       .then(pruneAppLogs)
@@ -601,6 +680,16 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
       server.log.error(err);
       throw err;
     }
+    // The API serves: from here the run-time threshold applies.
+    if (watchdogThresholdMs !== null) {
+      if (eventLoopWatchdog) eventLoopWatchdog.setThreshold(watchdogThresholdMs);
+      else
+        eventLoopWatchdog = startEventLoopWatchdog({
+          thresholdMs: watchdogThresholdMs,
+          runtimeDir: bootMarkerDirectory(),
+          log: server.log,
+        });
+    }
 
     // Only complete a checkpointed self-update after the replacement API is
     // genuinely listening, migrations succeeded, and Docker confirms that this
@@ -612,6 +701,13 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
   let stopping: Promise<void> | undefined;
 
   function stop(): Promise<void> {
+    // Before anything else: a stop that Docker cuts short with a kill still
+    // counts as clean, not as a crash of installed code.
+    markCleanStop();
+    // A shutdown that blocks the loop must not end in a kill counted as a crash.
+    onInstalledCodeStart(null);
+    eventLoopWatchdog?.stop();
+    eventLoopWatchdog = null;
     stopping ??= (async () => {
       privacyOperationsMonitor.stop();
       privacyNotificationWorker.stop();
@@ -619,6 +715,14 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
       stopMigrationStagePruning();
       stopIntegrationHealthRefresh();
       stopDataUsePolicyRefresh();
+      // Returns at once; a handler still running ends with the process.
+      stopIntegrationTasks();
+      // A reload may be migrating an integration while the API serves; left
+      // running, its statement would outlive the process and hold the lock
+      // the next start waits for.
+      await cancelRunningExtensionMigrations().catch((err) =>
+        server.log.warn(err, "Could not stop the running database migration"),
+      );
       await shutdownServer(server, {
         graceMs: SHUTDOWN_GRACE_MS,
         forceMs: SHUTDOWN_FORCE_MS,

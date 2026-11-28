@@ -35,6 +35,16 @@ it("keeps both source and id, never treating source as a list filter", () => {
   });
 });
 
+it("builds and parses a link to an integration task run", () => {
+  const RUN_ID = "0193e4a0-0000-7000-8001-000000000002";
+  const href = adminJobHref({ id: RUN_ID, source: "integration-task" });
+  expect(href).toBe(`/admin/activity?tab=jobs&job=${RUN_ID}&source=integration-task`);
+  expect(parseAdminJobSelection(new URL(href, "http://x").searchParams)).toMatchObject({
+    id: RUN_ID,
+    source: "integration-task",
+  });
+});
+
 it.each(["", " ", "\n", "x".repeat(257)])(
   "falls back to Activity for an unaddressable server job %s",
   (id) => {

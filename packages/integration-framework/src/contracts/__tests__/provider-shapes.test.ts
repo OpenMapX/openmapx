@@ -126,7 +126,10 @@ describe("PROVIDER_SHAPES", () => {
     expectTypeOf<ProviderRegistrar>().toEqualTypeOf<
       Exclude<
         Extract<keyof IntegrationContext, `register${string}`>,
-        "registerRoute" | "registerHealthCheck" | "registerDisclosure"
+        | "registerRoute"
+        | "registerHealthCheck"
+        | "registerDisclosure"
+        | "registerSubjectDataHandler"
       >
     >();
     expectTypeOf<ProviderRegistrar>().toEqualTypeOf<(typeof PROVIDER_REGISTRARS)[number]>();

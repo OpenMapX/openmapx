@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  fakeDatabaseClient,
+} from "@openmapx/integration-framework/testing";
 import { latLngToCell } from "h3-js";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createNotablePlacesSuggestionProvider } from "../../../integrations/search-notable-places/provider.js";
@@ -411,10 +414,7 @@ const signal = () => ({
 
 function context(pg: PostgisFixture) {
   return createMockIntegrationContext({
-    db: {
-      execute: async <T>(query: string, params?: unknown[]) =>
-        (await pg.sql.unsafe(query, params as never[])) as unknown as T,
-    },
+    db: fakeDatabaseClient((query, params) => pg.sql.unsafe(query, params as never[])),
   });
 }
 

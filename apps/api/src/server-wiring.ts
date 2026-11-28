@@ -279,6 +279,25 @@ export async function shutdownServer(
   await options.afterClose();
 }
 
+/**
+ * Cancels the database migrations start-up is running, the platform's and
+ * the extensions', and settles once each has ended or failed to. A killed
+ * process would leave their statements running in PostgreSQL.
+ */
+export async function cancelStartupMigrations(
+  platform: { cancel(): Promise<void> } | undefined,
+  cancelExtensionMigrations: () => Promise<void>,
+  log: Pick<FastifyBaseLogger, "warn">,
+): Promise<void> {
+  await Promise.all(
+    [() => platform?.cancel(), cancelExtensionMigrations].map((cancel) =>
+      Promise.resolve()
+        .then(cancel)
+        .catch((err) => log.warn(err, "Could not stop the running database migration")),
+    ),
+  );
+}
+
 const TRUST_PROXY_ALIASES = new Set(["loopback", "linklocal", "uniquelocal"]);
 
 function validateProxyRange(value: string): void {
@@ -330,7 +349,9 @@ export function uniformErrorHandler(
   _request: FastifyRequest,
   reply: FastifyReply,
 ) {
-  const statusCode = error.statusCode ?? 500;
+  // An integration's route may throw any value; reading it must not throw.
+  const declared = readField(error, "statusCode");
+  const statusCode = typeof declared === "number" ? declared : 500;
   if (statusCode >= 500) {
     // A stream can fail after Fastify copied its success headers to the raw
     // response but before the first byte was committed. Clear those headers
@@ -344,7 +365,19 @@ export function uniformErrorHandler(
       .status(statusCode)
       .send({ error: "Internal Server Error" });
   }
-  return reply.status(statusCode).send({ error: error.message });
+  const message = readField(error, "message");
+  return reply
+    .status(statusCode)
+    .send({ error: typeof message === "string" ? message : "Request failed" });
+}
+
+/** `error[key]`, or undefined when reading it throws. */
+function readField(error: unknown, key: "statusCode" | "message"): unknown {
+  try {
+    return (error as Record<string, unknown> | null)?.[key];
+  } catch {
+    return undefined;
+  }
 }
 
 export function corsOptions(trustedWebOrigins: readonly string[] = configuredTrustedWebOrigins()) {

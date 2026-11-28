@@ -74,6 +74,83 @@ describe("subject archive assembler", () => {
     ).toThrow("duplicate source logical ID");
   });
 
+  it("files an extension's export under extensions/ by its integration id only", () => {
+    expect(archivePathForLogicalId("extension:acme-overlay")).toBe(
+      "openmapx-data-export/extensions/acme-overlay.json",
+    );
+    for (const logicalId of [
+      "extension:",
+      "extension:../manifest",
+      "extension:Acme",
+      "extension:a/b",
+      "extension-acme-overlay",
+    ])
+      expect(archivePathForLogicalId(logicalId)).toBeNull();
+  });
+
+  it("lists every extension part in the manifest and writes the included ones", () => {
+    const written = buildSubjectArchiveEntries({
+      requestId: "r",
+      locale: "en",
+      responseContext,
+      parts: [
+        {
+          registrationId: "extension:acme-overlay",
+          category: "extension",
+          outcome: "included",
+          warningCodes: [],
+          capturedAt: "2026-01-01T00:03:00.000Z",
+          records: [],
+          recordCount: 1,
+          blocking: false,
+          extension: { integrationId: "acme-overlay", name: "Acme overlay" },
+          entries: [
+            {
+              logicalId: "extension:acme-overlay",
+              source: Buffer.from('{"notes":[]}'),
+              mediaType: "application/json",
+            },
+          ],
+        },
+        {
+          registrationId: "extension:acme-tracker",
+          category: "extension",
+          outcome: "unavailable",
+          warningCodes: ["extension-not-loaded"],
+          capturedAt: "2026-01-01T00:03:00.000Z",
+          records: [],
+          recordCount: 0,
+          blocking: false,
+          extension: { integrationId: "acme-tracker", name: "Acme tracker" },
+        },
+      ],
+    });
+    const manifest = JSON.parse(
+      (written.find((entry) => entry.logicalId === "manifest")?.source as Buffer).toString(),
+    );
+    expect(manifest.extensions).toEqual([
+      {
+        integrationId: "acme-overlay",
+        name: "Acme overlay",
+        outcome: "included",
+        warningCode: null,
+      },
+      {
+        integrationId: "acme-tracker",
+        name: "Acme tracker",
+        outcome: "unavailable",
+        warningCode: "extension-not-loaded",
+      },
+    ]);
+    expect(manifest.members).toContainEqual(
+      expect.objectContaining({
+        logicalId: "extension:acme-overlay",
+        path: "openmapx-data-export/extensions/acme-overlay.json",
+      }),
+    );
+    expect(written.map((entry) => entry.logicalId)).not.toContain("extension:acme-tracker");
+  });
+
   it("rejects an invalid generation timestamp before any byte is written", () => {
     expect(() =>
       buildSubjectArchiveEntries({

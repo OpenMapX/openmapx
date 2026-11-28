@@ -22,7 +22,12 @@ import { getPlaceResolver, registerPlaceResolver } from "@openmapx/place-ids";
 import type { FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  getAttentionMocks,
+  getDisabledExtensionMocks,
+  getExtensionMigrationMocks,
   getIntegrationHealthMocks,
+  getSubjectDataMocks,
+  getTaskRunMocks,
   createIntegrationHostTestApp as makeApp,
 } from "./__tests__/support/integration-host-environment.js";
 
@@ -52,15 +57,22 @@ import {
   getIntegrationProviders,
   getIntegrationsByDomain,
   getProviderOrder,
+  heldBackIntegrationLoads,
   initIntegrations,
+  isEnabledIntegrationScheme,
+  markSafeModeRecordsFailed,
   reloadIntegrations,
+  setCompatibilityResolver,
+  setDisabledExtensionResolver,
   shutdownIntegrations,
   startIntegrationHealthRefresh,
   stopIntegrationHealthRefresh,
 } from "./integration-host.js";
 import { registerIntegrationRoute, setIntegrationRouteRateLimits } from "./integration-routes.js";
 import { currentIntegrationScope } from "./integration-scope.js";
+import { createExtensionSubjectData } from "./privacy/extension-subject-data.js";
 import { processLogger } from "./process-logger";
+import { beginBoot, initSafeMode } from "./safe-mode.js";
 import { makeRateLimitTierHook, type RateLimitTiers } from "./server-wiring.js";
 import { getAttributionIndex } from "./services/attribution/index.js";
 import { secretsKeyProblem } from "./services/secrets.js";
@@ -778,7 +790,7 @@ describe("initIntegrations — loader", () => {
     function writeInstalled(
       id: string,
       bundle: string,
-      options: { declared?: boolean; domains?: string[] } = {},
+      options: { declared?: boolean; domains?: string[]; manifest?: Record<string, unknown> } = {},
     ) {
       const directory = join(installedRoot, id);
       mkdirSync(join(directory, "dist", "backend"), { recursive: true });
@@ -792,13 +804,14 @@ describe("initIntegrations — loader", () => {
           domains: options.domains ?? ["knowledge"],
           quality: "community",
           ...(options.declared === false ? {} : { backend: { entry: "dist/backend/index.mjs" } }),
+          ...options.manifest,
         }),
       );
       writeFileSync(join(directory, "dist", "backend", "index.mjs"), bundle);
       return directory;
     }
 
-    function writeBuiltIn(id: string, source: string) {
+    function writeBuiltIn(id: string, source: string, manifest: Record<string, unknown> = {}) {
       const directory = join(builtInRoot, id);
       mkdirSync(directory, { recursive: true });
       writeFileSync(
@@ -809,6 +822,7 @@ describe("initIntegrations — loader", () => {
           license: "MIT",
           domains: ["knowledge"],
           quality: "built-in",
+          ...manifest,
         }),
       );
       writeFileSync(join(directory, "index.js"), source);
@@ -970,6 +984,169 @@ describe("initIntegrations — loader", () => {
       await expectLeftOut(2);
     });
 
+    it("leaves out an installed integration whose migration fails, before importing it", async () => {
+      const { applyExtensionMigrations } = getExtensionMigrationMocks();
+      applyExtensionMigrations.mockImplementationOnce(async () => {
+        throw new Error("Migration 0001_init.sql of demo changed after it was applied");
+      });
+      writeInstalled(
+        "demo",
+        [
+          "// leaves out an installed integration whose migration fails, before importing it",
+          "globalThis.__omxInstalledEvaluated = true;",
+          "export function setup() { globalThis.__omxInstalledSetup = true; }",
+        ].join("\n"),
+        { manifest: { database: { migrations: true } } },
+      );
+
+      await initIntegrations(makeApp(), [installed()]);
+
+      expect(applyExtensionMigrations).toHaveBeenCalledWith({
+        integrationId: "demo",
+        directory: join(installedRoot, "demo"),
+      });
+      expect(getIntegration("demo")).toMatchObject({
+        enabled: false,
+        loadState: "failed",
+        loadError: {
+          phase: "migrate",
+          message: "Migration 0001_init.sql of demo changed after it was applied",
+        },
+      });
+      expect(g.__omxInstalledEvaluated).toBeUndefined();
+      expect(g.__omxInstalledSetup).toBeUndefined();
+      expect(failedIntegrationLoads(["demo"])).toEqual([
+        {
+          id: "demo",
+          phase: "migrate",
+          message: "Migration 0001_init.sql of demo changed after it was applied",
+        },
+      ]);
+    });
+
+    it("migrates a built-in that declares migrations before importing it", async () => {
+      const { applyExtensionMigrations } = getExtensionMigrationMocks();
+      const evaluatedWhenMigrated: unknown[] = [];
+      applyExtensionMigrations.mockImplementationOnce(async () => {
+        evaluatedWhenMigrated.push(g.__omxInstalledBuiltInEvaluated);
+        return { applied: ["0001_init.sql"], schemaAhead: false };
+      });
+      writeBuiltIn(
+        "ledger",
+        [
+          "// migrates a built-in that declares migrations before importing it",
+          "globalThis.__omxInstalledBuiltInEvaluated = true;",
+          "export function setup() {}",
+        ].join("\n"),
+        { database: { migrations: true } },
+      );
+
+      await initIntegrations(makeApp(), [builtIn()]);
+
+      expect(applyExtensionMigrations).toHaveBeenCalledWith({
+        integrationId: "ledger",
+        directory: join(builtInRoot, "ledger"),
+      });
+      expect(evaluatedWhenMigrated).toEqual([undefined]);
+      expect(g.__omxInstalledBuiltInEvaluated).toBe(true);
+      expect(getIntegration("ledger")?.loadState).toBe("loaded");
+    });
+
+    it("fails a built-in whose migration fails as phase migrate, without importing it", async () => {
+      const { applyExtensionMigrations } = getExtensionMigrationMocks();
+      const failure = "Migration 0001_init.sql of ledger failed at line 1: boom";
+      applyExtensionMigrations.mockImplementationOnce(async () => {
+        throw new Error(failure);
+      });
+      writeBuiltIn(
+        "ledger",
+        [
+          "// fails a built-in whose migration fails as phase migrate, without importing it",
+          "globalThis.__omxInstalledBuiltInEvaluated = true;",
+          "export function setup() {}",
+        ].join("\n"),
+        { database: { migrations: true } },
+      );
+
+      await initIntegrations(makeApp(), [builtIn()]);
+
+      expect(g.__omxInstalledBuiltInEvaluated).toBeUndefined();
+      expect(getIntegration("ledger")).toMatchObject({
+        enabled: false,
+        loadState: "failed",
+        loadError: { phase: "migrate", message: failure },
+      });
+
+      applyExtensionMigrations.mockImplementationOnce(async () => {
+        throw new Error(failure);
+      });
+      await expect(reloadIntegrations()).rejects.toThrow(failure);
+    });
+
+    it("migrates only integrations that declare migrations", async () => {
+      const { applyExtensionMigrations } = getExtensionMigrationMocks();
+      writeInstalled("plain", "// migrates only integrations that declare migrations\n");
+
+      await initIntegrations(makeApp(), [installed()]);
+
+      expect(getIntegration("plain")?.loadState).toBe("loaded");
+      expect(applyExtensionMigrations).not.toHaveBeenCalled();
+    });
+
+    it("loads an integration whose schema is ahead and raises an attention item", async () => {
+      const { applyExtensionMigrations } = getExtensionMigrationMocks();
+      const { raiseAttention, resolveAttention } = getAttentionMocks();
+      applyExtensionMigrations.mockImplementationOnce(async () => ({
+        applied: [],
+        schemaAhead: true,
+      }));
+      writeInstalled(
+        "demo",
+        [
+          "// loads an integration whose schema is ahead and raises an attention item",
+          "export function setup() { globalThis.__omxInstalledSetup = true; }",
+        ].join("\n"),
+        { manifest: { name: "Demo Ledger", database: { migrations: true } } },
+      );
+      const app = makeApp();
+
+      await initIntegrations(app, [installed()]);
+
+      expect(getIntegration("demo")?.loadState).toBe("loaded");
+      expect(g.__omxInstalledSetup).toBe(true);
+      expect(raiseAttention).toHaveBeenCalledWith({
+        key: "integration-schema-ahead:demo",
+        severity: "warning",
+        source: "extensions",
+        title: "Demo Ledger runs against a newer database schema",
+        detail:
+          "A later version of this extension migrated its tables, and the files were rolled back. Install a fixed version.",
+      });
+      expect(resolveAttention).not.toHaveBeenCalled();
+
+      await reloadIntegrations();
+
+      expect(resolveAttention).toHaveBeenCalledWith("integration-schema-ahead:demo");
+    });
+
+    it("loads an integration when the attention list cannot be written", async () => {
+      const { applyExtensionMigrations } = getExtensionMigrationMocks();
+      const { resolveAttention } = getAttentionMocks();
+      resolveAttention.mockImplementationOnce(async () => {
+        throw new Error("database unavailable");
+      });
+      writeInstalled(
+        "demo",
+        "// loads an integration when the attention list cannot be written\n",
+        { manifest: { database: { migrations: true } } },
+      );
+
+      await initIntegrations(makeApp(), [installed()]);
+
+      expect(applyExtensionMigrations).toHaveBeenCalledOnce();
+      expect(getIntegration("demo")?.loadState).toBe("loaded");
+    });
+
     const lineSeparator = String.fromCodePoint(0x2028);
     it.each([
       ["a package outside the SDK", "@openmapx/integration-framework", ""],
@@ -1031,6 +1208,53 @@ describe("initIntegrations — loader", () => {
       expect((await app.inject("/api/integrations/demo/owned")).statusCode).toBe(200);
     });
 
+    const HOSTILE_PROXY =
+      "new Proxy(Object.freeze({}), { get() { throw new Error('trap'); }, has() { throw new Error('trap'); }, getPrototypeOf() { throw new Error('trap'); }, getOwnPropertyDescriptor() { throw new Error('trap'); }, ownKeys() { throw new Error('trap'); } })";
+
+    it("reports a built-in whose setup throws a proxy with an error that describes it", async () => {
+      writeBuiltIn(
+        "listener",
+        [
+          "// reports a built-in whose setup throws a proxy with an error that describes it",
+          "export function setup(ctx) {",
+          '  ctx.on("integration.error", (event) => {',
+          "    globalThis.__omxInstalledErrors = [...(globalThis.__omxInstalledErrors ?? []),",
+          "      [event.integrationId, event.error instanceof Error, event.error.message]];",
+          "  });",
+          "}",
+        ].join("\n"),
+      );
+      writeBuiltIn("thrower", `export function setup() { throw ${HOSTILE_PROXY}; }\n`, {
+        dependencies: ["listener"],
+      });
+
+      await initIntegrations(makeApp(), [builtIn()]);
+
+      expect(getIntegration("thrower")).toMatchObject({
+        loadState: "failed",
+        loadError: { phase: "setup", message: "a value that cannot be shown" },
+      });
+      expect(g.__omxInstalledErrors).toEqual([["thrower", true, "a value that cannot be shown"]]);
+    });
+
+    it("answers the reload endpoint with a description when a reload throws a proxy", async () => {
+      writeBuiltIn(
+        "fragile",
+        `export function setup() { if (globalThis.__omxInstalledFragile) throw ${HOSTILE_PROXY}; }\n`,
+      );
+      const app = makeApp();
+      await initIntegrations(app, [builtIn()]);
+      g.__omxInstalledFragile = true;
+
+      const response = await app.inject({ method: "POST", url: "/api/integrations/reload" });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toEqual({
+        error: "Reload failed",
+        message: "a value that cannot be shown",
+      });
+    });
+
     it("ignores late context calls of a retired generation with one warning per method", async () => {
       writeInstalled(
         "late",
@@ -1057,6 +1281,11 @@ describe("initIntegrations — loader", () => {
           "    const accepted = ctx.setDataSources([]);",
           '    registerPlaceResolver("late", async () => null);',
           "    ctx.onShutdown(async () => {});",
+          '    ctx.schedule("late-task", { everyMs: 60000, deadlineMs: 5000 }, async () => {});',
+          '    ctx.schedule("late-task", { everyMs: 60000, deadlineMs: 5000 }, async () => {});',
+          "    const handler = { erase: async () => {}, export: async () => null };",
+          "    ctx.registerSubjectDataHandler(handler);",
+          "    ctx.registerSubjectDataHandler(handler);",
           "    globalThis.__omxInstalledLateDone = { accepted };",
           "  }, 0);",
           "}",
@@ -1103,13 +1332,351 @@ describe("initIntegrations — loader", () => {
             "onShutdown",
             "registerPlaceResolver",
             "registerRoute",
+            "registerSubjectDataHandler",
             "registerWeatherProvider",
+            "schedule",
             "setDataSources",
           ].map((method) => `Integration late was unloaded; ignoring ${method}`),
         );
       } finally {
         process.off("unhandledRejection", onRejection);
       }
+    });
+
+    describe("subject-data handlers", () => {
+      /** The real handler-table and erasure logic over the live registry, in memory. */
+      function subjectDataOverRegistry(pending: Array<[string, string]> = []) {
+        const synced: Array<{ handling: readonly string[]; stopped: readonly string[] }> = [];
+        const rows = [...pending];
+        const subjectData = createExtensionSubjectData({
+          store: {
+            syncHandlers: async ({ handling, stopped }) => {
+              synced.push({ handling, stopped });
+              return new Map();
+            },
+            pendingSubjects: async (id) =>
+              rows.filter(([integrationId]) => integrationId === id).map(([, subject]) => subject),
+            eraseLocked: async (id, subject, erase) => {
+              const attempt = await erase();
+              if (attempt.ok)
+                rows.splice(
+                  rows.findIndex(([i, s]) => i === id && s === subject),
+                  1,
+                );
+              return attempt;
+            },
+            recordStalled: async () => {},
+            pendingSummary: async () => {
+              const summary = new Map<string, { count: number; attempts: number }>();
+              for (const [id] of rows)
+                summary.set(id, { count: (summary.get(id)?.count ?? 0) + 1, attempts: 0 });
+              return summary;
+            },
+            count: async (ids) => rows.filter(([id]) => ids.includes(id)).length,
+            migrated: async () => new Set(),
+          },
+          integrations: getAllIntegrations,
+          attention: {
+            raise: vi.fn(async () => {}),
+            resolve: vi.fn(async () => {}),
+            openKeys: vi.fn(async () => []),
+          },
+          log: { warn: vi.fn() },
+        });
+        return { ...subjectData, synced, rows };
+      }
+
+      it("lists the handler after activation and erases through it in the integration's scope", async () => {
+        const { syncSubjectHandlerTable, runPendingErasures } = getSubjectDataMocks();
+        writeInstalled(
+          "notes",
+          [
+            "// lists the handler after activation and erases through it in the integration's scope",
+            "export function setup(ctx) {",
+            "  ctx.registerSubjectDataHandler({",
+            "    async erase(subjectId) { (globalThis.__omxInstalledErased ??= []).push(subjectId); },",
+            "    async export() { return null; },",
+            "  });",
+            "}",
+          ].join("\n"),
+        );
+        writeInstalled("plain", "// lists the handler after activation: no handler\n");
+
+        await initIntegrations(makeApp(), [installed()]);
+
+        expect(getIntegration("notes")?.loadState).toBe("loaded");
+        expect(syncSubjectHandlerTable).toHaveBeenCalledOnce();
+        expect(runPendingErasures).toHaveBeenCalledOnce();
+        expect(syncSubjectHandlerTable.mock.invocationCallOrder[0]).toBeLessThan(
+          runPendingErasures.mock.invocationCallOrder[0] ?? 0,
+        );
+        const real = subjectDataOverRegistry([["notes", "u1"]]);
+        await real.syncSubjectHandlerTable();
+        expect(real.synced).toEqual([{ handling: ["notes"], stopped: ["plain"] }]);
+        expect(await real.runPendingErasures()).toEqual({ erased: 1, failed: 0 });
+        expect(g.__omxInstalledErased).toEqual(["u1"]);
+
+        await reloadIntegrations();
+        expect(syncSubjectHandlerTable).toHaveBeenCalledTimes(2);
+        expect(runPendingErasures).toHaveBeenCalledTimes(2);
+      });
+
+      it("fails the load of an integration that registers a second handler", async () => {
+        writeInstalled(
+          "twice",
+          [
+            "// fails the load of an integration that registers a second handler",
+            "export function setup(ctx) {",
+            "  const handler = { erase: async () => {}, export: async () => null };",
+            "  ctx.registerSubjectDataHandler(handler);",
+            "  ctx.registerSubjectDataHandler(handler);",
+            "}",
+          ].join("\n"),
+        );
+
+        await initIntegrations(makeApp(), [installed()]);
+
+        expect(getIntegration("twice")).toMatchObject({
+          loadState: "failed",
+          loadError: {
+            phase: "setup",
+            message: "Integration twice already registered a subject-data handler",
+          },
+        });
+      });
+
+      it("ignores a handler registered after setup with one warning", async () => {
+        writeInstalled(
+          "slow",
+          [
+            "// ignores a handler registered after setup with one warning",
+            "export function setup(ctx) { globalThis.__omxInstalledCtx = ctx; }",
+          ].join("\n"),
+        );
+        const warn = vi.fn();
+        const app = makeApp();
+        // biome-ignore lint/suspicious/noExplicitAny: test-only log patch
+        (app as any).log = { info: vi.fn(), warn, error: vi.fn(), debug: vi.fn() };
+        await initIntegrations(app, [installed()]);
+        const ctx = g.__omxInstalledCtx as IntegrationContext;
+        const handler = { erase: async () => {}, export: async () => null };
+
+        ctx.registerSubjectDataHandler(handler);
+        ctx.registerSubjectDataHandler(handler);
+
+        const real = subjectDataOverRegistry();
+        await real.syncSubjectHandlerTable();
+        expect(real.synced).toEqual([{ handling: [], stopped: ["slow"] }]);
+        expect(
+          warn.mock.calls
+            .map(([, message]) => String(message))
+            .filter((message) => message.includes("subject-data handler")),
+        ).toEqual(["Integration slow registered a subject-data handler after setup; ignoring it"]);
+      });
+
+      it("loads the generation when the handler table cannot be written", async () => {
+        const { syncSubjectHandlerTable, runPendingErasures } = getSubjectDataMocks();
+        syncSubjectHandlerTable.mockRejectedValueOnce(new Error("database unavailable"));
+        writeInstalled(
+          "plain",
+          "// loads the generation when the handler table cannot be written\n",
+        );
+
+        await initIntegrations(makeApp(), [installed()]);
+
+        expect(getIntegration("plain")?.loadState).toBe("loaded");
+        expect(runPendingErasures).toHaveBeenCalledOnce();
+      });
+    });
+
+    describe("scheduled tasks", () => {
+      const taskRuns = getTaskRunMocks();
+
+      beforeEach(() => {
+        taskRuns.rows.length = 0;
+        // Only intervals are faked: the load deadline keeps real time.
+        vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+      });
+
+      afterEach(() => {
+        vi.useRealTimers();
+      });
+
+      const ticker = (comment: string, body: string[]) =>
+        [`// ${comment}`, "export function setup(ctx) {", ...body, "}"].join("\n");
+
+      it("starts a task once its generation is live", async () => {
+        writeInstalled(
+          "ticker",
+          ticker("starts a task once its generation is live", [
+            '  ctx.schedule("refresh", { everyMs: 60000, deadlineMs: 5000 }, async ({ signal }) => {',
+            "    (globalThis.__omxInstalledRuns ??= []).push(signal.aborted);",
+            "  });",
+          ]),
+        );
+
+        await initIntegrations(makeApp(), [installed()]);
+        expect(g.__omxInstalledRuns).toBeUndefined();
+        vi.advanceTimersByTime(60_000);
+
+        await vi.waitFor(() => expect(taskRuns.rows[0]?.status).toBe("succeeded"), {
+          timeout: 10_000,
+        });
+        expect(g.__omxInstalledRuns).toEqual([false]);
+        expect(taskRuns.rows).toEqual([
+          expect.objectContaining({ integrationId: "ticker", taskName: "refresh" }),
+        ]);
+      });
+
+      it("fails the load in setup when a task's options are invalid", async () => {
+        writeInstalled(
+          "ticker",
+          ticker("fails the load in setup when a task's options are invalid", [
+            '  ctx.schedule("refresh", { everyMs: 1000, deadlineMs: 5000 }, async () => {});',
+          ]),
+        );
+
+        await initIntegrations(makeApp(), [installed()]);
+
+        expect(getIntegration("ticker")).toMatchObject({
+          loadState: "failed",
+          loadError: { phase: "setup", message: expect.stringMatching(/everyMs/) },
+        });
+      });
+
+      it("drops the tasks of an integration whose setup fails after scheduling them", async () => {
+        writeInstalled(
+          "ticker",
+          ticker("drops the tasks of an integration whose setup fails", [
+            '  ctx.schedule("refresh", { everyMs: 60000, deadlineMs: 5000 }, async () => {',
+            "    globalThis.__omxInstalledRan = true;",
+            "  });",
+            '  throw new Error("setup failed");',
+          ]),
+        );
+
+        await initIntegrations(makeApp(), [installed()]);
+        vi.advanceTimersByTime(180_000);
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(getIntegration("ticker")?.loadState).toBe("failed");
+        expect(taskRuns.store.start).not.toHaveBeenCalled();
+        expect(g.__omxInstalledRan).toBeUndefined();
+      });
+
+      it("ignores a task scheduled after setup with one warning", async () => {
+        writeInstalled(
+          "ticker",
+          ticker("ignores a task scheduled after setup", [
+            "  setTimeout(() => {",
+            "    for (const name of ['late', 'late']) {",
+            "      ctx.schedule(name, { everyMs: 60000, deadlineMs: 5000 }, async () => {",
+            "        globalThis.__omxInstalledRan = true;",
+            "      });",
+            "    }",
+            "    globalThis.__omxInstalledScheduled = true;",
+            "  }, 0);",
+          ]),
+        );
+        const warn = vi.fn();
+        const app = makeApp();
+        // biome-ignore lint/suspicious/noExplicitAny: test-only log patch
+        (app as any).log = { info: vi.fn(), warn, error: vi.fn(), debug: vi.fn() };
+
+        await initIntegrations(app, [installed()]);
+        await vi.waitFor(() => expect(g.__omxInstalledScheduled).toBe(true), { timeout: 10_000 });
+        vi.advanceTimersByTime(180_000);
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(getIntegration("ticker")?.loadState).toBe("loaded");
+        expect(g.__omxInstalledRan).toBeUndefined();
+        const ignored = warn.mock.calls
+          .map(([, message]) => String(message))
+          .filter((message) => message.includes("after setup"));
+        expect(ignored).toEqual([
+          "Integration ticker scheduled task late after setup; ignoring it",
+        ]);
+      });
+
+      it("aborts a running task when a reload replaces its integration", async () => {
+        writeInstalled(
+          "ticker",
+          ticker("aborts a running task when a reload replaces its integration", [
+            "  const generation = (globalThis.__omxInstalledGeneration ?? 0) + 1;",
+            "  globalThis.__omxInstalledGeneration = generation;",
+            '  ctx.schedule("refresh", { everyMs: 60000, deadlineMs: 600000 }, ({ signal }) => {',
+            "    (globalThis.__omxInstalledStarted ??= []).push(generation);",
+            "    return new Promise((resolve) => {",
+            "      if (generation > 1) return resolve();",
+            '      signal.addEventListener("abort", () => {',
+            "        globalThis.__omxInstalledAborted = generation;",
+            "        resolve();",
+            "      });",
+            "    });",
+            "  });",
+          ]),
+        );
+
+        await initIntegrations(makeApp(), [installed()]);
+        vi.advanceTimersByTime(60_000);
+        await vi.waitFor(() => expect(g.__omxInstalledStarted).toEqual([1]), { timeout: 10_000 });
+
+        await reloadIntegrations();
+        await vi.waitFor(() => expect(g.__omxInstalledAborted).toBe(1), { timeout: 10_000 });
+        vi.advanceTimersByTime(60_000);
+        await vi.waitFor(() => expect(g.__omxInstalledStarted).toEqual([1, 2]), {
+          timeout: 10_000,
+        });
+      });
+
+      const countingTicker = (comment: string) =>
+        ticker(comment, [
+          '  ctx.schedule("refresh", { everyMs: 60000, deadlineMs: 5000 }, async () => {',
+          "    globalThis.__omxInstalledRuns = (globalThis.__omxInstalledRuns ?? 0) + 1;",
+          "  });",
+        ]);
+
+      it("stops the ticks of an integration that a reload no longer loads", async () => {
+        writeInstalled(
+          "ticker",
+          countingTicker("stops the ticks of an integration that a reload no longer loads"),
+        );
+        await initIntegrations(makeApp(), [installed()]);
+        vi.advanceTimersByTime(60_000);
+        await vi.waitFor(() => expect(taskRuns.rows[0]?.status).toBe("succeeded"), {
+          timeout: 10_000,
+        });
+
+        rmSync(join(installedRoot, "ticker"), { recursive: true, force: true });
+        await reloadIntegrations();
+        vi.advanceTimersByTime(180_000);
+        await new Promise((resolve) => setImmediate(resolve));
+
+        expect(getIntegration("ticker")).toBeUndefined();
+        expect(g.__omxInstalledRuns).toBe(1);
+        expect(taskRuns.rows).toHaveLength(1);
+      });
+
+      it("loads an integration and its task again after a reload that failed", async () => {
+        writeInstalled(
+          "ticker",
+          countingTicker("loads an integration and its task again after a reload that failed"),
+        );
+        writeBuiltIn(
+          "fragile",
+          'export function setup() { if (globalThis.__omxInstalledFragile) throw new Error("fragile setup"); }\n',
+        );
+        await initIntegrations(makeApp(), [installed(), builtIn()]);
+        g.__omxInstalledFragile = true;
+        await expect(reloadIntegrations()).rejects.toThrow("fragile setup");
+        g.__omxInstalledFragile = false;
+
+        await reloadIntegrations();
+        vi.advanceTimersByTime(60_000);
+
+        expect(getIntegration("ticker")).toMatchObject({ loadState: "loaded" });
+        await vi.waitFor(() => expect(g.__omxInstalledRuns).toBe(1), { timeout: 10_000 });
+      });
     });
 
     describe("integration scope and setup deadline", () => {
@@ -1485,7 +2052,212 @@ describe("initIntegrations — loader", () => {
         expect(settled).toBe(true);
         await outcome;
       });
+
+      it("lets a reload and shutdown finish while an unloaded integration's shutdown handler queries ctx.db", async () => {
+        writeInstalled(
+          "ledger",
+          [
+            "// lets a reload and shutdown finish while an unloaded integration's shutdown handler queries ctx.db",
+            "export function setup(ctx) {",
+            "  ctx.onShutdown(async () => {",
+            '    const rows = await ctx.db.execute("delete from pending returning id");',
+            "    globalThis.__omxInstalledFlushes = [...(globalThis.__omxInstalledFlushes ?? []), rows];",
+            "  });",
+            "}",
+          ].join("\n"),
+          { manifest: { database: { migrations: true } } },
+        );
+        const warn = vi.fn();
+        const app = makeApp();
+        // biome-ignore lint/suspicious/noExplicitAny: test-only log patch
+        (app as any).log = { info: vi.fn(), warn, error: vi.fn(), debug: vi.fn() };
+        await initIntegrations(app, [installed()]);
+
+        await reloadIntegrations();
+        await shutdownIntegrations();
+
+        expect(g.__omxInstalledFlushes).toEqual([[], []]);
+        expect(
+          warn.mock.calls
+            .map(([, message]) => String(message))
+            .filter((message) => message.includes("was unloaded")),
+        ).toEqual([
+          "Integration ledger was unloaded; still running db.execute",
+          "Integration ledger was unloaded; still running db.execute",
+        ]);
+      });
+
+      /**
+       * Runs `work` until a shutdown handler that never settles has been
+       * entered `hangs` times in all, moves the fake clock past the shutdown
+       * handler deadline, and expects `work` to settle.
+       */
+      async function settlesPastHungShutdownHandler(work: Promise<unknown>, hangs: number) {
+        let settled = false;
+        void work.then(
+          () => {
+            settled = true;
+          },
+          () => {
+            settled = true;
+          },
+        );
+        await vi.waitFor(() => expect(g.__omxInstalledHangs).toBe(hangs), { timeout: 5_000 });
+        await vi.advanceTimersByTimeAsync(10_000);
+        await vi.waitFor(() => expect(settled).toBe(true), { timeout: 5_000 });
+        await work;
+      }
+
+      it("does not let a shutdown handler that never settles hold up a reload", async () => {
+        writeInstalled(
+          "stuck-shutdown",
+          [
+            "// does not let a shutdown handler that never settles hold up a reload",
+            "export function setup(ctx) {",
+            "  globalThis.__omxInstalledSetups = (globalThis.__omxInstalledSetups ?? 0) + 1;",
+            "  ctx.onShutdown(() => {",
+            "    globalThis.__omxInstalledHangs = (globalThis.__omxInstalledHangs ?? 0) + 1;",
+            "    return new Promise(() => {});",
+            "  });",
+            "  ctx.onShutdown(async () => {",
+            "    globalThis.__omxInstalledLaterHandlers = (globalThis.__omxInstalledLaterHandlers ?? 0) + 1;",
+            "  });",
+            "}",
+          ].join("\n"),
+        );
+        const warn = vi.fn();
+        const app = makeApp();
+        // biome-ignore lint/suspicious/noExplicitAny: test-only log patch
+        (app as any).log = { info: vi.fn(), warn, error: vi.fn(), debug: vi.fn() };
+        await initIntegrations(app, [installed()]);
+        // Each generation's setup deadline is cleared before the previous
+        // generation's handlers run, so moving the clock reaches only the
+        // deadlines of handlers that have not finished.
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+        await settlesPastHungShutdownHandler(reloadIntegrations(), 1);
+        await settlesPastHungShutdownHandler(reloadIntegrations(), 2);
+        await settlesPastHungShutdownHandler(shutdownIntegrations(), 3);
+
+        expect(g.__omxInstalledSetups).toBe(3);
+        expect(g.__omxInstalledLaterHandlers).toBe(2);
+        expect(
+          warn.mock.calls
+            .map(([, message]) => String(message))
+            .filter((message) => message.startsWith("A shutdown handler")),
+        ).toEqual(
+          Array.from(
+            { length: 2 },
+            () =>
+              "A shutdown handler of integration stuck-shutdown did not finish within 10 seconds; going on without it",
+          ),
+        );
+      });
+
+      it("gives the shutdown handlers of installed integrations one budget in all at process shutdown", async () => {
+        const hangingOnShutdown = (id: string) => [
+          `// gives the shutdown handlers of installed integrations one budget in all: ${id}`,
+          "export function setup(ctx) {",
+          "  ctx.onShutdown(() => {",
+          "    globalThis.__omxInstalledHangs = (globalThis.__omxInstalledHangs ?? 0) + 1;",
+          "    return new Promise(() => {});",
+          "  });",
+          "}",
+        ];
+        writeInstalled("stuck-a", hangingOnShutdown("stuck-a").join("\n"));
+        writeInstalled("stuck-b", hangingOnShutdown("stuck-b").join("\n"));
+        writeInstalled(
+          "tidy",
+          [
+            "// gives the shutdown handlers of installed integrations one budget in all: tidy",
+            "export function setup(ctx) {",
+            "  ctx.onShutdown(() => { throw new Error('first handler failed'); });",
+            "  ctx.onShutdown(async () => { globalThis.__omxInstalledTidied = true; });",
+            "}",
+          ].join("\n"),
+        );
+        const warn = vi.fn();
+        const app = makeApp();
+        // biome-ignore lint/suspicious/noExplicitAny: test-only log patch
+        (app as any).log = { info: vi.fn(), warn, error: vi.fn(), debug: vi.fn() };
+        await initIntegrations(app, [installed()]);
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+        let settled = false;
+        const shutdown = shutdownIntegrations().then(() => {
+          settled = true;
+        });
+        await vi.advanceTimersByTimeAsync(4_999);
+        expect(g.__omxInstalledHangs).toBe(2);
+        expect(settled).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        await shutdown;
+
+        expect(g.__omxInstalledTidied).toBe(true);
+        expect(
+          warn.mock.calls.filter(([, message]) => String(message).includes("did not finish")),
+        ).toEqual([
+          [
+            { integrationIds: ["stuck-a", "stuck-b"] },
+            "Shutdown handlers of integrations stuck-a, stuck-b did not finish within 5 seconds in all; shutting down without them",
+          ],
+        ]);
+      });
+
+      it("does not let a shutdown handler that never settles hold up start-up when its integration is left out", async () => {
+        writeInstalled(
+          "stuck-left-out",
+          [
+            "// does not let a shutdown handler that never settles hold up start-up when its integration is left out",
+            "export function setup(ctx) {",
+            "  ctx.onShutdown(() => {",
+            "    globalThis.__omxInstalledHangs = (globalThis.__omxInstalledHangs ?? 0) + 1;",
+            "    return new Promise(() => {});",
+            "  });",
+            '  throw new Error("setup failed");',
+            "}",
+          ].join("\n"),
+        );
+        // The setup deadline is cleared before the handlers of the left-out
+        // integration run, so moving the clock reaches only theirs.
+        vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+
+        await settlesPastHungShutdownHandler(initIntegrations(makeApp(), [installed()]), 1);
+
+        expect(getIntegration("stuck-left-out")).toMatchObject({
+          loadState: "failed",
+          loadError: { phase: "setup", message: "setup failed" },
+        });
+      });
     });
+
+    it.each([
+      ["an object without a prototype", "Object.create(null)", "a value that cannot be shown"],
+      [
+        "a proxy that throws on every access",
+        "new Proxy({}, { get() { throw new Error('trap'); }, getPrototypeOf() { throw new Error('trap'); } })",
+        "a value that cannot be shown",
+      ],
+      ["a symbol", "Symbol('odd')", "Symbol(odd)"],
+    ])(
+      "leaves out an integration whose setup throws %s, with a description of it",
+      async (label, value, message) => {
+        writeInstalled(
+          "odd-throw",
+          [
+            `// leaves out an integration whose setup throws ${label}`,
+            `export function setup() { throw ${value}; }`,
+          ].join("\n"),
+        );
+
+        await initIntegrations(makeApp(), [installed()]);
+
+        expect(getIntegration("odd-throw")).toMatchObject({
+          loadState: "failed",
+          loadError: { phase: "setup", message },
+        });
+      },
+    );
 
     it("ignores a bundle the manifest does not declare", async () => {
       writeInstalled(
@@ -1502,6 +2274,551 @@ describe("initIntegrations — loader", () => {
 
       expect(g.__omxInstalledUndeclared).toBeUndefined();
       expect(getIntegration("demo")?.loadState).toBe("loaded");
+    });
+
+    describe("safe mode and the loader gates", () => {
+      let runtimeDir: string;
+
+      beforeEach(() => {
+        runtimeDir = join(parent, "runtime");
+        mkdirSync(runtimeDir);
+        initSafeMode({}, runtimeDir);
+      });
+
+      afterEach(() => {
+        vi.useRealTimers();
+        initSafeMode({}, runtimeDir);
+        setDisabledExtensionResolver(null);
+        setCompatibilityResolver(null);
+        getDisabledExtensionMocks().disabledExtensionIntegrationIds.mockClear();
+      });
+
+      const recording = (comment: string, extra: string[] = []) =>
+        [
+          `// ${comment}`,
+          "globalThis.__omxInstalledEvaluated = true;",
+          "export function setup(ctx) {",
+          "  globalThis.__omxInstalledLoaded = true;",
+          ...extra,
+          "}",
+        ].join("\n");
+
+      function writeGatedFixtures(comment: string, extra: string[] = []) {
+        writeInstalled("installed-demo", recording(comment, extra), {
+          manifest: { name: "Installed Demo", database: { migrations: true } },
+        });
+        writeBuiltIn(
+          "built-in-demo",
+          'export function setup(ctx) { ctx.registerRoute("GET", "/ok", (_q, reply) => reply.send({ ok: true })); }\n',
+        );
+      }
+
+      it("loads no installed code in safe mode and keeps built-ins", async () => {
+        writeGatedFixtures("loads no installed code in safe mode and keeps built-ins");
+        initSafeMode({ OPENMAPX_SAFE_MODE: "1" }, runtimeDir);
+        const app = makeApp();
+
+        await initIntegrations(app, [installed(), builtIn()]);
+
+        expect(getIntegration("installed-demo")).toMatchObject({
+          enabled: false,
+          loadState: "safe-mode",
+          manifest: { id: "installed-demo", name: "Installed Demo" },
+        });
+        expect(getIntegration("installed-demo")?.loadError).toBeUndefined();
+        expect(g.__omxInstalledEvaluated).toBeUndefined();
+        expect(g.__omxInstalledLoaded).toBeUndefined();
+        expect(getExtensionMigrationMocks().applyExtensionMigrations).not.toHaveBeenCalled();
+        expect(getDisabledExtensionMocks().disabledExtensionIntegrationIds).not.toHaveBeenCalled();
+        expect(getIntegration("built-in-demo")?.loadState).toBe("loaded");
+        expect((await app.inject("/api/integrations/built-in-demo/ok")).statusCode).toBe(200);
+        expect(failedIntegrationLoads(["installed-demo"])).toEqual([]);
+      });
+
+      it("marks only the import and setup of installed code in the boot marker", async () => {
+        const markerPath = join(runtimeDir, "boot-marker.json");
+        const readMarker = () => JSON.parse(fs.readFileSync(markerPath, "utf8") as string);
+        g.__omxInstalledMarkerPath = markerPath;
+        const recordMarker = (key: string) =>
+          `globalThis.${key} = JSON.parse(readFileSync(globalThis.__omxInstalledMarkerPath, "utf8"));`;
+        writeInstalled(
+          "installed-demo",
+          [
+            "// marks only the import and setup of installed code in the boot marker",
+            'import { readFileSync } from "node:fs";',
+            recordMarker("__omxInstalledAtImport"),
+            "export function setup() {",
+            `  ${recordMarker("__omxInstalledAtSetup")}`,
+            "}",
+          ].join("\n"),
+          { manifest: { database: { migrations: true } } },
+        );
+        writeBuiltIn("built-in-demo", "export function setup() {}\n");
+        const { applyExtensionMigrations } = getExtensionMigrationMocks();
+        const atMigration: unknown[] = [];
+        applyExtensionMigrations.mockImplementationOnce(async () => {
+          atMigration.push(readMarker());
+          return { applied: [], schemaAhead: false };
+        });
+        beginBoot(runtimeDir, new Date());
+
+        await initIntegrations(makeApp(), [builtIn()]);
+        expect(readMarker()).toMatchObject({ installedCodeStarted: false, current: null });
+
+        await initIntegrations(makeApp(), [installed(), builtIn()]);
+        expect(getIntegration("installed-demo")?.loadError).toBeUndefined();
+
+        // A migration may wait for half an hour; a stop meanwhile is not the code's fault.
+        expect(atMigration).toEqual([
+          expect.objectContaining({ installedCodeStarted: false, current: null }),
+        ]);
+        expect(g.__omxInstalledAtImport).toMatchObject({
+          installedCodeStarted: true,
+          current: { integrationId: "installed-demo", phase: "import" },
+        });
+        expect(g.__omxInstalledAtSetup).toMatchObject({
+          current: { integrationId: "installed-demo", phase: "setup" },
+        });
+        expect(readMarker()).toMatchObject({
+          running: true,
+          installedCodeStarted: true,
+          current: null,
+        });
+        expect(getIntegration("installed-demo")?.loadState).toBe("loaded");
+      });
+
+      it("stays in safe mode across a reload", async () => {
+        writeGatedFixtures("stays in safe mode across a reload");
+        writeFileSync(join(runtimeDir, "safe-mode.json"), '{"mode":"operator"}');
+        initSafeMode({}, runtimeDir);
+        await initIntegrations(makeApp(), [installed(), builtIn()]);
+
+        rmSync(join(runtimeDir, "safe-mode.json"));
+        await reloadIntegrations();
+
+        expect(getIntegration("installed-demo")?.loadState).toBe("safe-mode");
+        expect(g.__omxInstalledEvaluated).toBeUndefined();
+        expect(getIntegration("built-in-demo")?.loadState).toBe("loaded");
+      });
+
+      it("starts no task and runs no subject-data handler in safe mode", async () => {
+        writeGatedFixtures("starts no task and runs no subject-data handler in safe mode", [
+          '  ctx.schedule("refresh", { everyMs: 1000, deadlineMs: 5000 }, async () => {',
+          "    globalThis.__omxInstalledRan = true;",
+          "  });",
+          "  ctx.registerSubjectDataHandler({",
+          "    async erase() { globalThis.__omxInstalledErased = true; },",
+          "    async export() { return null; },",
+          "  });",
+        ]);
+        initSafeMode({ OPENMAPX_SAFE_MODE: "1" }, runtimeDir);
+        vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+
+        await initIntegrations(makeApp(), [installed(), builtIn()]);
+        vi.advanceTimersByTime(5_000);
+
+        expect(g.__omxInstalledRan).toBeUndefined();
+        expect(getTaskRunMocks().store.start).not.toHaveBeenCalled();
+        const synced: Array<{ handling: readonly string[]; stopped: readonly string[] }> = [];
+        const subjectData = createExtensionSubjectData({
+          store: {
+            syncHandlers: async (input) => {
+              synced.push(input);
+              return new Map();
+            },
+            pendingSubjects: async () => ["u1"],
+            eraseLocked: async (_id, _subject, erase) => erase(),
+            recordStalled: async () => {},
+            pendingSummary: async () => new Map([["installed-demo", { count: 1, attempts: 0 }]]),
+            count: async () => 1,
+            migrated: async () => new Set(),
+          },
+          integrations: getAllIntegrations,
+          attention: {
+            raise: vi.fn(async () => {}),
+            resolve: vi.fn(async () => {}),
+            openKeys: vi.fn(async () => []),
+          },
+          log: { warn: vi.fn() },
+        });
+        await subjectData.syncSubjectHandlerTable();
+        // Its handler row stays, so deletions keep being recorded for it.
+        expect(synced).toEqual([{ handling: [], stopped: ["built-in-demo"] }]);
+        expect(await subjectData.runPendingErasures()).toEqual({ erased: 0, failed: 0 });
+        expect(g.__omxInstalledErased).toBeUndefined();
+      });
+
+      it("lists no installed integration publicly in safe mode", async () => {
+        writeGatedFixtures("lists no installed integration publicly in safe mode");
+        initSafeMode({ OPENMAPX_SAFE_MODE: "1" }, runtimeDir);
+        const app = makeApp();
+        await initIntegrations(app, [installed(), builtIn()]);
+
+        const listed = (await app.inject("/api/integrations")).json() as {
+          integrations: Array<{ id: string }>;
+        };
+
+        expect(listed.integrations.map(({ id }) => id)).toEqual(["built-in-demo"]);
+        expect(getIntegrationsByDomain("knowledge").map(({ id }) => id)).toEqual(["built-in-demo"]);
+      });
+
+      it("does not load an integration whose extension is disabled", async () => {
+        writeGatedFixtures("does not load an integration whose extension is disabled");
+        getDisabledExtensionMocks().disabledExtensionIntegrationIds.mockResolvedValueOnce(
+          new Set(["installed-demo"]),
+        );
+
+        await initIntegrations(makeApp(), [installed(), builtIn()]);
+
+        expect(getIntegration("installed-demo")).toMatchObject({
+          enabled: false,
+          loadState: "disabled",
+          manifest: { id: "installed-demo" },
+        });
+        expect(g.__omxInstalledEvaluated).toBeUndefined();
+        expect(getExtensionMigrationMocks().applyExtensionMigrations).not.toHaveBeenCalled();
+        expect(getIntegration("built-in-demo")?.loadState).toBe("loaded");
+      });
+
+      it("keeps the manifest of a disabled integration", async () => {
+        writeInstalled("off", recording("keeps the manifest of a disabled integration"), {
+          manifest: { name: "Off" },
+        });
+        setDisabledExtensionResolver(async () => new Set(["off"]));
+
+        await initIntegrations(makeApp(), [installed()]);
+
+        expect(getIntegration("off")).toMatchObject({
+          loadState: "disabled",
+          manifest: { id: "off", name: "Off", platform: "1.0" },
+        });
+        expect(getDisabledExtensionMocks().disabledExtensionIntegrationIds).not.toHaveBeenCalled();
+      });
+
+      it("loads an integration again once its extension is enabled and the host reloads", async () => {
+        writeInstalled(
+          "demo",
+          recording("loads an integration again once its extension is enabled"),
+        );
+        let disabled = new Set(["demo"]);
+        setDisabledExtensionResolver(async () => disabled);
+        await initIntegrations(makeApp(), [installed()]);
+        expect(getIntegration("demo")?.loadState).toBe("disabled");
+
+        disabled = new Set();
+        await reloadIntegrations();
+
+        expect(getIntegration("demo")?.loadState).toBe("loaded");
+        expect(g.__omxInstalledLoaded).toBe(true);
+      });
+
+      it("records an incompatible integration instead of skipping it", async () => {
+        writeInstalled("demo", recording("records an incompatible integration"));
+        setCompatibilityResolver((manifest) =>
+          manifest.id === "demo" ? { reason: "platform", required: "2.0" } : null,
+        );
+
+        await initIntegrations(makeApp(), [installed()]);
+
+        expect(getIntegration("demo")).toMatchObject({
+          enabled: false,
+          loadState: "incompatible",
+          manifest: { id: "demo" },
+          loadError: { phase: "import", message: "requires platform 2.0, this is 1.0" },
+        });
+        expect(g.__omxInstalledEvaluated).toBeUndefined();
+      });
+
+      it("names the web platform when that is what is missing", async () => {
+        writeInstalled("demo", recording("names the web platform"));
+        setCompatibilityResolver(() => ({ reason: "webPlatform", required: "2.0" }));
+
+        await initIntegrations(makeApp(), [installed()]);
+
+        expect(getIntegration("demo")).toMatchObject({
+          loadState: "incompatible",
+          loadError: { message: "requires web platform 2.0, this is 1.0" },
+        });
+      });
+
+      it("refuses an installed manifest that needs a newer platform by default", async () => {
+        writeInstalled("demo", recording("refuses a newer platform by default"), {
+          manifest: { platform: "1.9" },
+        });
+        writeBuiltIn("built-in-demo", "export function setup() {}\n");
+
+        await initIntegrations(makeApp(), [installed(), builtIn()]);
+
+        expect(getIntegration("demo")).toMatchObject({
+          loadState: "incompatible",
+          loadError: { phase: "import", message: "requires platform 1.9, this is 1.0" },
+        });
+        expect(getIntegration("built-in-demo")?.loadState).toBe("loaded");
+      });
+
+      it("asks the compatibility resolver once for each installed manifest", async () => {
+        writeInstalled("a", recording("asks the compatibility resolver once: a"));
+        writeInstalled("b", recording("asks the compatibility resolver once: b"));
+        writeBuiltIn("built-in-demo", "export function setup() {}\n");
+        const resolver = vi.fn((_manifest: { id: string }) => null);
+        setCompatibilityResolver(resolver);
+
+        await initIntegrations(makeApp(), [installed(), builtIn()]);
+
+        expect(resolver.mock.calls.map(([manifest]) => manifest.id).sort()).toEqual(["a", "b"]);
+      });
+
+      it("loads no installed integration when the disabled set cannot be read", async () => {
+        writeGatedFixtures("loads no installed integration when the disabled set cannot be read");
+        setDisabledExtensionResolver(async () => {
+          throw new Error("db down");
+        });
+        vi.useFakeTimers({ toFake: ["setTimeout"] });
+
+        const booting = initIntegrations(makeApp(), [installed(), builtIn()]);
+        await vi.advanceTimersByTimeAsync(5_000);
+        await booting;
+
+        expect(getIntegration("installed-demo")).toMatchObject({
+          enabled: false,
+          loadState: "failed",
+          loadError: { phase: "platform", message: "could not read extension state" },
+        });
+        expect(g.__omxInstalledEvaluated).toBeUndefined();
+        expect(getIntegration("built-in-demo")?.loadState).toBe("loaded");
+        expect(failedIntegrationLoads(["installed-demo"])).toEqual([
+          { id: "installed-demo", phase: "platform", message: "could not read extension state" },
+        ]);
+      });
+
+      it("loads no installed integration when the compatibility rule throws", async () => {
+        writeGatedFixtures("loads no installed integration when the compatibility rule throws");
+        setCompatibilityResolver(() => {
+          throw new Error("broken rule");
+        });
+        vi.useFakeTimers({ toFake: ["setTimeout"] });
+
+        const booting = initIntegrations(makeApp(), [installed(), builtIn()]);
+        await vi.advanceTimersByTimeAsync(5_000);
+        await booting;
+
+        expect(getIntegration("installed-demo")).toMatchObject({
+          loadState: "failed",
+          loadError: { phase: "platform", message: "could not read extension state" },
+        });
+        expect(getIntegration("built-in-demo")?.loadState).toBe("loaded");
+      });
+
+      it("retries the gates once at boot", async () => {
+        writeGatedFixtures("retries the gates once at boot");
+        const resolver = vi
+          .fn<() => Promise<ReadonlySet<string>>>()
+          .mockRejectedValueOnce(new Error("db starting"))
+          .mockResolvedValueOnce(new Set());
+        setDisabledExtensionResolver(resolver);
+        vi.useFakeTimers({ toFake: ["setTimeout"] });
+
+        let settled = false;
+        const booting = initIntegrations(makeApp(), [installed(), builtIn()]).then(() => {
+          settled = true;
+        });
+        await vi.advanceTimersByTimeAsync(4_999);
+        expect(settled).toBe(false);
+        expect(resolver).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1);
+        await booting;
+
+        expect(resolver).toHaveBeenCalledTimes(2);
+        expect(getIntegration("installed-demo")?.loadState).toBe("loaded");
+        expect(g.__omxInstalledLoaded).toBe(true);
+      });
+
+      it("does not retry the gates on a reload", async () => {
+        writeGatedFixtures("does not retry the gates on a reload");
+        await initIntegrations(makeApp(), [installed(), builtIn()]);
+        const resolver = vi.fn(async (): Promise<ReadonlySet<string>> => {
+          throw new Error("db down");
+        });
+        setDisabledExtensionResolver(resolver);
+
+        await reloadIntegrations();
+
+        expect(resolver).toHaveBeenCalledTimes(1);
+        expect(getIntegration("installed-demo")).toMatchObject({
+          loadState: "failed",
+          loadError: { phase: "platform", message: "could not read extension state" },
+        });
+        expect(getIntegration("built-in-demo")?.loadState).toBe("loaded");
+      });
+
+      it("lets only the place links of an operator-disabled extension fall back to coordinates", async () => {
+        writeInstalled("held-safe", recording("held back: safe mode"));
+        initSafeMode({ OPENMAPX_SAFE_MODE: "1" }, runtimeDir);
+        await initIntegrations(makeApp(), [installed()]);
+        expect(getIntegration("held-safe")?.loadState).toBe("safe-mode");
+        // A transient hold keeps refusing a substitute place, which would be
+        // cached under the extension's id after it loads again.
+        expect(isEnabledIntegrationScheme("held-safe")).toBe(true);
+
+        initSafeMode({}, runtimeDir);
+        writeInstalled("held-disabled", recording("held back: disabled"));
+        writeInstalled("held-incompatible", recording("held back: incompatible"));
+        writeInstalled(
+          "loads-and-throws",
+          "export function setup() { throw new Error('boom'); }\n",
+        );
+        setDisabledExtensionResolver(async () => new Set(["held-disabled"]));
+        setCompatibilityResolver((manifest) =>
+          manifest.id === "held-incompatible" ? { reason: "platform", required: "9.0" } : null,
+        );
+        await reloadIntegrations();
+        expect(getIntegration("held-disabled")?.loadState).toBe("disabled");
+        expect(getIntegration("held-incompatible")?.loadState).toBe("incompatible");
+        expect(isEnabledIntegrationScheme("held-disabled")).toBe(false);
+        expect(isEnabledIntegrationScheme("held-incompatible")).toBe(true);
+        // Code that ran and failed keeps refusing a substitute place.
+        expect(getIntegration("loads-and-throws")?.loadState).toBe("failed");
+        expect(isEnabledIntegrationScheme("loads-and-throws")).toBe(true);
+
+        setDisabledExtensionResolver(async () => {
+          throw new Error("db down");
+        });
+        await reloadIntegrations();
+        expect(getIntegration("held-safe")).toMatchObject({
+          loadState: "failed",
+          loadError: { message: "could not read extension state" },
+        });
+        expect(isEnabledIntegrationScheme("held-safe")).toBe(true);
+      });
+
+      it("marks what safe mode held back as failed when the reload after leaving it fails", async () => {
+        writeGatedFixtures("marks what safe mode held back as failed");
+        initSafeMode({ OPENMAPX_SAFE_MODE: "1" }, runtimeDir);
+        await initIntegrations(makeApp(), [installed(), builtIn()]);
+
+        markSafeModeRecordsFailed("disk full");
+
+        expect(getIntegration("installed-demo")).toMatchObject({
+          enabled: false,
+          loadState: "failed",
+          loadError: {
+            phase: "platform",
+            message: "not loaded: the reload after leaving safe mode failed (disk full)",
+          },
+        });
+        expect(getIntegration("built-in-demo")?.loadState).toBe("loaded");
+      });
+
+      it("bounds a resolver that never settles", async () => {
+        writeGatedFixtures("bounds a resolver that never settles");
+        setDisabledExtensionResolver(() => new Promise<ReadonlySet<string>>(() => {}));
+        vi.useFakeTimers({ toFake: ["setTimeout"] });
+
+        let settled = false;
+        const booting = initIntegrations(makeApp(), [installed(), builtIn()]).then(() => {
+          settled = true;
+        });
+        // Ten seconds for each read, five between the boot's two attempts.
+        await vi.advanceTimersByTimeAsync(24_999);
+        expect(settled).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        // Fails in two seconds, not at the test timeout, when the bound is gone.
+        await vi.waitFor(() => expect(settled).toBe(true), { timeout: 2_000 });
+        await booting;
+
+        expect(getIntegration("installed-demo")).toMatchObject({
+          enabled: false,
+          loadState: "failed",
+          loadError: { phase: "platform", message: "could not read extension state" },
+        });
+        expect(g.__omxInstalledEvaluated).toBeUndefined();
+        expect(getIntegration("built-in-demo")?.loadState).toBe("loaded");
+
+        setDisabledExtensionResolver(() => new Promise<ReadonlySet<string>>(() => {}));
+        let reloaded = false;
+        const reloading = reloadIntegrations().then(() => {
+          reloaded = true;
+        });
+        await vi.advanceTimersByTimeAsync(9_999);
+        expect(reloaded).toBe(false);
+        await vi.advanceTimersByTimeAsync(1);
+        await reloading;
+        expect(getIntegration("installed-demo")?.loadState).toBe("failed");
+      });
+
+      it("starts in safe mode while the secrets key is unusable", async () => {
+        writeInstalled(
+          "installed-secret",
+          recording("starts in safe mode while the secrets key is unusable"),
+          {
+            manifest: {
+              name: "Installed Secret",
+              configSchema: {
+                properties: { apiKey: { type: "string", "x-openmapx-secret": true } },
+              },
+            },
+          },
+        );
+        vi.mocked(secretsKeyProblem).mockReturnValue("The secrets key is not configured");
+        initSafeMode({ OPENMAPX_SAFE_MODE: "1" }, runtimeDir);
+
+        await expect(initIntegrations(makeApp(), [installed()])).resolves.toBeUndefined();
+
+        expect(getIntegration("installed-secret")).toMatchObject({
+          enabled: false,
+          loadState: "safe-mode",
+        });
+        expect(g.__omxInstalledEvaluated).toBeUndefined();
+      });
+
+      it("tells an install job which integrations did not load and which are held back", async () => {
+        writeInstalled("off", recording("tells an install job: off"));
+        writeInstalled("old", recording("tells an install job: old"));
+        writeInstalled("fine", recording("tells an install job: fine"));
+        setDisabledExtensionResolver(async () => new Set(["off"]));
+        setCompatibilityResolver((manifest) =>
+          manifest.id === "old" ? { reason: "platform", required: "2.0" } : null,
+        );
+        await initIntegrations(makeApp(), [installed()]);
+
+        const ids = ["off", "old", "fine", "gone"];
+        expect(failedIntegrationLoads(ids)).toEqual([
+          { id: "old", phase: "import", message: "requires platform 2.0, this is 1.0" },
+          { id: "gone", phase: "import", message: "the reload did not find it" },
+        ]);
+        expect(heldBackIntegrationLoads(ids)).toEqual([
+          {
+            id: "off",
+            loadState: "disabled",
+            message: "Integration off is installed but not loaded: its extension is disabled.",
+          },
+        ]);
+
+        initSafeMode({ OPENMAPX_SAFE_MODE: "1" }, runtimeDir);
+        await reloadIntegrations();
+
+        expect(failedIntegrationLoads(ids)).toEqual([
+          { id: "gone", phase: "import", message: "the reload did not find it" },
+        ]);
+        expect(heldBackIntegrationLoads(["fine"])).toEqual([
+          {
+            id: "fine",
+            loadState: "safe-mode",
+            message:
+              "Integration fine is installed but not loaded: the API runs in safe mode. It loads when safe mode is left.",
+          },
+        ]);
+      });
+
+      it("reads no extension state without installed integrations", async () => {
+        writeBuiltIn("built-in-demo", "export function setup() {}\n");
+        const resolver = vi.fn(async () => new Set<string>());
+        setDisabledExtensionResolver(resolver);
+
+        await initIntegrations(makeApp(), [installed(), builtIn()]);
+
+        expect(resolver).not.toHaveBeenCalled();
+      });
     });
   });
 

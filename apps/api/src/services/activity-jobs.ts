@@ -10,6 +10,7 @@ import {
   ACTIVE_JOB_STATUSES,
   type DataJobStatus,
   type DataJobTrigger,
+  type IntegrationTaskRunStatus,
   type JobStatus,
 } from "@openmapx/core/jobs";
 import { envString } from "@openmapx/core/server-env";
@@ -17,11 +18,17 @@ import { readDataManagerToken } from "@openmapx/core/service-secret-files";
 import { and, count, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { unionAll } from "drizzle-orm/pg-core";
 import { db } from "../db";
-import { adminJob, adminJobLog, dataManagerJob, dataManagerJobStage } from "../db/schema";
+import {
+  adminJob,
+  adminJobLog,
+  dataManagerJob,
+  dataManagerJobStage,
+  integrationTaskRun,
+} from "../db/schema";
 import { type ActorSummary, resolveActors } from "../utils/resolve-actor";
 import { publicAdminJobPayload } from "./admin-job-failure";
 
-export type ActivityJobSource = "application" | "data-manager";
+export type ActivityJobSource = "application" | "data-manager" | "integration-task";
 export type ActivityJobFilter = "active" | "completed" | "failed";
 
 export interface ActivityJob {
@@ -69,6 +76,15 @@ const DATA_MANAGER_STATUSES: Record<ActivityJobFilter, DataJobStatus[]> = {
   completed: ["succeeded", "partially_succeeded", "cancelled"],
   failed: ["failed"],
 };
+
+const INTEGRATION_TASK_STATUSES: Record<ActivityJobFilter, IntegrationTaskRunStatus[]> = {
+  active: ["running"],
+  completed: ["succeeded"],
+  failed: ["failed"],
+};
+
+/** Who started a scheduled task's run, as the Activity list names it. */
+const INTEGRATION_TASK_ACTOR = { userId: null, label: "Scheduled" } as const;
 
 /** Who started a data job, as the Activity list names it. */
 export function dataManagerActor(
@@ -168,6 +184,34 @@ function dataManagerSelect(filter?: ActivityJobFilter) {
     .where(dataManagerWhere(filter));
 }
 
+function integrationTaskWhere(filter?: ActivityJobFilter) {
+  return filter ? inArray(integrationTaskRun.status, INTEGRATION_TASK_STATUSES[filter]) : undefined;
+}
+
+function integrationTaskSelect(filter?: ActivityJobFilter) {
+  return db
+    .select({
+      source: sql<ActivityJobSource>`'integration-task'::text`.as("source"),
+      id: integrationTaskRun.id,
+      type: sql<string>`${integrationTaskRun.integrationId} || ':' || ${integrationTaskRun.taskName}`.as(
+        "type",
+      ),
+      status: sql<string>`${integrationTaskRun.status}::text`.as("status"),
+      payload: sql<unknown>`null::jsonb`.as("payload"),
+      error: integrationTaskRun.error,
+      progress: sql<number | null>`null::integer`.as("progress"),
+      createdBy: sql<string | null>`null::text`.as("created_by"),
+      trigger: sql<DataJobTrigger | null>`null::text`.as("trigger"),
+      triggeredByUserId: sql<string | null>`null::text`.as("triggered_by_user_id"),
+      createdAt: integrationTaskRun.startedAt,
+      startedAt: integrationTaskRun.startedAt,
+      finishedAt: integrationTaskRun.finishedAt,
+      cancelable: sql<boolean>`false`.as("cancelable"),
+    })
+    .from(integrationTaskRun)
+    .where(integrationTaskWhere(filter));
+}
+
 export async function listActivityJobs(options: {
   filter?: ActivityJobFilter;
   limit: number;
@@ -178,20 +222,28 @@ export async function listActivityJobs(options: {
   const appQuery = applicationSelect(options.filter);
   const dataManagerQuery = dataManagerSelect(options.filter);
 
-  const [rows, [applicationCount], [dataManagerCount]] = await Promise.all([
-    unionAll(appQuery, dataManagerQuery)
+  const integrationTaskQuery = integrationTaskSelect(options.filter);
+
+  const [rows, [applicationCount], [dataManagerCount], [integrationTaskCount]] = await Promise.all([
+    unionAll(appQuery, dataManagerQuery, integrationTaskQuery)
       .orderBy((fields) => desc(fields.createdAt))
       .limit(limit)
       .offset(offset),
     db.select({ total: count() }).from(adminJob).where(applicationWhere(options.filter)),
     db.select({ total: count() }).from(dataManagerJob).where(dataManagerWhere(options.filter)),
+    db
+      .select({ total: count() })
+      .from(integrationTaskRun)
+      .where(integrationTaskWhere(options.filter)),
   ]);
 
   const typedRows = rows as ActivityJobRow[];
   const actorOf = (row: ActivityJobRow) =>
-    row.source === "data-manager" && row.trigger
-      ? dataManagerActor(row.trigger, row.triggeredByUserId)
-      : { userId: row.createdBy, label: "System" };
+    row.source === "integration-task"
+      ? INTEGRATION_TASK_ACTOR
+      : row.source === "data-manager" && row.trigger
+        ? dataManagerActor(row.trigger, row.triggeredByUserId)
+        : { userId: row.createdBy, label: "System" };
   const actors = await resolveActors(typedRows.map((row) => actorOf(row).userId));
 
   return {
@@ -203,7 +255,8 @@ export async function listActivityJobs(options: {
         id: row.id,
         type: row.type,
         status: row.status,
-        payload: publicAdminJobPayload(row.type, row.payload),
+        payload:
+          row.source === "integration-task" ? null : publicAdminJobPayload(row.type, row.payload),
         error: row.error,
         progress: row.progress,
         createdBy,
@@ -215,11 +268,42 @@ export async function listActivityJobs(options: {
         cancelable: row.cancelable,
       };
     }),
-    total: (applicationCount?.total ?? 0) + (dataManagerCount?.total ?? 0),
+    total:
+      (applicationCount?.total ?? 0) +
+      (dataManagerCount?.total ?? 0) +
+      (integrationTaskCount?.total ?? 0),
+  };
+}
+
+async function getIntegrationTaskActivityJob(id: string) {
+  const [run] = await db
+    .select()
+    .from(integrationTaskRun)
+    .where(eq(integrationTaskRun.id, id))
+    .limit(1);
+  if (!run) return null;
+  return {
+    source: "integration-task" as const,
+    id: run.id,
+    type: `${run.integrationId}:${run.taskName}`,
+    status: run.status,
+    payload: null,
+    result: null,
+    error: run.error,
+    progress: null,
+    createdBy: INTEGRATION_TASK_ACTOR.userId,
+    actorLabel: INTEGRATION_TASK_ACTOR.label,
+    createdAt: run.startedAt,
+    startedAt: run.startedAt,
+    finishedAt: run.finishedAt,
+    cancelable: false,
+    logs: [],
+    stages: [],
   };
 }
 
 export async function getActivityJob(id: string, source: ActivityJobSource) {
+  if (source === "integration-task") return getIntegrationTaskActivityJob(id);
   if (source === "application") {
     const [row] = await db.select().from(adminJob).where(eq(adminJob.id, id)).limit(1);
     if (!row) return null;

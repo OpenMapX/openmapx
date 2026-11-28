@@ -117,6 +117,7 @@ const sidebars: SidebarsConfig = {
             'administration/services-administration',
             'administration/integrations-administration',
             'administration/community-extensions',
+            'administration/safe-mode',
           ],
         },
         {

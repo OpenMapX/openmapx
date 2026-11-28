@@ -7,7 +7,7 @@ import {
   portableSchemaId,
 } from "./archive-schema-ids.js";
 import { type ArchiveEntryInput, archivePathForLogicalId } from "./archive-writer.js";
-import { SUBJECT_DATA_CATALOGUE } from "./catalogue.js";
+import { subjectDataCatalogue } from "./catalogue.js";
 import type {
   CollectorSourcePart,
   CollectorSourcePartEntry,
@@ -66,6 +66,22 @@ function digest(value: Buffer): string {
 }
 type ArchiveWriteEntrySource = ArchiveEntryInput["source"];
 
+/** Every extension asked for the person's data, or that holds some and could not be asked. */
+const EXTENSION_OUTCOMES_SCHEMA = {
+  type: "array",
+  items: {
+    type: "object",
+    required: ["integrationId", "name", "outcome", "warningCode"],
+    properties: {
+      integrationId: { type: "string" },
+      name: { type: "string" },
+      outcome: { enum: ["included", "unavailable"] },
+      warningCode: { type: ["string", "null"] },
+    },
+    additionalProperties: false,
+  },
+};
+
 const ARCHIVE_SCHEMAS: ReadonlyArray<{
   logicalId: string;
   schemaId: ArchiveSchemaId;
@@ -90,6 +106,7 @@ const ARCHIVE_SCHEMAS: ReadonlyArray<{
         "collectorOutcomes",
         "reviewContact",
         "translationFallbacks",
+        "extensions",
         "members",
       ],
       properties: {
@@ -118,6 +135,7 @@ const ARCHIVE_SCHEMAS: ReadonlyArray<{
         collectorOutcomes: { type: "array", items: { type: "object" } },
         reviewContact: { type: "string" },
         translationFallbacks: { type: "array", items: { type: "object" } },
+        extensions: EXTENSION_OUTCOMES_SCHEMA,
         members: {
           type: "array",
           items: {
@@ -214,6 +232,7 @@ const ARCHIVE_SCHEMAS: ReadonlyArray<{
         "translationFallbacks",
         "shortLivedCategories",
         "sources",
+        "extensions",
       ],
       properties: {
         version: { const: 1 },
@@ -241,6 +260,7 @@ const ARCHIVE_SCHEMAS: ReadonlyArray<{
             additionalProperties: true,
           },
         },
+        extensions: EXTENSION_OUTCOMES_SCHEMA,
       },
       additionalProperties: false,
     },
@@ -397,7 +417,7 @@ export function buildSubjectArchiveEntries(
   const articleParts = new Map<ArticleTarget, SubjectExportRecord[]>();
   const portableParts = new Map<string, SubjectExportRecord[]>();
   let assembledRecords = 0;
-  for (const registration of SUBJECT_DATA_CATALOGUE) {
+  for (const registration of subjectDataCatalogue()) {
     const part = byRegistration.get(registration.id);
     if (!part || part.outcome === "not_applicable") continue;
     const records = part.records;
@@ -496,9 +516,23 @@ export function buildSubjectArchiveEntries(
       });
     }
   }
+  // Every extension that was asked, or that holds data and could not be.
+  const extensions = input.parts.flatMap((part) =>
+    part.extension
+      ? [
+          {
+            integrationId: part.extension.integrationId,
+            name: part.extension.name,
+            outcome: part.outcome === "included" ? ("included" as const) : ("unavailable" as const),
+            warningCode: part.outcome === "included" ? null : (part.warningCodes[0] ?? null),
+          },
+        ]
+      : [],
+  );
   const report = buildPrivacyResponseReport({
     locale: input.locale,
     context: input.responseContext,
+    extensions,
     sources: input.parts.map((part) => ({
       registrationId: part.registrationId,
       category: part.category,
@@ -575,6 +609,7 @@ export function buildSubjectArchiveEntries(
     })),
     reviewContact: input.responseContext.reviewContact,
     translationFallbacks: report.translationFallbacks,
+    extensions: report.processingInformation.extensions,
     members,
   };
   const manifestBuffer = json(manifest);

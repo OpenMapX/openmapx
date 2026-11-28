@@ -10,7 +10,11 @@ import {
   installedIntegration,
   serviceRepository,
 } from "../db/schema";
-import { failedIntegrationLoads, reloadIntegrations } from "../integration-host";
+import {
+  failedIntegrationLoads,
+  heldBackIntegrationLoads,
+  reloadIntegrations,
+} from "../integration-host";
 import { actorUserIdOrNull } from "../utils/actor";
 import { dockerComposeAction } from "../utils/docker-compose";
 import { sanitizeExtensionOutputString } from "../utils/safe-log-fields";
@@ -696,10 +700,14 @@ async function installExtensionNow(
       await ctx.log("Reloading integrations...");
       const r = await reloadIntegrations();
       await ctx.log(`Reload complete: ${r.reloaded} reloaded, ${r.enabled} enabled`);
-      // The reload leaves out an installed integration whose code fails
-      // instead of failing; this change installed it, so the change fails.
-      const [failed] = failedIntegrationLoads(integrationComponents.map(({ id }) => id));
+      // The reload leaves out an installed integration whose code fails, or
+      // that this release cannot run, instead of failing; this change
+      // installed it, so the change fails. One the operator holds back is
+      // installed as asked; the job says so instead of claiming it runs.
+      const ids = integrationComponents.map(({ id }) => id);
+      const [failed] = failedIntegrationLoads(ids);
       if (failed) throw new Error(`Integration ${failed.id} failed to load: ${failed.message}`);
+      for (const held of heldBackIntegrationLoads(ids)) await ctx.log(held.message);
     }
     await ctx.setProgress(90);
 

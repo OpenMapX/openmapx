@@ -391,6 +391,61 @@ suite("privacy case administration on PostgreSQL", () => {
     ).rejects.toMatchObject({ code: "EXTENSION_NOT_ALLOWED" });
   });
 
+  it("names the extension of each task an export opened", async () => {
+    const { setSubjectDataIntegrationSource } = await import("./extension-handlers");
+    const request = await service().create({
+      channel: "email",
+      kind: "access",
+      subject: { locatorType: "email", locator: "named@example.test", accountState: "unknown" },
+      actorUserId: ACTOR,
+      locale: "en",
+      timeZone: "UTC",
+    });
+    await service().recordExtensionsLeftOut(request.id, [
+      { integrationId: "acme-tracker", warningCode: "extension-not-loaded" },
+      { integrationId: "gone-ext", warningCode: "extension-not-installed" },
+    ]);
+    setSubjectDataIntegrationSource(() => [
+      {
+        id: "acme-tracker",
+        manifest: { id: "acme-tracker", name: "Acme\ntracker" },
+        config: {},
+        directory: "/integrations/acme-tracker",
+        isBuiltIn: false,
+        enabled: true,
+        providers: new Map(),
+        strings: {},
+        loadState: "failed",
+        shutdownHandlers: [],
+      } as unknown as import("@openmapx/integration-framework").LoadedIntegration,
+    ]);
+    const server = await app();
+    try {
+      const detail = await server.inject({
+        method: "GET",
+        url: `/api/privacy/admin/requests/${request.id}`,
+      });
+      expect(detail.statusCode, detail.body).toBe(200);
+      const tasks = detail.json().tasks as Array<Record<string, unknown>>;
+      expect(
+        tasks
+          .filter((task) => task.source === "extension")
+          .map(({ registrationId, integrationName }) => ({ registrationId, integrationName })),
+      ).toEqual([
+        { registrationId: "extension:acme-tracker", integrationName: "Acme tracker" },
+        { registrationId: "extension:gone-ext", integrationName: "gone-ext" },
+      ]);
+      expect(
+        tasks
+          .filter((task) => task.source !== "extension")
+          .every((task) => !("integrationName" in task)),
+      ).toBe(true);
+    } finally {
+      setSubjectDataIntegrationSource(null);
+      await server.close();
+    }
+  });
+
   it("resolves operator-held tasks with one action each, then completes the case", async () => {
     const request = await service().create({
       channel: "email",

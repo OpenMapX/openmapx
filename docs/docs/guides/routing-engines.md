@@ -243,7 +243,7 @@ application traffic. BRouter has no automatic public fallback.
 ### Engine request budgets
 
 The routing integration admits every engine call against a per-engine budget
-shared by all clients and API replicas: by default 3,000 calls a minute and
+shared by all clients: by default 3,000 calls a minute and
 500,000 a day, set by its `providerRequestsPerMinute` and
 `providerRequestsPerDay`. An adapter can lower that for its current upstream.
 While `routing-osrm` points at the public demo (`router.project-osrm.org`, the

@@ -185,6 +185,69 @@ describe("Activity canonical producer", () => {
       await app.close();
     }
   });
+  it("refuses to cancel an integration task", async () => {
+    const app = await createAdminTestApp(adminActivityRoute);
+    try {
+      const res = await app.inject({
+        method: "POST",
+        url: "/admin/jobs/0193e4a0-0000-7000-8001-000000000001/cancel?source=integration-task",
+      });
+      expect(res.statusCode).toBe(409);
+      expect(res.json()).toMatchObject({ error: "Integration tasks cannot be canceled" });
+      expect(cancel).not.toHaveBeenCalled();
+      expect(cancelData).not.toHaveBeenCalled();
+      expect(mocks.writeAuditLog).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
+  });
+  it("lists an integration task run and opens its detail", async () => {
+    const app = await createAdminTestApp(adminActivityRoute);
+    const date = new Date("2026-10-19T10:00:00.000Z");
+    const run = {
+      source: "integration-task",
+      id: "0193e4a0-0000-7000-8001-000000000002",
+      type: "demo:refresh",
+      status: "failed",
+      payload: null,
+      error: "deadline exceeded",
+      progress: null,
+      createdBy: null,
+      actorLabel: "Scheduled",
+      createdAt: date,
+      startedAt: date,
+      finishedAt: date,
+      cancelable: false,
+    };
+    const succeeded = { ...run, id: "0193e4a0-0000-7000-8001-000000000003", status: "succeeded" };
+    try {
+      list.mockResolvedValue({
+        jobs: [
+          { ...run, actor: null },
+          { ...succeeded, actor: null, error: null },
+        ],
+        total: 2,
+      });
+      const listed = await app.inject("/admin/jobs");
+      expect(listed.statusCode).toBe(200);
+      expect(listed.json().jobs).toEqual([
+        JSON.parse(JSON.stringify({ ...run, actor: null })),
+        JSON.parse(JSON.stringify({ ...succeeded, actor: null, error: null })),
+      ]);
+      detail.mockResolvedValue({ ...run, result: null, logs: [], stages: [] });
+      const opened = await app.inject(
+        "/admin/jobs/0193e4a0-0000-7000-8001-000000000002?source=integration-task",
+      );
+      expect(opened.statusCode).toBe(200);
+      expect(detail).toHaveBeenLastCalledWith(
+        "0193e4a0-0000-7000-8001-000000000002",
+        "integration-task",
+      );
+      expect(opened.json()).toMatchObject({ source: "integration-task", logs: [], stages: [] });
+    } finally {
+      await app.close();
+    }
+  });
   it("returns canonical missing, exception and malformed-output errors", async () => {
     const app = await createAdminTestApp(adminActivityRoute);
     try {

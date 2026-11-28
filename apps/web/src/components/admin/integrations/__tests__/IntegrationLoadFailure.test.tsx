@@ -92,6 +92,39 @@ it("shows an integration whose code failed to load as failed, with the phase and
   await waitFor(() => expect(posted).toEqual(["/api/admin/integrations/transit-acme/disable"]));
 });
 
+it("says the platform failed, not the integration, when its code was never tried", async () => {
+  const posted = serve({
+    ...detail,
+    id: "acme-places",
+    name: "Acme Places",
+    isBuiltIn: false,
+    enabled: false,
+    status: "failed",
+    loadState: "failed",
+    loadError: "not loaded: the reload after leaving safe mode failed (disk full)",
+    loadErrorPhase: "platform",
+  });
+  mount("acme-places");
+
+  await screen.findByRole("heading", { level: 1, name: "Acme Places" });
+  const notice = screen.getByRole("alert");
+  expect(notice).toHaveTextContent(
+    "This integration is not loaded: the platform could not load it.",
+  );
+  expect(notice).toHaveTextContent(
+    "not loaded: the reload after leaving safe mode failed (disk full)",
+  );
+  expect(notice).toHaveTextContent(
+    "Nothing points to a fault in the integration. Select Reload to try again.",
+  );
+  expect(notice).not.toHaveTextContent("its code failed to load");
+  expect(notice).not.toHaveTextContent("Fix or update the integration");
+
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "Reload" }));
+  await waitFor(() => expect(posted).toEqual([expect.stringMatching(/\/reload$/)]));
+});
+
 it("labels a failed integration as failed, not disabled, on the bulk configuration page", async () => {
   vi.stubGlobal("fetch", async (input: string | Request) => {
     const url = new URL(typeof input === "string" ? input : input.url);
@@ -129,6 +162,135 @@ it("labels a failed integration as failed, not disabled, on the bulk configurati
   const off = screen.getByRole("button", { name: /Weather off/ });
   expect(within(off).getByText("disabled")).toBeInTheDocument();
   expect(within(off).queryByText("Failed to load")).not.toBeInTheDocument();
+});
+
+const installed = {
+  ...detail,
+  id: "acme-places",
+  name: "Acme Places",
+  isBuiltIn: false,
+  quality: "community" as const,
+  enabled: false,
+  health: { status: "up" as const, responseTime: 20 },
+  hasHealthCheck: true,
+};
+
+it("explains that safe mode holds an installed integration back", async () => {
+  serve({ ...installed, status: "safe-mode", loadState: "safe-mode" });
+  mount("acme-places");
+
+  const heading = await screen.findByRole("heading", { level: 1, name: "Acme Places" });
+  const header = heading.parentElement as HTMLElement;
+  expect(within(header).getByRole("img", { name: "Not loaded: safe mode" })).toBeInTheDocument();
+  const notice = screen.getByRole("status");
+  expect(notice).toHaveTextContent("Not loaded: the API runs in safe mode.");
+  expect(within(notice).getByRole("link", { name: "Open the integration list" })).toHaveAttribute(
+    "href",
+    "/admin/integrations",
+  );
+  expect(screen.queryByText(/its code failed to load/)).not.toBeInTheDocument();
+  // The operator's switch is on; reloading cannot load it while safe mode holds.
+  expect(screen.getByRole("button", { name: "Disable" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Reload" })).not.toBeInTheDocument();
+
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("tab", { name: "Health" }));
+  const healthPanel = screen.getByRole("tabpanel");
+  expect(
+    within(healthPanel).getByRole("img", { name: "Not loaded: safe mode" }),
+  ).toBeInTheDocument();
+  expect(within(healthPanel).queryByRole("img", { name: "Healthy" })).not.toBeInTheDocument();
+});
+
+it("names the version an incompatible extension needs", async () => {
+  serve({
+    ...installed,
+    status: "incompatible",
+    loadState: "incompatible",
+    loadError: "requires platform 2.0, this is 1.0",
+    loadErrorPhase: "import",
+  });
+  mount("acme-places");
+
+  await screen.findByRole("heading", { level: 1, name: "Acme Places" });
+  const notice = screen.getByRole("status");
+  expect(notice).toHaveTextContent("This release of OpenMapX cannot run this extension.");
+  expect(notice).toHaveTextContent("requires platform 2.0, this is 1.0");
+  expect(notice).toHaveTextContent(
+    "Update OpenMapX, or install a version of the extension made for this release.",
+  );
+  expect(screen.queryByText("Its code could not be imported.")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Disable" })).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Reload" })).not.toBeInTheDocument();
+});
+
+it("says the extension is disabled and offers no switch that would not load it", async () => {
+  serve({ ...installed, status: "disabled", loadState: "disabled" });
+  mount("acme-places");
+
+  await screen.findByRole("heading", { level: 1, name: "Acme Places" });
+  const notice = screen.getByRole("status");
+  expect(notice).toHaveTextContent("Not loaded: its extension is disabled.");
+  expect(screen.queryByRole("button", { name: "Enable" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Disable" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Reload" })).not.toBeInTheDocument();
+});
+
+it("labels held-back integrations by their reason on the bulk configuration page", async () => {
+  vi.stubGlobal("fetch", async (input: string | Request) => {
+    const url = new URL(typeof input === "string" ? input : input.url);
+    if (url.pathname === "/api/admin/integrations")
+      return Response.json([
+        {
+          ...summary,
+          id: "held",
+          name: "Held",
+          enabled: false,
+          status: "safe-mode",
+          loadState: "safe-mode",
+        },
+        {
+          ...summary,
+          id: "old",
+          name: "Old",
+          enabled: false,
+          status: "incompatible",
+          loadState: "incompatible",
+          loadError: "requires platform 2.0, this is 1.0",
+          loadErrorPhase: "import",
+        },
+        {
+          ...summary,
+          id: "off",
+          name: "Off",
+          enabled: false,
+          status: "disabled",
+          loadState: "disabled",
+        },
+      ]);
+    if (url.pathname === "/api/admin/integrations/env-vars")
+      return Response.json({ integrations: [] });
+    return Response.json({ error: "Not found" }, { status: 404 });
+  });
+  const client = createTestQueryClient();
+  client.setDefaultOptions({ queries: { retry: false } });
+  render(
+    <QueryClientProvider client={client}>
+      <AdminToastProvider>
+        <BulkConfigure />
+      </AdminToastProvider>
+    </QueryClientProvider>,
+  );
+
+  const held = await screen.findByRole("button", { name: /Held/ });
+  expect(within(held).getByText("Safe mode")).toBeInTheDocument();
+  expect(within(held).queryByText("disabled")).not.toBeInTheDocument();
+  const old = screen.getByRole("button", { name: /Old/ });
+  expect(within(old).getByText("Not compatible")).toBeInTheDocument();
+  expect(within(old).queryByText("Failed to load")).not.toBeInTheDocument();
+  const off = screen.getByRole("button", { name: /Off/ });
+  expect(within(off).getByText("Extension disabled")).toBeInTheDocument();
+  expect(within(off).queryByText("disabled")).not.toBeInTheDocument();
 });
 
 it("shows no failure notice for an integration that loaded", async () => {

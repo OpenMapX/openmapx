@@ -69,7 +69,7 @@ class ProgressPassThrough extends PassThrough {
  * download is released only once the download has really stopped.
  */
 export function pumpExport(
-  prepared: PreparedSubjectExport,
+  prepared: Pick<PreparedSubjectExport, "filename" | "write" | "dispose">,
   response: Writable,
   limits: ExportStreamLimits = {},
 ): { body: PassThrough; delivered: Promise<boolean> } {

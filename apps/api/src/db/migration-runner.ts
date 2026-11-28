@@ -14,7 +14,8 @@ export const MIGRATION_LOCK_KEY = 4_206_712_018_342n;
 
 const DEFAULT_PROGRESS_INTERVAL_MS = 60_000;
 const LOGGED_STATEMENT_LENGTH = 200;
-// Docker waits 10 seconds after SIGTERM before it kills the container.
+// Docker kills the API's container 20 seconds after SIGTERM (its
+// `stopGracePeriod`); a cancellation stays well inside that.
 const CANCEL_RETRY_MS = 5_000;
 const CANCEL_POLL_MS = 250;
 

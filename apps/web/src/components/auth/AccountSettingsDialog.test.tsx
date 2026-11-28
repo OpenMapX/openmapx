@@ -1245,6 +1245,18 @@ describe("AccountSettingsDialog recent sign-in refusals", () => {
     expect(credentials.clearDeviceData).not.toHaveBeenCalled();
   });
 
+  it("says an installed extension keeps the account when its key refuses the deletion", async () => {
+    credentials.deleteUser.mockResolvedValue({
+      data: null,
+      error: { code: "EXTENSION_BLOCKS_ACCOUNT_DELETION", status: 409, statusText: "Conflict" },
+    });
+    renderAccount();
+    await confirmDeletion();
+    await screen.findByText("account.deletionBlockedByExtension");
+    expect(screen.queryByText("account.failedDeleteAccount")).not.toBeInTheDocument();
+    expect(credentials.clearDeviceData).not.toHaveBeenCalled();
+  });
+
   it("shows the sign-in prompt for a refused email request and does not retry it", async () => {
     window.history.replaceState({}, "", "/");
     credentials.requestEmail.mockResolvedValue(freshRefusal);

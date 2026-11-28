@@ -510,6 +510,8 @@ export type GetPrivacyAdminCase200TasksItem = {
   /** @nullable */
   resolutionCode: string | null;
   resolvedAt: string | null;
+  /** @maxLength 200 */
+  integrationName?: string;
 };
 
 export type GetPrivacyAdminCase200EventsItemEventType =
@@ -524,6 +526,7 @@ export const GetPrivacyAdminCase200EventsItemEventType = {
   export_started: "export_started",
   export_delivered: "export_delivered",
   export_failed: "export_failed",
+  export_incomplete: "export_incomplete",
 } as const;
 
 export type GetPrivacyAdminCase200EventsItemActorKind =

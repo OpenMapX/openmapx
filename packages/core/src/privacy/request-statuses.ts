@@ -1,6 +1,9 @@
-/** Lifecycle of a data-subject request. Every status change in the API goes
- * through `isValidRequestTransition`; the predicates below are the only place
- * that groups statuses, so callers never repeat their own status lists. */
+/** Lifecycle of a data-subject request. Every status change an actor makes
+ * goes through `isValidRequestTransition`. The one exception is the system's
+ * reopen of a `completed` case whose export finished afterwards and left an
+ * extension's data out: it moves the case back to `in_progress` outside this
+ * table. The predicates below are the only place that groups statuses, so
+ * callers never repeat their own status lists. */
 export const REQUEST_STATUSES = [
   "open",
   "in_progress",
@@ -33,7 +36,8 @@ export const TERMINAL_REQUEST_STATUSES = [
 
 /**
  * What a case event records. A status change is one `status_changed` event;
- * its payload names the `from` and `to` statuses.
+ * its payload names the `from` and `to` statuses. `export_incomplete` records
+ * the operator tasks an export opened for the parts it had to leave out.
  */
 export const PRIVACY_EVENT_TYPES = [
   "received",
@@ -44,6 +48,7 @@ export const PRIVACY_EVENT_TYPES = [
   "export_started",
   "export_delivered",
   "export_failed",
+  "export_incomplete",
 ] as const;
 export type PrivacyEventType = (typeof PRIVACY_EVENT_TYPES)[number];
 

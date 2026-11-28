@@ -6,8 +6,8 @@ impacts: [breaking, operator-action]
 
 Installed integrations can ship backend code. An integration artifact may carry a
 prebuilt `dist/backend/index.mjs` (declared as `backend.entry`), numbered
-`migrations/NNNN_name.sql` files (declared with `database.migrations: true`; they
-are stored with the integration and applied by a later release) and `assets/`. Frontend code, undeclared bundles or migrations, native add-ons and a
+`migrations/NNNN_name.sql` files (declared with `database.migrations: true`) and
+`assets/`. Frontend code, undeclared bundles or migrations, native add-ons and a
 `node_modules/` directory are refused. The API verifies the bundle against the
 SHA-256 the operations agent recorded, copies it into a cache keyed by that hash
 (`OPENMAPX_INTEGRATION_CODE_CACHE_DIR`, default `<tmp>/openmapx-integration-code`,
@@ -22,7 +22,7 @@ the host checks its pinned bytes.
 An installed integration whose import or `setup` fails, or whose import and
 `setup` together take longer than 60 seconds, is left out: what it registered is
 undone, the rest keep loading, and the admin integrations list shows **Failed to
-load** with the step (import, setup or deadline) and the error. A
+load** with the step (migrate, import, setup or deadline) and the error. A
 failing built-in still aborts a reload. An install or update job whose
 integration fails to load ends failed with "Integration <id> failed to load:
 <message>" and rolls back. Every provider is checked when it is registered

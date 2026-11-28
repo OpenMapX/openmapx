@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -7,6 +7,62 @@ import type { App } from "./app";
 import { createMigratedPostgresFixture } from "./test/postgres-fixture";
 
 const describeDatabase = process.env.OPENMAPX_RUN_DATABASE_TESTS === "1" ? describe : describe.skip;
+
+/** The lifecycle calls of createApp() and stop(), in the order they happened. */
+const lifecycle = vi.hoisted(() => [] as string[]);
+
+vi.mock("./integration-host", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./integration-host")>();
+  return {
+    ...actual,
+    recoverInterruptedIntegrationTasks: () => {
+      lifecycle.push("recover task runs");
+      return actual.recoverInterruptedIntegrationTasks();
+    },
+    initIntegrations: (...args: Parameters<typeof actual.initIntegrations>) => {
+      lifecycle.push("load integrations");
+      return actual.initIntegrations(...args);
+    },
+    stopIntegrationTasks: () => {
+      lifecycle.push("stop tasks");
+      actual.stopIntegrationTasks();
+    },
+  };
+});
+
+vi.mock("./safe-mode", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./safe-mode")>();
+  return {
+    ...actual,
+    beginBoot: (...args: Parameters<typeof actual.beginBoot>) => {
+      lifecycle.push("begin boot");
+      return actual.beginBoot(...args);
+    },
+    markCleanStop: () => {
+      lifecycle.push("mark clean stop");
+      actual.markCleanStop();
+    },
+    initSafeMode: (...args: Parameters<typeof actual.initSafeMode>) => {
+      lifecycle.push("read safe mode");
+      return actual.initSafeMode(...args);
+    },
+    syncSafeModeAttention: () => {
+      lifecycle.push("sync safe-mode attention");
+      return actual.syncSafeModeAttention();
+    },
+  };
+});
+
+vi.mock("./extension-migrations", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./extension-migrations")>();
+  return {
+    ...actual,
+    cancelRunningExtensionMigrations: () => {
+      lifecycle.push("cancel extension migrations");
+      return actual.cancelRunningExtensionMigrations();
+    },
+  };
+});
 
 const TRUSTED_ORIGIN = "https://web.example.test";
 const PUBLIC_RATE_LIMIT = 3;
@@ -67,6 +123,7 @@ describeDatabase("the real application from createApp()", () => {
   const originalStackTraceLimit = Error.stackTraceLimit;
   let fixture: Awaited<ReturnType<typeof createMigratedPostgresFixture>>;
   let customIntegrations: string;
+  let runtimeDir: string;
   let app: App;
   let pendingAfterImport: TrackedTimer[];
   let pendingAfterCreateApp: TrackedTimer[];
@@ -85,7 +142,40 @@ describeDatabase("the real application from createApp()", () => {
     Error.stackTraceLimit = 40;
     // The fixture is built before the spies so its own client is not counted.
     fixture = await createMigratedPostgresFixture();
+    // A run a previous API process left behind.
+    await fixture.sql`insert into integration_task_run (integration_id, task_name, status)
+      values ('left-behind', 'nightly', 'running')`;
+    // An integration that registered a subject-data handler and is gone now.
+    await fixture.sql`insert into integration_subject_handler (integration_id)
+      values ('not-installed')`;
+    await fixture.sql`insert into subject_erasure_pending (integration_id, subject_user_id)
+      values ('not-installed', 'deleted-account')`;
     customIntegrations = await mkdtemp(join(tmpdir(), "openmapx-app-integrations-"));
+    // An installed integration whose code records that it ran, and an
+    // operator's safe-mode file, so the start must keep that code out.
+    const installedDemo = join(customIntegrations, "app-installed-demo");
+    await mkdir(join(installedDemo, "dist", "backend"), { recursive: true });
+    await writeFile(
+      join(installedDemo, "manifest.json"),
+      JSON.stringify({
+        id: "app-installed-demo",
+        name: "App Installed Demo",
+        version: "1.0.0",
+        platform: "1.0",
+        license: "MIT",
+        domains: ["knowledge"],
+        quality: "community",
+        backend: { entry: "dist/backend/index.mjs" },
+      }),
+    );
+    await writeFile(
+      join(installedDemo, "dist", "backend", "index.mjs"),
+      "globalThis.__omxAppInstalledEvaluated = true;\nexport function setup() {}\n",
+    );
+    runtimeDir = await mkdtemp(join(tmpdir(), "openmapx-app-runtime-"));
+    await writeFile(join(runtimeDir, "safe-mode.json"), '{"mode":"operator"}');
+    vi.stubEnv("OPENMAPX_API_RUNTIME_DIR", runtimeDir);
+    vi.stubEnv("OPENMAPX_SAFE_MODE", "");
     vi.stubEnv("NODE_ENV", "test");
     vi.stubEnv("LOG_LEVEL", "silent");
     vi.stubEnv("DATABASE_URL", fixture.connectionUri);
@@ -166,14 +256,19 @@ describeDatabase("the real application from createApp()", () => {
   afterAll(async () => {
     try {
       await app?.stop();
-      const { integrationSql, sql } = await import("./db/index");
-      await Promise.all([sql.end({ timeout: 5 }), integrationSql.end({ timeout: 5 })]);
+      const { extensionSql, integrationSql, sql } = await import("./db/index");
+      await Promise.all([
+        sql.end({ timeout: 5 }),
+        integrationSql.end({ timeout: 5 }),
+        extensionSql.end({ timeout: 5 }),
+      ]);
     } finally {
       Error.stackTraceLimit = originalStackTraceLimit;
       vi.restoreAllMocks();
       vi.unstubAllGlobals();
       vi.unstubAllEnvs();
       await rm(customIntegrations, { recursive: true, force: true });
+      await rm(runtimeDir, { recursive: true, force: true });
       await fixture?.stop();
     }
   }, 60_000);
@@ -198,9 +293,69 @@ describeDatabase("the real application from createApp()", () => {
     expect(app.server.server.listening).toBe(false);
   });
 
+  it("closes the task runs a previous process left running before any integration loads", async () => {
+    expect(lifecycle.indexOf("recover task runs")).toBeGreaterThanOrEqual(0);
+    expect(lifecycle.indexOf("recover task runs")).toBeLessThan(
+      lifecycle.indexOf("load integrations"),
+    );
+    expect(
+      await fixture.sql`select status, error from integration_task_run
+        where integration_id = 'left-behind'`,
+    ).toEqual([{ status: "failed", error: "interrupted by restart" }]);
+  });
+
+  it("reads the operator's safe-mode file before any installed integration is considered", async () => {
+    const { getSafeMode } = await import("./safe-mode");
+    const { getIntegration } = await import("./integration-host");
+    expect(lifecycle.indexOf("read safe mode")).toBeGreaterThanOrEqual(0);
+    expect(lifecycle.indexOf("read safe mode")).toBeLessThan(
+      lifecycle.indexOf("load integrations"),
+    );
+    // How the previous processes ended can turn safe mode on, so it is judged first.
+    expect(lifecycle.indexOf("begin boot")).toBeGreaterThanOrEqual(0);
+    expect(lifecycle.indexOf("begin boot")).toBeLessThan(lifecycle.indexOf("read safe mode"));
+    expect(getSafeMode()).toEqual({ active: true, reason: "operator", integrationId: null });
+    expect(getIntegration("app-installed-demo")).toMatchObject({
+      enabled: false,
+      loadState: "safe-mode",
+    });
+    expect(
+      (globalThis as { __omxAppInstalledEvaluated?: boolean }).__omxAppInstalledEvaluated,
+    ).toBeUndefined();
+    expect(lifecycle.indexOf("sync safe-mode attention")).toBeGreaterThan(
+      lifecycle.indexOf("load integrations"),
+    );
+    expect(
+      await fixture.sql`select key, title from attention_item where key = 'safe-mode'`,
+    ).toEqual([{ key: "safe-mode", title: "Safe mode is on" }]);
+  });
+
+  it("keeps recording erasures for an integration that is no longer loaded and shows what it owes", async () => {
+    // Its data may still exist, so deletions are still recorded for it.
+    expect(await fixture.sql`select integration_id from integration_subject_handler`).toEqual([
+      { integration_id: "not-installed" },
+    ]);
+    expect(
+      await fixture.sql`select integration_id, subject_user_id from subject_erasure_pending`,
+    ).toEqual([{ integration_id: "not-installed", subject_user_id: "deleted-account" }]);
+    await vi.waitFor(
+      async () =>
+        expect(
+          await fixture.sql`select key, title from attention_item
+            where key = 'subject-erasure-pending:not-installed'`,
+        ).toEqual([
+          {
+            key: "subject-erasure-pending:not-installed",
+            title: "Erasure pending in not-installed",
+          },
+        ]),
+      { timeout: 10_000, interval: 100 },
+    );
+  });
+
   it("ends a slow integration statement at the integration pool's timeout", async () => {
     const { ProviderTimeoutError } = await import("@openmapx/integration-framework");
-    const { integrationSql } = await import("./db/index");
+    const { extensionSql, integrationSql } = await import("./db/index");
     const { createIntegrationDb } = await import("./integration-db");
     const [settings] = await integrationSql<{ timeout: string; name: string }[]>`
       SELECT current_setting('statement_timeout') AS timeout,
@@ -209,7 +364,9 @@ describeDatabase("the real application from createApp()", () => {
 
     const started = Date.now();
     await expect(
-      createIntegrationDb(integrationSql).execute("SELECT pg_sleep(6)"),
+      createIntegrationDb({ requests: integrationSql, transactions: extensionSql }).execute(
+        "SELECT pg_sleep(6)",
+      ),
     ).rejects.toBeInstanceOf(ProviderTimeoutError);
     expect(Date.now() - started).toBeLessThan(5_900);
   }, 20_000);
@@ -285,18 +442,75 @@ describeDatabase("the real application from createApp()", () => {
     if (!address || typeof address === "string") throw new Error("Blocker has no port");
     vi.stubEnv("HOST", "127.0.0.1");
     vi.stubEnv("PORT", String(address.port));
+    // Start-up runs the retention jobs, which delete task runs finished more
+    // than 30 days after they started.
+    await fixture.sql`insert into integration_task_run
+        (integration_id, task_name, status, started_at, finished_at)
+      values ('pruned', 'old', 'succeeded', now() - interval '31 days', now() - interval '31 days'),
+             ('pruned', 'recent', 'succeeded', now() - interval '29 days', now() - interval '29 days')`;
+    // The daily run syncs the handler table before it works through the
+    // pending erasures: a row for a running integration without a handler
+    // goes, and the item of the integration that owes erasures comes back.
+    const { getAllIntegrations } = await import("./integration-host");
+    const running = getAllIntegrations().find(
+      (integration) => integration.loadState === "loaded" && integration.enabled,
+    );
+    if (!running) throw new Error("No integration is running");
+    await fixture.sql`insert into integration_subject_handler (integration_id) values (${running.id})`;
+    await fixture.sql`delete from attention_item where key = 'subject-erasure-pending:not-installed'`;
 
     try {
       await expect(app.start()).rejects.toThrow(/EADDRINUSE/);
     } finally {
       await new Promise<void>((resolve) => blocker.close(() => resolve()));
     }
-    await app.stop();
+    await vi.waitFor(
+      async () =>
+        expect(
+          await fixture.sql`select task_name from integration_task_run
+            where integration_id = 'pruned'`,
+        ).toEqual([{ task_name: "recent" }]),
+      { timeout: 10_000, interval: 100 },
+    );
+    await vi.waitFor(
+      async () => {
+        expect(
+          await fixture.sql`select integration_id from integration_subject_handler
+            where integration_id = ${running.id}`,
+        ).toEqual([]);
+        expect(
+          await fixture.sql`select key from attention_item
+            where key = 'subject-erasure-pending:not-installed'`,
+        ).toEqual([{ key: "subject-erasure-pending:not-installed" }]);
+      },
+      { timeout: 10_000, interval: 100 },
+    );
+    expect(lifecycle).not.toContain("cancel extension migrations");
+    expect(lifecycle).not.toContain("stop tasks");
+    expect(JSON.parse(await readFile(join(runtimeDir, "boot-marker.json"), "utf8"))).toMatchObject({
+      running: true,
+    });
+    const stopped = app.stop();
+    // Recorded before anything is torn down, so a stop cut short by a kill is clean.
+    expect(lifecycle.indexOf("mark clean stop")).toBeGreaterThanOrEqual(0);
+    expect(lifecycle.indexOf("mark clean stop")).toBeLessThan(
+      lifecycle.indexOf("cancel extension migrations"),
+    );
+    expect(JSON.parse(await readFile(join(runtimeDir, "boot-marker.json"), "utf8"))).toMatchObject({
+      running: false,
+    });
+    await stopped;
+    // A reload may be migrating an integration while the API serves.
+    expect(lifecycle).toContain("cancel extension migrations");
+    expect(lifecycle).toContain("stop tasks");
+    expect(lifecycle.indexOf("mark clean stop")).toBeLessThan(lifecycle.indexOf("stop tasks"));
     await expect(app.stop()).resolves.toBeUndefined();
 
     const healthRefreshes = [...timers.values()].filter(
       (timer) =>
-        timer.origin.includes("integration-host") && [5_000, 60_000].includes(timer.delay ?? 0),
+        timer.origin.includes("startIntegrationHealthRefresh") &&
+        timer.origin.includes("integration-host") &&
+        [5_000, 60_000].includes(timer.delay ?? 0),
     );
     expect(healthRefreshes.map((timer) => timer.kind).sort()).toEqual(["interval", "timeout"]);
     expect(pendingTimers()).toEqual([]);

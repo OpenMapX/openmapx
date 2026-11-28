@@ -9,6 +9,7 @@ export type {
   AttributionIndexHandle,
   CustomHealthCheckFn,
   DatabaseClient,
+  DatabaseTransaction,
   HealthCheckResult,
   HttpClient,
   HttpClientOptions,
@@ -21,7 +22,9 @@ export type {
   RouteOptions,
   RouteParams,
   RouteRequest,
+  ScheduleOptions,
   SecretsClient,
+  SubjectDataHandler,
 } from "@openmapx/integration-framework/context";
 export { httpError } from "@openmapx/integration-framework/http-error";
 export type { ProviderCallContext } from "@openmapx/integration-framework/provider-execution";

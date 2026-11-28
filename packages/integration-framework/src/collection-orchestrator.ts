@@ -2,6 +2,7 @@ import type { BBox, DataSourcePartialReason } from "@openmapx/core";
 import type { IntegrationContext, Logger } from "./context";
 import type { ProviderDomain } from "./contracts/provider-shapes";
 import { collectOrderedProviders } from "./provider-order";
+import { describeThrown } from "./thrown";
 
 /** Records each provider's failures, so an outage is logged when it starts and when it ends. */
 export interface ProviderOutages {
@@ -19,7 +20,7 @@ export function createProviderOutages(log: Logger, logPrefix: string): ProviderO
   const failing = new Map<string, string>();
   return {
     failed(providerId, operation, err) {
-      const reason = err instanceof Error ? err.message : String(err);
+      const reason = describeThrown(err);
       if (failing.get(providerId) === reason) {
         log.debug(`[${logPrefix}] provider ${providerId} failed ${operation} again: ${reason}`);
         return;

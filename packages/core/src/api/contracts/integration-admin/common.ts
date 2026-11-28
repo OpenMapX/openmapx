@@ -71,14 +71,28 @@ export const adminIntegrationSummarySchema = z.strictObject({
   isBuiltIn: z.boolean(),
   loadState: z.enum(["loaded", "disabled", "incompatible", "failed", "safe-mode"]),
   loadError: z.string().nullable(),
-  /** The step at which the integration's code failed to load, beside `loadError`. */
-  loadErrorPhase: z.enum(["import", "migrate", "setup", "deadline"]).nullable(),
   /**
-   * One status every client shows: `disabled` when switched off, `failed` when
-   * its code could not load (so no health check result can make it healthy),
-   * then the cached health check and the credentials decide.
+   * The step at which the integration's code failed to load, beside
+   * `loadError`; `platform` when the host could not try its code at all.
    */
-  status: z.enum(["healthy", "unhealthy", "unconfigured", "disabled", "failed"]),
+  loadErrorPhase: z.enum(["import", "migrate", "setup", "deadline", "platform"]).nullable(),
+  /**
+   * One status every client shows: `failed` when its code could not load (so
+   * no health check result can make it healthy), `disabled` when the operator
+   * switched it or its extension off, `safe-mode` when it is installed and the
+   * API runs in safe mode, `incompatible` when this release cannot run it
+   * (`loadError` names the version it needs), then the cached health check
+   * and the credentials decide.
+   */
+  status: z.enum([
+    "healthy",
+    "unhealthy",
+    "unconfigured",
+    "disabled",
+    "failed",
+    "safe-mode",
+    "incompatible",
+  ]),
   enabled: z.boolean(),
   configured: z.boolean(),
   hasHealthCheck: z.boolean(),
@@ -166,6 +180,17 @@ export const adminIntegrationBindingSetSchema = adminIntegrationBindingDeleteSch
   serviceId: z.string().min(1).max(64),
 });
 export const adminIntegrationEmptyMutationSchema = z.strictObject({}).optional();
+/**
+ * Whether the API keeps installed integrations out, and why: `env` when
+ * `OPENMAPX_SAFE_MODE=1` forces it, `operator` when an operator turned it on,
+ * `automatic` when the API stopped repeatedly while installed code ran,
+ * naming the integration it blames in `integrationId` when one is known.
+ */
+export const adminSafeModeStateSchema = z.strictObject({
+  active: z.boolean(),
+  reason: z.enum(["env", "operator", "automatic"]).nullable(),
+  integrationId: z.string().nullable(),
+});
 export const adminIntegrationIdempotencyHeadersSchema = z.object({
   "idempotency-key": z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/),
 });
@@ -183,6 +208,7 @@ export type AdminIntegrationSummary = z.infer<typeof adminIntegrationSummarySche
 export type AdminIntegrationResolvedConfig = z.infer<typeof adminIntegrationResolvedConfigSchema>;
 export type AdminIntegrationDetail = z.infer<typeof adminIntegrationDetailSchema>;
 export type AdminProviderOrder = z.infer<typeof adminProviderOrderSchema>;
+export type AdminSafeModeState = z.infer<typeof adminSafeModeStateSchema>;
 export type AdminIntegrationEnvVar = z.infer<typeof adminIntegrationEnvVarSchema>;
 export type AdminIntegrationEnvVars = z.infer<typeof adminIntegrationEnvVarsSchema>;
 export type AdminIntegrationConfigPatch = z.infer<typeof adminIntegrationConfigPatchSchema>;

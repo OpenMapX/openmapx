@@ -1,5 +1,6 @@
+import { APIError } from "better-auth/api";
 import { describe, expect, it } from "vitest";
-import { safeAuthErrorEvent } from "../auth-error-log.js";
+import { safeAuthEndpointErrorEvent, safeAuthErrorEvent } from "../auth-error-log.js";
 
 const AUTH_CODE = "authorization-code-sentinel-xyz";
 const TOKEN = "osm-access-token-sentinel";
@@ -45,6 +46,50 @@ describe("safeAuthErrorEvent", () => {
       requestId: "req-5",
       method: "GET",
       errorClass: "string",
+    });
+  });
+});
+
+describe("safeAuthEndpointErrorEvent", () => {
+  it("describes a failure inside an endpoint by class and stable code only", () => {
+    const error = Object.assign(new Error(`failed exchanging ${AUTH_CODE}`), {
+      code: "23001",
+      access_token: TOKEN,
+    });
+    expect(safeAuthEndpointErrorEvent(error)).toEqual({
+      event: "auth_endpoint_failed",
+      errorClass: "Error",
+    });
+    expect(
+      safeAuthEndpointErrorEvent(Object.assign(new Error("x"), { code: "INVALID_GRANT" })),
+    ).toEqual({ event: "auth_endpoint_failed", errorClass: "Error", errorCode: "INVALID_GRANT" });
+  });
+
+  it("keeps the stable code of an internal-error response from the auth library", () => {
+    const error = new APIError("INTERNAL_SERVER_ERROR", {
+      code: "FAILED_TO_CREATE_USER",
+      message: `failed exchanging ${AUTH_CODE}`,
+    });
+    expect(safeAuthEndpointErrorEvent(error)).toEqual({
+      event: "auth_endpoint_failed",
+      errorClass: "APIError",
+      errorCode: "FAILED_TO_CREATE_USER",
+    });
+  });
+
+  it("drops a credential-shaped code in the response body of the auth library", () => {
+    for (const code of [AUTH_CODE, TOKEN, "a".repeat(200), 42, { nested: TOKEN }]) {
+      const error = Object.assign(new Error("x"), { body: { code } });
+      expect(safeAuthEndpointErrorEvent(error)).toEqual({
+        event: "auth_endpoint_failed",
+        errorClass: "Error",
+      });
+    }
+    const error = new APIError("INTERNAL_SERVER_ERROR", { code: AUTH_CODE, message: "x" });
+    expect(JSON.stringify(safeAuthEndpointErrorEvent(error))).not.toContain(AUTH_CODE);
+    expect(safeAuthEndpointErrorEvent(error)).toEqual({
+      event: "auth_endpoint_failed",
+      errorClass: "APIError",
     });
   });
 });

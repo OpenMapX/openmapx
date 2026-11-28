@@ -33,7 +33,11 @@ import {
   httpErrorSchema,
 } from "./admin";
 
-export const adminActivityJobSourceSchema = z.enum(["application", "data-manager"]);
+export const adminActivityJobSourceSchema = z.enum([
+  "application",
+  "data-manager",
+  "integration-task",
+]);
 export const adminApplicationJobStatusSchema = z.enum(JOB_STATUSES);
 export const adminDataManagerActivityJobStatusSchema = z.enum(DATA_JOB_STATUSES);
 export const adminActorSummarySchema = z.strictObject({
@@ -64,9 +68,21 @@ const dataManager = z.strictObject({
   source: z.literal("data-manager"),
   status: adminDataManagerActivityJobStatusSchema,
 });
+/**
+ * One run of a task an integration scheduled: `type` is
+ * `<integrationId>:<taskName>`, and a run that succeeded is `succeeded`, as
+ * a job of the other sources is.
+ */
+const integrationTask = z.strictObject({
+  ...fields,
+  source: z.literal("integration-task"),
+  status: z.enum(["running", "succeeded", "failed"]),
+  cancelable: z.literal(false),
+});
 export const adminActivityJobSchema = z.discriminatedUnion("source", [
   application.extend({ actor: adminActorSummarySchema.nullable() }),
   dataManager.extend({ actor: adminActorSummarySchema.nullable() }),
+  integrationTask.extend({ actor: z.null() }),
 ]);
 /** One line of a job's log; `seq` is its position, unique within the job. */
 export const adminActivityJobLogSchema = z.strictObject({
@@ -113,6 +129,11 @@ export const adminDataManagerActivityJobDetailSchema = dataManager.extend(detail
 export const adminActivityJobDetailSchema = z.discriminatedUnion("source", [
   adminApplicationActivityJobDetailSchema,
   adminDataManagerActivityJobDetailSchema,
+  integrationTask.extend({
+    ...detail,
+    logs: z.array(adminActivityJobLogSchema).max(0),
+    stages: z.array(adminActivityJobStageSchema).max(0),
+  }),
 ]);
 export const adminActivityJobsResponseSchema = z.strictObject({
   jobs: z.array(adminActivityJobSchema),
@@ -210,7 +231,11 @@ export const activityAdminOperations = {
     path: "/api/admin/jobs/:id/cancel",
     auth: "admin",
     request: { params: adminActivityJobParamsSchema, query: adminActivityJobQuerySchema },
-    responses: { ...common, 200: adminJson(z.strictObject({ ok: z.literal(true) })) },
+    responses: {
+      ...common,
+      200: adminJson(z.strictObject({ ok: z.literal(true) })),
+      409: adminJson(httpErrorSchema),
+    },
   },
   getAdminActivityJobStreamMetrics: {
     method: "GET",

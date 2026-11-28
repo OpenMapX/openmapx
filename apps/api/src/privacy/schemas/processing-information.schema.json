@@ -12,7 +12,8 @@
     "recipientSummary",
     "translationFallbacks",
     "shortLivedCategories",
-    "sources"
+    "sources",
+    "extensions"
   ],
   "properties": {
     "version": { "const": 1 },
@@ -38,6 +39,20 @@
           "warningCodes": { "type": "array", "items": { "type": "string" } }
         },
         "additionalProperties": true
+      }
+    },
+    "extensions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["integrationId", "name", "outcome", "warningCode"],
+        "properties": {
+          "integrationId": { "type": "string" },
+          "name": { "type": "string" },
+          "outcome": { "enum": ["included", "unavailable"] },
+          "warningCode": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
       }
     }
   },

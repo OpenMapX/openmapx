@@ -5,6 +5,7 @@
     "CacheWriter",
     "CustomHealthCheckFn",
     "DatabaseClient",
+    "DatabaseTransaction",
     "Disclosure",
     "HealthCheckResult",
     "HttpClient",
@@ -24,7 +25,9 @@
     "RouteOptions",
     "RouteParams",
     "RouteRequest",
+    "ScheduleOptions",
     "SecretsClient",
+    "SubjectDataHandler",
     "UpstreamCacheRead",
     "UpstreamCacheTtl",
     "UpstreamRuntime"

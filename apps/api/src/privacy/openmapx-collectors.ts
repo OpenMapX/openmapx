@@ -52,7 +52,7 @@ import {
 } from "../db/schema.js";
 import { deriveOfflinePackagePrincipal } from "../services/offline-package-principal.js";
 import { ARCHIVE_SCHEMA_IDS, portableSchemaId } from "./archive-schema-ids.js";
-import { getSubjectDataRegistration, SUBJECT_DATA_CATALOGUE } from "./catalogue.js";
+import { getSubjectDataRegistration, subjectDataCatalogue } from "./catalogue.js";
 import {
   type CollectorSourcePart,
   type CollectorSourcePartEntry,
@@ -1472,7 +1472,7 @@ async function collectOpenMapxStreams(
   entries: CollectorSourcePartEntry[];
   disposeSources?: () => Promise<void>;
 }> {
-  const registrations = SUBJECT_DATA_CATALOGUE.filter(
+  const registrations = subjectDataCatalogue().filter(
     (registration) =>
       registration.source === "openmapx-db" && registration.strategy === "collector",
   );

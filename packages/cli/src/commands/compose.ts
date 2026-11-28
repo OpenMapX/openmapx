@@ -248,6 +248,8 @@ export async function renderComposeWithWriter(
   ensurePlatformPrivateDirectory(join(paths.infraDir, "catalog-pins"));
   const erasureDirectory = join(paths.infraDir, "data", "erasure");
   ensurePlatformPrivateDirectory(erasureDirectory);
+  // Safe mode and the boot marker survive a restart of the API here.
+  ensurePlatformPrivateDirectory(join(paths.infraDir, "data", "api-runtime"));
   ensurePlatformPrivateDirectory(join(paths.infraDir, "backups"));
   const redisPasswordPath = join(paths.infraDir, "secrets", "redis-password");
   const redisAclPath = join(paths.infraDir, "secrets", "redis-acl.conf");

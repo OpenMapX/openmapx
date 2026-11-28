@@ -27,8 +27,13 @@ Every request is in one of five states:
 Allowed moves: `open` to `in_progress`, `waiting_on_requester` or
 `refused`; `in_progress` to `waiting_on_requester`, `completed` or `refused`;
 `waiting_on_requester` to `in_progress`, `completed` or `refused`. `completed`
-and `refused` are final and release the case's retention holds. Every move is
-recorded as a case event with its reason code.
+and `refused` release the case's retention holds. `refused` is final, and so
+is `completed` with one exception: when the person's export finishes after the
+case was completed and had to leave an extension's data out, the system moves
+the case back to `in_progress` (reason `export-incomplete`) with an operator
+task for that extension, and puts back the retention holds the completion
+released until the case is closed again. Every move is recorded as a case event
+with its reason code.
 
 ## Self-service download
 
@@ -52,9 +57,26 @@ The archive contains the full scope and the Article 15(1) information:
 purposes, categories, recipients, retention, sources, rights and the
 supervisory authority. Sources that only an operator can check
 (`application-logs`, `redis-subject-controls`,
-`data-manager-trigger-attribution`, `backup-retained-copies` and
-`off-host-processor-sources`) do not block the download; the report lists them
-as checked separately by the operator.
+`data-manager-trigger-attribution`, `backup-retained-copies`,
+`off-host-processor-sources` and `extension-erasure-pending`) do not block the
+download; the report lists them as checked separately by the operator.
+
+The `extension-erasure-pending` task concerns the erasures extensions still owe
+a deleted account. For an account that still exists nothing can be pending:
+resolve the task with a reason such as `account-exists`. For a deleted account,
+look up what is still owed:
+
+```sql
+select integration_id, attempts, last_error, requested_at
+from subject_erasure_pending where subject_user_id = $1;
+```
+
+Each row names an extension that still holds data about the person. Include
+that in your answer, have the extension erase it (repair it, or remove and
+reinstall a disabled one, or remove its data, as the attention list's "Erasure
+pending in …" item says), and
+resolve the task with a reason such as `extension-erasure-pending` or
+`no-extension-erasure-pending` when the query returns no rows.
 
 ## Working a case in Privacy requests
 
@@ -75,7 +97,19 @@ requires another explicit confirmation.
 - **Operator-held sources:** each request has one task per source that only an
   operator can check. Check it outside OpenMapX and resolve it with one action
   and a reason code. A self-service request stays `in_progress` after the
-  download until every task is resolved.
+  download until every task is resolved. An export that could not include an
+  extension's data adds a task `extension:<id>` whose code says why
+  (`extension-not-loaded`, `extension-not-installed`,
+  `extension-no-export-handler`, `extension-handler-failed` or
+  `extension-export-too-large`); see
+  [User erasure operations](./user-erasure.md#access-and-portability-requests)
+  for what to do. A later export that leaves the extension out again opens the
+  task again. Opening these tasks is recorded in the case history as
+  `export_incomplete` and raises the case version. If you completed the case
+  while the export was still collecting, the case returns to `in_progress`
+  (a `status_changed` event with the reason `export-incomplete`), so it shows
+  up among the open cases again; on a refused case the export is refused
+  instead.
 - **Deadlines and decisions:** inspect the original deadline and controller
   time zone. Record the actual notification time before extending a deadline;
   extensions cannot exceed two calendar months after the original deadline.

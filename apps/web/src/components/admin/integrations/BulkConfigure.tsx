@@ -37,6 +37,7 @@ import { useConfigSourceLabel } from "../shared/configSourceLabel";
 import { ConfigSchemaForm } from "./ConfigSchemaForm";
 import { CredentialSetupGuide } from "./CredentialSetupGuide";
 import { isSwitchedOn } from "./IntegrationStatusDot";
+import { LoadStateChip } from "./LoadStateChip";
 import { SetCredentialDialog } from "./SetCredentialDialog";
 
 type CredentialStatus = import("@openmapx/core/api-contracts").AdminIntegrationCredential;
@@ -189,12 +190,9 @@ function IntegrationAccordion({ entry }: { entry: IntegrationListEntry }) {
           {!entry.configured && (
             <Chip label={t("unconfiguredChip")} size="small" color="warning" variant="outlined" />
           )}
-          {entry.status === "failed" ? (
-            <Chip label={t("failedToLoad")} size="small" color="error" variant="outlined" />
-          ) : (
-            !isSwitchedOn(entry.status) && (
-              <Chip label={t("disabledChip")} size="small" color="default" variant="outlined" />
-            )
+          <LoadStateChip integration={entry} />
+          {entry.loadState !== "disabled" && !isSwitchedOn(entry.status) && (
+            <Chip label={t("disabledChip")} size="small" color="default" variant="outlined" />
           )}
         </Stack>
       </AccordionSummary>

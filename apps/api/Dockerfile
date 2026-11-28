@@ -141,7 +141,11 @@ WORKDIR /app
 # held then. The version floors checked after the upgrade change this
 # instruction, which keeps such a layer from being reused; they also fail the
 # build on a mirror that doesn't have the fixes yet.
-RUN apk add --no-cache curl ca-certificates git && \
+#
+# tini runs as PID 1 and forwards signals to Node. The event-loop watchdog ends
+# a frozen API with SIGKILL from a worker thread, and the kernel ignores a
+# SIGKILL a PID namespace's init sends itself.
+RUN apk add --no-cache curl ca-certificates git tini && \
     apk upgrade --no-cache libcrypto3 libssl3 libexpat brotli-libs curl libcurl git git-init-template && \
     libcurl="$(apk query --fields version libcurl)" && libcurl="${libcurl#Version: }" && \
     test -n "$libcurl" && test "$(apk version -t "$libcurl" 8.23.0-r0)" != "<" && \
@@ -255,12 +259,13 @@ COPY packages/core/tsconfig.json ./packages/core/
 # its own 0700 directory inside (see private-volume-directory.ts). Only the
 # API mounts it.
 RUN mkdir -p /app/custom_integrations \
-      /var/lib/openmapx/erasure /app/infra/docker/.runtime-recovery && \
+      /var/lib/openmapx/erasure /var/lib/openmapx/runtime /app/infra/docker/.runtime-recovery && \
     chmod 1777 /app/infra/docker/.runtime-recovery
 USER node
 
 WORKDIR /app/apps/api
 EXPOSE 3001
+ENTRYPOINT ["/sbin/tini", "--"]
 # `--import tsx/esm` activates the tsx loader for all subsequent imports,
 # including the dynamic integration loader's runtime imports of .ts files.
 CMD ["node", "--import", "tsx/esm", "dist/server.js"]

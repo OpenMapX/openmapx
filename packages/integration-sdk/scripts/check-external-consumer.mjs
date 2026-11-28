@@ -226,7 +226,7 @@ try {
   );
   writeFileSync(
     join(consumer, "provider.ts"),
-    `import type { IntegrationContext } from "@openmapx/integration-sdk";
+    `import type { IntegrationContext, ScheduleOptions, SubjectDataHandler } from "@openmapx/integration-sdk";
 import { ProviderDeclinedError, ProviderTimeoutError } from "@openmapx/integration-sdk/errors";
 import { safeFetchJson, type SafeFetchJsonOptions } from "@openmapx/integration-sdk/http";
 import { registerPlaceResolver } from "@openmapx/integration-sdk/places";
@@ -260,6 +260,19 @@ export function setup(ctx: IntegrationContext): void {
   registerPlaceResolver("consumer", async (id: string) => ({ id }));
   ctx.registerWeatherProvider(weather);
   ctx.registerRoutingProvider(routing);
+  const refresh: ScheduleOptions = { cron: "*/15 * * * *", deadlineMs: 60_000 };
+  ctx.schedule("refresh-feed", refresh, async ({ signal }) => {
+    await fetchConfiguredFeed("https://feeds.example/items.json", signal);
+  });
+  const personalData: SubjectDataHandler = {
+    async export(subjectId) {
+      return { subjectId, notes: [] as string[] };
+    },
+    async erase(subjectId) {
+      await ctx.db?.transaction((tx) => tx.execute("delete from note where user_id = $1", [subjectId]));
+    },
+  };
+  ctx.registerSubjectDataHandler(personalData);
   ctx.log.info("ready");
 }
 

@@ -32,6 +32,7 @@ import {
   adminIntegrationValidationErrorSchema,
   adminIntegrationVaultUnavailableSchema,
   adminProviderOrderSchema,
+  adminSafeModeStateSchema,
 } from "./common";
 import { configurationMigrationOperations } from "./configuration-migration";
 import { credentialTransferOperations } from "./credential-transfer";
@@ -291,6 +292,23 @@ export const integrationAdminOperations = {
     path: "/api/admin/provider-order",
     auth: "admin",
     responses: { ...common, 200: adminJson(adminProviderOrderSchema) },
+  },
+  getAdminSafeMode: {
+    method: "GET",
+    path: "/api/admin/safe-mode",
+    auth: "admin",
+    responses: { ...common, 200: adminJson(adminSafeModeStateSchema) },
+  },
+  leaveAdminSafeMode: {
+    method: "POST",
+    path: "/api/admin/safe-mode/leave",
+    auth: "admin",
+    request: { body: adminIntegrationEmptyMutationSchema },
+    responses: {
+      ...common,
+      200: adminJson(adminSafeModeStateSchema),
+      409: adminJson(httpErrorSchema),
+    },
   },
   getAdminOverview: {
     method: "GET",

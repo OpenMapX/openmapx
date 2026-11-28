@@ -10,7 +10,12 @@ export type IntegrationStrings = LocaleStrings;
 export type IntegrationLoadState = "loaded" | "disabled" | "incompatible" | "failed" | "safe-mode";
 
 export interface IntegrationLoadError {
-  phase: "import" | "migrate" | "setup" | "deadline";
+  /**
+   * The step at which loading stopped. `platform` means the host could not
+   * try the integration's code at all (its extension state could not be read,
+   * or the reload after leaving safe mode failed), so nothing points at it.
+   */
+  phase: "import" | "migrate" | "setup" | "deadline" | "platform";
   message: string;
 }
 
@@ -33,7 +38,10 @@ export interface LoadedIntegration {
    * admin UI so an integration left out is visible rather than a log line.
    */
   loadState: IntegrationLoadState;
-  /** Why the load failed; present only when `loadState` is `"failed"`. */
+  /**
+   * Why the code did not load; present only when `loadState` is `"failed"`,
+   * or `"incompatible"` with the version the integration needs.
+   */
   loadError?: IntegrationLoadError;
   disclosures?: Disclosure[];
   shutdownHandlers: Array<() => Promise<void>>;

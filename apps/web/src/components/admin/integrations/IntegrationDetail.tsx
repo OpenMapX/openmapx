@@ -37,6 +37,7 @@ import Typography from "@mui/material/Typography";
 import { buildLicensingHtml, safeHref } from "@openmapx/core";
 import { ORCHESTRATOR_BY_DOMAIN } from "@openmapx/integration-framework";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import NextLink from "next/link";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { AttributionText } from "@/components/ui/AttributionText";
@@ -331,18 +332,23 @@ const LOAD_PHASE_KEY = {
   deadline: "loadFailedPhaseDeadline",
 } as const;
 
-/** Why an integration is not running: the step its code failed at, and the error. */
+/**
+ * Why an integration is not running: the step its code failed at, and the
+ * error. When the platform could not try its code at all, nothing is wrong
+ * with the integration and Reload is the way forward.
+ */
 function LoadFailureNotice({ data }: { data: IntegrationDetailData }) {
   const t = useTranslations("adminIntegrations");
+  const platform = data.loadErrorPhase === "platform";
   return (
     <Alert
       severity="error"
       variant="outlined"
       sx={{ "& .MuiAlert-message": { minWidth: 0, overflowWrap: "anywhere" } }}
     >
-      <AlertTitle>{t("loadFailedTitle")}</AlertTitle>
+      <AlertTitle>{t(platform ? "loadFailedPlatformTitle" : "loadFailedTitle")}</AlertTitle>
       <Stack sx={{ gap: 0.75 }}>
-        {data.loadErrorPhase && (
+        {data.loadErrorPhase && data.loadErrorPhase !== "platform" && (
           <Typography variant="body2">{t(LOAD_PHASE_KEY[data.loadErrorPhase])}</Typography>
         )}
         {data.loadError && (
@@ -350,7 +356,62 @@ function LoadFailureNotice({ data }: { data: IntegrationDetailData }) {
             {data.loadError}
           </Typography>
         )}
-        <Typography variant="body2">{t("loadFailedFix")}</Typography>
+        <Typography variant="body2">
+          {t(platform ? "loadFailedPlatformFix" : "loadFailedFix")}
+        </Typography>
+      </Stack>
+    </Alert>
+  );
+}
+
+/**
+ * Why the host holds an installed integration back without it having failed:
+ * safe mode, a release that cannot run it, or its disabled extension.
+ */
+function HeldBackNotice({ data }: { data: IntegrationDetailData }) {
+  const t = useTranslations("adminIntegrations");
+  const notice =
+    data.status === "safe-mode"
+      ? {
+          title: t("safeModeNoticeTitle"),
+          lines: [t("safeModeNoticeBody")],
+          link: true,
+        }
+      : data.status === "incompatible"
+        ? {
+            title: t("incompatibleNoticeTitle"),
+            lines: [data.loadError, t("incompatibleNoticeFix")],
+            link: false,
+          }
+        : data.loadState === "disabled"
+          ? {
+              title: t("extensionDisabledNoticeTitle"),
+              lines: [t("extensionDisabledNoticeBody")],
+              link: false,
+            }
+          : null;
+  if (!notice) return null;
+  return (
+    <Alert
+      role="status"
+      severity={data.status === "incompatible" ? "warning" : "info"}
+      variant="outlined"
+      sx={{ "& .MuiAlert-message": { minWidth: 0, overflowWrap: "anywhere" } }}
+    >
+      <AlertTitle>{notice.title}</AlertTitle>
+      <Stack sx={{ gap: 0.75, alignItems: "flex-start" }}>
+        {notice.lines.map((line) =>
+          line ? (
+            <Typography key={line} variant="body2">
+              {line}
+            </Typography>
+          ) : null,
+        )}
+        {notice.link && (
+          <Button component={NextLink} href="/admin/integrations" size="small" variant="outlined">
+            {t("openIntegrationList")}
+          </Button>
+        )}
       </Stack>
     </Alert>
   );
@@ -863,7 +924,10 @@ function HealthTab({
                   {/* The latest check's own result, beside its label. */}
                   <IntegrationStatusDot
                     status={
-                      data.status === "disabled" || data.status === "failed"
+                      data.status === "disabled" ||
+                      data.status === "failed" ||
+                      data.status === "safe-mode" ||
+                      data.status === "incompatible"
                         ? data.status
                         : health.status === "up"
                           ? "healthy"
@@ -1176,6 +1240,11 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
 
   const isBusy = toggleMutation.isPending || reloadMutation.isPending;
   const switchedOn = isSwitchedOn(data.status);
+  // The integration's switch cannot load it while its extension is disabled,
+  // and a reload cannot while safe mode or an incompatible release holds it.
+  const offersSwitch = data.loadState !== "disabled";
+  const offersReload =
+    data.loadState !== "disabled" && data.status !== "safe-mode" && data.status !== "incompatible";
 
   return (
     <Stack
@@ -1230,36 +1299,40 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
             }}
           >
             {/* A failed integration is still switched on: Reload retries it, Disable stops it. */}
-            <Button
-              size="small"
-              variant={switchedOn ? "outlined" : "contained"}
-              color={switchedOn ? "error" : "success"}
-              startIcon={isBusy ? <CircularProgress size={14} /> : <PowerSettingsNewIcon />}
-              onClick={() => toggleMutation.mutate(!switchedOn)}
-              disabled={isBusy}
-            >
-              {switchedOn ? t("disable") : t("enable")}
-            </Button>
-            <Button
-              size="small"
-              variant="outlined"
-              startIcon={isBusy ? <CircularProgress size={14} /> : <RefreshIcon />}
-              onClick={() =>
-                reloadMutation.mutate(undefined, {
-                  onSuccess: (result) => {
-                    if (!owner.active) return;
-                    setReloadJobId(result.jobId);
-                    showToast(t("reloadJobQueuedCheckActivity"), "info");
-                  },
-                  onError: () => {
-                    if (owner.active) showToast(t("failedToQueueReloadJob"), "error");
-                  },
-                })
-              }
-              disabled={isBusy}
-            >
-              {t("reload")}
-            </Button>
+            {offersSwitch && (
+              <Button
+                size="small"
+                variant={switchedOn ? "outlined" : "contained"}
+                color={switchedOn ? "error" : "success"}
+                startIcon={isBusy ? <CircularProgress size={14} /> : <PowerSettingsNewIcon />}
+                onClick={() => toggleMutation.mutate(!switchedOn)}
+                disabled={isBusy}
+              >
+                {switchedOn ? t("disable") : t("enable")}
+              </Button>
+            )}
+            {offersReload && (
+              <Button
+                size="small"
+                variant="outlined"
+                startIcon={isBusy ? <CircularProgress size={14} /> : <RefreshIcon />}
+                onClick={() =>
+                  reloadMutation.mutate(undefined, {
+                    onSuccess: (result) => {
+                      if (!owner.active) return;
+                      setReloadJobId(result.jobId);
+                      showToast(t("reloadJobQueuedCheckActivity"), "info");
+                    },
+                    onError: () => {
+                      if (owner.active) showToast(t("failedToQueueReloadJob"), "error");
+                    },
+                  })
+                }
+                disabled={isBusy}
+              >
+                {t("reload")}
+              </Button>
+            )}
           </Stack>
         </Stack>
         {data.description && (
@@ -1274,6 +1347,7 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
         )}
       </Stack>
       {data.status === "failed" && <LoadFailureNotice data={data} />}
+      <HeldBackNotice data={data} />
       {reloadJobId && <AdminJobLink id={reloadJobId} source="application" />}
       <Divider />
       <Box>

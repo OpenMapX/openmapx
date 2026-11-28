@@ -1,5 +1,8 @@
 import type { Place } from "@openmapx/core";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  fakeDatabaseClient,
+} from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const GERS_ID = "overture-0f3a2b1c-dead-beef-cafe-123456789abc";
@@ -23,9 +26,8 @@ const FIXTURE_ROW = {
 };
 
 function makeFakeDb(row: unknown | null) {
-  return {
-    execute: vi.fn().mockResolvedValue(row ? [row] : []),
-  };
+  const execute = vi.fn().mockResolvedValue(row ? [row] : []);
+  return { ...fakeDatabaseClient(execute), execute };
 }
 
 describe("overture place resolver", () => {

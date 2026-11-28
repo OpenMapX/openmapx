@@ -55,6 +55,18 @@ function underVerifiedRoot(directory: string): boolean {
 }
 
 /**
+ * The POSIX paths the operations agent recorded for an integration directory,
+ * or null when the directory is not verified and is read as it is. A
+ * directory under a verified root that the agent did not report has none.
+ */
+export function verifiedIntegrationPaths(directory: string): string[] | null {
+  const root = resolve(directory);
+  const digests = digestsByDirectory.get(root);
+  if (digests) return [...digests.keys()];
+  return underVerifiedRoot(root) ? [] : null;
+}
+
+/**
  * The bytes of `relativePath` in an integration directory, or null when it is
  * missing or, in a verified directory, is not exactly what the agent
  * installed.

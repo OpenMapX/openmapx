@@ -16,6 +16,7 @@ import {
   isTransactionalAuthDatabase,
   withAuthDatabase,
 } from "./auth-database";
+import { throwIfExtensionBlocksDeletion } from "./extension-deletion-block";
 export const accountRoleSchema = z.enum(["user", "admin"]);
 export type AccountRole = z.infer<typeof accountRoleSchema>;
 export interface AccountMutationIntent {
@@ -43,6 +44,7 @@ export async function withAccountMutation<T>(
 ): Promise<T> {
   const parent = currentAccountMutation();
   const afterCommit: Array<() => Promise<void>> = parent?.afterCommit ?? [];
+  const failures: unknown[] = parent?.failures ?? [];
   const perform = async (tx: AuthDatabase) => {
     await lockAdminGuard(tx);
     if (intent.actorId) {
@@ -84,6 +86,7 @@ export async function withAccountMutation<T>(
           mutationKey: intent.mutationKey,
           roleAudit: false,
           afterCommit,
+          failures,
         },
         async () => assertAccountMutationOutcome(await run(tx)),
       ),
@@ -109,7 +112,14 @@ export async function withAccountMutation<T>(
     for (const complete of afterCommit) await complete().catch(() => {});
     return result;
   } catch (error) {
-    if (error instanceof MutationResponseRollback) return error.response as T;
+    if (error instanceof MutationResponseRollback) {
+      // Through the auth handler, better-auth answers a database error with a
+      // bare 500 response; the error itself was kept when it was caught.
+      if (intent.action === "delete")
+        for (const failure of failures) await throwIfExtensionBlocksDeletion(failure);
+      return error.response as T;
+    }
+    if (intent.action === "delete") await throwIfExtensionBlocksDeletion(error);
     return mapAccountConstraint(error);
   }
 }

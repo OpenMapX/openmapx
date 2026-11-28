@@ -10,6 +10,7 @@ import {
   isTerminalRequestStatus,
   type PrivacyActorKind,
   type PrivacyEventType,
+  type SubjectDataRegistration,
 } from "@openmapx/core/privacy";
 import { defaultLocale, resolveLocale } from "@openmapx/i18n";
 import { and, desc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
@@ -31,9 +32,10 @@ import {
 import { isUniqueViolation } from "../db/unique-violation.js";
 import { decrypt, encrypt, type SealedSecret, secretAad } from "../services/secrets.js";
 import { actorUserIdOrNull } from "../utils/actor.js";
-import { SUBJECT_DATA_CATALOGUE } from "./catalogue.js";
+import { subjectDataCatalogue } from "./catalogue.js";
 import { addCalendarMonths, calculateSubjectRequestDueAt } from "./deadline.js";
 import { PrivacyRequestError } from "./errors.js";
+import { EXTENSION_LOGICAL_ID_PREFIX } from "./extension-handlers.js";
 import {
   findIdempotentCreate,
   findIdempotentEvent,
@@ -49,7 +51,8 @@ import {
 
 export interface PrivacyRequestServiceOptions {
   database?: typeof defaultDb;
-  catalogue?: typeof SUBJECT_DATA_CATALOGUE;
+  /** The registrations a new case preserves; the live catalogue when left out. */
+  catalogue?: readonly SubjectDataRegistration[];
   now?: () => Date;
 }
 
@@ -195,12 +198,12 @@ export async function privacyAlertRecipients(
 
 export class PrivacyRequestService {
   private readonly database: typeof defaultDb;
-  private readonly catalogue: typeof SUBJECT_DATA_CATALOGUE;
+  private readonly catalogue: readonly SubjectDataRegistration[] | undefined;
   private readonly now: () => Date;
 
   constructor(options: PrivacyRequestServiceOptions = {}) {
     this.database = options.database ?? defaultDb;
-    this.catalogue = options.catalogue ?? SUBJECT_DATA_CATALOGUE;
+    this.catalogue = options.catalogue;
     this.now = options.now ?? (() => new Date());
   }
 
@@ -247,7 +250,8 @@ export class PrivacyRequestService {
     // request is tied to the signed-in account and needs no locator copy.
     const requestId = uuidv7();
     const storedLocator = selfService ? NO_LOCATOR : encodeLocator(requestId, locatorValue);
-    const applicable = this.catalogue.filter(
+    // Read per case: installed extensions add registrations while the API runs.
+    const applicable = (this.catalogue ?? subjectDataCatalogue()).filter(
       (registration) => registration.strategy !== "not_personal",
     );
     // A replayed create (same key, same administrator, same request) returns
@@ -957,6 +961,134 @@ export class PrivacyRequestService {
       .where(eq(dataSubjectRequest.id, request.id))
       .returning();
     return updated ?? request;
+  }
+
+  /**
+   * Opens one operator task per extension an export left out, named
+   * `extension:<integration id>` with the reason as its public code. A task
+   * an earlier export opened is opened again with the new reason, also when
+   * an administrator had resolved it, so every export that leaves an
+   * extension out is seen to before the case can be completed.
+   *
+   * Like every other change to a case, it locks the request, raises its
+   * version and records an `export_incomplete` event. An export collects for
+   * up to half a minute, and an administrator may complete the case in that
+   * time; such a case is reopened, because a completed case must not carry
+   * an open task the administrator never sees. A refused case is not
+   * reopened: the export is refused instead.
+   */
+  async recordExtensionsLeftOut(
+    requestId: string,
+    leftOut: ReadonlyArray<{ integrationId: string; warningCode: string }>,
+  ): Promise<void> {
+    if (leftOut.length === 0) return;
+    const now = this.now();
+    const taskIds = leftOut.map(
+      ({ integrationId }) => `${EXTENSION_LOGICAL_ID_PREFIX}${integrationId}`,
+    );
+    await this.database
+      .transaction(async (tx) => {
+        const [current] = await tx
+          .select()
+          .from(dataSubjectRequest)
+          .where(eq(dataSubjectRequest.id, requestId))
+          .for("update")
+          .limit(1);
+        if (!current) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
+        const reopening = current.status === "completed";
+        if (!reopening && !acceptsTaskResolution(current.status))
+          throw new PrivacyRequestError("REQUEST_NOT_ACTIVE", 409);
+        await tx
+          .insert(dataSubjectRequestTask)
+          .values(
+            leftOut.map(({ warningCode }, index) => ({
+              requestId,
+              registrationId: taskIds[index] as string,
+              source: "extension" as const,
+              status: "open" as const,
+              publicCode: warningCode,
+              createdAt: now,
+              updatedAt: now,
+            })),
+          )
+          .onConflictDoUpdate({
+            target: [dataSubjectRequestTask.requestId, dataSubjectRequestTask.registrationId],
+            set: {
+              status: "open",
+              publicCode: sql`excluded.public_code`,
+              resolutionCode: null,
+              resolvedAt: null,
+              updatedAt: now,
+            },
+          });
+        const [updated] = await tx
+          .update(dataSubjectRequest)
+          .set({
+            version: sql`${dataSubjectRequest.version} + 1`,
+            updatedAt: now,
+            // An open operator task means the case is being worked on.
+            ...(reopening ? { status: "in_progress", completedAt: null, closedAt: null } : {}),
+          })
+          .where(eq(dataSubjectRequest.id, current.id))
+          .returning({ id: dataSubjectRequest.id });
+        if (!updated) throw new PrivacyRequestError("REQUEST_NOT_FOUND", 404);
+        if (reopening && current.closedAt)
+          // Completing released the case's retention holds. The reopened case
+          // may stay open for days and be exported again, so the holds that
+          // completion released come back with the status each had before.
+          await tx
+            .update(dataSubjectRequestPreservation)
+            .set({
+              releasedAt: null,
+              status: sql`case
+              when ${dataSubjectRequestPreservation.capturedAt} is not null then 'captured'
+              when ${dataSubjectRequestPreservation.outcomeCode} like '%-preservation-action-required' then 'action_required'
+              when ${dataSubjectRequestPreservation.outcomeCode} = 'managed-source-capture-required' then 'source_capture_pending'
+              else 'held'
+            end`,
+            })
+            .where(
+              and(
+                eq(dataSubjectRequestPreservation.requestId, current.id),
+                eq(dataSubjectRequestPreservation.releasedAt, current.closedAt),
+              ),
+            );
+        if (reopening)
+          await tx.insert(dataSubjectRequestEvent).values({
+            requestId: current.id,
+            eventType: "status_changed",
+            actorKind: "system",
+            actorUserId: null,
+            payload: boundedEventPayload({
+              from: current.status,
+              to: "in_progress",
+              reasonCode: "export-incomplete",
+            }),
+            payloadVersion: 1,
+            createdAt: now,
+          });
+        // The event payload holds at most 32 entries per list; the tasks
+        // themselves are all recorded above.
+        await tx.insert(dataSubjectRequestEvent).values({
+          requestId: current.id,
+          eventType: "export_incomplete",
+          actorKind: "system",
+          actorUserId: null,
+          payload: boundedEventPayload({
+            tasks: taskIds.slice(0, 32),
+            codes: leftOut.slice(0, 32).map(({ warningCode }) => warningCode),
+          }),
+          payloadVersion: 1,
+          createdAt: now,
+        });
+      })
+      .catch((error: unknown) => {
+        // The person opened a new request of the same kind after this case was
+        // completed, so it cannot become active again.
+        if (isUniqueViolation(error, ACTIVE_REQUEST_KIND_KEY))
+          throw new PrivacyRequestError("REQUEST_NOT_ACTIVE", 409);
+        throw error;
+      });
   }
 
   /** Record an export failure without identifiers in the payload. */

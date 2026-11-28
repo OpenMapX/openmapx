@@ -1,8 +1,10 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { FetchJsonHttpError } from "@openmapx/core/http/fetch-json-error";
 import { parseRetryAfterMs } from "@openmapx/core/retry-after";
+import { extensionSchemaName } from "@openmapx/extension-contracts/identifiers";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type {
   MobilityHttpRequestOptions,
@@ -24,8 +26,10 @@ import type {
   ResponseOptions,
   RouteHandler,
   RouteOptions,
+  ScheduleOptions,
   SecretsClient,
   StreamHttpResponse,
+  SubjectDataHandler,
 } from "../context.js";
 import type { AirQualityProvider } from "../contracts/air-quality-provider.js";
 import type { BorderCrossingProvider } from "../contracts/border-crossing-provider.js";
@@ -63,6 +67,7 @@ import { resolveIntegrationPlatformEndpoint } from "../platform-endpoints";
 import { providerOrderFingerprintInput, readProviderOrder } from "../provider-order";
 import { createProviderRegistrationCheck } from "../provider-registration";
 import { storedRouteHandler } from "../route-handler";
+import { cronShapeProblem, scheduleRegistrationProblem } from "../schedule";
 
 export interface FakeMobilityHttpRequest {
   kind: "json" | "text";
@@ -339,6 +344,89 @@ export function createRecordingReply(): {
   };
 }
 
+/**
+ * The `ctx.db` the host would give an integration with `manifest`: none when
+ * it neither requires PostGIS nor ships migrations, and the schema it owns
+ * when it ships them. Its methods reject until a test passes its own `db`.
+ */
+function unstubbedDatabase(
+  id: string,
+  manifest: IntegrationContext["manifest"],
+): DatabaseClient | undefined {
+  const ownsSchema = manifest.database?.migrations === true;
+  if (!ownsSchema && !manifest.requires?.some((requirement) => requirement.service === "postgis")) {
+    return undefined;
+  }
+  const notStubbed = async (): Promise<never> => {
+    throw new Error("createMockIntegrationContext: database not stubbed — pass { db }");
+  };
+  return {
+    execute: notStubbed,
+    transaction: notStubbed,
+    ...(ownsSchema ? { schema: extensionSchemaName(id) } : {}),
+  };
+}
+
+/**
+ * `db` with the host's transaction rules: transactions run one at a time, in
+ * the order they were called, and a `transaction` started inside the
+ * callback of another one is refused, as the host refuses it, so a test
+ * catches a nested call that would wait forever in the host and never passes
+ * on an interleaving the host does not produce.
+ */
+function withHostTransactionRules(db: DatabaseClient): DatabaseClient {
+  const insideTransaction = new AsyncLocalStorage<{ open: boolean }>();
+  // Settles once the last transaction called so far has settled.
+  let queue: Promise<unknown> = Promise.resolve();
+  return {
+    execute: (...args) => db.execute(...args),
+    transaction: (fn, options) => {
+      if (insideTransaction.getStore()?.open) {
+        return Promise.reject(
+          new Error(
+            "Nested transactions are not supported; use the transaction passed to the callback",
+          ),
+        );
+      }
+      const inside = { open: true };
+      const result = queue
+        .then(() => db.transaction((tx) => insideTransaction.run(inside, () => fn(tx)), options))
+        .finally(() => {
+          inside.open = false;
+        });
+      queue = result.catch(() => {});
+      return result;
+    },
+    ...(db.schema === undefined ? {} : { schema: db.schema }),
+  };
+}
+
+/**
+ * A complete `ctx.db` stub built from one `execute`: `transaction` runs its
+ * callback with a transaction whose statements go to the same `execute`, so
+ * a test that stubs statements needs no separate transaction stub. Pass it
+ * as `db` to `createMockIntegrationContext`.
+ *
+ * On its own it does not apply the host's transaction rules: its
+ * `transaction` neither queues concurrent calls nor refuses a nested one.
+ * The mock context wraps it in those rules; a test that uses the client
+ * directly gets neither.
+ */
+export function fakeDatabaseClient(
+  execute: (...args: Parameters<DatabaseClient["execute"]>) => Promise<unknown>,
+  options: { schema?: string } = {},
+): DatabaseClient {
+  return {
+    execute: <T>(...args: Parameters<DatabaseClient["execute"]>) => execute(...args) as Promise<T>,
+    transaction: (fn) =>
+      fn({
+        execute: <T>(...args: Parameters<DatabaseClient["execute"]>) =>
+          execute(...args) as Promise<T>,
+      }),
+    ...(options.schema === undefined ? {} : { schema: options.schema }),
+  };
+}
+
 /** A `Logger` that swallows everything. Override per-call to assert. */
 export function createNoopLogger(): Logger {
   return { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
@@ -459,6 +547,14 @@ export interface CapturedRegistrations {
   disclosures: Disclosure[];
   /** Every list passed to `setDataSources()`, in call order. */
   dataSourceLists: IntegrationDataSource[][];
+  /** Every task passed to `schedule()`, in call order. */
+  tasks: {
+    name: string;
+    options: ScheduleOptions;
+    handler: (run: { signal: AbortSignal }) => Promise<void>;
+  }[];
+  /** The handler passed to `registerSubjectDataHandler()`, or `null`. */
+  subjectDataHandler: SubjectDataHandler | null;
 }
 
 export interface MockContextOverrides {
@@ -476,9 +572,26 @@ export interface MockContextOverrides {
   providerOrder?: Record<string, readonly string[]>;
 }
 
+/**
+ * The context `createMockIntegrationContext` returns. Its `schedule` checks a
+ * registration as the host does, except the cron expression: it checks only
+ * that it is a nickname such as `@daily` or has five fields. An expression
+ * with a value out of range, such as `0 25 * * *`, or one that never matches,
+ * such as `0 0 31 2 *`, passes here and fails the load in the host.
+ */
 export interface MockIntegrationContext extends IntegrationContext {
   /** Captured registrations from `setup()` — drives contract conformance. */
   readonly registered: CapturedRegistrations;
+  /**
+   * Runs the handler of the task `setup()` scheduled under `name` once, as a
+   * tick of its schedule would, with `signal` or one that never aborts. The
+   * mock does not parse cron fields; see `MockIntegrationContext`.
+   */
+  runScheduledTask(name: string, options?: { signal?: AbortSignal }): Promise<void>;
+  /** Calls `erase` of the registered subject-data handler, as an account deletion does. */
+  eraseSubject(subjectId: string): Promise<void>;
+  /** Calls `export` of the registered subject-data handler, as a data export does. */
+  exportSubject(subjectId: string): Promise<unknown>;
 }
 
 /**
@@ -521,11 +634,21 @@ export function createMockIntegrationContext(
     healthChecks: [],
     disclosures: [],
     dataSourceLists: [],
+    tasks: [],
+    subjectDataHandler: null,
+  };
+  const subjectDataHandler = (): SubjectDataHandler => {
+    if (!registered.subjectDataHandler)
+      throw new Error("createMockIntegrationContext: no subject-data handler was registered");
+    return registered.subjectDataHandler;
   };
   const noop = () => undefined;
+  const id = overrides.id ?? "test-integration";
+  const manifest = overrides.manifest ?? ({} as IntegrationContext["manifest"]);
+  const db = overrides.db ?? unstubbedDatabase(id, manifest);
   const ctx: MockIntegrationContext = {
-    id: overrides.id ?? "test-integration",
-    manifest: overrides.manifest ?? ({} as IntegrationContext["manifest"]),
+    id,
+    manifest,
     config: overrides.config ?? {},
     http:
       overrides.http ??
@@ -535,7 +658,7 @@ export function createMockIntegrationContext(
         );
       }),
     cache: overrides.cache ?? createPassthroughCache(),
-    db: overrides.db,
+    db: db && withHostTransactionRules(db),
     log: overrides.log ?? createNoopLogger(),
     secrets: overrides.secrets ?? { get: async () => null },
     registered,
@@ -642,6 +765,29 @@ export function createMockIntegrationContext(
     on: () => () => undefined,
     onActivate: runImmediateActivation,
     onShutdown: noop,
+    // The host's checks, except that only the host parses a cron expression's fields.
+    schedule: (name, options, handler) => {
+      const problem =
+        scheduleRegistrationProblem(name, options, handler) ??
+        (options.cron === undefined ? null : cronShapeProblem(name, options.cron));
+      if (problem) throw new Error(problem);
+      if (registered.tasks.some((scheduled) => scheduled.name === name)) {
+        throw new Error(`Scheduled task ${name} is already scheduled by ${ctx.id}`);
+      }
+      registered.tasks.push({ name, options: { ...options }, handler });
+    },
+    runScheduledTask: async (name, options = {}) => {
+      const task = registered.tasks.find((candidate) => candidate.name === name);
+      if (!task) throw new Error(`createMockIntegrationContext: no task ${name} was scheduled`);
+      await task.handler({ signal: options.signal ?? new AbortController().signal });
+    },
+    registerSubjectDataHandler: (handler) => {
+      if (registered.subjectDataHandler)
+        throw new Error(`Integration ${ctx.id} already registered a subject-data handler`);
+      registered.subjectDataHandler = handler;
+    },
+    eraseSubject: async (subjectId) => subjectDataHandler().erase(subjectId),
+    exportSubject: async (subjectId) => subjectDataHandler().export(subjectId),
     getIntegrationsByDomain: () => [],
     getProviderOrder: (domain) => {
       const orders = overrides.providerOrder ?? {};

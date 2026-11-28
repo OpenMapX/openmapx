@@ -237,6 +237,9 @@ privacy-catalogue registration IDs. Operator-managed handling uses
 `strategy: "operator_task"` and bounded instructions. A declaration does not
 register a collector or grant database access. Transmitting a query upstream
 still needs source/privacy disclosures even when the integration stores none.
+An integration that keeps personal data itself registers a
+[subject-data handler](#subject-data-handlers), through which account deletion
+erases it and a data export includes it.
 
 ### Health checks
 
@@ -727,7 +730,7 @@ where they came from.
 interface IntegrationContext {
   readonly http: HttpClient; // fetch wrapper with optional Redis caching
   readonly cache: CacheClient; // namespaced KV (int:<id>:<key>) with withCache()
-  readonly db?: DatabaseClient; // only when the manifest requires postgis
+  readonly db?: DatabaseClient; // when the manifest requires postgis or ships migrations
   readonly log: Logger; // tagged structured logger
   readonly secrets: SecretsClient; // decrypted vault access
   // …
@@ -746,10 +749,126 @@ interface IntegrationContext {
   An entry that several callers share holds only what the upstream returned;
   add caller-specific values, such as the distance from the caller to a tide
   station, to a copy at the route.
-- **`db`** is present only when the manifest requires the `postgis` service;
-  otherwise it is `undefined`.
+- **`db`** is present when the manifest requires the `postgis` service or
+  declares `database.migrations: true`; otherwise it is `undefined`.
+  `execute` runs one statement on the request-path pool, which ends it after
+  five seconds. `transaction(fn, { timeoutMs })` runs `fn` in one transaction
+  on a separate pool of two connections that all extensions share: it commits
+  when `fn` resolves and rolls back when it rejects. When the wait for a
+  connection, `fn`, a statement or a pause between statements outlasts
+  `timeoutMs` (default 30 seconds, from 1 second to 15 minutes), the
+  transaction rolls back and the call rejects with `ProviderTimeoutError`;
+  after a wait for a connection, its message says so. Once `fn` has resolved,
+  the COMMIT decides the outcome, even past `timeoutMs`, so a
+  `ProviderTimeoutError` always means nothing was committed. An integration's
+  transactions run one at a time, in the order it called them, so one
+  integration cannot hold both connections; `execute` calls do not wait for
+  them. A `transaction` called inside another one's `fn` is refused at once:
+  use the `tx` passed to `fn`. An integration that ships migrations owns the
+  schema in `db.schema` (`ext_` and its id with `-` as `_`). In both methods
+  its search path is that schema, then `extensions`, where PostGIS lives, so
+  `geometry` and `ST_*` work without a prefix; `public` is not on it, and
+  platform tables are named with their schema, as in `public."user"`. Such a
+  client refuses to run while the schema is missing, and refuses every call
+  once the integration's data was removed. Calls made after the integration
+  was unloaded, for example from a shutdown handler, still run, with one
+  warning per method.
 - **`log`** is a structured logger tagged with the integration id.
 - **`secrets`** retrieves a decrypted credential from the vault.
+
+#### Database migrations
+
+An integration that declares `database.migrations: true` ships SQL files as
+`migrations/NNNN_name.sql`: four digits, then lower-case words joined by `_`.
+The API applies them at every start and reload, before it imports the
+integration's code and outside the 60-second load budget, with the API's
+database role:
+
+- The files apply in the order of their numbers, each once. All files a start
+  applies run in one transaction: if one fails, none of them is applied. Each
+  applied file is recorded with its SHA-256 in `public.extension_migration`.
+- An applied file never changes ("Migration `<name>` of `<id>` changed after it
+  was applied"), and a new file is numbered above every applied one
+  ("... is older than a migration that was already applied"). Fix a mistake
+  with a new file.
+- The first run creates the schema `ext_<id>`. The migration session's search
+  path is that schema, then `extensions`, so unqualified names are created and
+  found in the schema; a `RESET ALL` or `SET search_path TO DEFAULT` in a file
+  returns to it. `public` is not on the path; name platform tables with their
+  schema. The settings a file changes end with the file: before the API's own
+  statements and the next file run, every setting returns to the session's.
+- A file runs as one string through PL/pgSQL `EXECUTE` inside the migration
+  transaction. Comments, `$$`-quoted function bodies and `DO` blocks work as
+  usual. The error of a failing statement names the file and, where
+  PostgreSQL reports a position, its line. The file's text is one value sent
+  to the server, so it must stay below PostgreSQL's 1 GB limit for a value;
+  split a bulk load into several files. A file may not contain `COMMIT`, `ROLLBACK`, `BEGIN`, `SAVEPOINT` or other
+  transaction control, also not inside a `DO` block, nor a statement that
+  cannot run inside a transaction or function, such as
+  `CREATE INDEX CONCURRENTLY`, `REINDEX CONCURRENTLY`, `VACUUM` or
+  `CREATE DATABASE`. Use a plain `CREATE INDEX`. `COPY ... FROM STDIN`, which
+  `pg_dump` data files use, is not available either; load data with `INSERT`.
+  A file may not change the role, create extensions or create schemas other
+  than its own, and it must not change `lock_timeout` or
+  `transaction_timeout`. Create objects only in the integration's schema:
+  a table, function or other object a file creates in another schema, such
+  as `public`, escapes the foreign-key check below and is not removed with
+  the integration's data.
+- Deferred constraints are checked at the end of each file, so each file must
+  leave its rows consistent; a file that relies on deferring a check within
+  itself sets `SET CONSTRAINTS ... DEFERRED` at its start.
+- After each file, the foreign keys of the whole schema are checked:
+  - A key to a table outside the schema, such as `public."user"(id)`, must be
+    `ON DELETE CASCADE`.
+  - A table of the schema that such a cascade deletes rows from, directly or
+    through further cascades, may only be referenced by keys that are
+    `ON DELETE CASCADE` as well.
+
+  `SET NULL`, `SET DEFAULT`, `NO ACTION` and `RESTRICT` are refused for these
+  keys, with a message that names the file, the key, its table and the
+  cascade that reaches it. Use `ON DELETE CASCADE`, or store the id without a
+  foreign key and erase the rows through the subject-data handler. Keys
+  between tables no such cascade reaches are not restricted. A key on or to a
+  partitioned table is judged for each partition, because a cascade may reach
+  one partition without its parent. While the schema's keys change only
+  through the integration's own migration files, this guarantees that no
+  foreign key of the schema makes deleting a row outside it, such as an
+  account, fail. It judges foreign keys only: a trigger, rule or check
+  constraint of the integration that fails on such a deletion still makes it
+  fail. Objects a file creates outside its schema are not judged at all, and
+  neither are keys that reach the schema another way: a key that another
+  integration runs into this schema's tables from its own migration files
+  (`ALTER TABLE ext_<this integration's id>.…`), or one created through
+  `ctx.db` at run time. When such a key refuses an account deletion, the
+  deletion fails and the account stays unchanged: the API logs the key, its
+  table and schema, raises an attention item naming the extension, and
+  answers the request with `409` `EXTENSION_BLOCKS_ACCOUNT_DELETION`. The item
+  resolves itself at the next daily check once the key no longer refuses a
+  deletion (dropped, or changed to `ON DELETE CASCADE`).
+
+- A migration waits at most 120 seconds for each lock, including the lock
+  that keeps two runs of the same integration apart, and all files of a start
+  run at most 30 minutes in all. Both limits are set on the database session
+  as well, so the server ends a migration whose API process went away and
+  releases its lock. A file that changes them loses this protection: one
+  that turns `transaction_timeout` off is, if the API dies, no longer
+  bounded by the server, and its statement runs on until it ends. A stop
+  request, during start-up or while a reload is migrating, cancels running
+  migrations, and the migrations of the integrations that would follow do not
+  start.
+- When a file fails or a limit is reached, everything is rolled back. An
+  installed integration is then left out with phase `migrate`, and a built-in
+  fails as well; fix the file and install the integration again.
+- When a version that applied more files is rolled back to an older one, the
+  older one still loads, and the admin attention list shows
+  `integration-schema-ahead:<id>` ("... runs against a newer database schema")
+  until a version that ships all applied files loads.
+- Removing an integration with its data drops `ext_<id>` with everything in it
+  and its rows in the platform's bookkeeping tables. A removal waits for a
+  migration of the same integration that is running.
+
+Migrations run with the API role's rights: a file can read and change every
+platform table it names explicitly. Install only extensions you trust.
 
 #### Shared and local caches
 
@@ -862,14 +981,14 @@ Do not replace it with process-local maps or counters in production. Redis
 failure must never become unmetered upstream use: deny a new quota-consuming
 refresh, or, where a refusal would take a core feature down, count the same
 windows in process with `createLocalQuotaMeter` until the store returns
-(each replica then admits up to the full limit). Eligible stale data may still
+(that count starts over when the API restarts). Eligible stale data may still
 be returned with its original evidence time.
 
 #### Shared request admission
 
 `upstreamRuntime.admitSharedRequest?({ scope, key, policy?, signal? })` is a
-separate opt-in capability for upstream identities shared across integrations and
-replicas. `scope` and `key` are nonempty strings supplied by the consumer; the
+separate opt-in capability for upstream identities shared across integrations.
+`scope` and `key` are nonempty strings supplied by the consumer; the
 host hashes them into `upstream-shared:` keys outside integration cache scopes.
 Choose the identity from the upstream's actual quota boundary. Do not include
 integration IDs, result receipts, bounding boxes or reload generations when
@@ -992,6 +1111,194 @@ one value silently.
 Opaque cursors are HMAC-signed and purpose-scoped. Bind their encoded value to
 the normalized query/provider context and give it a finite expiry; decoding a
 cursor under another route purpose must fail.
+
+#### Scheduled tasks
+
+`ctx.schedule(name, options, handler)` registers work the host runs on a
+schedule, for example a nightly import into the integration's schema:
+
+```ts
+ctx.schedule("refresh", { cron: "30 2 * * *", deadlineMs: 15 * 60_000 }, async ({ signal }) => {
+  const rows = await ctx.http.get<Row[]>(FEED_URL, { signal, timeoutMs: 60_000 });
+  signal.throwIfAborted();
+  await ctx.db?.transaction(async (tx) => {
+    for (const row of rows) await tx.execute("insert into items (id) values ($1)", [row.id]);
+  });
+});
+```
+
+- Call it from `setup()`. A call after `setup()` has returned is ignored with
+  one warning; the task would otherwise attach to the next generation.
+- `name` matches `^[a-z0-9][a-z0-9-]{0,63}$` and is unique within the
+  integration. The handler must be a function.
+- `options` holds exactly one of `cron` and `everyMs`, and `deadlineMs`:
+  - `cron` has five fields (minute, hour, day of month, month, day of week) or
+    is a nickname such as `@daily` or `@hourly`. It is evaluated in UTC,
+    whatever the server's time zone, and must match at least once: an
+    expression that never matches, such as `0 0 31 2 *`, is refused.
+  - `everyMs` is between 60 000 and 2 147 483 647 milliseconds. The first run
+    comes one interval after the generation goes live.
+  - `deadlineMs` is between 1 000 and 21 600 000 milliseconds (six hours).
+- An invalid registration throws in `setup()` and fails the load, as any
+  other error there does.
+- A task runs at most once at a time. A tick is skipped while the task's
+  previous run has not settled, and missed ticks are not made up: a run that
+  was due while the previous one was still going, while the API was down or
+  while the integration was not loaded does not happen later.
+- At `deadlineMs`, the run's `signal` aborts and the run is recorded as failed
+  with `deadline exceeded`. The host cannot stop JavaScript that ignores the
+  signal; such a handler keeps its task from running again until it settles.
+  Pass `signal` to `ctx.http` calls and check it between steps.
+- A handler that resolves is recorded as succeeded. One that rejects or throws,
+  with any value, is recorded as failed with a description of that value (at
+  most 2 000 characters); nothing reaches the process.
+- A reload, of this integration or any other, aborts the `signal` of every run
+  in progress. The new generation's task does not start while the old run is
+  still going, until that run settles or reaches its deadline. Removing or
+  disabling the integration stops its ticks.
+- When the API stops, every run's `signal` aborts and the API exits without
+  waiting for the handlers; a statement or transaction still running is cut
+  off. PostgreSQL rolls back a transaction that had not reached its COMMIT;
+  one whose COMMIT was already running may still commit although the call
+  failed, and a statement already running on the server runs on until it ends
+  or reaches its timeout. At the next start, runs still recorded as running
+  are recorded as failed with `interrupted by restart`.
+- When the outcome of a run cannot be written to the database, the host retries
+  the write three times over about 20 seconds and then keeps it in memory. The
+  task's next tick writes it first, and runs only once that has worked; until
+  then each tick is skipped with a warning.
+
+Every run is listed in the administration's Activity, as a job named
+`<integration>: <task>` with the caption "Scheduled task"; see
+[Monitoring](../administration/monitoring.md). In tests,
+`createMockIntegrationContext().runScheduledTask(name)` runs a task's handler
+once. The mock checks a registration as the host does, except that it checks
+only the shape of a cron expression: one with a value out of range, or one that
+never matches, passes the mock and fails the load in the host.
+
+Scheduled tasks rely on there being one API process per instance, which is the
+only supported deployment (see [Requirements](../install/requirements.md)). Each
+task's running run is one row in `integration_task_run`, and the restart
+recovery fails every row left running; a second API process on the same
+database would start runs beside the first one's and fail them at its own
+start.
+
+#### Subject-data handlers
+
+An integration that stores data about a person, typically in its own schema
+through `ctx.db`, registers how that data is erased when the person's account
+is deleted:
+
+```ts
+ctx.registerSubjectDataHandler({
+  async erase(subjectId) {
+    await ctx.db?.transaction((tx) =>
+      tx.execute("delete from note where user_id = $1", [subjectId]),
+    );
+  },
+  async export(subjectId) {
+    return {
+      notes: await ctx.db?.execute("select body from note where user_id = $1", [subjectId]),
+    };
+  },
+});
+```
+
+- `subjectId` is the platform's account id (`"user".id`).
+- Call it from `setup()`, at most once. A second call throws there and fails
+  the load. A call after `setup()` has returned is ignored with one warning,
+  and so is a call from work of an integration that was left out or replaced
+  by a reload.
+- After each generation goes live, and again in the daily run, the host lists
+  every running integration with a handler in `integration_subject_handler`.
+  An integration's row is deleted in two cases only: it runs (loaded and
+  enabled) without a handler, which drops its pending erasures because it no
+  longer erases anything, or its data is removed, which drops them because the
+  data is gone. Either way the API logs how many owed erasures were dropped and
+  resolves the attention item. In every other state (disabled, failed,
+  incompatible, in safe mode, left out of the registry by the loader, or
+  uninstalled with its data kept) the row and the pending erasures stay, so
+  deletions keep being recorded for as long as its data exists.
+- Deleting an account, on every path (the app, the restore replay, plain SQL),
+  records one row in `subject_erasure_pending` for each listed integration, in
+  the deleting transaction. The deletion never waits for a handler.
+- The host then calls `erase` for each pending row, one at a time, in the
+  integration's scope, with 30 seconds per call: right after a deletion through
+  the API, after every activation and once a day. A call that resolves deletes
+  the row. A call that rejects or throws, with any value, or runs past its 30
+  seconds, keeps the row, counts the attempt and records the error (at most
+  2 000 characters). Rows whose erase failed least often go first, then the
+  oldest, so one person whose erase keeps overrunning does not hold up the
+  others. While a call of `erase` is still unsettled after its deadline, the
+  host does not call `erase` of that integration again; each run counts one
+  more failed attempt on that row instead. A hung `export` does not hold up
+  erasures. Rows of an integration that is not running wait until it runs.
+- The administration's attention list shows "Erasure pending in _name_" while
+  erasures are pending and either an erase failed (with the number of people
+  waiting, the most failed attempts and the last error) or the integration
+  cannot erase now (with the reason and the number of people waiting). The item
+  disappears once the integration has no pending erasures left.
+- `erase` runs after the account is deleted, so rows that cascade from `"user"`
+  are already gone; it may also run again for the same person, for example
+  after a call that outlasted its deadline finished on its own, or after a
+  restore replays a deletion. It must succeed when it finds nothing. After
+  `erase`, the integration must not store data about that account again, for
+  example from a scheduled task or a provider request that was already under
+  way. Erase everything the integration holds about the person, in its own
+  schema and upstream where it copied data.
+- The host cannot stop JavaScript that ignores the deadline. Keep each call well
+  within 30 seconds; a person with much data is erased in the same call.
+- For a person's data export, the host calls `export` of every running
+  integration with a handler at the same time, in its scope, with 30 seconds
+  each. Return only the given person's data, as plain JSON-serialisable values,
+  at most 8 MiB once written as JSON (measured in UTF-8 bytes). What it returns
+  is written to `extensions/<id>.json` in the archive, exactly as returned;
+  `undefined` becomes `null`, and functions and `undefined` inside objects are
+  dropped as JSON drops them. A `Map` or `Set` is written as `{}`, so convert
+  them yourself. The `toJSON` methods and getters of the returned value run
+  synchronously in the API process while the host writes it, in the
+  integration's scope, and nothing can interrupt them there: a loop in one
+  stops the whole API.
+- An export that rejects or throws, runs past 30 seconds, cannot be written as
+  JSON (a cycle, a BigInt, a `toJSON` that throws, a function as the whole
+  value) or is larger than 8 MiB is left out. While an earlier `export` call of
+  the integration is still unsettled after its deadline, the next export
+  leaves it out without calling it again.
+- The export also names every integration that may hold data about the
+  person and was not asked: an installed integration whose manifest declares
+  `subjectData.storesPersonalData` but that registered no handler
+  (`extension-no-export-handler`); one that cannot run and is listed with a
+  handler, declares personal data or has its `ext_<id>` schema
+  (`extension-not-loaded`); and one the registry does not hold although it is
+  listed or its schema exists, for example after an uninstall that kept its
+  data (`extension-not-installed`). The export is still delivered: its
+  manifest and processing information list every extension with
+  `outcome: "included"` or `"unavailable"` and the `warningCode`, its README
+  names the extensions it asked and the file of each, and names each one left
+  out under "Extensions that could not be asked" with the reason and that the
+  operator has been asked to provide the data. Each one left out opens an
+  operator task `extension:<id>` on the case, with the code as its public code,
+  and is logged with the case id; the case cannot be completed until the
+  administrator resolves it. The tasks are opened under the case's lock with
+  a new version and an `export_incomplete` event; a case completed while the
+  export was collecting is reopened, and on a refused case the export is
+  refused.
+- An installed integration may describe its data for the processing
+  information in `subjectData.registrations` (at most 64). Each entry is a
+  catalogue registration without `source` and `collectorId`; the host sets
+  `source` to `"extension"` and, for a `collector` entry, `collectorId` to
+  `"extension:<id>"`, so the entry shows the outcome of the integration's
+  export. An `operator_task` entry has no collector and is shown as checked by
+  the operator. An entry may add a `title` (at most 200 characters) and
+  `description` (at most 2 000), which the report shows as its category and
+  purpose. An entry that fails the catalogue's schema, takes an id that is
+  already in the catalogue, declares `not_personal` or sets `source` or
+  `collectorId` is left out with one warning naming the integration and the
+  entry's index.
+
+In tests, `createMockIntegrationContext()` keeps the registered handler in
+`registered.subjectDataHandler`, and `eraseSubject(id)` and `exportSubject(id)`
+call it.
 
 ### Registering capabilities
 
@@ -1155,7 +1462,12 @@ local to `setup` where possible.
 `onShutdown` registers cleanup run when a generation retires or is discarded.
 Register cleanup as resources are created. Abort pending requests, cancel timers
 and unsubscribe listeners; prevent retired requests from publishing into new
-state.
+state. When a reload retires an installed integration or it is left out, the
+host waits at most 10 seconds for each of its handlers, logs a warning naming
+the integration, and goes on without it. When the API process stops, the
+installed integrations run their handlers side by side, each its own in
+order, and all of them share 5 seconds in total; the host then logs the
+integrations still running and shuts down without them.
 `getIntegrationsByDomain` lets an orchestrator enumerate its peers.
 `getProviderOrder(domain)` returns the operator's order for a domain: the
 integration ids in the `providerOrder` setting of the domain's orchestrator

@@ -20,19 +20,33 @@ export interface SafeAuthErrorEvent {
   errorCode?: string;
 }
 
+function describeAuthError(error: unknown): { errorClass: string; errorCode?: string } {
+  const errorClass = error instanceof Error ? (error.constructor?.name ?? "Error") : typeof error;
+  // The auth library's APIError keeps its code in the response body.
+  const candidate = error as { code?: unknown; body?: { code?: unknown } } | null | undefined;
+  const rawCode = candidate?.code ?? candidate?.body?.code;
+  const errorCode = typeof rawCode === "string" && SAFE_CODE.test(rawCode) ? rawCode : undefined;
+  return { errorClass, ...(errorCode ? { errorCode } : {}) };
+}
+
 export function safeAuthErrorEvent(
   error: unknown,
   requestId: string,
   method: string,
 ): SafeAuthErrorEvent {
-  const errorClass = error instanceof Error ? (error.constructor?.name ?? "Error") : typeof error;
-  const rawCode = (error as { code?: unknown } | null | undefined)?.code;
-  const errorCode = typeof rawCode === "string" && SAFE_CODE.test(rawCode) ? rawCode : undefined;
-  return {
-    event: "auth_handler_failed",
-    requestId,
-    method,
-    errorClass,
-    ...(errorCode ? { errorCode } : {}),
-  };
+  return { event: "auth_handler_failed", requestId, method, ...describeAuthError(error) };
+}
+
+export interface SafeAuthEndpointErrorEvent {
+  event: "auth_endpoint_failed";
+  errorClass: string;
+  errorCode?: string;
+}
+
+/**
+ * The same bounded description for a failure better-auth caught inside one of
+ * its endpoints and answered itself, where no request id is at hand.
+ */
+export function safeAuthEndpointErrorEvent(error: unknown): SafeAuthEndpointErrorEvent {
+  return { event: "auth_endpoint_failed", ...describeAuthError(error) };
 }

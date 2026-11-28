@@ -52,6 +52,11 @@ See [Reviews](./reviews.md) for key export and recovery limits.
    One download per account runs at a time; a second one started while the
    first is still running is refused until it finishes. A download that
    stalls is ended and can be started again.
+   Installed extensions that keep data about you add their answer under
+   `extensions/` in the archive. An extension that could not be asked is
+   listed in the README under "Extensions that could not be asked" with the
+   reason; the operator is asked to provide that data, and the request stays
+   open until they have.
 4. The request stays listed with its status and response deadline. Some
    sources can only be checked by the operator; the archive's report names
    them, and the request is completed once the operator has checked them.
@@ -89,7 +94,12 @@ warning, and confirm. If your last sign-in is older than ten minutes, sign in
 again when asked and then repeat the deletion. Deletion removes the
 OpenMapX account and its associated sign-in data, saved content, shares,
 vehicles, parking, timeline connection, settings, and review signing key.
-The operation cannot be undone through OpenMapX. Privacy-case records can be
+This data in OpenMapX itself is deleted immediately. Data that installed
+extensions keep about you is erased by each extension, usually at once, and
+otherwise as soon as that extension runs again; the operator is told while an
+erasure is waiting. If an installed extension keeps the account from being
+deleted, the app says so and the account stays unchanged; the operator has
+been told. The operation cannot be undone through OpenMapX. Privacy-case records can be
 retained under the instance's request-handling and retention process; account
 deletion does not necessarily close an active request. Contact the operator if
 one is still pending.

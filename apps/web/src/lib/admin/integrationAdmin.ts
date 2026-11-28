@@ -67,6 +67,11 @@ export function integrationAdminQueries(client: ApiClient, apiUrl: string) {
             await integrationOrThrow(sdk.getAdminProviderOrder(options(signal))),
           ),
       }),
+    safeMode: () =>
+      queryOptions({
+        queryKey: [...key, "safe-mode"],
+        queryFn: ({ signal }) => integrationOrThrow(sdk.getAdminSafeMode(options(signal))),
+      }),
     envVars: () =>
       queryOptions({
         queryKey: [...key, "env-vars"],
@@ -142,6 +147,7 @@ export function useIntegrationAdmin() {
         ),
       healthSweep: () =>
         integrationOrThrow(sdk.runAdminIntegrationHealthChecks(undefined, { client })),
+      leaveSafeMode: () => integrationOrThrow(sdk.leaveAdminSafeMode(undefined, { client })),
       patchConfig: (id: string, updates: Record<string, unknown>) =>
         integrationOrThrow(
           sdk.patchAdminIntegrationConfig(

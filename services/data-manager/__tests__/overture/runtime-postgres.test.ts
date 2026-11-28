@@ -2,8 +2,10 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { OVERTURE_PLACES_SCHEMA_VERSION } from "@openmapx/core/published-data";
-import type { DatabaseClient } from "@openmapx/integration-framework";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  fakeDatabaseClient,
+} from "@openmapx/integration-framework/testing";
 import type postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
@@ -114,10 +116,9 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
           ST_SetSRID(ST_MakePoint(6.0839, 50.7753), 4326), x'881f1d4887fffff'::BIGINT,
           '[{"property":"","dataset":"meta"}]', '2026-07-22.0')`,
     );
-    const database: DatabaseClient = {
-      execute: <T>(query: string, params: unknown[] = []) =>
-        pg.sql.unsafe(query, params as never[]) as unknown as Promise<T>,
-    };
+    const database = fakeDatabaseClient((query, params = []) =>
+      pg.sql.unsafe(query, params as never[]),
+    );
     setupPoiOverture(createMockIntegrationContext({ db: database }));
     bindKnowledgeDb(database);
 
@@ -174,9 +175,9 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
          ('gers-far', 'Café Aachen', 'cafe', 'cafe', ARRAY['cafe'], ARRAY[]::TEXT[],
           ST_SetSRID(ST_MakePoint(7.0000, 51.0000), 4326), x'881f1d4887ffffe'::BIGINT, '2026-07-22.0')`,
     );
-    const database: DatabaseClient = {
-      execute: (query, params = []) => pg.sql.unsafe(query, params as never[]),
-    } as DatabaseClient;
+    const database = fakeDatabaseClient((query, params = []) =>
+      pg.sql.unsafe(query, params as never[]),
+    );
 
     await withPublishedRelease(() =>
       expect(
@@ -207,9 +208,9 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
           )::geometry,
           x'881f1d4887ffffd'::BIGINT, '2026-07-22.0')`,
     );
-    const database: DatabaseClient = {
-      execute: (query, params = []) => pg.sql.unsafe(query, params as never[]),
-    } as DatabaseClient;
+    const database = fakeDatabaseClient((query, params = []) =>
+      pg.sql.unsafe(query, params as never[]),
+    );
 
     await withPublishedRelease(() =>
       expect(

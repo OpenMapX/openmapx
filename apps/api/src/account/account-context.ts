@@ -17,10 +17,19 @@ export interface AccountMutationContext {
   mutationKey: string;
   roleAudit: boolean;
   afterCommit: Array<() => Promise<void>>;
+  /**
+   * Errors better-auth caught inside the mutation and answered as a response,
+   * so the mutation can still recognise them once it rolls back.
+   */
+  failures: unknown[];
 }
 const context = new AsyncLocalStorage<AccountMutationContext>();
 export function currentAccountMutation() {
   return context.getStore();
+}
+/** Keeps `error` for the account mutation it was thrown in, if any. */
+export function recordAccountMutationFailure(error: unknown): void {
+  context.getStore()?.failures.push(error);
 }
 export function withAccountMutationContext<T>(
   value: AccountMutationContext,

@@ -1977,6 +1977,11 @@
     },
     "pending": []
   },
+  "/api/admin/safe-mode": {
+    "active": false,
+    "reason": null,
+    "integrationId": null
+  },
   "/api/admin/coverage": {
     "schemaVersion": 1,
     "snapshotId": "snapshot-fixture",

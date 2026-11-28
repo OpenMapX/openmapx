@@ -54,7 +54,7 @@ requests, can exclude an engine.
 | OSRM     | Driving                               | Coverage and profile depend on its prepared dataset; follows Valhalla in the default order      |
 
 Every engine call first takes one unit from that engine's shared budget,
-counted across all clients and API replicas in Valkey: by default 3,000 calls a
+counted across all clients in Valkey: by default 3,000 calls a
 minute and 500,000 a day per engine, set by the routing integration's
 `providerRequestsPerMinute` and `providerRequestsPerDay`. Calls to the public
 OSRM demo are held to its usage policy instead, 60 a minute and 10,000 a day;

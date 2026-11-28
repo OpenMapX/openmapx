@@ -44,6 +44,14 @@ describe("admin journey fixtures", () => {
     },
   );
 
+  it("answers the safe-mode state the integration list asks for, with safe mode off", () => {
+    expect((fixtures as Record<string, unknown>)["/api/admin/safe-mode"]).toEqual({
+      active: false,
+      reason: null,
+      integrationId: null,
+    });
+  });
+
   it("signs in an administrator with the same identity everywhere", () => {
     const session = fixtures["/api/auth/get-session"];
     expect(fixtures["/api/me"].user).toMatchObject({ id: session.user.id, role: "admin" });

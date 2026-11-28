@@ -4,14 +4,20 @@ import {
   appendErasureRequest,
   readErasureJournalKeyFile,
 } from "@openmapx/core/erasure-journal";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { currentAccountMutation } from "../account/account-context";
 import { assertAccountDeletionAllowed } from "../account/admin-invariant";
-import { type AuthDatabase, currentAuthDatabase } from "../account/auth-database";
+import {
+  type AuthDatabase,
+  currentAuthDatabase,
+  isTransactionalAuthDatabase,
+} from "../account/auth-database";
 import {
   dataManagerOfflinePackageArtifactReference,
   dataManagerOfflinePackageJobOwner,
 } from "../db/schema";
+import { runPendingErasures } from "../privacy/extension-subject-data";
+import { processLogger } from "../process-logger";
 import {
   deriveOfflinePackagePrincipal,
   OFFLINE_PACKAGE_PRINCIPAL_KEY_FILE_DEFAULT,
@@ -24,31 +30,30 @@ interface ErasureUser {
 }
 
 export interface UserErasureDependencies {
+  check(userId: string): Promise<void>;
   request(userId: string): Promise<string>;
   cleanup(user: ErasureUser): Promise<void>;
   complete(receiptId: string): Promise<void>;
 }
 
+/**
+ * The request is journalled in `after`, which Better Auth runs once the
+ * "user" row is deleted but still inside the account mutation's transaction.
+ * A deletion the database refuses therefore leaves no request that a restore
+ * would replay, and a request that cannot be written fails the deletion, so
+ * no committed deletion lacks one.
+ */
 export function createUserErasureHooks(dependencies: UserErasureDependencies): {
   before(user: ErasureUser): Promise<void>;
   after(user: ErasureUser): Promise<void>;
 } {
-  const pendingReceipts = new Map<string, string>();
   return {
     async before(user) {
-      const receiptId = await dependencies.request(user.id);
-      pendingReceipts.set(user.id, receiptId);
-      try {
-        await dependencies.cleanup(user);
-      } catch (error) {
-        pendingReceipts.delete(user.id);
-        throw error;
-      }
+      await dependencies.check(user.id);
+      await dependencies.cleanup(user);
     },
     async after(user) {
-      const receiptId = pendingReceipts.get(user.id);
-      if (!receiptId) return;
-      pendingReceipts.delete(user.id);
+      const receiptId = await dependencies.request(user.id);
       try {
         await dependencies.complete(receiptId);
       } catch {
@@ -124,8 +129,14 @@ export async function removeOfflinePackageOwnership(
  * erasure journal and the offline-package rows.
  */
 export const userErasureHooks = createUserErasureHooks({
+  check: assertAccountDeletionAllowed,
   request: async (userId) => {
-    await assertAccountDeletionAllowed(userId);
+    // A deferred key, which an extension may declare, would refuse only at
+    // COMMIT, after the request is written; checking it now refuses the
+    // deletion before the journal holds a request a restore would replay.
+    // Outside a transaction no check is still deferred.
+    if (isTransactionalAuthDatabase())
+      await currentAuthDatabase().execute(sql`set constraints all immediate`);
     return appendErasureRequest(journalPath(), readJournalKey(), userId);
   },
   cleanup: async (user) =>
@@ -133,7 +144,26 @@ export const userErasureHooks = createUserErasureHooks({
   complete: async (receiptId) => {
     const complete = () => appendErasureCompleted(journalPath(), readJournalKey(), receiptId);
     const context = currentAccountMutation();
-    if (context) context.afterCommit.push(complete);
-    else await complete();
+    if (context) {
+      context.afterCommit.push(complete, async () => startExtensionErasures());
+      return;
+    }
+    try {
+      await complete();
+    } finally {
+      startExtensionErasures();
+    }
   },
 });
+
+/**
+ * Starts erasing the deleted account's data in the integrations that hold
+ * some, without waiting: an extension's handler never delays or fails the
+ * deletion. The erasure trigger recorded one pending row per integration in
+ * the deleting transaction; what this run leaves is retried later.
+ */
+function startExtensionErasures(): void {
+  runPendingErasures().catch((error: unknown) => {
+    processLogger.warn({ err: error }, "Processing pending erasures failed");
+  });
+}

@@ -105,6 +105,19 @@ describe("DeleteAccountActions", () => {
     expect(view.queryByText(en.account.freshSignIn.signInAgain)).toBeNull();
   });
 
+  it("explains that an installed extension keeps the account from being deleted", async () => {
+    deleteResult = { error: { code: "EXTENSION_BLOCKS_ACCOUNT_DELETION", status: 409 } };
+    const view = renderActions();
+    fireEvent.click(view.getByRole("button", { name: en.legal.deleteAccountButton }));
+    const buttons = view.getAllByRole("button", { name: en.legal.deleteAccountButton });
+    fireEvent.click(nth(buttons, -1));
+
+    const message = await view.findByText(en.account.deletionBlockedByExtension);
+    expect(message.closest('[role="alert"]')).not.toBeNull();
+    expect(view.queryByText(en.account.failedDeleteAccount)).toBeNull();
+    expect(view.queryByRole("status")).toBeNull();
+  });
+
   it("reports a failure rather than claiming success", async () => {
     deleteResult = { error: { message: "nope" } };
     const view = renderActions();

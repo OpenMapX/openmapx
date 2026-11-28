@@ -108,6 +108,7 @@ const CLOSED_VALUE_SETS: Record<string, { table: string; column: string; values:
       "export_started",
       "export_delivered",
       "export_failed",
+      "export_incomplete",
     ],
   },
   data_subject_request_event_actor_kind_check: {

@@ -141,6 +141,7 @@ export const privacyRequestsRoute: FastifyPluginAsync<PrivacyRequestsRouteOption
           request: row,
           subjectUserId: row.userId,
           database,
+          recordExtensionsLeftOut: (leftOut) => service.recordExtensionsLeftOut(row.id, leftOut),
           ...(options.exportSources ?? {}),
           dawarich: {
             ...(options.exportSources?.dawarich ?? {}),

@@ -24,8 +24,10 @@ import {
 } from "@openmapx/core/erasure-journal";
 import { openMapXCategoryToOvertureConcepts } from "@openmapx/core/places/overtureCategoryMap";
 import { services } from "@openmapx/core/server";
-import type { DatabaseClient } from "@openmapx/integration-framework";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  fakeDatabaseClient,
+} from "@openmapx/integration-framework/testing";
 import { execa } from "execa";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { setup as setupPoiOverture } from "../../../integrations/poi-overture/index";
@@ -655,10 +657,7 @@ async function ingestOverture(
 
 /** The API's readers of the search index and of Overture places, on `sql`. */
 function apiReaders(sql: DatabaseSql) {
-  const db: DatabaseClient = {
-    execute: <T>(query: string, params: unknown[] = []) =>
-      sql.unsafe(query, params as never[]) as unknown as Promise<T>,
-  };
+  const db = fakeDatabaseClient((query, params = []) => sql.unsafe(query, params as never[]));
   const aliases = createMockIntegrationContext({ db });
   setupOsmAliases(aliases);
   const overture = createMockIntegrationContext({ db });

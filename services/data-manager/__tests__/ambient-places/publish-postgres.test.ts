@@ -8,7 +8,10 @@ import {
   readAmbientPlaceByGers,
   readAmbientTile,
 } from "@openmapx/core/ambient-places-server";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  fakeDatabaseClient,
+} from "@openmapx/integration-framework/testing";
 import { drizzle } from "drizzle-orm/postgres-js";
 import { PbfReader } from "pbf";
 import postgres from "postgres";
@@ -301,10 +304,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         const { getPlaceResolver } = await import("../../../../packages/place-ids/src/index.js");
         setup(
           createMockIntegrationContext({
-            db: {
-              execute: async <T>(query: string, params?: unknown[]) =>
-                (await pg.sql.unsafe(query, params as never[])) as unknown as T,
-            },
+            db: fakeDatabaseClient((query, params) => pg.sql.unsafe(query, params as never[])),
           }),
         );
         expect(await getPlaceResolver("overture")?.("gers-a", { lang: "en" })).toMatchObject({

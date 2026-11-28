@@ -353,6 +353,7 @@ async function wire() {
     (await import("../admin-configuration-migration")).adminConfigurationMigrationRoute,
     (await import("../admin-credential-transfer")).adminCredentialTransferRoute,
     (await import("../admin-provider-order")).adminProviderOrderRoute,
+    (await import("../admin-safe-mode")).adminSafeModeRoute,
   ])
     await app.register(route, { prefix: "/api" });
   await app.ready();
@@ -465,10 +466,17 @@ describe("actual integration producers through generated SDK", () => {
           ),
         () => sdk.getAdminOverview(options),
         () => sdk.getAdminProviderOrder(options),
+        () => sdk.getAdminSafeMode(options),
+        () => sdk.leaveAdminSafeMode(undefined, options),
       ];
       for (const call of cases)
         expect(await call(), call.toString()).toMatchObject({ status: 200 });
-      expect(cases).toHaveLength(20);
+      expect(cases).toHaveLength(22);
+      expect((await sdk.getAdminSafeMode(options)).data).toEqual({
+        active: false,
+        reason: null,
+        integrationId: null,
+      });
       const order = await sdk.getAdminProviderOrder(options);
       assert(order.status === 200);
       expect(order.data.domains.find((entry) => entry.domain === "geocoding")).toEqual({
@@ -721,7 +729,24 @@ describe("actual integration producers through generated SDK", () => {
       expect(detail.data).toMatchObject({ status: "failed", loadErrorPhase: "import" });
       mockGetIntegration.mockReturnValueOnce({ ...failed, loadState: "incompatible" });
       expect((await sdk.getAdminIntegration(failed.id, { client })).data).toMatchObject({
-        status: "failed",
+        status: "incompatible",
+      });
+      mockGetIntegration.mockReturnValueOnce({
+        ...failed,
+        loadState: "safe-mode",
+        loadError: undefined,
+      });
+      expect((await sdk.getAdminIntegration(failed.id, { client })).data).toMatchObject({
+        status: "safe-mode",
+        loadErrorPhase: null,
+      });
+      mockGetIntegration.mockReturnValueOnce({
+        ...failed,
+        loadState: "disabled",
+        loadError: undefined,
+      });
+      expect((await sdk.getAdminIntegration(failed.id, { client })).data).toMatchObject({
+        status: "disabled",
       });
       // Switched off by the operator: it never tried to load.
       mockGetIntegration.mockReturnValueOnce({

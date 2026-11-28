@@ -40,17 +40,37 @@ export const integrationSql = postgres(connectionString, {
   },
 });
 
+/**
+ * Transactions integrations run through `ctx.db.transaction`. Each sets its
+ * own statement and idle-in-transaction timeouts; the pool's 30-second
+ * statement timeout only bounds those first statements. Two connections keep
+ * long transactions away from the request-path pool above and the main pool.
+ */
+export const extensionSql = postgres(connectionString, {
+  max: 2,
+  connect_timeout: 10,
+  idle_timeout: 60,
+  connection: {
+    application_name: "openmapx-api-extensions",
+    statement_timeout: 30000,
+    TimeZone: DATABASE_SESSION_TIME_ZONE,
+  },
+});
+
 export const db = drizzle(sql, { schema });
 
 /**
  * One connection for startup migrations, so the migration lock and the
  * migration transaction share a session. Operators find it in
- * `pg_stat_activity` by its application name.
+ * `pg_stat_activity` by its application name. `settings` are further
+ * server parameters for the whole session; set at connection time, they are
+ * what `RESET ALL` returns to.
  */
-export function openMigrationSession() {
+export function openMigrationSession(settings: Record<string, string> = {}) {
   return postgres(connectionString, {
     max: 1,
     connection: {
+      ...settings,
       application_name: "openmapx-api-migrations",
       TimeZone: DATABASE_SESSION_TIME_ZONE,
     },

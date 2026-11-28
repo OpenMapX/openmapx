@@ -10,4 +10,6 @@ export const ListAdminIntegrations200ItemStatus = {
   unconfigured: "unconfigured",
   disabled: "disabled",
   failed: "failed",
+  "safe-mode": "safe-mode",
+  incompatible: "incompatible",
 } as const;

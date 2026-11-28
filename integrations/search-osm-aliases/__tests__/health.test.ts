@@ -1,5 +1,9 @@
 import { OSM_SEARCH_SCHEMA_VERSION } from "@openmapx/core/published-data";
-import { createMockIntegrationContext, nth } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  fakeDatabaseClient,
+  nth,
+} from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
 import { setup } from "../index.js";
 
@@ -24,7 +28,7 @@ describe("OSM alias index health", () => {
           schema_version: OSM_SEARCH_SCHEMA_VERSION,
         },
       ]);
-    const ctx = createMockIntegrationContext({ db: { execute } });
+    const ctx = createMockIntegrationContext({ db: fakeDatabaseClient(execute) });
     setup(ctx);
     await expect(nth(ctx.registered.healthChecks, 0)()).resolves.toMatchObject({
       status: "up",
@@ -44,7 +48,7 @@ describe("OSM alias index health", () => {
           schema_version: OSM_SEARCH_SCHEMA_VERSION + 1,
         },
       ]);
-    const ctx = createMockIntegrationContext({ db: { execute } });
+    const ctx = createMockIntegrationContext({ db: fakeDatabaseClient(execute) });
     setup(ctx);
     await expect(nth(ctx.registered.healthChecks, 0)()).resolves.toMatchObject({
       status: "down",

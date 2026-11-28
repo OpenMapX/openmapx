@@ -1482,6 +1482,34 @@ describe("GET /places/:id", () => {
     expect(mockLookupByNameAndCoords).toHaveBeenCalled();
   });
 
+  it("coord-falls-back for the scheme of an installed integration the host holds back", async () => {
+    // The integration is installed, so it owns the scheme, but safe mode or
+    // its disabled extension kept its code out: the host reports the scheme
+    // as switched off, and a shared link degrades like a config-disabled one.
+    mockIsIntegrationScheme.mockImplementation((scheme) => scheme === "acme-places");
+    mockIsEnabledIntegrationScheme.mockReturnValue(false);
+    mockLookupByNameAndCoords.mockResolvedValue(MOCK_PLACE);
+    mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
+    mockBuildReviewLinks.mockReturnValue([]);
+
+    try {
+      const res = await app.inject({
+        method: "GET",
+        url: `/places/${encodeURIComponent("acme-places:shop-17")}?${qs({
+          lat: "52.52",
+          lng: "13.37",
+          name: "Acme Shop",
+        })}`,
+      });
+
+      expect(res.statusCode).toBe(200);
+      expect(mockIsEnabledIntegrationScheme).toHaveBeenCalledWith("acme-places");
+      expect(mockLookupByNameAndCoords).toHaveBeenCalled();
+    } finally {
+      mockIsIntegrationScheme.mockReturnValue(false);
+    }
+  });
+
   it("returns 404 for an enabled integration scheme with no resolver (no coords supplied)", async () => {
     // When no lat/lng are provided AND the scheme belongs to an enabled
     // integration whose resolver never registered, the route must 404.

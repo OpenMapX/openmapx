@@ -133,12 +133,82 @@ export interface Logger {
   debug(message: string, ...args: unknown[]): void;
 }
 
+/** The statements of one `DatabaseClient.transaction` callback. */
+export interface DatabaseTransaction {
+  execute<T = unknown>(query: string, params?: unknown[]): Promise<T>;
+}
+
+/**
+ * `ctx.db`: present when the manifest requires the `postgis` service or
+ * declares `database.migrations: true`. An integration that ships migrations
+ * owns the schema named in `schema`; in both methods its search path is
+ * that schema, then `extensions`, where PostGIS lives. `public` is not on
+ * it: name platform tables with their schema.
+ */
 export interface DatabaseClient {
+  /** One statement on the request-path pool, which ends it after five seconds. */
   execute<T = unknown>(
     query: string,
     params?: unknown[],
     options?: { signal?: AbortSignal },
   ): Promise<T>;
+  /**
+   * Runs `fn` in one transaction that commits when `fn` resolves and rolls
+   * back when it rejects. `timeoutMs` (default 30 000, at least 1 000, at most
+   * 900 000) bounds the wait for a connection, `fn`, each statement and each
+   * pause between statements; when one of them outlasts it, the transaction
+   * is rolled back and the call rejects with `ProviderTimeoutError`. Once `fn`
+   * has resolved, the COMMIT decides: the call settles with its outcome, even
+   * past `timeoutMs`, and the COMMIT itself may last up to `timeoutMs` again.
+   * So a `ProviderTimeoutError` always means nothing was committed.
+   *
+   * An integration's transactions run one at a time, in the order they were
+   * called; `execute` calls are not queued behind them. A `transaction` called
+   * inside `fn` is refused at once; use the `tx` passed to `fn`.
+   */
+  transaction<T>(
+    fn: (tx: DatabaseTransaction) => Promise<T>,
+    options?: { timeoutMs?: number },
+  ): Promise<T>;
+  /** The schema the integration owns; absent when it ships no migrations. */
+  readonly schema?: string;
+}
+
+/**
+ * When a task registered with `ctx.schedule` runs: exactly one of `cron` (five
+ * fields, minute precision, evaluated in UTC) and `everyMs` (at least 60 000).
+ * `deadlineMs` (1 000 to 21 600 000) bounds each run.
+ */
+export interface ScheduleOptions {
+  cron?: string;
+  everyMs?: number;
+  deadlineMs: number;
+}
+
+/**
+ * What an integration that stores personal data does for one person, named
+ * by `subjectId`, the platform's account id. `erase` removes everything the
+ * integration holds about the person. It runs after the account is deleted,
+ * so rows that cascade from `"user"` are already gone; it may also run again
+ * for the same person. It must succeed when it finds nothing. After `erase`,
+ * the integration must not store data about that account again, for example
+ * from a scheduled task or a provider request that was already under way.
+ * The host gives each call 30 seconds.
+ */
+export interface SubjectDataHandler {
+  /**
+   * Returns what the integration holds about the person `subjectId`, and
+   * only about that person, for the person's data export: plain
+   * JSON-serialisable values (objects, arrays, strings, numbers, booleans,
+   * `null`), at most 8 MiB once written as JSON. An answer that is larger,
+   * cannot be written as JSON or takes longer than 30 seconds is left out of
+   * the export, which then names the integration. `toJSON` methods and
+   * getters of the returned value run synchronously in the API process while
+   * the host writes it, and nothing can interrupt them there; a loop in one
+   * stops the whole API.
+   */
+  export(subjectId: string): Promise<unknown>;
+  erase(subjectId: string): Promise<void>;
 }
 
 /** A `:name` segment's param name, without a `.png`-style or `-` suffix after it. */
@@ -711,6 +781,33 @@ export interface IntegrationContext {
    */
   onActivate(activate: () => void, rollback?: () => void): void;
   onShutdown(cleanup: () => Promise<void>): void;
+
+  /**
+   * Runs `handler` on a schedule once the integration's generation is live.
+   * Call it from `setup()`: it throws there on a name that does not match
+   * `^[a-z0-9][a-z0-9-]{0,63}$` or that the integration already scheduled,
+   * and on invalid `options`; a call after `setup()` has returned is ignored
+   * with a warning. An `everyMs` task first runs one interval after the
+   * generation goes live; a tick missed while the API was down is not made up.
+   * A run is skipped while the task's previous run has not settled. The run's
+   * `signal` aborts at `deadlineMs`, when a reload replaces the integration and
+   * when the API stops; a run still going at its deadline is recorded as
+   * failed. Each run is listed in the administration's Activity.
+   */
+  schedule(
+    name: string,
+    options: ScheduleOptions,
+    handler: (run: { signal: AbortSignal }) => Promise<void>,
+  ): void;
+
+  /**
+   * Registers how the host erases and exports what this integration holds
+   * about a person. Call it from `setup()`, at most once; a second call
+   * throws. An account deletion is recorded for every integration that
+   * registered a handler, also while the integration cannot run, and `erase`
+   * is called until it succeeds.
+   */
+  registerSubjectDataHandler(handler: SubjectDataHandler): void;
 
   /** Query all enabled integrations registered under a domain. */
   getIntegrationsByDomain(domain: string): LoadedIntegration[];

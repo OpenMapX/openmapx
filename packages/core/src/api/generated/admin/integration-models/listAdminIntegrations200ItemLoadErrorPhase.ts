@@ -10,4 +10,5 @@ export const ListAdminIntegrations200ItemLoadErrorPhase = {
   migrate: "migrate",
   setup: "setup",
   deadline: "deadline",
+  platform: "platform",
 } as const;

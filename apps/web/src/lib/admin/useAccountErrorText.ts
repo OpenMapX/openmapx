@@ -12,6 +12,7 @@ const ACCOUNT_ERROR_KEYS: Readonly<Record<string, string>> = {
   AUTH_POLICY_CONFLICT: "policyConflict",
   ADMIN_OPERATION_IN_PROGRESS: "operationInProgress",
   LAST_ADMIN_REQUIRED: "lastAdminRequired",
+  EXTENSION_BLOCKS_ACCOUNT_DELETION: "extensionBlocksDeletion",
   ROLE_VERSION_CONFLICT: "roleConflict",
   INVALID_PASSWORD: "passwordPolicy",
   PASSWORD_TOO_SHORT: "passwordPolicy",

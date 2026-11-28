@@ -495,8 +495,8 @@ keep its earlier acquisition metadata. Use `ctx.http` for requests and
 When several integrations use the same upstream client identity, use its
 explicit shared admission capability with the upstream's quota identity rather
 than the integration's result-cache key. Treat missing capabilities and store
-failure according to the provider's policy; process-local counters do not
-coordinate replicas. See
+failure according to the provider's policy; process-local counters are not
+shared between integrations and start over when the API restarts. See
 [shared request admission](./integration-system.md#shared-request-admission)
 for numeric policy, cooldown-only calls, cancellation and cache-clear semantics.
 

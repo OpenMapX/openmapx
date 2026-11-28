@@ -7,6 +7,7 @@ import {
   type CacheClient,
   type CustomHealthCheckFn,
   createActivationTransactionScope,
+  describeThrown,
   type HttpClient,
   type IntegrationContext,
   type IntegrationDataSource,
@@ -25,6 +26,7 @@ import {
   satisfiesPlatformVersion,
   validateDataSource,
   validateManifest,
+  WEB_PLATFORM_VERSION,
 } from "@openmapx/integration-framework";
 import {
   integrationBackendBundlePath,
@@ -40,7 +42,8 @@ import {
   snapshotPlaceResolvers,
 } from "@openmapx/place-ids";
 import type { FastifyInstance } from "fastify";
-import { integrationSql } from "./db";
+import { extensionSql, integrationSql } from "./db";
+import { applyExtensionMigrations, schemaAheadAttentionKey } from "./extension-migrations";
 import { assertBundleImports } from "./integration-bundle-imports";
 import { createCacheClient, createHttpClient, createLogger } from "./integration-clients";
 import { type IntegrationCodeCache, prepareIntegrationCodeCache } from "./integration-code-cache";
@@ -51,7 +54,7 @@ import {
   resolveIntegrationConfigWithSourcesStrict,
   warnInvalidConfig,
 } from "./integration-config";
-import { createIntegrationDb } from "./integration-db";
+import { createIntegrationDb, integrationDbAccess } from "./integration-db";
 import { readIntegrationFile, setVerifiedIntegrationFiles } from "./integration-files";
 import { createProviderRegistrars, type ProviderRegistrars } from "./integration-registrars";
 import {
@@ -63,22 +66,38 @@ import {
   resetIntegrationRoutes,
   rollbackIntegrationRouteStaging,
 } from "./integration-routes";
+import { createIntegrationScheduler, type IntegrationScheduler } from "./integration-scheduler";
 import {
   bindPlaceResolverToScope,
   bindProviderToScope,
   currentIntegrationScope,
   type IntegrationScope,
   ignoredAfterUnload,
+  PROCESS_SHUTDOWN_BUDGET_MS,
   runInIntegrationScope,
   SETUP_DEADLINE_MS,
   SETUP_WARNING_MS,
+  SHUTDOWN_HANDLER_DEADLINE_MS,
 } from "./integration-scope";
+import {
+  forgetSubjectDataHandler,
+  registerSubjectDataHandlerFor,
+  setSubjectDataIntegrationSource,
+} from "./privacy/extension-handlers";
+import { runPendingErasures, syncSubjectHandlerTable } from "./privacy/extension-subject-data";
 import { processLogger } from "./process-logger";
 import { redis } from "./redis";
+import {
+  isSafeModeActive,
+  markIntegrationLoaded,
+  markIntegrationLoading,
+  setSafeModeHost,
+} from "./safe-mode";
 import {
   type AdministrativeConfigurationReadContext,
   assertAdministrativeConfigurationRead,
 } from "./services/administrative-configuration-context";
+import { raiseAttention, resolveAttention } from "./services/attention";
 import {
   AttributionIndex,
   defaultMotisLicenseFile,
@@ -87,6 +106,7 @@ import {
 } from "./services/attribution";
 import type { ManifestDataSource } from "./services/attribution/types";
 import { loadAllBindingsByIntegration } from "./services/capability-bindings";
+import { disabledExtensionIntegrationIds } from "./services/installed-extension-state";
 import {
   executeAllIntegrationHealthChecks,
   getCachedIntegrationHealthSnapshot,
@@ -95,6 +115,7 @@ import {
   integrationRuntimeEvidence,
   stageIntegrationRuntimeEvidence,
 } from "./services/integration-runtime-evidence";
+import { createTaskRunStore } from "./services/integration-task-runs";
 import { getMetricsRecorder } from "./services/metrics/recorder";
 import { cursorCodecFromEnvironment } from "./services/opaque-cursor";
 import {
@@ -492,13 +513,20 @@ function manifestDeclaresSecretFields(manifest: IntegrationManifest): boolean {
 }
 
 /**
- * `ctx.db` on the integration pool when the manifest requires PostGIS (via
- * `requires: [{ service: "postgis" }]`); `undefined` otherwise. Shared by cold
- * start and reload.
+ * `ctx.db` when the manifest requires PostGIS or ships migrations;
+ * `undefined` otherwise. Its calls do nothing once `scope` is revoked.
  */
-function buildIntegrationDb(manifest: IntegrationManifest): IntegrationContext["db"] {
-  const needsDb = manifest.requires?.some((r) => r.service === "postgis");
-  return needsDb ? createIntegrationDb(integrationSql) : undefined;
+function buildIntegrationDb(
+  manifest: IntegrationManifest,
+  scope: IntegrationScope,
+): IntegrationContext["db"] {
+  const access = integrationDbAccess(manifest);
+  return access
+    ? createIntegrationDb(
+        { requests: integrationSql, transactions: extensionSql },
+        { ...access, integrationId: manifest.id, revocation: { scope, log: hostLog } },
+      )
+    : undefined;
 }
 
 /**
@@ -660,6 +688,161 @@ function setRuntimeDataSources(
 
 type DiscoveredManifest = Awaited<ReturnType<typeof discoverManifests>>[number];
 
+/** Why this release cannot run an installed manifest, and the version it needs. */
+export interface IntegrationIncompatibility {
+  reason: "platform" | "webPlatform";
+  required: string;
+}
+
+/**
+ * The integration ids whose extension an operator disabled. `null` restores
+ * the default, which reads `installed_extension.enabled`.
+ */
+let disabledExtensionResolver: (() => Promise<ReadonlySet<string>>) | null = null;
+
+export function setDisabledExtensionResolver(
+  fn: (() => Promise<ReadonlySet<string>>) | null,
+): void {
+  disabledExtensionResolver = fn;
+}
+
+/**
+ * Whether this release can run an installed manifest: `null` when it can. It
+ * is called once for each installed manifest of a generation. `null` restores
+ * the default, the manifest's `platform` against `PLATFORM_VERSION`.
+ */
+let compatibilityResolver:
+  | ((manifest: IntegrationManifest) => IntegrationIncompatibility | null)
+  | null = null;
+
+export function setCompatibilityResolver(
+  fn: ((manifest: IntegrationManifest) => IntegrationIncompatibility | null) | null,
+): void {
+  compatibilityResolver = fn;
+}
+
+/** A community manifest always states its protocol; validation requires it. */
+function platformIncompatibility(manifest: IntegrationManifest): IntegrationIncompatibility | null {
+  const required = manifest.platform ?? "";
+  return satisfiesPlatformVersion(required) ? null : { reason: "platform", required };
+}
+
+function incompatibilityMessage({ reason, required }: IntegrationIncompatibility): string {
+  return reason === "webPlatform"
+    ? `requires web platform ${required}, this is ${WEB_PLATFORM_VERSION}`
+    : `requires platform ${required}, this is ${PLATFORM_VERSION}`;
+}
+
+/** Why an installed integration is not loaded in a generation, recorded on its entry. */
+interface InstalledLoadGate {
+  loadState: "safe-mode" | "disabled" | "incompatible" | "failed";
+  loadError?: IntegrationLoadError;
+}
+
+const GATE_RETRY_DELAY_MS = 5_000;
+/** The extension state is read from the database, which may hang rather than fail. */
+const GATE_READ_DEADLINE_MS = 10_000;
+const EXTENSION_STATE_UNREADABLE = "could not read extension state";
+
+function withinGateDeadline<T>(read: () => Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    read(),
+    new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error("Reading the extension state timed out")),
+        GATE_READ_DEADLINE_MS,
+      );
+    }),
+  ]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * Decides, once per generation and before any installed integration is
+ * loaded, which installed integrations must not load, keyed by directory. In
+ * safe mode none loads and the extension state is not read. Otherwise an
+ * integration whose extension is disabled, or that this release cannot run,
+ * is held back. When that state cannot be read (at boot after one retry),
+ * no installed integration loads in the generation: an extension disabled
+ * because it stopped the API must never load because a query failed.
+ */
+async function readInstalledLoadGates(
+  sorted: DiscoveredManifest[],
+  options: { retry: boolean },
+): Promise<ReadonlyMap<string, InstalledLoadGate>> {
+  const installed = sorted.filter(
+    ({ manifest, isBuiltIn }) =>
+      !isBuiltIn && validateManifest(manifest, { firstParty: false }).valid,
+  );
+  const gates = new Map<string, InstalledLoadGate>();
+  if (installed.length === 0) return gates;
+  if (isSafeModeActive()) {
+    for (const { directory } of installed) gates.set(directory, { loadState: "safe-mode" });
+    return gates;
+  }
+  const read = async () => {
+    const disabled = await withinGateDeadline(
+      disabledExtensionResolver ?? (() => disabledExtensionIntegrationIds()),
+    );
+    const incompatibility = compatibilityResolver ?? platformIncompatibility;
+    const result = new Map<string, InstalledLoadGate>();
+    for (const { manifest: raw, directory } of installed) {
+      const manifest = raw as IntegrationManifest;
+      if (disabled.has(manifest.id)) {
+        result.set(directory, { loadState: "disabled" });
+        continue;
+      }
+      const refused = incompatibility(manifest);
+      if (refused)
+        result.set(directory, {
+          loadState: "incompatible",
+          loadError: { phase: "import", message: incompatibilityMessage(refused) },
+        });
+    }
+    return result;
+  };
+  try {
+    return await read();
+  } catch (error) {
+    hostLog.warn("Could not read which installed extensions may load", { err: error });
+  }
+  if (options.retry) {
+    await new Promise((resolve) => setTimeout(resolve, GATE_RETRY_DELAY_MS));
+    try {
+      return await read();
+    } catch (error) {
+      hostLog.warn("Could not read which installed extensions may load", { err: error });
+    }
+  }
+  hostLog.error(
+    "No installed integration is loaded in this generation: the extension state could not be read",
+  );
+  for (const { directory } of installed)
+    gates.set(directory, {
+      loadState: "failed",
+      loadError: { phase: "platform", message: EXTENSION_STATE_UNREADABLE },
+    });
+  return gates;
+}
+
+/** The records of installed integrations a gate held back, whose code was never imported. */
+const heldBackRecords = new WeakSet<LoadedIntegration>();
+
+/** Records an installed integration a gate holds back, with its manifest, switched off. */
+function holdBack(integration: LoadedIntegration, gate: InstalledLoadGate, log: Logger): void {
+  heldBackRecords.add(integration);
+  integration.enabled = false;
+  integration.loadState = gate.loadState;
+  if (gate.loadError) integration.loadError = gate.loadError;
+  const reason =
+    gate.loadState === "safe-mode"
+      ? "the API runs in safe mode"
+      : gate.loadState === "disabled"
+        ? "its extension is disabled"
+        : (gate.loadError?.message ?? gate.loadState);
+  log.warn(`Installed integration ${integration.id} is not loaded: ${reason}`);
+}
+
 /**
  * Resolves each integration's configuration at most once per generation, and
  * the provider order of every orchestrator before any setup runs: a provider's
@@ -673,6 +856,7 @@ async function prepareGenerationConfig(
     manifest: IntegrationManifest,
     directory: string,
   ) => Promise<Record<string, ConfigValueWithSource>>,
+  gates: ReadonlyMap<string, InstalledLoadGate>,
 ): Promise<{
   configOf: (manifest: IntegrationManifest, directory: string) => Promise<Record<string, unknown>>;
   orders: ReadonlyMap<string, readonly string[]>;
@@ -699,8 +883,9 @@ async function prepareGenerationConfig(
     if (!validateManifest(raw, { firstParty: isBuiltIn }).valid) continue;
     const manifest = raw as IntegrationManifest;
     if (seen.has(manifest.id)) continue;
-    if (!isBuiltIn && !satisfiesPlatformVersion(manifest.platform ?? "")) continue;
     seen.add(manifest.id);
+    // A held-back integration keeps its id in the registry but sets no order.
+    if (!isBuiltIn && gates.has(directory)) continue;
     if (!ORCHESTRATOR_IDS.has(manifest.id)) continue;
     const entry = (await withSourcesOf(manifest, directory)).providerOrder;
     orders.set(
@@ -723,7 +908,6 @@ function buildIntegrationContext(args: {
   log: Logger;
   http: HttpClient;
   cache: CacheClient;
-  db: IntegrationContext["db"];
   requiresMap: ReturnType<typeof resolveRequiresForIntegration>;
   providers: Map<string, unknown[]>;
   shutdownHandlers: Array<() => Promise<void>>;
@@ -741,7 +925,6 @@ function buildIntegrationContext(args: {
     log,
     http,
     cache,
-    db,
     requiresMap,
     providers,
     shutdownHandlers,
@@ -778,6 +961,11 @@ function buildIntegrationContext(args: {
     (...args: A): R =>
       ignoredAfterUnload(scope, method, hostLog) ? inert() : fn(...args);
   const nothing = () => undefined;
+  // Tasks are staged while setup runs and start with the generation; a task
+  // scheduled later would belong to no generation.
+  let acceptsTasks = true;
+  let warnedLateTask = false;
+  let warnedLateSubjectDataHandler = false;
   const registrars = createProviderRegistrars({
     integrationId: id,
     manifest,
@@ -790,7 +978,7 @@ function buildIntegrationContext(args: {
     config,
     http,
     cache,
-    db,
+    db: buildIntegrationDb(manifest, scope),
     log,
     secrets: { get: (key: string) => getSecret(id, key) },
     attributionIndex: getAttributionIndex() ?? undefined,
@@ -885,6 +1073,42 @@ function buildIntegrationContext(args: {
       },
       nothing,
     ),
+    schedule: live(
+      "schedule",
+      (name, options, handler) => {
+        if (!acceptsTasks) {
+          if (!warnedLateTask) {
+            warnedLateTask = true;
+            hostLog.warn(`Integration ${id} scheduled task ${name} after setup; ignoring it`, {
+              integrationId: id,
+              task: name,
+            });
+          }
+          return;
+        }
+        integrationScheduler().stage(id, scope, name, options, handler);
+      },
+      nothing,
+    ),
+    registerSubjectDataHandler: live(
+      "registerSubjectDataHandler",
+      (handler) => {
+        // The handler table is written as the generation goes live; a later
+        // registration would not be listed, so deletions would go unrecorded.
+        if (!acceptsTasks) {
+          if (!warnedLateSubjectDataHandler) {
+            warnedLateSubjectDataHandler = true;
+            hostLog.warn(
+              `Integration ${id} registered a subject-data handler after setup; ignoring it`,
+              { integrationId: id },
+            );
+          }
+          return;
+        }
+        registerSubjectDataHandlerFor(integration, scope, handler);
+      },
+      nothing,
+    ),
     getIntegrationsByDomain(domain: string) {
       return integrationsByDomain(domain);
     },
@@ -933,6 +1157,9 @@ function buildIntegrationContext(args: {
     unsubscribeAll() {
       for (const unsubscribe of [...subscriptions]) unsubscribe();
     },
+    closeTasks() {
+      acceptsTasks = false;
+    },
   });
   return ctx;
 }
@@ -945,9 +1172,35 @@ interface IntegrationContextControl {
   discardActivations(): void;
   /** Removes every `ctx.on` subscription the context made. */
   unsubscribeAll(): void;
+  /**
+   * Ends `setup`'s chance to schedule tasks and register a subject-data
+   * handler; later calls are ignored.
+   */
+  closeTasks(): void;
 }
 
 const contextControls = new WeakMap<IntegrationContext, IntegrationContextControl>();
+
+let scheduler: IntegrationScheduler | null = null;
+
+/** The scheduler of every integration's tasks, created on first use. */
+function integrationScheduler(): IntegrationScheduler {
+  scheduler ??= createIntegrationScheduler({ runs: createTaskRunStore(), log: hostLog });
+  return scheduler;
+}
+
+/**
+ * Fails the task runs a previous API process left running. The server calls
+ * it once at boot, before the first generation starts its tasks.
+ */
+export function recoverInterruptedIntegrationTasks(): Promise<number> {
+  return integrationScheduler().recoverInterrupted();
+}
+
+/** Aborts every scheduled task's run and stops its timers, without waiting for handlers. */
+export function stopIntegrationTasks(): void {
+  scheduler?.stop();
+}
 
 /** The scope each loaded integration's code runs in, for this generation. */
 const integrationScopes = new WeakMap<LoadedIntegration, IntegrationScope>();
@@ -972,6 +1225,51 @@ const hostLog: Logger = (() => {
       );
   return { info: write("info"), warn: write("warn"), error: write("error"), debug: write("debug") };
 })();
+
+/**
+ * Runs an integration's shutdown handlers one after another and passes each
+ * failure to `onError`. A handler of an installed integration is awaited for
+ * at most `SHUTDOWN_HANDLER_DEADLINE_MS` and then left running, so none can
+ * hold up start-up or the reload queue. A built-in's handlers are awaited to
+ * their end. The process's shutdown uses `shutdownIntegrations` instead.
+ */
+async function runShutdownHandlers(
+  integration: Pick<LoadedIntegration, "id" | "isBuiltIn">,
+  handlers: ReadonlyArray<() => Promise<void>>,
+  onError: (error: unknown) => void,
+): Promise<void> {
+  for (const handler of handlers) {
+    try {
+      await (integration.isBuiltIn ? handler() : withinShutdownDeadline(integration.id, handler));
+    } catch (error) {
+      onError(error);
+    }
+  }
+}
+
+function withinShutdownDeadline(id: string, handler: () => Promise<void>): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      hostLog.warn(
+        `A shutdown handler of integration ${id} did not finish within ${SHUTDOWN_HANDLER_DEADLINE_MS / 1000} seconds; going on without it`,
+        { integrationId: id },
+      );
+      resolve();
+    }, SHUTDOWN_HANDLER_DEADLINE_MS);
+    timer.unref?.();
+    // A handler that throws at once rejects like one whose promise rejects.
+    new Promise<void>((run) => run(handler())).then(
+      () => {
+        clearTimeout(timer);
+        resolve();
+      },
+      (error: unknown) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
 
 class LoadDeadlineError extends Error {
   constructor() {
@@ -1050,8 +1348,92 @@ function runSetup(
   }).finally(() => clearTimeout(warning));
 }
 
+/** The text of a value an integration threw; describing it cannot throw. */
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return describeThrown(error);
+}
+
+/** Whether the load deadline ended the load; `instanceof` throws on some proxies. */
+function isLoadDeadline(error: unknown): boolean {
+  try {
+    return error instanceof LoadDeadlineError;
+  } catch {
+    return false;
+  }
+}
+
+/** `error` itself when it is an `Error`, else an `Error` describing it. */
+function asError(error: unknown): Error {
+  try {
+    if (error instanceof Error) return error;
+  } catch {
+    // A proxy whose prototype cannot be read.
+  }
+  return new Error(describeThrown(error));
+}
+
+/** The steps at which an integration's own code can fail. */
+const LOAD_FAILURE_STEP: Record<Exclude<IntegrationLoadError["phase"], "platform">, string> = {
+  import: "import",
+  migrate: "migrate its database schema",
+  setup: "set up",
+  deadline: "import and set up in time",
+};
+
+/**
+ * Applies the migrations of an integration whose manifest declares them,
+ * before its code is imported. Their time does not count against the load
+ * deadline, which a legitimate migration may outlast; the migration runner
+ * bounds itself. The schema-ahead attention item is raised or resolved after
+ * the migration transaction has committed, and a failure to do so does not
+ * fail the load.
+ */
+async function migrateIntegration(integration: LoadedIntegration): Promise<void> {
+  if (integration.manifest.database?.migrations !== true) return;
+  const { schemaAhead } = await applyExtensionMigrations({
+    integrationId: integration.id,
+    directory: integration.directory,
+  });
+  const key = schemaAheadAttentionKey(integration.id);
+  try {
+    if (schemaAhead) {
+      await raiseAttention({
+        key,
+        severity: "warning",
+        source: "extensions",
+        title: `${integration.manifest.name || integration.id} runs against a newer database schema`,
+        detail:
+          "A later version of this extension migrated its tables, and the files were rolled back. Install a fixed version.",
+      });
+    } else {
+      await resolveAttention(key);
+    }
+  } catch (error) {
+    hostLog.warn(`Could not update the attention item ${key}`, {
+      err: error,
+      integrationId: integration.id,
+    });
+  }
+}
+
+/**
+ * Brings the subject-data handler table in line with the generation that
+ * just went live, then starts working through the erasures it allows. A
+ * database failure is logged and does not fail the activation; the next
+ * activation and the daily retention run, which syncs before it works
+ * through the pending erasures, try again.
+ */
+async function refreshSubjectDataHandlers(): Promise<void> {
+  try {
+    await syncSubjectHandlerTable();
+  } catch (error) {
+    hostLog.warn("Could not update the list of integrations with a subject-data handler", {
+      err: error,
+    });
+  }
+  runPendingErasures().catch((error: unknown) => {
+    hostLog.warn("Processing pending erasures failed", { err: error });
+  });
 }
 
 /**
@@ -1069,9 +1451,13 @@ async function loadIntegrationBackend(args: {
   const scope = integrationScopes.get(integration);
   if (!scope) throw new Error(`Integration ${integration.id} has no context`);
   let phase: IntegrationLoadError["phase"] = "import";
+  const control = contextControls.get(ctx);
   if (integration.isBuiltIn) {
     try {
       const entryPoint = resolveBuiltInBackendEntryPoint(integration.directory);
+      phase = "migrate";
+      await migrateIntegration(integration);
+      phase = "import";
       if (entryPoint) {
         const specifier = backendEntryImportSpecifier(entryPoint);
         const mod = (await runInIntegrationScope(scope, () => import(specifier))) as {
@@ -1081,41 +1467,57 @@ async function loadIntegrationBackend(args: {
         const { setup } = mod;
         if (typeof setup === "function") await runSetup(integration, scope, () => setup(ctx));
       }
+      control?.closeTasks();
       return "loaded";
     } catch (error) {
+      control?.closeTasks();
+      integrationScheduler().discard(integration.id);
+      forgetSubjectDataHandler(integration);
       integration.loadState = "failed";
       integration.loadError = { phase, message: errorMessage(error) };
       throw error;
     }
   }
 
-  const control = contextControls.get(ctx);
   const resolvers = snapshotPlaceResolvers();
   const declaredDataSources = integration.manifest.dataSources;
   try {
     const specifier = await installedBackendImportSpecifier(integration);
+    phase = "migrate";
+    await migrateIntegration(integration);
+    phase = "import";
     if (specifier) {
       const deadline = startLoadDeadline(scope);
+      // Only the import and `setup` run the integration's code in this
+      // process. A migration runs in PostgreSQL and may take half an hour, so
+      // a process stopped while it waits is not an exit its code caused.
+      markIntegrationLoading(integration.id, "import");
       try {
         const mod = (await deadline.within(() =>
           runInIntegrationScope(scope, () => import(specifier)),
         )) as { setup?: SetupFunction };
         phase = "setup";
+        markIntegrationLoading(integration.id, "setup");
         const { setup } = mod;
         if (typeof setup === "function")
           await deadline.within(() => runSetup(integration, scope, () => setup(ctx)));
       } finally {
         deadline.clear();
+        markIntegrationLoaded();
       }
     }
     phase = "setup";
+    control?.closeTasks();
     control?.releaseActivations();
     return "loaded";
   } catch (error) {
     scope.revoked = true;
-    if (error instanceof LoadDeadlineError) phase = "deadline";
+    if (isLoadDeadline(error)) phase = "deadline";
+    control?.closeTasks();
     control?.discardActivations();
     control?.unsubscribeAll();
+    integrationScheduler().discard(integration.id);
+    forgetSubjectDataHandler(integration);
     dropIntegrationRoutes(integration.id);
     restorePlaceResolvers(resolvers);
     integration.providers.clear();
@@ -1127,27 +1529,25 @@ async function loadIntegrationBackend(args: {
     integration.loadError = { phase, message: errorMessage(error) };
     _fastify?.log.error(
       { err: error, integrationId: integration.id, phase },
-      `Leaving out installed integration ${integration.id}: its backend failed to ${phase === "import" ? "import" : phase === "deadline" ? "import and set up in time" : "set up"}`,
+      `Leaving out installed integration ${integration.id}: its backend failed to ${LOAD_FAILURE_STEP[phase]}`,
     );
-    const handlers = shutdownHandlers.splice(0);
-    for (const handler of handlers) {
-      try {
-        await handler();
-      } catch (shutdownError) {
-        _fastify?.log.warn(
-          { err: shutdownError, integrationId: integration.id },
-          `A shutdown handler of the left-out integration ${integration.id} failed`,
-        );
-      }
-    }
+    await runShutdownHandlers(integration, shutdownHandlers.splice(0), (shutdownError) => {
+      _fastify?.log.warn(
+        { err: shutdownError, integrationId: integration.id },
+        `A shutdown handler of the left-out integration ${integration.id} failed`,
+      );
+    });
     return "left-out";
   }
 }
 
 /**
- * The integrations of the live generation whose load failed, limited to `ids`
- * when given. Install and update jobs use it to fail a change whose
- * integration the reload left out.
+ * The integrations of the live generation whose code did not load, limited to
+ * `ids` when given: those whose load failed, those this release cannot run,
+ * and each of `ids` the generation does not hold at all. Install and update
+ * jobs use it to fail a change whose integration the reload left out. One an
+ * operator's decision holds back (its extension disabled, or safe mode) is
+ * not a failure; `heldBackIntegrationLoads` names those.
  */
 export function failedIntegrationLoads(
   ids?: readonly string[],
@@ -1155,14 +1555,45 @@ export function failedIntegrationLoads(
   const wanted = ids ? new Set(ids) : null;
   const failed: Array<{ id: string; phase: IntegrationLoadError["phase"]; message: string }> = [];
   for (const integration of integrations.values()) {
-    if (integration.loadState !== "failed" || (wanted && !wanted.has(integration.id))) continue;
+    if (wanted && !wanted.has(integration.id)) continue;
+    if (integration.loadState !== "failed" && integration.loadState !== "incompatible") continue;
     failed.push({
       id: integration.id,
       phase: integration.loadError?.phase ?? "setup",
       message: integration.loadError?.message ?? "",
     });
   }
+  for (const id of wanted ?? [])
+    if (!integrations.has(id))
+      failed.push({ id, phase: "import", message: "the reload did not find it" });
   return failed;
+}
+
+/**
+ * Of `ids`, the integrations the live generation holds back by an operator's
+ * decision (their extension is disabled, or the API runs in safe mode), with
+ * the line a job reports for each.
+ */
+export function heldBackIntegrationLoads(
+  ids: readonly string[],
+): Array<{ id: string; loadState: "disabled" | "safe-mode"; message: string }> {
+  const held: Array<{ id: string; loadState: "disabled" | "safe-mode"; message: string }> = [];
+  for (const id of ids) {
+    const loadState = integrations.get(id)?.loadState;
+    if (loadState === "safe-mode")
+      held.push({
+        id,
+        loadState,
+        message: `Integration ${id} is installed but not loaded: the API runs in safe mode. It loads when safe mode is left.`,
+      });
+    else if (loadState === "disabled")
+      held.push({
+        id,
+        loadState,
+        message: `Integration ${id} is installed but not loaded: its extension is disabled.`,
+      });
+  }
+  return held;
 }
 
 export async function initIntegrations(
@@ -1175,6 +1606,7 @@ export async function initIntegrations(
   _integrationDirs = normalizeIntegrationDirs(integrationDirs);
   resetIntegrationRoutes();
   codeCache = null;
+  setSubjectDataIntegrationSource(getAllIntegrations, processLogger);
   setPlaceResolverRegistrationHook((_scheme, resolver) => {
     const scope = currentIntegrationScope();
     if (!scope) return resolver;
@@ -1184,16 +1616,20 @@ export async function initIntegrations(
 
   const discovered = await discoverManifests(_integrationDirs);
   const sorted = topologicalSort(discovered);
+  const gates = await readInstalledLoadGates(sorted, { retry: true });
 
   // Hard-fail at startup when any selected integration declares vault-backed
   // secret fields but the secrets key is unusable. The lazy fallback in
   // secrets.ts already throws on first decrypt, but lazy failure means the
   // operator only finds out via a 500 from a user-facing route; bailing here
-  // surfaces it as a boot error with a clear remediation hint.
+  // surfaces it as a boot error with a clear remediation hint. An installed
+  // integration that is held back does not count: safe mode must start.
   const keyProblem = secretsKeyProblem();
   if (keyProblem) {
-    const requiringSecrets = sorted.filter((d) =>
-      manifestDeclaresSecretFields(d.manifest as IntegrationManifest),
+    const requiringSecrets = sorted.filter(
+      (d) =>
+        (d.isBuiltIn || !gates.has(d.directory)) &&
+        manifestDeclaresSecretFields(d.manifest as IntegrationManifest),
     );
     if (requiringSecrets.length > 0) {
       const names = requiringSecrets.map((d) => d.manifest.id).join(", ");
@@ -1268,7 +1704,11 @@ export async function initIntegrations(
     fastify.log.warn(err, "AttributionIndex initialization failed (continuing without it)");
   }
 
-  const { configOf, orders } = await prepareGenerationConfig(sorted, resolveConfigWithSources);
+  const { configOf, orders } = await prepareGenerationConfig(
+    sorted,
+    resolveConfigWithSources,
+    gates,
+  );
   providerOrders = orders;
 
   for (const { manifest: raw, directory, isBuiltIn } of sorted) {
@@ -1286,14 +1726,6 @@ export async function initIntegrations(
 
     if (integrations.has(id)) {
       fastify.log.warn(`Skipping duplicate integration: ${id}`);
-      continue;
-    }
-
-    // A community manifest always states its protocol; validation requires it.
-    if (!isBuiltIn && !satisfiesPlatformVersion(manifest.platform ?? "")) {
-      fastify.log.warn(
-        `Skipping community integration ${id}: requires platform >=${manifest.platform}, current is ${PLATFORM_VERSION}`,
-      );
       continue;
     }
 
@@ -1320,13 +1752,18 @@ export async function initIntegrations(
       shutdownHandlers,
     };
 
+    const gate = isBuiltIn ? undefined : gates.get(directory);
+    if (gate) {
+      holdBack(integration, gate, log);
+      integrations.set(id, integration);
+      continue;
+    }
+
     if (!integration.enabled) {
       integrations.set(id, integration);
       log.info(`Integration ${id} is disabled`);
       continue;
     }
-
-    const integrationDb = buildIntegrationDb(manifest);
 
     const requiresMap = resolveRequiresForIntegration({
       manifestId: id,
@@ -1348,7 +1785,6 @@ export async function initIntegrations(
       log,
       http,
       cache,
-      db: integrationDb,
       requiresMap,
       providers,
       shutdownHandlers,
@@ -1383,6 +1819,8 @@ export async function initIntegrations(
         fastify.log.warn(rollbackError, `Failed to roll back activation for integration ${id}`);
       }
       fastify.log.error(err, `Failed to load integration ${id}`);
+      integrationScheduler().discard(id);
+      forgetSubjectDataHandler(integration);
       integration.enabled = false;
       if (integration.loadState !== "failed") {
         integration.loadState = "failed";
@@ -1392,14 +1830,18 @@ export async function initIntegrations(
       eventBus.emit({
         type: "integration.error",
         integrationId: id,
-        error: err instanceof Error ? err : new Error(String(err)),
+        error: asError(err),
       });
     }
   }
 
+  // The integrations that loaded go live now, and their tasks with them.
+  integrationScheduler().activate([...integrations.keys()]);
+
   // The index above was seeded from the manifests on disk; runtime integrations
   // supplied their sources during setup, so re-index from the live registry.
   await refreshAttributionFromRegistry();
+  await refreshSubjectDataHandlers();
 
   const warnedPreviewIds = new Set<string>();
   fastify.get<{ Params: { id: string } }>("/api/integrations/:id/preview", async (req, reply) => {
@@ -1473,7 +1915,7 @@ export async function initIntegrations(
       } catch (err) {
         return reply.status(500).send({
           error: "Reload failed",
-          message: err instanceof Error ? err.message : String(err),
+          message: describeThrown(err),
         });
       }
     });
@@ -1520,6 +1962,11 @@ export function isIntegrationHostInitialized(): boolean {
   return _fastify !== null;
 }
 
+/**
+ * The live generation's entry for `id`, whatever its load state. An installed
+ * integration that was not loaded (disabled, incompatible, in safe mode or
+ * failed) keeps its manifest here and has `enabled: false`.
+ */
 export function getIntegration(id: string): LoadedIntegration | undefined {
   return integrations.get(id);
 }
@@ -1556,10 +2003,34 @@ export function isIntegrationScheme(scheme: string): boolean {
  * uniquely marks config-disabled. Using the runtime flag would let a broken
  * enabled integration fall through to coord-fallback, re-opening the
  * tag-substitution leak the 404 trap closes.
+ *
+ * An installed integration held back because the operator disabled its
+ * extension counts as switched off, a long-lived choice like a setting. The
+ * other holds (safe mode, an incompatible release, extension state that could
+ * not be read) are transient: the links keep answering "not found", because a
+ * substitute place would be cached under the extension's id and outlive the
+ * hold once the extension loads again.
  */
 export function isEnabledIntegrationScheme(scheme: string): boolean {
   const i = integrations.get(scheme);
-  return i !== undefined && i.config?.enabled !== false;
+  if (i === undefined || i.config?.enabled === false) return false;
+  return !(heldBackRecords.has(i) && i.loadState === "disabled");
+}
+
+/**
+ * The reload after leaving safe mode failed, so the registry still holds the
+ * records safe mode held back. Each becomes a failed load that says so, which
+ * the administration shows with the way to reload; safe mode itself is off.
+ */
+export function markSafeModeRecordsFailed(message: string): void {
+  for (const integration of integrations.values()) {
+    if (integration.loadState !== "safe-mode") continue;
+    integration.loadState = "failed";
+    integration.loadError = {
+      phase: "platform",
+      message: `not loaded: the reload after leaving safe mode failed (${message})`,
+    };
+  }
 }
 
 export function getIntegrationsByDomain(domain: string): LoadedIntegration[] {
@@ -1639,6 +2110,8 @@ async function doReloadIntegrations(
   const stagedEventBus = new IntegrationEventBus();
   const next = new Map<string, LoadedIntegration>();
   const activationScope = createActivationTransactionScope();
+  /** Integrations whose setup ran for this generation and may have staged tasks. */
+  const staged = new Set<string>();
 
   try {
     beginIntegrationRouteStaging();
@@ -1680,12 +2153,14 @@ async function doReloadIntegrations(
       _fastify.log.debug("Service registry unavailable during reload");
     }
 
+    const gates = await readInstalledLoadGates(sorted, { retry: false });
     const { configOf, orders: stagedProviderOrders } = await prepareGenerationConfig(
       sorted,
       context
         ? (manifest, directory) =>
             resolveIntegrationConfigWithSourcesStrict(manifest, directory, context)
         : resolveConfigWithSources,
+      gates,
     );
 
     for (const { manifest: raw, directory, isBuiltIn } of sorted) {
@@ -1714,13 +2189,6 @@ async function doReloadIntegrations(
         continue;
       }
 
-      if (!isBuiltIn && !satisfiesPlatformVersion(manifest.platform ?? "")) {
-        _fastify.log.warn(
-          `Skipping community integration ${id}: requires platform >=${manifest.platform}, current is ${PLATFORM_VERSION}`,
-        );
-        continue;
-      }
-
       const config = await configOf(manifest, directory);
       const log = createLogger(id, _fastify);
       const http = createHttpClient(log);
@@ -1744,12 +2212,17 @@ async function doReloadIntegrations(
         shutdownHandlers,
       };
 
-      if (!integration.enabled) {
+      const gate = isBuiltIn ? undefined : gates.get(directory);
+      if (gate) {
+        holdBack(integration, gate, log);
         next.set(id, integration);
         continue;
       }
 
-      const integrationDb = buildIntegrationDb(manifest);
+      if (!integration.enabled) {
+        next.set(id, integration);
+        continue;
+      }
 
       const fastifyForReload = _fastify;
       const reloadRequiresMap = resolveRequiresForIntegration({
@@ -1771,7 +2244,6 @@ async function doReloadIntegrations(
         log,
         http,
         cache,
-        db: integrationDb,
         requiresMap: reloadRequiresMap,
         providers,
         shutdownHandlers,
@@ -1785,6 +2257,7 @@ async function doReloadIntegrations(
         activationScope,
       });
 
+      staged.add(id);
       try {
         if ((await loadIntegrationBackend({ integration, ctx, shutdownHandlers })) === "left-out") {
           next.set(id, integration);
@@ -1803,13 +2276,8 @@ async function doReloadIntegrations(
       } catch (err) {
         _fastify.log.error(err, `Failed to stage integration ${id}; keeping current generation`);
         next.delete(id);
-        for (const handler of shutdownHandlers) {
-          try {
-            await handler();
-          } catch {
-            // best effort cleanup for the partially staged integration
-          }
-        }
+        // Best effort cleanup for the partially staged integration.
+        await runShutdownHandlers(integration, shutdownHandlers, () => {});
         throw err;
       }
     }
@@ -1827,22 +2295,22 @@ async function doReloadIntegrations(
     // The previous generation stops serving here. Revoking it before the next
     // await keeps its late work out of the registries just committed.
     for (const integration of previousIntegrations) revokeInstalledScope(integration);
+    // Its tasks stop ticking and their runs are aborted; the new generation's
+    // tasks wait for a run that is still going.
+    for (const integration of previousIntegrations) integrationScheduler().retire(integration.id);
+    integrationScheduler().activate([...next.keys()]);
   } catch (err) {
     for (const rollbackError of activationScope.rollback()) {
       _fastify.log.warn(rollbackError, "Failed to roll back staged integration activation");
     }
+    for (const id of staged) integrationScheduler().discard(id);
     rollbackIntegrationRouteStaging();
     rollbackPlaceResolverStaging();
     stagedEventBus.removeAll();
     for (const integration of next.values()) {
       revokeInstalledScope(integration);
-      for (const handler of integration.shutdownHandlers) {
-        try {
-          await handler();
-        } catch {
-          // best effort cleanup for resources created by the failed generation
-        }
-      }
+      // Best effort cleanup for resources created by the failed generation.
+      await runShutdownHandlers(integration, integration.shutdownHandlers, () => {});
     }
     throw err;
   }
@@ -1852,6 +2320,7 @@ async function doReloadIntegrations(
   // index reads the live registry, so it carries the lists runtime
   // integrations supplied while staging and nothing of the retired generation.
   await refreshAttributionFromRegistry();
+  await refreshSubjectDataHandlers();
 
   const enabledCount = Array.from(integrations.values()).filter((i) => i.enabled).length;
   _fastify.log.info(
@@ -1864,13 +2333,8 @@ async function doReloadIntegrations(
 
   for (const integration of previousIntegrations) {
     previousEventBus.emit({ type: "integration.unloaded", integrationId: integration.id });
-    for (const handler of integration.shutdownHandlers) {
-      try {
-        await handler();
-      } catch {
-        // best effort retirement of the previous generation
-      }
-    }
+    // Best effort retirement of the previous generation.
+    await runShutdownHandlers(integration, integration.shutdownHandlers, () => {});
   }
   previousEventBus.removeAll();
 
@@ -1881,18 +2345,62 @@ async function doReloadIntegrations(
   };
 }
 
+/**
+ * Runs the shutdown handlers of every integration as the process stops. Each
+ * installed integration runs its handlers in order, side by side with the
+ * other installed integrations, and all of them share
+ * `PROCESS_SHUTDOWN_BUDGET_MS`: once it is spent, the integrations still
+ * running are named in a warning and shutdown goes on without them. A
+ * built-in's handlers are awaited to their end.
+ */
 export async function shutdownIntegrations(): Promise<void> {
+  // Before the shutdown handlers: no task starts or keeps running beside them.
+  stopIntegrationTasks();
+  const pending = new Set<string>();
+  const installedRuns: Promise<void>[] = [];
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const budgetSpent = new Promise<void>((resolve) => {
+    timer = setTimeout(() => {
+      if (pending.size > 0) {
+        const integrationIds = [...pending].sort();
+        hostLog.warn(
+          `Shutdown handlers of integrations ${integrationIds.join(", ")} did not finish within ${PROCESS_SHUTDOWN_BUDGET_MS / 1000} seconds in all; shutting down without them`,
+          { integrationIds },
+        );
+      }
+      resolve();
+    }, PROCESS_SHUTDOWN_BUDGET_MS);
+    timer.unref?.();
+  });
+  const builtIns: LoadedIntegration[] = [];
   for (const integration of integrations.values()) {
     eventBus.emit({ type: "integration.unloaded", integrationId: integration.id });
     revokeInstalledScope(integration);
-
-    for (const handler of integration.shutdownHandlers) {
-      try {
-        await handler();
-      } catch {
-        // best effort
-      }
+    if (integration.isBuiltIn) {
+      builtIns.push(integration);
+      continue;
     }
+    pending.add(integration.id);
+    installedRuns.push(
+      (async () => {
+        for (const handler of integration.shutdownHandlers) {
+          try {
+            // A handler that throws at once fails like one whose promise rejects.
+            await new Promise<void>((run) => run(handler()));
+          } catch {
+            // A failing handler does not keep the integration's others from running.
+          }
+        }
+        pending.delete(integration.id);
+      })(),
+    );
+  }
+  try {
+    for (const integration of builtIns)
+      await runShutdownHandlers(integration, integration.shutdownHandlers, () => {});
+    await Promise.race([Promise.all(installedRuns), budgetSpent]);
+  } finally {
+    clearTimeout(timer);
   }
   integrations.clear();
   providerOrders = new Map();
@@ -1911,3 +2419,11 @@ export async function shutdownIntegrations(): Promise<void> {
     setProviderHealth(null);
   }
 }
+
+// Leaving safe mode reloads through this host, and the attention item names
+// the integration automatic safe mode blames.
+setSafeModeHost({
+  reload: () => reloadIntegrations(),
+  integrationName: (integrationId) => integrations.get(integrationId)?.manifest.name,
+  reloadFailed: markSafeModeRecordsFailed,
+});

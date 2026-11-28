@@ -179,6 +179,26 @@ it("leaves the selected deletion open and row intact after a resolved deletion e
   expect(screen.getByText(subject.email)).toBeInTheDocument();
   expect(mocks.push).not.toHaveBeenCalled();
 });
+it("says that an installed extension keeps the account from being deleted", async () => {
+  goodList();
+  mocks.remove.mockResolvedValue({
+    status: 409,
+    data: { code: "EXTENSION_BLOCKS_ACCOUNT_DELETION" },
+    error: { code: "EXTENSION_BLOCKS_ACCOUNT_DELETION", status: 409 },
+  });
+  mount(<UserList />);
+  await screen.findByText(subject.email);
+  fireEvent.click(screen.getByLabelText("User actions"));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+  fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+  await waitFor(() =>
+    expect(mocks.toast).toHaveBeenCalledWith(
+      "An installed extension keeps this account from being deleted. See “Needs Attention” on the overview.",
+      "error",
+    ),
+  );
+  expect(screen.getByText(subject.email)).toBeInTheDocument();
+});
 it.each(["Revoke", "Revoke All Sessions"])(
   "retains confirmed sessions after rejected %s",
   async (label) => {

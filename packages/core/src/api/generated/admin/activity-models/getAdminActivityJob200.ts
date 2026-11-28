@@ -120,4 +120,61 @@ export type GetAdminActivityJob200 =
         /** Recursive JSON. Objects with an own __proto__ key are rejected at every depth. */
         artifacts: AdminGetAdminActivityJob200Schema0 | null;
       }[];
+    }
+  | {
+      id: string;
+      type: string;
+      /** Recursive JSON. Objects with an own __proto__ key are rejected at every depth. */
+      payload: AdminGetAdminActivityJob200Schema0 | null;
+      /** @nullable */
+      error: string | null;
+      /** @nullable */
+      progress: number | null;
+      /** @nullable */
+      createdBy: string | null;
+      actorLabel: string;
+      /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+      createdAt: string;
+      startedAt: string | null;
+      finishedAt: string | null;
+      cancelable: false;
+      source: "integration-task";
+      status: "running" | "succeeded" | "failed";
+      /** Recursive JSON. Objects with an own __proto__ key are rejected at every depth. */
+      result: AdminGetAdminActivityJob200Schema0 | null;
+      /** @maxItems 0 */
+      logs: {
+        jobId: string;
+        /**
+         * @minimum 0
+         * @maximum 9007199254740991
+         */
+        seq: number;
+        stream: "stdout" | "stderr";
+        line: string;
+        /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+        createdAt: string;
+      }[];
+      /** @maxItems 0 */
+      stages: {
+        id: string;
+        jobId: string;
+        stage: string;
+        status: "succeeded" | "partially_succeeded" | "failed" | "skipped";
+        /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+        startedAt: string;
+        /** @pattern ^(?:(?:\d\d[2468][048]|\d\d[13579][26]|\d\d0[48]|[02468][048]00|[13579][26]00)-02-29|\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\d|30)|(?:02)-(?:0[1-9]|1\d|2[0-8])))T(?:(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|([+-](?:[01]\d|2[0-3]):[0-5]\d)))$ */
+        finishedAt: string;
+        /**
+         * @minimum 0
+         * @maximum 9007199254740991
+         */
+        durationMs: number;
+        /** @nullable */
+        message: string | null;
+        /** Recursive JSON. Objects with an own __proto__ key are rejected at every depth. */
+        error: AdminGetAdminActivityJob200Schema0 | null;
+        /** Recursive JSON. Objects with an own __proto__ key are rejected at every depth. */
+        artifacts: AdminGetAdminActivityJob200Schema0 | null;
+      }[];
     };

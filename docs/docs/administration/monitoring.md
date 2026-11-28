@@ -536,6 +536,17 @@ than that. Jobs that are still running are never pruned, and neither are jobs
 that a pending data-subject request still needs. Between them, the audit log tells you
 the _intent_ of every admin action and the jobs view shows the _execution_.
 
+The Jobs tab also lists every run of a task an integration scheduled, with the
+caption "Scheduled task", the actor "Scheduled" and the name
+`<integration>: <task>` (the raw `<integration-id>:<task>` once the integration
+is no longer installed). A run is `running`, `succeeded` or `failed`; the
+details of a failed run give the reason, such as `deadline exceeded` when the
+task outlasted its deadline, or `interrupted by restart` when the API stopped or
+crashed during the run. Task runs have no log and cannot be cancelled. Any
+integration reload aborts every task run in progress, not only those of the
+integration that changed. Finished task runs are deleted 30 days after they
+started; running ones are never pruned. They hold no account data.
+
 Application job details are pushed to the browser over Server-Sent Events
 (`GET /api/admin/jobs/<id>/events`). Every event carries a per-job cursor; when
 the browser reconnects it resends the last cursor it saw and the API replays

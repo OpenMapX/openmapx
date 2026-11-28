@@ -24,6 +24,11 @@ import {
 import { privacyCaseProjection as projection } from "../privacy/admin-projections.js";
 import { PrivacyRequestError, privacyErrorReply } from "../privacy/errors.js";
 import { exportResponseHeaders, pumpExport } from "../privacy/export-response.js";
+import {
+  EXTENSION_LOGICAL_ID_PREFIX,
+  installedIntegrations,
+} from "../privacy/extension-handlers.js";
+import { plainExtensionName } from "../privacy/extension-subject-data.js";
 import { createSubjectRequestSchema } from "../privacy/request-contracts.js";
 import { PrivacyRequestService } from "../privacy/request-service.js";
 import {
@@ -133,7 +138,10 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
       try {
         const service = serviceForRequest();
         const row = await service.getById(request.params.requestId);
-        const tasks = await database
+        const registry = new Map(
+          (installedIntegrations() ?? []).map((integration) => [integration.id, integration]),
+        );
+        const taskRows = await database
           .select({
             id: dataSubjectRequestTask.id,
             registrationId: dataSubjectRequestTask.registrationId,
@@ -146,6 +154,15 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
           .from(dataSubjectRequestTask)
           .where(eq(dataSubjectRequestTask.requestId, row.id))
           .orderBy(asc(dataSubjectRequestTask.registrationId));
+        // An export's task for an extension is shown by the extension's name.
+        const tasks = taskRows.map((task) => {
+          if (task.source !== "extension") return task;
+          const integrationId = task.registrationId.slice(EXTENSION_LOGICAL_ID_PREFIX.length);
+          return {
+            ...task,
+            integrationName: plainExtensionName(registry.get(integrationId), integrationId),
+          };
+        });
         const events = (
           await database
             .select({
@@ -331,6 +348,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
           request: row,
           subjectUserId: service.subjectUserId(row),
           database,
+          recordExtensionsLeftOut: (leftOut) => service.recordExtensionsLeftOut(row.id, leftOut),
           ...(options.exportSources ?? {}),
         });
         await database.transaction((tx) => new AdminActionReauthentication(tx).consume(proof, tx));

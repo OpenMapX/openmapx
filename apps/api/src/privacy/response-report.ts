@@ -1,7 +1,8 @@
 import type { PrivacySource } from "@openmapx/core/privacy";
 import { createTranslator, type Locale, resolveLocale } from "@openmapx/i18n";
-import { SUBJECT_DATA_CATALOGUE } from "./catalogue.js";
+import { type SUBJECT_DATA_CATALOGUE, subjectDataCatalogue } from "./catalogue.js";
 import { getCatalogueCopyWithFallbacks } from "./catalogue-copy.js";
+import { EXTENSION_LOGICAL_ID_PREFIX } from "./extension-handlers.js";
 
 type ReportTranslator = ReturnType<typeof createTranslator>;
 
@@ -59,6 +60,31 @@ export interface PrivacyReportSource {
   warningCodes: readonly string[];
   capturedAt: string;
   recordCount: number;
+}
+
+/** What asking one extension's subject-data handler gave. */
+export interface PrivacyReportExtension {
+  integrationId: string;
+  name: string;
+  outcome: "included" | "unavailable";
+  warningCode: string | null;
+}
+
+/**
+ * The source that answered for a registration: an extension's collector
+ * registration is answered by the part of the extension that declared it,
+ * whose id is the registration's collector id.
+ */
+function observedSource(
+  registration: Registration,
+  sources: readonly PrivacyReportSource[],
+): PrivacyReportSource | undefined {
+  const { collectorId } = registration;
+  const registrationId =
+    registration.source === "extension" && collectorId?.startsWith(EXTENSION_LOGICAL_ID_PREFIX)
+      ? collectorId
+      : registration.id;
+  return sources.find((source) => source.registrationId === registrationId);
 }
 
 function escapeHtml(value: string): string {
@@ -160,6 +186,7 @@ function retentionText(t: ReportTranslator, rule: RetentionRule): string {
     });
   if (rule.kind === "account-lifetime")
     return t("retentionAccount", { afterClosure: rule.daysAfterClosure, trigger });
+  if (rule.kind === "until-erased") return t("retentionUntilErased", { trigger });
   return t("retentionLegalHold", { afterClosure: rule.daysAfterClosure, trigger });
 }
 
@@ -167,8 +194,10 @@ export function buildPrivacyResponseReport(input: {
   locale: string;
   context: PrivacyResponseContext;
   sources: readonly PrivacyReportSource[];
+  extensions?: readonly PrivacyReportExtension[];
 }) {
   const locale = resolveLocale(input.locale);
+  const extensions = input.extensions ?? [];
   const t = createTranslator(locale, "privacyExport.report");
   const { context } = input;
   for (const [field, value] of Object.entries({
@@ -215,7 +244,7 @@ export function buildPrivacyResponseReport(input: {
     t("snapshotLimitations"),
   ];
   const catalogueFallbacks: ReturnType<typeof t.fallbacks> = [];
-  const scopedRegistrations = SUBJECT_DATA_CATALOGUE.filter(
+  const scopedRegistrations = subjectDataCatalogue().filter(
     (registration) => rights.access || registration.portability.decision === "include",
   );
   const shortLived = scopedRegistrations.filter((registration) =>
@@ -244,7 +273,7 @@ export function buildPrivacyResponseReport(input: {
     t("sourcesHeading"),
   );
   const processingSources = scopedRegistrations.map((registration) => {
-    const observed = input.sources.find((source) => source.registrationId === registration.id);
+    const observed = observedSource(registration, input.sources);
     const explanation = getCatalogueCopyWithFallbacks(locale, registration.id);
     catalogueFallbacks.push(...explanation.translationFallbacks);
     return {
@@ -341,6 +370,34 @@ export function buildPrivacyResponseReport(input: {
         }),
       );
   }
+  const included = extensions.filter((extension) => extension.outcome === "included");
+  if (included.length) {
+    lines.push("", t("extensionsIncludedHeading"), t("extensionsIncludedIntro"));
+    for (const extension of included)
+      lines.push(
+        t("extensionIncludedRow", {
+          name: extension.name,
+          id: extension.integrationId,
+          file: `extensions/${extension.integrationId}.json`,
+        }),
+      );
+  }
+  const unasked = extensions.filter((extension) => extension.outcome === "unavailable");
+  if (unasked.length) {
+    lines.push("", t("extensionsUnavailableHeading"), t("extensionsUnavailableIntro"));
+    for (const extension of unasked)
+      lines.push(
+        t("extensionUnavailableRow", {
+          name: extension.name,
+          id: extension.integrationId,
+          reason:
+            extension.warningCode && t.has(`warnings.${extension.warningCode}`)
+              ? t(`warnings.${extension.warningCode}`)
+              : t("warningUnknown", { contact: context.reviewContact }),
+        }),
+      );
+    lines.push(t("reviewContact", { contact: context.reviewContact }));
+  }
   lines.push("", t("deploymentSourcesHeading"));
   if (!context.deployment.privacySources.length) lines.push(t("noDeploymentSources"));
   for (const source of context.deployment.privacySources)
@@ -430,6 +487,12 @@ export function buildPrivacyResponseReport(input: {
       translationFallbacks,
       shortLivedCategories: shortLived.map((registration) => registration.id),
       sources: processingSources,
+      extensions: extensions.map(({ integrationId, name, outcome, warningCode }) => ({
+        integrationId,
+        name,
+        outcome,
+        warningCode,
+      })),
     },
   };
 }

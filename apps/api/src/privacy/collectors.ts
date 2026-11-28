@@ -32,6 +32,13 @@ export interface CollectorSourcePart {
     | "omitted_with_reason";
   warningCodes: string[];
   capturedAt: string;
+  /**
+   * `false` for a part whose absence the export lists instead of refusing
+   * the whole export; an unavailable part refuses it otherwise.
+   */
+  blocking?: boolean;
+  /** The extension whose subject-data handler a part asked. */
+  extension?: { integrationId: string; name: string };
   /** Optional fixed archive members supplied by a managed-source collector. */
   entries?: CollectorSourcePartEntry[];
   /** Removes encrypted transient source material after assembly or failure. */

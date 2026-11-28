@@ -41,7 +41,7 @@ it("collects exactly five actual Activity operations with complete media, status
     const source = document.paths["/api/admin/jobs/{id}"].get.parameters.find(
       (entry: { name: string }) => entry.name === "source",
     );
-    expect(source.schema.enum).toEqual(["application", "data-manager"]);
+    expect(source.schema.enum).toEqual(["application", "data-manager", "integration-task"]);
     expect(
       document.tags.find((tag: { name: string }) => tag.name === "activity-admin").description,
     ).toContain("Activity");
