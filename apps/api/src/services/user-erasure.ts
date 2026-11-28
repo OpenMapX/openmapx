@@ -4,10 +4,14 @@ import {
   appendErasureRequest,
   readErasureJournalKeyFile,
 } from "@openmapx/core/erasure-journal";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { currentAccountMutation } from "../account/account-context";
 import { assertAccountDeletionAllowed } from "../account/admin-invariant";
-import { type AuthDatabase, currentAuthDatabase } from "../account/auth-database";
+import {
+  type AuthDatabase,
+  currentAuthDatabase,
+  isTransactionalAuthDatabase,
+} from "../account/auth-database";
 import {
   dataManagerOfflinePackageArtifactReference,
   dataManagerOfflinePackageJobOwner,
@@ -126,7 +130,15 @@ export async function removeOfflinePackageOwnership(
  */
 export const userErasureHooks = createUserErasureHooks({
   check: assertAccountDeletionAllowed,
-  request: async (userId) => appendErasureRequest(journalPath(), readJournalKey(), userId),
+  request: async (userId) => {
+    // A deferred key, which an extension may declare, would refuse only at
+    // COMMIT, after the request is written; checking it now refuses the
+    // deletion before the journal holds a request a restore would replay.
+    // Outside a transaction no check is still deferred.
+    if (isTransactionalAuthDatabase())
+      await currentAuthDatabase().execute(sql`set constraints all immediate`);
+    return appendErasureRequest(journalPath(), readJournalKey(), userId);
+  },
   cleanup: async (user) =>
     removeOfflinePackageOwnership(user.id, await offlinePackagePrincipalKey()),
   complete: async (receiptId) => {

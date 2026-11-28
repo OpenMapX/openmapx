@@ -68,8 +68,10 @@ export function accountDeletionBlockedAttentionKey(
 
 /**
  * Resolves the items of keys that no longer refuse a deletion: dropped,
- * changed to another delete action, or gone with their schema. Nothing else
- * observes such a key once the deletion failed, so the daily run asks.
+ * changed to ON DELETE CASCADE, or gone with their schema. SET NULL and SET
+ * DEFAULT still count as refusing, since a NOT NULL column or a default no
+ * row matches makes them fail too. Nothing else observes such a key once the
+ * deletion failed, so the daily run asks.
  */
 export async function resolveClearedDeletionBlocks(): Promise<void> {
   const keys = await listAttentionKeys(ATTENTION_KEY_PREFIX);
@@ -79,7 +81,7 @@ export async function resolveClearedDeletionBlocks(): Promise<void> {
     from pg_constraint k
     join pg_class c on c.oid = k.conrelid
     join pg_namespace n on n.oid = c.relnamespace
-    where k.contype = 'f' and k.confdeltype in ('a', 'r') and starts_with(n.nspname, 'ext_')`);
+    where k.contype = 'f' and k.confdeltype <> 'c' and starts_with(n.nspname, 'ext_')`);
   const live = new Set<string>();
   for (const row of refusing) {
     const integrationId = schemaIntegrationId(row.schema);

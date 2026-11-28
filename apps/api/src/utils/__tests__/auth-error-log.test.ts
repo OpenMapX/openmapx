@@ -76,4 +76,20 @@ describe("safeAuthEndpointErrorEvent", () => {
       errorCode: "FAILED_TO_CREATE_USER",
     });
   });
+
+  it("drops a credential-shaped code in the response body of the auth library", () => {
+    for (const code of [AUTH_CODE, TOKEN, "a".repeat(200), 42, { nested: TOKEN }]) {
+      const error = Object.assign(new Error("x"), { body: { code } });
+      expect(safeAuthEndpointErrorEvent(error)).toEqual({
+        event: "auth_endpoint_failed",
+        errorClass: "Error",
+      });
+    }
+    const error = new APIError("INTERNAL_SERVER_ERROR", { code: AUTH_CODE, message: "x" });
+    expect(JSON.stringify(safeAuthEndpointErrorEvent(error))).not.toContain(AUTH_CODE);
+    expect(safeAuthEndpointErrorEvent(error)).toEqual({
+      event: "auth_endpoint_failed",
+      errorClass: "APIError",
+    });
+  });
 });

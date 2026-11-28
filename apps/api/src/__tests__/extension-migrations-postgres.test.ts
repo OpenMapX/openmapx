@@ -798,6 +798,55 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       await raw.unsafe("drop schema ext_kept cascade");
     });
 
+    it("keeps a blocked-deletion item at the daily check while the key sets null or a default instead of cascading", async () => {
+      const { accountDeletionBlockedAttentionKey, resolveClearedDeletionBlocks } = await import(
+        "../account/extension-deletion-block"
+      );
+      const { raiseAttention } = await import("../services/attention");
+      // Either action can still refuse: a NOT NULL column, or a default
+      // that no referenced row has.
+      await raw.unsafe(`
+        drop schema if exists ext_nulling cascade;
+        create schema ext_nulling;
+        create table ext_nulling.t (id int primary key);
+        create table ext_nulling.n (tid int not null, constraint n_t foreign key (tid) references ext_nulling.t(id) on delete set null);
+        create table ext_nulling.d (tid int default 0, constraint d_t foreign key (tid) references ext_nulling.t(id) on delete set default);
+      `);
+      const keys = [
+        accountDeletionBlockedAttentionKey("nulling", {
+          schema: "ext_nulling",
+          table: "n",
+          constraint: "n_t",
+        }),
+        accountDeletionBlockedAttentionKey("nulling", {
+          schema: "ext_nulling",
+          table: "d",
+          constraint: "d_t",
+        }),
+      ];
+      for (const key of keys)
+        await raiseAttention({
+          key,
+          severity: "warning",
+          source: "privacy",
+          clearance: "acknowledge",
+          title: "blocks account deletion",
+        });
+
+      await resolveClearedDeletionBlocks();
+
+      expect(
+        (
+          await raw<{ key: string }[]>`select key from attention_item
+            where starts_with(key, 'account-deletion-blocked:')`
+        )
+          .map(({ key }) => key)
+          .sort(),
+      ).toEqual([...keys].sort());
+      await raw`delete from attention_item`;
+      await raw.unsafe("drop schema ext_nulling cascade");
+    });
+
     it("names the table that holds the refusing key, also when another table has a key of that name to it", async () => {
       const { accountDeletionBlockedAttentionKey, resolveClearedDeletionBlocks } = await import(
         "../account/extension-deletion-block"

@@ -32,7 +32,14 @@ account row is deleted, and before that transaction commits, the API durably
 appends an HMAC-pseudonymised request to the erasure journal. If the journal is
 unavailable, the transaction rolls back and the deletion fails without
 pretending that it succeeded. A deletion the database refuses, for example
-because of an extension's foreign key, leaves no request in the journal.
+because of an extension's foreign key, leaves no request in the journal; the
+API checks deferred keys and constraints before it writes the request, so this
+holds for them too. A failure after the request is written, such as the server
+stopping or an error between the journal write and the commit, rolls the
+deletion back but leaves the request in the journal. The account then still
+exists, and a later restore of a backup erases it, because the restore
+replays every request in the journal. The deletion had been asked for, so the
+restore errs on the side of erasing.
 
 Extensions that keep data about people register a handler that erases it.
 The trigger records the deleted account once for each such extension, also

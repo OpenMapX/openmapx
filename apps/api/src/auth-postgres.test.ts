@@ -1,5 +1,5 @@
 import { createHash, createPublicKey, randomBytes, verify } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -759,14 +759,16 @@ describeDatabase("production authentication on migrated PostgreSQL", () => {
 
   /**
    * An extension schema whose rows about `userId` cascade from the account,
-   * with a refusing key on them that another migration could have added.
+   * with a refusing key on them that another migration could have added. A
+   * deferred key refuses only when its check runs, at the latest at COMMIT.
    */
-  async function blockingExtension(userId: string) {
+  async function blockingExtension(userId: string, { deferred = false } = {}) {
+    const refusal = deferred ? "deferrable initially deferred" : "on delete restrict";
     await fixture.sql.unsafe(`
       drop schema if exists ext_blocker cascade;
       create schema ext_blocker;
       create table ext_blocker.t (id int primary key, uid text references public."user"(id) on delete cascade);
-      create table ext_blocker.s (tid int, constraint s_t foreign key (tid) references ext_blocker.t(id) on delete restrict);
+      create table ext_blocker.s (tid int, constraint s_t foreign key (tid) references ext_blocker.t(id) ${refusal});
     `);
     await fixture.sql`insert into ext_blocker.t values (1, ${userId})`;
     await fixture.sql`insert into ext_blocker.s values (1)`;
@@ -856,6 +858,85 @@ describeDatabase("production authentication on migrated PostgreSQL", () => {
       error.mockRestore();
       await clearBlockingExtension();
     }
+  });
+
+  it("answers a deletion that an extension's deferred key refuses with a conflict and journals no request", async () => {
+    const { processLogger } = await import("./process-logger");
+    const error = vi.spyOn(processLogger, "error");
+    const fresh = await osmSignIn();
+    try {
+      await blockingExtension(fresh.userId, { deferred: true });
+      const sessionsBefore = await sessions(fresh.userId);
+      const requestsBefore = readErasureJournal(journal, journalKey).requests.length;
+
+      const deleted = await request("/api/auth/delete-user", {}, fresh.cookie);
+
+      expectBlockedDeletion(deleted, error);
+      expect(await fixture.db.select().from(user).where(eq(user.id, fresh.userId))).toHaveLength(1);
+      expect((await sessions(fresh.userId)).map(({ id }) => id).sort()).toEqual(
+        sessionsBefore.map(({ id }) => id).sort(),
+      );
+      expect(readErasureJournal(journal, journalKey).requests).toHaveLength(requestsBefore);
+      expect(erasedOnRestore(fresh.userId)).toBe(false);
+      expect(await blockedDeletionItems()).toEqual([
+        expect.objectContaining({ title: "blocker blocks account deletion" }),
+      ]);
+    } finally {
+      error.mockRestore();
+      await clearBlockingExtension();
+    }
+  });
+
+  /**
+   * Runs `remove` while another holder keeps the erasure journal's lock, so
+   * the request for the deletion cannot be written.
+   */
+  async function withJournalLocked<T>(remove: () => Promise<T>): Promise<T> {
+    const lock = `${journal}.lock`;
+    mkdirSync(lock);
+    try {
+      return await remove();
+    } finally {
+      rmdirSync(lock);
+    }
+  }
+
+  it("rolls a person's deletion back when its erasure request cannot be journalled", async () => {
+    const { userId, cookie } = await verifiedUser("unjournalled-deletion@example.test");
+    const sessionsBefore = await sessions(userId);
+    expect(sessionsBefore.length).toBeGreaterThan(0);
+    const journalBefore = readFileSync(journal);
+
+    const deleted = await withJournalLocked(() =>
+      request("/api/auth/delete-user", { password: PASSWORD }, cookie),
+    );
+
+    expect(deleted.statusCode, deleted.body).toBeGreaterThanOrEqual(400);
+    expect(await fixture.db.select().from(user).where(eq(user.id, userId))).toHaveLength(1);
+    expect((await sessions(userId)).map(({ id }) => id).sort()).toEqual(
+      sessionsBefore.map(({ id }) => id).sort(),
+    );
+    expect(readFileSync(journal).equals(journalBefore)).toBe(true);
+  });
+
+  it("rolls an administrator's removal back when its erasure request cannot be journalled", async () => {
+    const admin = await verifiedUser("unjournalled-removal-admin@example.test");
+    await fixture.db.update(user).set({ role: "admin" }).where(eq(user.id, admin.userId));
+    const target = await verifiedUser("unjournalled-removal-target@example.test");
+    const sessionsBefore = await sessions(target.userId);
+    expect(sessionsBefore.length).toBeGreaterThan(0);
+    const journalBefore = readFileSync(journal);
+
+    const removed = await withJournalLocked(() =>
+      request("/api/auth/admin/remove-user", { userId: target.userId }, admin.cookie),
+    );
+
+    expect(removed.statusCode, removed.body).toBeGreaterThanOrEqual(400);
+    expect(await fixture.db.select().from(user).where(eq(user.id, target.userId))).toHaveLength(1);
+    expect((await sessions(target.userId)).map(({ id }) => id).sort()).toEqual(
+      sessionsBefore.map(({ id }) => id).sort(),
+    );
+    expect(readFileSync(journal).equals(journalBefore)).toBe(true);
   });
 
   it("persists managed OIDC consent and signed PKCE tokens while rejecting invalid and reused codes", async () => {
