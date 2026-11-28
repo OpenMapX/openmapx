@@ -54,6 +54,17 @@ extension runs without a handler (an update dropped it), or its data is
 removed. The API log then says how many owed erasures were dropped and why,
 and the item is resolved.
 
+If an extension's foreign key refuses an account deletion, the deletion is
+rolled back and the account stays unchanged; the person is told that an
+installed extension keeps the account from being deleted. The API log names
+the key, its table and schema, and the attention list shows "_extension_
+blocks account deletion" with the same. The key must be changed to
+`ON DELETE CASCADE` or dropped, by an update of the extension that owns the
+table or of the extension whose migration added the key; removing the
+extension alone keeps its schema and the key. The item resolves itself at
+the next daily check once the key no longer refuses deletions (you can
+acknowledge it before); then ask the person to delete the account again.
+
 Delete accounts in the app. Deleting with plain SQL as `openmapx_api`
 (`DELETE FROM "user" WHERE id = …`) runs the same trigger but not the API's
 journal entry or offline-package cleanup. `TRUNCATE "user"` fires no row
@@ -89,8 +100,10 @@ with the reason and says that the operator has been asked to provide the
 data, and the manifest records it with a reason code. The case gets an
 operator task named `extension:<id>` whose public code is that reason, so it
 cannot be completed until you resolve it: provide the person with the
-extension's data (from its `ext_<id>` schema, or by fixing or re-enabling the
-extension and letting the person download again), then resolve the task. The
+extension's data (from its `ext_<id>` schema, or by repairing the extension (a
+disabled extension is enabled again by removing it and installing it again,
+which keeps its data) and letting the person download again), then resolve
+the task. The
 API log has one line per extension left out, with the case id and the
 reason.
 The **Download browser data** action is a separate local JSON supplement: it
@@ -182,7 +195,7 @@ OpenMapX.
    boundary.
 6. Check the attention list for "Erasure pending in …" items. Each one means
    an extension still holds data of deleted accounts. Act on what it says:
-   enable or repair the extension, reinstall it, or remove its data; the API
+   repair it, or remove and reinstall a disabled one, or remove its data; the API
    asks a running extension again. The list covers only extensions that
    registered a handler: data an extension keeps through tables that cascade
    from the account is deleted with the account, and data in tables a

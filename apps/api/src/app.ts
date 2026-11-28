@@ -17,6 +17,7 @@ import { envInt, envString } from "@openmapx/core/server-env";
 import { registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
 import Fastify, { type FastifyBaseLogger, type FastifyInstance } from "fastify";
 import { startAccountMailWorker } from "./account/account-mail-outbox";
+import { resolveClearedDeletionBlocks } from "./account/extension-deletion-block";
 import { auth } from "./auth";
 import { db, openMigrationSession, sql } from "./db/index";
 import { type MigrationRun, startMigrations } from "./db/migration-runner";
@@ -514,6 +515,9 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
     // failed when the integrations went live.
     void syncAndRunPendingErasures().catch((err) =>
       server.log.warn(err, "Processing pending erasures failed"),
+    );
+    void resolveClearedDeletionBlocks().catch((err) =>
+      server.log.warn(err, "Checking blocked account deletions failed"),
     );
     void retentionDays("serverLog")
       .then(pruneAppLogs)

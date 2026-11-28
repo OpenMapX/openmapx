@@ -4,10 +4,11 @@ import { passkey } from "@better-auth/passkey";
 import { envString } from "@openmapx/core/server-env";
 import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { createAuthMiddleware } from "better-auth/api";
+import { createAuthMiddleware, isAPIError } from "better-auth/api";
 import { admin, customSession, emailOTP, jwt, oneTimeToken, twoFactor } from "better-auth/plugins";
 import { emailHarmony } from "better-auth-harmony";
 import { eq } from "drizzle-orm";
+import { recordAccountMutationFailure } from "./account/account-context";
 import {
   capturedAccountPasswordLink,
   enqueueCapturedAccountMail,
@@ -33,9 +34,11 @@ import { adminAuditLog, user as userTable } from "./db/schema";
 import { managedOAuthProviderOptions } from "./managed-oauth-provider";
 import { recordDataDisclosureBestEffort } from "./privacy/disclosures.js";
 import { recordSessionFromAuthContext } from "./privacy/session-assurance.js";
+import { processLogger } from "./process-logger";
 import { userErasureHooks } from "./services/user-erasure";
 import { actorUserIdOrNull } from "./utils/actor";
 import { type AdminAuditCtx, handleAdminAuditEvent } from "./utils/auth-audit-hook";
+import { safeAuthEndpointErrorEvent } from "./utils/auth-error-log";
 import { configuredTrustedWebOrigins } from "./utils/csrf.js";
 import { sendAuthMail } from "./utils/email";
 import {
@@ -184,6 +187,19 @@ function createPolicyAuth(
     // origin instead of a session, so no app scheme belongs in this list.
     trustedOrigins: configuredTrustedWebOrigins(),
     appName: "OpenMapX",
+    onAPIError: {
+      // better-auth answers an error inside an endpoint with a response of its
+      // own, a bare 500 for a database error. The account mutation around a
+      // deletion still needs that error to recognise an extension's refusing
+      // key, so it is kept for it. Setting this replaces better-auth's own log
+      // line, which would write the raw error; the bounded event keeps what it
+      // logged, unexpected failures, without their content.
+      onError(error) {
+        recordAccountMutationFailure(error);
+        if (!isAPIError(error) || error.status === "INTERNAL_SERVER_ERROR")
+          processLogger.error(safeAuthEndpointErrorEvent(error), "Auth endpoint failed");
+      },
+    },
     user: {
       deleteUser: {
         enabled: true,

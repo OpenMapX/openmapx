@@ -840,9 +840,11 @@ database role:
   integration runs into this schema's tables from its own migration files
   (`ALTER TABLE ext_<this integration's id>.…`), or one created through
   `ctx.db` at run time. When such a key refuses an account deletion, the
-  deletion fails: the API logs the key, its table and schema, raises an
-  attention item naming the extension, and answers the request with `409`
-  `EXTENSION_BLOCKS_ACCOUNT_DELETION`.
+  deletion fails and the account stays unchanged: the API logs the key, its
+  table and schema, raises an attention item naming the extension, and
+  answers the request with `409` `EXTENSION_BLOCKS_ACCOUNT_DELETION`. The item
+  resolves itself at the next daily check once the key no longer refuses a
+  deletion (dropped, or changed to `ON DELETE CASCADE`).
 
 - A migration waits at most 120 seconds for each lock, including the lock
   that keeps two runs of the same integration apart, and all files of a start
@@ -1233,11 +1235,14 @@ ctx.registerSubjectDataHandler({
   waiting, the most failed attempts and the last error) or the integration
   cannot erase now (with the reason and the number of people waiting). The item
   disappears once the integration has no pending erasures left.
-- `erase` may run more than once for the same person, for example after a call
-  that outlasted its deadline finished on its own, or after a restore replays a
-  deletion. It must then succeed without finding anything. Erase everything the
-  integration holds about the person, in its own schema and upstream where it
-  copied data.
+- `erase` runs after the account is deleted, so rows that cascade from `"user"`
+  are already gone; it may also run again for the same person, for example
+  after a call that outlasted its deadline finished on its own, or after a
+  restore replays a deletion. It must succeed when it finds nothing. After
+  `erase`, the integration must not store data about that account again, for
+  example from a scheduled task or a provider request that was already under
+  way. Erase everything the integration holds about the person, in its own
+  schema and upstream where it copied data.
 - The host cannot stop JavaScript that ignores the deadline. Keep each call well
   within 30 seconds; a person with much data is erased in the same call.
 - For a person's data export, the host calls `export` of every running

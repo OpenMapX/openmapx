@@ -713,24 +713,89 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         "An extension's foreign key refused an account deletion",
       );
       expect(JSON.stringify(error.mock.calls)).not.toContain("blocked-owner");
+      const { accountDeletionBlockedAttentionKey, resolveClearedDeletionBlocks } = await import(
+        "../account/extension-deletion-block"
+      );
+      const key = accountDeletionBlockedAttentionKey("blocked", {
+        schema: "ext_blocked",
+        table: "s",
+        constraint: "s_t",
+      });
+      expect(key).toMatch(/^account-deletion-blocked:blocked:[0-9a-f]{16}$/);
       expect(
         await raw`select key, severity, source, title, detail from attention_item
-          where key = 'account-deletion-blocked:blocked'`,
+          where starts_with(key, 'account-deletion-blocked:')`,
       ).toEqual([
         {
-          key: "account-deletion-blocked:blocked",
+          key,
           severity: "warning",
           source: "privacy",
           title: "blocked blocks account deletion",
           detail:
-            "blocked's foreign key s_t on table s refused an account deletion. Update or remove the extension, then the person can delete the account again.",
+            "blocked's table ext_blocked.s holds the foreign key s_t, which refused an account deletion; the account was left unchanged. Deleting accounts works again once this key is changed to ON DELETE CASCADE or dropped, by an update of the extension that owns the table or of the extension whose migration added the key. Removing the extension alone keeps its schema and this key. This item resolves itself at the next daily check after the key stopped refusing deletions; then ask the person to delete the account again.",
         },
       ]);
+
+      // The daily check keeps the item while the key still refuses.
+      await resolveClearedDeletionBlocks();
+      expect(await raw`select key from attention_item`).toEqual([{ key }]);
+      await raw.unsafe(
+        "alter table ext_blocked.s drop constraint s_t, add constraint s_t foreign key (tid) references ext_blocked.t(id) on delete cascade",
+      );
+      await resolveClearedDeletionBlocks();
+      expect(await raw`select key from attention_item`).toEqual([]);
+      await deleteAccount("blocked-owner");
+      expect(await raw`select count(*)::int as n from "user" where id = 'blocked-owner'`).toEqual([
+        { n: 0 },
+      ]);
+
       error.mockRestore();
       await raw`delete from attention_item`;
       await raw.unsafe(
         "drop schema ext_blocked cascade; drop schema if exists ext_other cascade; delete from \"user\" where id = 'blocked-owner'",
       );
+    });
+
+    it("resolves a blocked-deletion item at the daily check once the refusing key or its schema is gone", async () => {
+      const { accountDeletionBlockedAttentionKey, resolveClearedDeletionBlocks } = await import(
+        "../account/extension-deletion-block"
+      );
+      const { raiseAttention } = await import("../services/attention");
+      await raw.unsafe(`
+        drop schema if exists ext_kept cascade;
+        drop schema if exists ext_gone cascade;
+        create schema ext_kept;
+        create table ext_kept.t (id int primary key);
+        create table ext_kept.s (tid int, constraint s_t foreign key (tid) references ext_kept.t(id));
+        create table ext_kept.r (tid int, constraint r_t foreign key (tid) references ext_kept.t(id) on delete restrict);
+        create schema ext_gone;
+        create table ext_gone.t (id int primary key);
+        create table ext_gone.s (tid int, constraint s_t foreign key (tid) references ext_gone.t(id) on delete restrict);
+      `);
+      const keyOf = (id: string, table: string, constraint: string) =>
+        accountDeletionBlockedAttentionKey(id, { schema: `ext_${id}`, table, constraint });
+      const keys = [
+        keyOf("kept", "s", "s_t"),
+        keyOf("kept", "r", "r_t"),
+        keyOf("gone", "s", "s_t"),
+      ];
+      for (const key of keys)
+        await raiseAttention({
+          key,
+          severity: "warning",
+          source: "privacy",
+          clearance: "acknowledge",
+          title: "blocks account deletion",
+        });
+
+      await raw.unsafe("alter table ext_kept.r drop constraint r_t; drop schema ext_gone cascade");
+      await resolveClearedDeletionBlocks();
+
+      expect(
+        await raw`select key from attention_item where starts_with(key, 'account-deletion-blocked:')`,
+      ).toEqual([{ key: keys[0] }]);
+      await raw`delete from attention_item`;
+      await raw.unsafe("drop schema ext_kept cascade");
     });
 
     it("lets the account be deleted through the erasure path with every accepted shape", async () => {

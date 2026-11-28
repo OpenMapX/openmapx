@@ -7,6 +7,7 @@ import {
 import { db } from "../db";
 import { runInIntegrationScope } from "../integration-scope";
 import { processLogger } from "../process-logger";
+import { getSafeMode, type SafeModeState } from "../safe-mode";
 import { listAttentionKeys, raiseAttention, resolveAttention } from "../services/attention";
 import type { CollectorSourcePart } from "./collectors";
 import {
@@ -143,26 +144,42 @@ function accountsWaiting(count: number): string {
 }
 
 /** Why an integration that owes erasures cannot erase now, as a clause. */
-function whyNotErasing(integration: LoadedIntegration | undefined): string {
+function whyNotErasing(
+  integration: LoadedIntegration | undefined,
+  safeMode: SafeModeState["reason"],
+): string {
   if (!integration) return "it is not installed, or its installation could not be loaded";
   if (integration.loadState === "failed") return "it failed to load";
   if (integration.loadState === "incompatible")
     return "it is not compatible with this version of OpenMapX";
-  if (integration.loadState === "safe-mode") return "the API runs in safe mode";
+  if (integration.loadState === "safe-mode") {
+    if (safeMode === "env") return "the API runs in safe mode because OPENMAPX_SAFE_MODE=1 is set";
+    if (safeMode === "automatic")
+      return "the API runs in safe mode because it stopped three times within ten minutes";
+    return "the API runs in safe mode, which an operator turned on";
+  }
   if (integration.loadState === "disabled") return "its extension is disabled";
   if (!integration.enabled) return "it is disabled";
   return "it registered no subject-data handler";
 }
 
 /** What an operator can do so an integration that cannot erase now erases, as a sentence. */
-function erasureNextStep(integration: LoadedIntegration | undefined): string {
+function erasureNextStep(
+  integration: LoadedIntegration | undefined,
+  safeMode: SafeModeState["reason"],
+): string {
   if (!integration) return "Reinstall the extension, or remove its data.";
   if (integration.loadState === "failed")
     return "Repair or update the extension, or remove its data.";
   if (integration.loadState === "incompatible")
     return "Update OpenMapX or install a version of the extension made for it, or remove its data.";
-  if (integration.loadState === "safe-mode")
-    return "Leave safe mode once the extension that stopped the API is disabled or repaired, or remove its data.";
+  if (integration.loadState === "safe-mode") {
+    if (safeMode === "env")
+      return "It erases them once safe mode is left, after the variable is removed from the API's environment.";
+    if (safeMode === "automatic")
+      return "It erases them once safe mode is left; if an extension stopped the API, disable or repair that one first.";
+    return "It erases them once safe mode is left.";
+  }
   // No command enables a disabled extension yet; reinstalling it does.
   if (integration.loadState === "disabled")
     return "An update keeps the extension disabled; remove it and install it again to enable it, which keeps its data, or remove its data.";
@@ -306,11 +323,14 @@ export interface ExtensionSubjectDataDependencies {
   log: SubjectDataLog;
   /** `ERASE_DEADLINE_MS` unless a test shortens it. */
   eraseDeadlineMs?: number;
+  /** Why safe mode is on, for the texts of what it holds back; the process's own unless given. */
+  safeModeReason?: () => SafeModeState["reason"];
 }
 
 export function createExtensionSubjectData(dependencies: ExtensionSubjectDataDependencies) {
   const { store, attention, log } = dependencies;
   const eraseDeadlineMs = dependencies.eraseDeadlineMs ?? ERASE_DEADLINE_MS;
+  const safeModeReason = dependencies.safeModeReason ?? (() => getSafeMode().reason);
 
   /** Runs an attention update; a failure is logged and does not stop the caller. */
   async function updateItem(key: string, update: () => Promise<unknown>): Promise<void> {
@@ -513,7 +533,7 @@ export function createExtensionSubjectData(dependencies: ExtensionSubjectDataDep
       if (failure !== undefined)
         detail = `${accountsWaiting(pending.count)} for this extension to erase their data; erasing has failed up to ${pending.attempts} ${pending.attempts === 1 ? "time" : "times"} per account.${failure ? ` Last error: ${failure}.` : ""} Repair or update the extension, or remove its data.`;
       else if (!canErase)
-        detail = `${name} cannot erase data now: ${whyNotErasing(integration)}. ${accountsWaiting(pending.count)} for it to erase their data. ${erasureNextStep(integration)}`;
+        detail = `${name} cannot erase data now: ${whyNotErasing(integration, safeModeReason())}. ${accountsWaiting(pending.count)} for it to erase their data. ${erasureNextStep(integration, safeModeReason())}`;
       // An integration that can erase and failed nothing this run keeps its item as it is.
       if (detail === undefined) continue;
       await updateItem(key, () =>

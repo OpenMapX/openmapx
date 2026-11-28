@@ -81,6 +81,7 @@ describe("extension erasures after an account deletion", () => {
         mutationKey: "erasure-extensions",
         roleAudit: false,
         afterCommit,
+        failures: [],
       },
       async () => {
         await userErasureHooks.before(subject);

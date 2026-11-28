@@ -137,7 +137,11 @@ function withHandler(
   return handler;
 }
 
-function setup(store: ReturnType<typeof memoryStore>, registry: LoadedIntegration[]) {
+function setup(
+  store: ReturnType<typeof memoryStore>,
+  registry: LoadedIntegration[],
+  safeModeReason: "env" | "operator" | "automatic" | null = null,
+) {
   /** The attention items, by key, as the list holds them. */
   const items = new Map<string, { title: string; detail?: string }>();
   const attention = {
@@ -161,6 +165,7 @@ function setup(store: ReturnType<typeof memoryStore>, registry: LoadedIntegratio
     integrations: () => registry,
     attention,
     log,
+    safeModeReason: () => safeModeReason,
   });
   return { ...subjectData, attention, log, items };
 }
@@ -517,14 +522,29 @@ describe("pending erasures", () => {
       "Update OpenMapX or install a version of the extension made for it, or remove its data.",
     ],
     [
-      "is held back by safe mode",
+      "is held back by safe mode an operator turned on",
       integration("c", { loadState: "safe-mode", name: "Trips" }),
-      "Trips cannot erase data now: the API runs in safe mode.",
-      "Leave safe mode once the extension that stopped the API is disabled or repaired, or remove its data.",
+      "Trips cannot erase data now: the API runs in safe mode, which an operator turned on.",
+      "It erases them once safe mode is left.",
+      "operator",
     ],
-  ])(
+    [
+      "is held back by safe mode the environment forces",
+      integration("c", { loadState: "safe-mode", name: "Trips" }),
+      "Trips cannot erase data now: the API runs in safe mode because OPENMAPX_SAFE_MODE=1 is set.",
+      "It erases them once safe mode is left, after the variable is removed from the API's environment.",
+      "env",
+    ],
+    [
+      "is held back by safe mode after repeated crashes",
+      integration("c", { loadState: "safe-mode", name: "Trips" }),
+      "Trips cannot erase data now: the API runs in safe mode because it stopped three times within ten minutes.",
+      "It erases them once safe mode is left; if an extension stopped the API, disable or repair that one first.",
+      "automatic",
+    ],
+  ] as const)(
     "shows owed erasures of an integration that %s, and clears the item once nothing is owed",
-    async (_label, waiting, reason, next) => {
+    async (_label, waiting, reason, next, safeModeReason?: "env" | "operator" | "automatic") => {
       const store = memoryStore({
         handlers: ["c"],
         pending: [
@@ -532,7 +552,7 @@ describe("pending erasures", () => {
           ["c", "u2"],
         ],
       });
-      const { runPendingErasures, items } = setup(store, [waiting]);
+      const { runPendingErasures, items } = setup(store, [waiting], safeModeReason ?? null);
 
       await runPendingErasures();
 

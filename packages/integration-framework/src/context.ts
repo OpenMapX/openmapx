@@ -188,9 +188,12 @@ export interface ScheduleOptions {
 /**
  * What an integration that stores personal data does for one person, named
  * by `subjectId`, the platform's account id. `erase` removes everything the
- * integration holds about the person; it runs after the account is deleted,
- * may run again for the same person and must then succeed without finding
- * anything. The host gives each call 30 seconds.
+ * integration holds about the person. It runs after the account is deleted,
+ * so rows that cascade from `"user"` are already gone; it may also run again
+ * for the same person. It must succeed when it finds nothing. After `erase`,
+ * the integration must not store data about that account again, for example
+ * from a scheduled task or a provider request that was already under way.
+ * The host gives each call 30 seconds.
  */
 export interface SubjectDataHandler {
   /**

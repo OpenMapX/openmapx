@@ -23,7 +23,11 @@ schema `ext_<id>` (hyphens as underscores), then `extensions`, where PostGIS liv
 refuses to run while that schema is missing and once the integration's data was
 removed. When a reload retires an installed integration or leaves it out, the API
 waits at most 10 seconds for each of its shutdown handlers; when the API stops, the
-shutdown handlers of all installed integrations share 5 seconds in total.
+shutdown handlers of all installed integrations share 5 seconds in total. A stop
+does not wait for extension database work: the database pools close after at most
+2 seconds, and a statement or transaction still running is cut off and rolled
+back. The API container's stop grace period is now 20 seconds instead of Docker's
+default 10, which covers the whole stop sequence.
 
 **Extension schemas and migrations.** The API applies an integration's
 `migrations/NNNN_name.sql` files at every start and reload, before it imports the
@@ -47,10 +51,12 @@ own migration files, no foreign key of the schema can make deleting an account
 fail. The check does not judge triggers, rules or check constraints, objects a
 file creates outside its schema (they are not removed with the extension's data
 either), a key another integration's migration adds to this schema, or a key
-created through `ctx.db`. When such a key refuses an account deletion, the
-deletion fails with `409 EXTENSION_BLOCKS_ACCOUNT_DELETION`, the API logs the key,
-its table and schema, and the attention list shows "<extension> blocks account
-deletion".
+created through `ctx.db`. When such a key refuses an account deletion, through
+the person's own deletion or an administrator's removal, the deletion fails with
+`409 EXTENSION_BLOCKS_ACCOUNT_DELETION` and the account stays unchanged, the API
+logs the key, its table and schema, and the attention list shows "<extension>
+blocks account deletion"; the item resolves itself at the next daily check once
+the key is dropped or changed to `ON DELETE CASCADE`.
 
 Migrations wait at most 2 minutes for a lock and run at most 30 minutes in all;
 both limits are also set on the database session, so PostgreSQL ends a migration
@@ -85,16 +91,19 @@ or cannot run show as "Erasure pending in <extension>" on the attention list. A
 person's data download includes `extensions/<id>.json` from every running
 extension; `export(subjectId)` must return JSON-serialisable data of at most
 8 MiB within 30 seconds. An extension that may hold the person's data and could
-not be asked (not running, no export handler, failing, too slow or too large) is
+not be asked (not running, no longer installed while its data is kept, no export
+handler, failing, too slow or too large) is
 named in the download's README under "Extensions that could not be asked" and gets
 an operator task on the privacy case, which the case view shows with the
-extension's name and the reason. When such an export finishes after an
-administrator completed the case, the case returns to `in_progress` with the
+extension's name and the reason. When such an export finishes after the case was
+completed, by an administrator or by the person withdrawing it, the case returns to `in_progress` with the
 events `status_changed` (reason `export-incomplete`) and `export_incomplete`, and
 its retention holds come back until it is closed again. Extensions may describe
 their data for the privacy report in `subjectData.registrations`. The privacy
 catalogue gains the retention kind `until-erased`, reserved for the platform's own
-record of pending erasures.
+record of pending erasures. The account deletion page and the user documentation
+now say that data in OpenMapX itself is deleted immediately and that installed
+extensions erase theirs, usually at once and otherwise once they run again.
 
 **Safe mode and recovery.** Safe mode starts the API without any installed
 extension; built-in integrations, the administration and all containers run as

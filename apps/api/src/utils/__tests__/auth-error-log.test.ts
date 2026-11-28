@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { safeAuthErrorEvent } from "../auth-error-log.js";
+import { safeAuthEndpointErrorEvent, safeAuthErrorEvent } from "../auth-error-log.js";
 
 const AUTH_CODE = "authorization-code-sentinel-xyz";
 const TOKEN = "osm-access-token-sentinel";
@@ -46,5 +46,21 @@ describe("safeAuthErrorEvent", () => {
       method: "GET",
       errorClass: "string",
     });
+  });
+});
+
+describe("safeAuthEndpointErrorEvent", () => {
+  it("describes a failure inside an endpoint by class and stable code only", () => {
+    const error = Object.assign(new Error(`failed exchanging ${AUTH_CODE}`), {
+      code: "23001",
+      access_token: TOKEN,
+    });
+    expect(safeAuthEndpointErrorEvent(error)).toEqual({
+      event: "auth_endpoint_failed",
+      errorClass: "Error",
+    });
+    expect(
+      safeAuthEndpointErrorEvent(Object.assign(new Error("x"), { code: "INVALID_GRANT" })),
+    ).toEqual({ event: "auth_endpoint_failed", errorClass: "Error", errorCode: "INVALID_GRANT" });
   });
 });

@@ -36,7 +36,7 @@ export function DeleteAccountActions() {
   // A deletion refused for an old sign-in or an impersonation session explains
   // that instead of the generic failure. A recent sign-in is the confirmation
   // for every kind of account, so no password is asked for.
-  const [refusal, setRefusal] = useState<CredentialRefusal | null>(null);
+  const [refusal, setRefusal] = useState<CredentialRefusal | "extension" | null>(null);
 
   const remove = useCallback(async () => {
     setState("working");
@@ -44,7 +44,13 @@ export function DeleteAccountActions() {
     try {
       const { error } = await authClient.deleteUser({});
       if (error) {
-        setRefusal(credentialRefusal(error));
+        // An installed extension's database key refused the deletion; the
+        // account is unchanged and the administrator has been told.
+        setRefusal(
+          (error as { code?: unknown }).code === "EXTENSION_BLOCKS_ACCOUNT_DELETION"
+            ? "extension"
+            : credentialRefusal(error),
+        );
         setState("error");
         return;
       }
@@ -91,7 +97,9 @@ export function DeleteAccountActions() {
           <Alert severity="error" role="alert">
             {refusal === "impersonating"
               ? tAccount("freshSignIn.impersonating")
-              : tAccount("failedDeleteAccount")}
+              : refusal === "extension"
+                ? tAccount("deletionBlockedByExtension")
+                : tAccount("failedDeleteAccount")}
           </Alert>
         ))}
       {confirming ? (

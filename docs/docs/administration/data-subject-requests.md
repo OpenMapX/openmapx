@@ -72,8 +72,9 @@ from subject_erasure_pending where subject_user_id = $1;
 ```
 
 Each row names an extension that still holds data about the person. Include
-that in your answer, have the extension erase it (enable or repair it, or remove
-its data, as the attention list's "Erasure pending in …" item says), and
+that in your answer, have the extension erase it (repair it, or remove and
+reinstall a disabled one, or remove its data, as the attention list's "Erasure
+pending in …" item says), and
 resolve the task with a reason such as `extension-erasure-pending` or
 `no-extension-erasure-pending` when the query returns no rows.
 
