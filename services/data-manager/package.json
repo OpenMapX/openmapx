@@ -12,7 +12,7 @@
     "bench:live-writer": "tsx scripts/bench-live-writer.ts"
   },
   "dependencies": {
-    "@fastify/rate-limit": "11.2.2",
+    "@fastify/rate-limit": "11.3.0",
     "@mapbox/glyph-pbf-composite": "0.0.3",
     "@motis-project/motis-client": "2.11.4",
     "@openmapx/cli": "workspace:*",
@@ -33,13 +33,13 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@fastify/swagger": "9.9.3",
+    "@fastify/swagger": "9.9.5",
     "@mapbox/vector-tile": "3.0.0",
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/mobility-core": "workspace:^",
     "@testcontainers/postgresql": "^12.2.1",
     "@types/node": "^26.6.6",
-    "pbf": "5.1.2",
+    "pbf": "5.2.0",
     "tsx": "4.23.15",
     "typescript": "^6.0.3",
     "vitest": "^5.0.5"
