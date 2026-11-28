@@ -2,6 +2,11 @@ import { createHash, createPublicKey, randomBytes, verify } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  initializeErasureJournal,
+  isErasedSubject,
+  readErasureJournal,
+} from "@openmapx/core/erasure-journal";
 import { en } from "@openmapx/i18n";
 import { symmetricDecrypt } from "better-auth/crypto";
 import { eq } from "drizzle-orm";
@@ -32,16 +37,17 @@ describeDatabase("production authentication on migrated PostgreSQL", () => {
   let server: FastifyInstance;
   const mail: { to: string; text: string }[] = [];
   let journalDirectory = "";
+  let journal = "";
+  const journalKey = randomBytes(32);
 
   beforeAll(async () => {
     fixture = await createMigratedPostgresFixture();
     // Account deletion writes a pseudonymous erasure receipt.
     journalDirectory = mkdtempSync(join(tmpdir(), "openmapx-auth-postgres-"));
-    const journal = join(journalDirectory, "erasure.jsonl");
+    journal = join(journalDirectory, "erasure.jsonl");
     const keyFile = join(journalDirectory, "journal.key");
-    const journalKey = randomBytes(32);
     writeFileSync(keyFile, journalKey.toString("base64url"), { mode: 0o444 });
-    (await import("@openmapx/core/erasure-journal")).initializeErasureJournal(journal, journalKey);
+    initializeErasureJournal(journal, journalKey);
     vi.stubEnv("ERASURE_JOURNAL_KEY_FILE", keyFile);
     vi.stubEnv("ERASURE_JOURNAL_KEY_UID", String(process.getuid?.() ?? 0));
     vi.stubEnv("ERASURE_JOURNAL_PATH", journal);
@@ -724,11 +730,21 @@ describeDatabase("production authentication on migrated PostgreSQL", () => {
     expect(upgraded.json()).toMatchObject({ url: expect.any(String) });
   });
 
+  /** Whether restoring an older backup would erase `userId` again. */
+  function erasedOnRestore(userId: string) {
+    return isErasedSubject(readErasureJournal(journal, journalKey), journalKey, userId);
+  }
+
   it("lets a federated OpenStreetMap account delete itself after a fresh provider sign-in", async () => {
     const fresh = await osmSignIn();
+    const before = readErasureJournal(journal, journalKey);
     const deleted = await request("/api/auth/delete-user", {}, fresh.cookie);
     expect(deleted.statusCode, deleted.body).toBe(200);
     expect(await fixture.db.select().from(user).where(eq(user.id, fresh.userId))).toHaveLength(0);
+    const after = readErasureJournal(journal, journalKey);
+    expect(after.requests).toHaveLength(before.requests.length + 1);
+    expect([...after.completedReceiptIds]).toContain(after.requests.at(-1)?.receiptId);
+    expect(erasedOnRestore(fresh.userId)).toBe(true);
 
     const stale = await osmSignIn();
     await ageAssurance(stale.userId);
@@ -799,6 +815,7 @@ describeDatabase("production authentication on migrated PostgreSQL", () => {
       expect(
         (await request("/api/auth/get-session", undefined, fresh.cookie)).json(),
       ).toMatchObject({ user: { id: fresh.userId } });
+      expect(erasedOnRestore(fresh.userId)).toBe(false);
       expect(await blockedDeletionItems()).toEqual([
         expect.objectContaining({ title: "blocker blocks account deletion" }),
       ]);
@@ -831,6 +848,7 @@ describeDatabase("production authentication on migrated PostgreSQL", () => {
       expect((await sessions(target.userId)).map(({ id }) => id).sort()).toEqual(
         sessionsBefore.map(({ id }) => id).sort(),
       );
+      expect(erasedOnRestore(target.userId)).toBe(false);
       expect(await blockedDeletionItems()).toEqual([
         expect.objectContaining({ title: "blocker blocks account deletion" }),
       ]);

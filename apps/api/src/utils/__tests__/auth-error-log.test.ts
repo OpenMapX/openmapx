@@ -1,3 +1,4 @@
+import { APIError } from "better-auth/api";
 import { describe, expect, it } from "vitest";
 import { safeAuthEndpointErrorEvent, safeAuthErrorEvent } from "../auth-error-log.js";
 
@@ -62,5 +63,17 @@ describe("safeAuthEndpointErrorEvent", () => {
     expect(
       safeAuthEndpointErrorEvent(Object.assign(new Error("x"), { code: "INVALID_GRANT" })),
     ).toEqual({ event: "auth_endpoint_failed", errorClass: "Error", errorCode: "INVALID_GRANT" });
+  });
+
+  it("keeps the stable code of an internal-error response from the auth library", () => {
+    const error = new APIError("INTERNAL_SERVER_ERROR", {
+      code: "FAILED_TO_CREATE_USER",
+      message: `failed exchanging ${AUTH_CODE}`,
+    });
+    expect(safeAuthEndpointErrorEvent(error)).toEqual({
+      event: "auth_endpoint_failed",
+      errorClass: "APIError",
+      errorCode: "FAILED_TO_CREATE_USER",
+    });
   });
 });

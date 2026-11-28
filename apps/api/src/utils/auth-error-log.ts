@@ -22,7 +22,9 @@ export interface SafeAuthErrorEvent {
 
 function describeAuthError(error: unknown): { errorClass: string; errorCode?: string } {
   const errorClass = error instanceof Error ? (error.constructor?.name ?? "Error") : typeof error;
-  const rawCode = (error as { code?: unknown } | null | undefined)?.code;
+  // The auth library's APIError keeps its code in the response body.
+  const candidate = error as { code?: unknown; body?: { code?: unknown } } | null | undefined;
+  const rawCode = candidate?.code ?? candidate?.body?.code;
   const errorCode = typeof rawCode === "string" && SAFE_CODE.test(rawCode) ? rawCode : undefined;
   return { errorClass, ...(errorCode ? { errorCode } : {}) };
 }

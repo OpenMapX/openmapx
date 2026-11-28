@@ -96,9 +96,12 @@ describe("extension erasures after an account deletion", () => {
 });
 
 describe("user erasure hooks", () => {
-  it("durably records the request before cleaning residual records and records completion", async () => {
+  it("journals the request only once the account row is deleted, then its completion", async () => {
     const events: string[] = [];
     const hooks = createUserErasureHooks({
+      check: vi.fn(async () => {
+        events.push("checked");
+      }),
       request: vi.fn(async () => {
         events.push("requested");
         return "receipt-1";
@@ -113,46 +116,51 @@ describe("user erasure hooks", () => {
     const user = { id: "user-1", email: "person@example.test" };
 
     await hooks.before(user);
+    events.push("deleted");
     await hooks.after(user);
 
-    expect(events).toEqual(["requested", "cleaned", "completed"]);
+    expect(events).toEqual(["checked", "cleaned", "deleted", "requested", "completed"]);
   });
 
-  it("fails closed without cleaning data when the durable request cannot be written", async () => {
-    const cleanup = vi.fn();
+  it("fails the deletion, so its transaction rolls back, when the request cannot be journalled", async () => {
+    const complete = vi.fn();
     const hooks = createUserErasureHooks({
+      check: async () => {},
       request: async () => {
         throw new Error("journal unavailable");
       },
+      cleanup: async () => {},
+      complete,
+    });
+    const user = { id: "user-1", email: "person@example.test" };
+
+    await hooks.before(user);
+    await expect(hooks.after(user)).rejects.toThrow("journal unavailable");
+    expect(complete).not.toHaveBeenCalled();
+  });
+
+  it("journals nothing when the deletion is refused before the account row is deleted", async () => {
+    const request = vi.fn(async () => "receipt-1");
+    const cleanup = vi.fn();
+    const hooks = createUserErasureHooks({
+      check: async () => {
+        throw new Error("last administrator");
+      },
+      request,
       cleanup,
       complete: vi.fn(),
     });
 
     await expect(hooks.before({ id: "user-1", email: "person@example.test" })).rejects.toThrow(
-      "journal unavailable",
+      "last administrator",
     );
     expect(cleanup).not.toHaveBeenCalled();
-  });
-
-  it("does not complete a request when pre-delete cleanup aborts deletion", async () => {
-    const complete = vi.fn();
-    const hooks = createUserErasureHooks({
-      request: async () => "receipt-1",
-      cleanup: async () => {
-        throw new Error("cleanup failed");
-      },
-      complete,
-    });
-    const user = { id: "user-1", email: "person@example.test" };
-
-    await expect(hooks.before(user)).rejects.toThrow("cleanup failed");
-    await hooks.after(user);
-
-    expect(complete).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
   });
 
   it("does not report deletion as failed when only the completion marker cannot be appended", async () => {
     const hooks = createUserErasureHooks({
+      check: async () => {},
       request: async () => "receipt-1",
       cleanup: async () => {},
       complete: async () => {

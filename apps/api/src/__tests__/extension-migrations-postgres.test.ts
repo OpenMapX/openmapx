@@ -732,7 +732,7 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
           source: "privacy",
           title: "blocked blocks account deletion",
           detail:
-            "blocked's table ext_blocked.s holds the foreign key s_t, which refused an account deletion; the account was left unchanged. Deleting accounts works again once this key is changed to ON DELETE CASCADE or dropped, by an update of the extension that owns the table or of the extension whose migration added the key. Removing the extension alone keeps its schema and this key. This item resolves itself at the next daily check after the key stopped refusing deletions; then ask the person to delete the account again.",
+            "blocked's table ext_blocked.s holds the foreign key s_t, which refused an account deletion; the account was left unchanged. Deleting accounts works again once this key is changed to ON DELETE CASCADE or dropped, by an update of the extension that owns the table or of the extension whose migration added the key. Removing the extension alone keeps its schema and this key. This item resolves itself at the next daily check once the key no longer refuses deletions; then ask the person to delete the account again.",
         },
       ]);
 
@@ -796,6 +796,60 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       ).toEqual([{ key: keys[0] }]);
       await raw`delete from attention_item`;
       await raw.unsafe("drop schema ext_kept cascade");
+    });
+
+    it("names the table that holds the refusing key, also when another table has a key of that name to it", async () => {
+      const { accountDeletionBlockedAttentionKey, resolveClearedDeletionBlocks } = await import(
+        "../account/extension-deletion-block"
+      );
+      // Created by the API role, which owns every extension schema.
+      await api.unsafe(`
+        drop schema if exists ext_holder cascade;
+        drop schema if exists ext_namesake cascade;
+        create schema ext_holder;
+        create table ext_holder.t (id int primary key, uid text references public."user"(id) on delete cascade);
+        create table ext_holder.s (id int primary key, tid int, constraint k foreign key (tid) references ext_holder.t(id) on delete restrict);
+        create schema ext_namesake;
+        create table ext_namesake.q (sid int, constraint k foreign key (sid) references ext_holder.s(id) on delete cascade);
+      `);
+      await raw`insert into "user" (id, name, email, role, created_at, updated_at)
+        values ('holder-owner', 'Owner', 'holder-owner@example.test', 'user', now(), now())`;
+      await raw.unsafe(
+        "insert into ext_holder.t values (1, 'holder-owner'); insert into ext_holder.s values (1, 1);",
+      );
+      const error = vi.spyOn(processLogger, "error");
+      const items = async () =>
+        (
+          await raw<{ key: string }[]>`select key from attention_item
+            where starts_with(key, 'account-deletion-blocked:')`
+        ).map(({ key }) => key);
+
+      await expect(deleteAccount("holder-owner")).rejects.toMatchObject({ statusCode: 409 });
+
+      expect(error).toHaveBeenCalledWith(
+        { integrationId: "holder", schema: "ext_holder", table: "s", constraint: "k" },
+        "An extension's foreign key refused an account deletion",
+      );
+      const key = accountDeletionBlockedAttentionKey("holder", {
+        schema: "ext_holder",
+        table: "s",
+        constraint: "k",
+      });
+      expect(await items()).toEqual([key]);
+      // The daily check keeps the item while the key still refuses.
+      await resolveClearedDeletionBlocks();
+      expect(await items()).toEqual([key]);
+      await raw.unsafe(
+        "alter table ext_holder.s drop constraint k, add constraint k foreign key (tid) references ext_holder.t(id) on delete cascade",
+      );
+      await resolveClearedDeletionBlocks();
+      expect(await items()).toEqual([]);
+
+      error.mockRestore();
+      await raw`delete from attention_item`;
+      await raw.unsafe(
+        "drop schema ext_namesake cascade; drop schema ext_holder cascade; delete from \"user\" where id = 'holder-owner'",
+      );
     });
 
     it("lets the account be deleted through the erasure path with every accepted shape", async () => {

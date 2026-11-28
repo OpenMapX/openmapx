@@ -26,31 +26,30 @@ interface ErasureUser {
 }
 
 export interface UserErasureDependencies {
+  check(userId: string): Promise<void>;
   request(userId: string): Promise<string>;
   cleanup(user: ErasureUser): Promise<void>;
   complete(receiptId: string): Promise<void>;
 }
 
+/**
+ * The request is journalled in `after`, which Better Auth runs once the
+ * "user" row is deleted but still inside the account mutation's transaction.
+ * A deletion the database refuses therefore leaves no request that a restore
+ * would replay, and a request that cannot be written fails the deletion, so
+ * no committed deletion lacks one.
+ */
 export function createUserErasureHooks(dependencies: UserErasureDependencies): {
   before(user: ErasureUser): Promise<void>;
   after(user: ErasureUser): Promise<void>;
 } {
-  const pendingReceipts = new Map<string, string>();
   return {
     async before(user) {
-      const receiptId = await dependencies.request(user.id);
-      pendingReceipts.set(user.id, receiptId);
-      try {
-        await dependencies.cleanup(user);
-      } catch (error) {
-        pendingReceipts.delete(user.id);
-        throw error;
-      }
+      await dependencies.check(user.id);
+      await dependencies.cleanup(user);
     },
     async after(user) {
-      const receiptId = pendingReceipts.get(user.id);
-      if (!receiptId) return;
-      pendingReceipts.delete(user.id);
+      const receiptId = await dependencies.request(user.id);
       try {
         await dependencies.complete(receiptId);
       } catch {
@@ -126,10 +125,8 @@ export async function removeOfflinePackageOwnership(
  * erasure journal and the offline-package rows.
  */
 export const userErasureHooks = createUserErasureHooks({
-  request: async (userId) => {
-    await assertAccountDeletionAllowed(userId);
-    return appendErasureRequest(journalPath(), readJournalKey(), userId);
-  },
+  check: assertAccountDeletionAllowed,
+  request: async (userId) => appendErasureRequest(journalPath(), readJournalKey(), userId),
   cleanup: async (user) =>
     removeOfflinePackageOwnership(user.id, await offlinePackagePrincipalKey()),
   complete: async (receiptId) => {

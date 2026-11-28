@@ -27,10 +27,12 @@ actions and the sessions the account impersonated as an administrator. It
 clears the account from data jobs it started. Audit events and privacy case
 events may remain for accountability, but the deleted actor's ID, IP address,
 user agent, target ID and matching details are cleared. The API also removes the
-account's offline-package records, which name it only by a keyed hash. Before
-that transaction starts, the API durably appends an HMAC-pseudonymised request
-to the erasure journal. If the journal is unavailable, deletion fails without
-pretending that it succeeded.
+account's offline-package records, which name it only by a keyed hash. Once the
+account row is deleted, and before that transaction commits, the API durably
+appends an HMAC-pseudonymised request to the erasure journal. If the journal is
+unavailable, the transaction rolls back and the deletion fails without
+pretending that it succeeded. A deletion the database refuses, for example
+because of an extension's foreign key, leaves no request in the journal.
 
 Extensions that keep data about people register a handler that erases it.
 The trigger records the deleted account once for each such extension, also

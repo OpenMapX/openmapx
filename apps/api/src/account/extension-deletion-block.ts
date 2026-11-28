@@ -13,7 +13,11 @@ const REFUSING_KEY_CODES = new Set(["23001", "23503"]);
 
 interface KeyRefusal {
   constraint: string;
-  /** The table PostgreSQL names in the error, which for a delete is the referenced one. */
+  /**
+   * The table that holds the key. PostgreSQL names it in the error also for a
+   * delete on the referenced table, so no lookup is needed, and the daily run
+   * that resolves the item looks at the same table.
+   */
   schema: string;
   table: string;
 }
@@ -38,24 +42,6 @@ function keyRefusal(error: unknown): KeyRefusal | null {
     current = item.cause;
   }
   return null;
-}
-
-/**
- * The schema and table that hold the refusing key. For a delete PostgreSQL
- * names the referenced table, which is `public."user"` for a key straight to
- * the account; the key's own table names the extension.
- */
-async function keyOwner(refusal: KeyRefusal): Promise<{ schema: string; table: string }> {
-  const rows = await db.execute<{ schema: string; table: string }>(sql`
-    select n.nspname::text as schema, c.relname::text as table
-    from pg_constraint k
-    join pg_class c on c.oid = k.conrelid
-    join pg_namespace n on n.oid = c.relnamespace
-    where k.contype = 'f'
-      and k.conname = ${refusal.constraint}
-      and k.confrelid = to_regclass(format('%I.%I', ${refusal.schema}::text, ${refusal.table}::text))
-    limit 1`);
-  return rows[0] ?? { schema: refusal.schema, table: refusal.table };
 }
 
 /** The integration id an `ext_` schema belongs to: the id with hyphens as underscores. */
@@ -114,13 +100,7 @@ export async function resolveClearedDeletionBlocks(): Promise<void> {
 export async function throwIfExtensionBlocksDeletion(error: unknown): Promise<void> {
   const refusal = keyRefusal(error);
   if (!refusal) return;
-  let owner: { schema: string; table: string };
-  try {
-    owner = await keyOwner(refusal);
-  } catch {
-    owner = { schema: refusal.schema, table: refusal.table };
-  }
-  const { schema, table } = schemaIntegrationId(owner.schema) ? owner : refusal;
+  const { schema, table } = refusal;
   const integrationId = schemaIntegrationId(schema);
   if (!integrationId) return;
   processLogger.error(
@@ -142,7 +122,7 @@ export async function throwIfExtensionBlocksDeletion(error: unknown): Promise<vo
       // administrator may dismiss it before.
       clearance: "acknowledge",
       title: `${name} blocks account deletion`,
-      detail: `${name}'s table ${schema}.${table} holds the foreign key ${refusal.constraint}, which refused an account deletion; the account was left unchanged. Deleting accounts works again once this key is changed to ON DELETE CASCADE or dropped, by an update of the extension that owns the table or of the extension whose migration added the key. Removing the extension alone keeps its schema and this key. This item resolves itself at the next daily check after the key stopped refusing deletions; then ask the person to delete the account again.`,
+      detail: `${name}'s table ${schema}.${table} holds the foreign key ${refusal.constraint}, which refused an account deletion; the account was left unchanged. Deleting accounts works again once this key is changed to ON DELETE CASCADE or dropped, by an update of the extension that owns the table or of the extension whose migration added the key. Removing the extension alone keeps its schema and this key. This item resolves itself at the next daily check once the key no longer refuses deletions; then ask the person to delete the account again.`,
     });
   } catch (raiseError) {
     processLogger.warn(
