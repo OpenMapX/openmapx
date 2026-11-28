@@ -4,11 +4,13 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const host = {
@@ -126,8 +128,20 @@ describe("apiRuntimeDirectory", () => {
     expect(apiRuntimeDirectory({ NODE_ENV: "production" })).toBe("/var/lib/openmapx/runtime");
   });
 
-  it("uses a temporary directory in host development", () => {
-    expect(apiRuntimeDirectory({})).toBe(join(tmpdir(), "openmapx-api-runtime"));
+  it("keeps host development's files in the checkout, not in the shared temporary directory", () => {
+    const repository = join(import.meta.dirname, "..", "..", "..", "..");
+    const directory = apiRuntimeDirectory({});
+    expect(directory).toBe(join(repository, "infra", "docker", "state", "api-runtime"));
+    for (const temporary of [tmpdir(), realpathSync(tmpdir())])
+      expect(directory.startsWith(`${temporary}${sep}`)).toBe(false);
+  });
+
+  it("is ignored in development checkouts by git and by the Docker context", () => {
+    const repository = join(import.meta.dirname, "..", "..", "..", "..");
+    for (const file of [".gitignore", ".dockerignore"])
+      expect(readFileSync(join(repository, file), "utf8").split("\n")).toContain(
+        "infra/docker/state/",
+      );
   });
 
   it("is the directory the api service mounts read-write from the host and the image creates", () => {
@@ -165,6 +179,22 @@ describe("the process's safe mode", () => {
     });
     expect(getSafeMode()).toEqual({ active: true, reason: "operator", integrationId: null });
     expect(isSafeModeActive()).toBe(true);
+  });
+
+  it("ignores the file in a runtime directory the boot refused", () => {
+    const target = join(runtimeDir, "elsewhere");
+    mkdirSync(target);
+    writeFileSync(join(target, "safe-mode.json"), '{"mode":"operator"}');
+    const link = join(runtimeDir, "link");
+    symlinkSync(target, link);
+    beginBoot(link, new Date());
+    expect(initSafeMode({}, link)).toEqual({ active: false, reason: null, integrationId: null });
+    expect(initSafeMode({ OPENMAPX_SAFE_MODE: "1" }, link)).toEqual({
+      active: true,
+      reason: "env",
+      integrationId: null,
+    });
+    expect(initSafeMode({}, target).reason).toBe("operator");
   });
 
   it("is not changed by the file after boot", () => {

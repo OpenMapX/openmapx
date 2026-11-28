@@ -102,6 +102,47 @@ describe("the event-loop watchdog", () => {
     TEST_TIMEOUT_MS,
   );
 
+  it(
+    "does not write through a file left at its temporary name",
+    async () => {
+      const outside = join(runtimeDir, "outside");
+      writeFileSync(outside, "keep");
+      const result = await runChild(
+        child(
+          `import { symlinkSync } from "node:fs";
+          symlinkSync(${JSON.stringify(outside)}, runtimeDir + "/boot-marker.json." + process.pid + ".watchdog.tmp");
+          markIntegrationLoading("acme", "setup");`,
+          "setTimeout(() => block(25_000), 100);",
+        ),
+        { timeoutMs: CHILD_TIMEOUT_MS },
+      );
+      expect(result.signal).toBe("SIGKILL");
+      expect(readFileSync(outside, "utf8")).toBe("keep");
+      expect(readMarker(runtimeDir)).toMatchObject({
+        lastFatal: { integrationId: "acme", at: expect.any(String) },
+      });
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "still kills a blocked process when it has no marker to record in",
+    async () => {
+      const result = await runChild(
+        `
+          import { startEventLoopWatchdog } from ${JSON.stringify(WATCHDOG)};
+          const log = { error: (message) => console.error(message), warn: (message) => console.error(message) };
+          startEventLoopWatchdog({ thresholdMs: ${FAST_THRESHOLD_MS}, runtimeDir: null, log, heartbeatMs: ${FAST_HEARTBEAT_MS} });
+          setTimeout(() => { const end = Date.now() + 25_000; while (Date.now() < end) {} }, 100);
+        `,
+        { timeoutMs: CHILD_TIMEOUT_MS },
+      );
+      expect(result.signal).toBe("SIGKILL");
+      expect(result.stderr).toMatch(/event loop blocked for \d+ ms; exiting/);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   it("does not start as PID 1", () => {
     const log = { error: vi.fn(), warn: vi.fn() };
     expect(startEventLoopWatchdog({ thresholdMs: 5_000, runtimeDir, log, pid: 1 })).toBeNull();

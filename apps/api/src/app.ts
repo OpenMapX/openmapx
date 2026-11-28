@@ -61,6 +61,7 @@ import { registerCoreRoutes } from "./routes/index";
 import {
   apiRuntimeDirectory,
   beginBoot,
+  bootMarkerDirectory,
   initSafeMode,
   markCleanStop,
   onInstalledCodeStart,
@@ -468,7 +469,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
     if (startupMs !== null)
       eventLoopWatchdog ??= startEventLoopWatchdog({
         thresholdMs: startupMs,
-        runtimeDir,
+        runtimeDir: bootMarkerDirectory(),
         log: server.log,
       });
   });
@@ -685,7 +686,7 @@ export async function createApp(options: CreateAppOptions = {}): Promise<App> {
       else
         eventLoopWatchdog = startEventLoopWatchdog({
           thresholdMs: watchdogThresholdMs,
-          runtimeDir,
+          runtimeDir: bootMarkerDirectory(),
           log: server.log,
         });
     }

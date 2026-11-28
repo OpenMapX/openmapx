@@ -1,6 +1,7 @@
 import {
   closeSync,
   fsyncSync,
+  lstatSync,
   mkdirSync,
   openSync,
   readFileSync,
@@ -8,8 +9,7 @@ import {
   rmSync,
   writeSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { isComponentId } from "@openmapx/core/component-id";
 import { describeThrown, loggableThrown } from "@openmapx/integration-framework";
 import { processLogger } from "./process-logger";
@@ -40,6 +40,23 @@ export const BOOT_MARKER_FILE = "boot-marker.json";
 export const SAFE_MODE_ATTENTION_KEY = "safe-mode";
 
 const CONTAINER_RUNTIME_DIR = "/var/lib/openmapx/runtime";
+/**
+ * An API run from the checkout keeps its files in the checkout's git-ignored
+ * host state, like its other development defaults: a fixed name in the shared
+ * temporary directory could be created first by another user of the machine.
+ * Not the stack's `infra/docker/data/api-runtime`, whose marker an API in a
+ * container may be writing at the same time.
+ */
+const DEVELOPMENT_RUNTIME_DIR = resolve(
+  import.meta.dirname,
+  "..",
+  "..",
+  "..",
+  "infra",
+  "docker",
+  "state",
+  "api-runtime",
+);
 const INACTIVE: SafeModeState = { active: false, reason: null, integrationId: null };
 const OPERATOR: SafeModeState = { active: true, reason: "operator", integrationId: null };
 
@@ -47,9 +64,33 @@ const OPERATOR: SafeModeState = { active: true, reason: "operator", integrationI
 export function apiRuntimeDirectory(env: NodeJS.ProcessEnv = process.env): string {
   const configured = env.OPENMAPX_API_RUNTIME_DIR?.trim();
   if (configured) return configured;
-  return env.NODE_ENV === "production"
-    ? CONTAINER_RUNTIME_DIR
-    : join(tmpdir(), "openmapx-api-runtime");
+  return env.NODE_ENV === "production" ? CONTAINER_RUNTIME_DIR : DEVELOPMENT_RUNTIME_DIR;
+}
+
+/**
+ * Creates `runtimeDir` for this user only when it is missing and returns why
+ * it must not be used, or null. Its files decide whether installed code loads,
+ * so a symbolic link or anything but a directory is refused. With an `owner`,
+ * the directory must also belong to that uid and be writable by it alone.
+ */
+export function checkRuntimeDirectory(runtimeDir: string, owner: number | null): string | null {
+  try {
+    mkdirSync(runtimeDir, { recursive: true, mode: 0o700 });
+  } catch {
+    // The check below reports what is in the way.
+  }
+  let stats: ReturnType<typeof lstatSync>;
+  try {
+    stats = lstatSync(runtimeDir);
+  } catch (error) {
+    return `it cannot be inspected (${(error as NodeJS.ErrnoException)?.code ?? "unknown error"})`;
+  }
+  if (stats.isSymbolicLink()) return "it is a symbolic link";
+  if (!stats.isDirectory()) return "it is not a directory";
+  if (owner === null) return null;
+  if (stats.uid !== owner) return `it belongs to uid ${stats.uid}, not to uid ${owner}`;
+  if ((stats.mode & 0o022) !== 0) return "it is writable by other users";
+  return null;
 }
 
 /**
@@ -179,7 +220,11 @@ export function readBootMarker(runtimeDir: string): BootMarker {
 function writeFileDurably(path: string, text: string): void {
   const temporary = `${path}.${process.pid}.tmp`;
   try {
-    const fd = openSync(temporary, "w", 0o600);
+    // A file left at this name, by a process that had the same pid, is
+    // removed rather than opened: "wx" creates it anew and never follows a
+    // symbolic link put there.
+    rmSync(temporary, { force: true });
+    const fd = openSync(temporary, "wx", 0o600);
     try {
       writeSync(fd, text);
       fsyncSync(fd);
@@ -225,9 +270,19 @@ interface ProcessBoot {
   lastFatal: BootMarker["lastFatal"];
 }
 
-/** This process's part of the marker; null until `beginBoot` ran in this process. */
+/**
+ * This process's part of the marker; null until `beginBoot` ran in this
+ * process, and when it refused the runtime directory.
+ */
 let boot: ProcessBoot | null = null;
 let automaticSafeModeEnteredAtBoot = false;
+/** The runtime directory `beginBoot` refused, whose files are then neither read nor written. */
+let refusedRuntimeDirectory: string | null = null;
+
+/** Where this process records its boot marker, or null when it records none. */
+export function bootMarkerDirectory(): string | null {
+  return boot?.runtimeDir ?? null;
+}
 
 /**
  * Writes this process's fields. The unclean exits are taken from the file as
@@ -285,10 +340,22 @@ export function beginBoot(
   now: Date,
 ): { enterSafeMode: boolean; integrationId: string | null } {
   automaticSafeModeEnteredAtBoot = false;
-  try {
-    mkdirSync(runtimeDir, { recursive: true, mode: 0o700 });
-  } catch {
-    // Reading and writing below report the problem.
+  boot = null;
+  refusedRuntimeDirectory = null;
+  // Only the directory chosen without configuration is checked for its owner:
+  // the configured and the container's directory are the operator's mounts,
+  // which a remapping container runtime may show under another uid.
+  const problem = checkRuntimeDirectory(
+    runtimeDir,
+    resolve(runtimeDir) === DEVELOPMENT_RUNTIME_DIR ? (process.geteuid?.() ?? null) : null,
+  );
+  if (problem) {
+    refusedRuntimeDirectory = runtimeDir;
+    warnMarkerOnce(
+      new Error(`${runtimeDir} is not used: ${problem}`),
+      "The API runtime directory is unsafe; safe-mode.json and the boot marker are ignored and automatic safe mode is unavailable",
+    );
+    return { enterSafeMode: false, integrationId: null };
   }
   const previous = readBootMarker(runtimeDir);
   let exits = previous.uncleanExits;
@@ -452,7 +519,10 @@ export function initSafeMode(
   runtimeDir: string = apiRuntimeDirectory(env),
 ): SafeModeState {
   runtimeDirectory = runtimeDir;
-  state = readSafeMode(env, runtimeDir);
+  state =
+    runtimeDir === refusedRuntimeDirectory && env.OPENMAPX_SAFE_MODE !== "1"
+      ? { ...INACTIVE }
+      : readSafeMode(env, runtimeDir);
   return getSafeMode();
 }
 

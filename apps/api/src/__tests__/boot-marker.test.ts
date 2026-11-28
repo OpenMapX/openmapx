@@ -1,10 +1,13 @@
 import {
+  chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
   rmSync,
+  statSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -12,6 +15,8 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   beginBoot,
+  bootMarkerDirectory,
+  checkRuntimeDirectory,
   markCleanStop,
   markIntegrationLoaded,
   markIntegrationLoading,
@@ -244,6 +249,49 @@ describe("the boot marker", () => {
     expect(() => markCleanStop()).not.toThrow();
   });
 
+  it("neither reads nor writes through a runtime directory that is a symbolic link", () => {
+    const target = join(dir, "elsewhere");
+    mkdirSync(target);
+    const crashed = JSON.stringify({
+      version: 1,
+      running: true,
+      installedCodeStarted: true,
+      current: { integrationId: "acme", phase: "setup" },
+      lastFatal: null,
+      uncleanExits: [
+        { at: at(-60).toISOString(), integrationId: "acme" },
+        { at: at(-30).toISOString(), integrationId: "acme" },
+      ],
+    });
+    writeFileSync(join(target, "boot-marker.json"), crashed);
+    const link = join(dir, "link");
+    symlinkSync(target, link);
+    expect(beginBoot(link, t0)).toEqual({ enterSafeMode: false, integrationId: null });
+    expect(bootMarkerDirectory()).toBeNull();
+    markIntegrationLoading("acme", "import");
+    recordFatal("acme");
+    markCleanStop();
+    expect(readdirSync(target)).toEqual(["boot-marker.json"]);
+    expect(readFileSync(join(target, "boot-marker.json"), "utf8")).toBe(crashed);
+  });
+
+  it("names the directory it writes the marker in", () => {
+    beginBoot(dir, t0);
+    expect(bootMarkerDirectory()).toBe(dir);
+  });
+
+  it("does not write through a file left at the temporary name", () => {
+    const outside = join(dir, "outside");
+    writeFileSync(outside, "keep");
+    const runtime = join(dir, "runtime");
+    mkdirSync(runtime);
+    symlinkSync(outside, join(runtime, `boot-marker.json.${process.pid}.tmp`));
+    beginBoot(runtime, t0);
+    expect(readFileSync(outside, "utf8")).toBe("keep");
+    expect(readMarker(runtime)).toMatchObject({ running: true });
+    expect(readdirSync(runtime)).toEqual(["boot-marker.json"]);
+  });
+
   it("writes the marker as the process goes", () => {
     beginBoot(dir, t0);
     markIntegrationLoading("acme", "import");
@@ -270,5 +318,47 @@ describe("the boot marker", () => {
     markIntegrationLoading("acme", "import");
     markCleanStop();
     expect(readMarker(dir).uncleanExits).toEqual([]);
+  });
+});
+
+describe("checkRuntimeDirectory", () => {
+  const uid = process.geteuid?.() ?? null;
+
+  it("creates a missing directory for this user only", () => {
+    const path = join(dir, "a", "runtime");
+    expect(checkRuntimeDirectory(path, uid)).toBeNull();
+    expect(statSync(path).isDirectory()).toBe(true);
+    expect(statSync(path).mode & 0o777).toBe(0o700);
+  });
+
+  it("accepts an existing directory of this user", () => {
+    expect(checkRuntimeDirectory(dir, uid)).toBeNull();
+  });
+
+  it("refuses a symbolic link, even to a directory of this user", () => {
+    const link = join(dir, "link");
+    symlinkSync(dir, link);
+    expect(checkRuntimeDirectory(link, uid)).toMatch(/symbolic link/);
+    expect(checkRuntimeDirectory(link, null)).toMatch(/symbolic link/);
+  });
+
+  it("refuses a path that is not a directory", () => {
+    const file = join(dir, "file");
+    writeFileSync(file, "");
+    expect(checkRuntimeDirectory(file, null)).toMatch(/not a directory/);
+  });
+
+  it.runIf(uid !== null)("refuses a directory another user owns", () => {
+    expect(checkRuntimeDirectory(dir, (uid ?? 0) + 1)).toMatch(/belongs to uid/);
+  });
+
+  it.runIf(uid !== null)("refuses a directory others may write to", () => {
+    chmodSync(dir, 0o777);
+    expect(checkRuntimeDirectory(dir, uid)).toMatch(/writable by other users/);
+  });
+
+  it("leaves owner and mode unchecked when no owner is asked for", () => {
+    chmodSync(dir, 0o777);
+    expect(checkRuntimeDirectory(dir, null)).toBeNull();
   });
 });

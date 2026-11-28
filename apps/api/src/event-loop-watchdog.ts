@@ -62,7 +62,7 @@ export function startupEventLoopWatchdogThresholdMs(runtimeMs: number | null): n
  * a frozen loop.
  */
 const WORKER_SOURCE = `
-const { closeSync, fsyncSync, openSync, readFileSync, renameSync, writeSync } = require("node:fs");
+const { closeSync, fsyncSync, openSync, readFileSync, renameSync, rmSync, writeSync } = require("node:fs");
 const { workerData } = require("node:worker_threads");
 const { buffer, markerPath, heartbeatMs } = workerData;
 const shared = new Int32Array(buffer);
@@ -72,6 +72,7 @@ let lastTick = performance.now();
 let blockedMs = 0;
 
 function recordInMarker() {
+  if (markerPath === null) return;
   try {
     const marker = JSON.parse(readFileSync(markerPath, "utf8"));
     if (marker === null || typeof marker !== "object" || Array.isArray(marker)) return;
@@ -84,7 +85,8 @@ function recordInMarker() {
     // Like writeFileDurably in safe-mode.ts, under its own name; the main
     // thread is blocked, and SIGKILL follows before a directory flush matters.
     const temporary = markerPath + "." + process.pid + ".watchdog.tmp";
-    const fd = openSync(temporary, "w", 0o600);
+    rmSync(temporary, { force: true });
+    const fd = openSync(temporary, "wx", 0o600);
     try {
       writeSync(fd, JSON.stringify(marker, null, 2) + "\\n");
       fsyncSync(fd);
@@ -148,7 +150,8 @@ let active: EventLoopWatchdog | null = null;
 
 export function startEventLoopWatchdog(options: {
   thresholdMs: number;
-  runtimeDir: string;
+  /** Where the boot marker is, or null when this process records none: it still kills. */
+  runtimeDir: string | null;
   log: Pick<Logger, "error" | "warn">;
   pid?: number;
   /** For tests, which scale thresholds and blocks down with it; the API keeps the default. */
@@ -207,14 +210,14 @@ export function startEventLoopWatchdog(options: {
  */
 export function startWatchdogWorker(
   buffer: SharedArrayBuffer,
-  runtimeDir: string,
+  runtimeDir: string | null,
   heartbeatMs = HEARTBEAT_MS,
 ): Worker {
   const worker = new Worker(WORKER_SOURCE, {
     eval: true,
     workerData: {
       buffer,
-      markerPath: join(runtimeDir, BOOT_MARKER_FILE),
+      markerPath: runtimeDir === null ? null : join(runtimeDir, BOOT_MARKER_FILE),
       heartbeatMs,
     },
   });
